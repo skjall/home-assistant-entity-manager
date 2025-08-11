@@ -8,7 +8,7 @@ jobs:
   lint:
     runs-on: home-assistant-entity-manager
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,7 +42,7 @@ jobs:
       matrix:
         arch: [amd64, aarch64, armv7, armhf, i386]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -77,7 +77,7 @@ jobs:
   validate-addon:
     runs-on: home-assistant-entity-manager
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Validate config.json
         run: |
