@@ -11,7 +11,8 @@
     "skip_maintained": "Maintained",
     "only_changes": "Only changes",
     "show_disabled": "Disabled",
-    "area_override_label": "Area override:"
+    "area_override_label": "Area override:",
+    "unassigned_area": "Unassigned"
   },
   "summary": {
     "entities": "Entities",

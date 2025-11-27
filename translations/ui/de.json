@@ -12,7 +12,7 @@
     "only_changes": "Nur Änderungen",
     "show_disabled": "Deaktivierte",
     "area_override_label": "Bereich überschreiben:",
-    "unassigned_area": "Nicht zugeordnet"
+    "unassigned_area": "Unassigned"
   },
   "summary": {
     "entities": "Entitäten",
