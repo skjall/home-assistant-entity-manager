@@ -101,7 +101,7 @@
                             <option value="" x-text="t ? t('filters.select_area') : 'Wähle einen Bereich...'">Wähle einen Bereich...</option>
                             <template x-for="area in areas" :key="area.name">
                                 <option :value="area.name">
-                                    <span x-text="`${area.display_name} (${area.entity_count})`"></span>
+                                    <span x-text="`${getAreaDisplayName(area)} (${area.entity_count})`"></span>
                                 </option>
                             </template>
                         </select>
@@ -303,15 +303,15 @@
                                         <div class="flex-1">
                                             <div class="flex items-center space-x-2">
                                                 <template x-if="deviceGroup && deviceGroup.device && deviceGroup.device.has_override">
-                                                    <span class="text-xs text-gray-500" x-text="t('entity.basename')"></span>
+                                                    <span class="text-xs text-gray-500" x-text="t('entity.override') + ':'"></span>
                                                 </template>
-                                                <template x-if="deviceGroup && deviceGroup.device && !deviceGroup.device.has_override">
+                                                <template x-if="deviceGroup && deviceGroup.device && !deviceGroup.device.has_override && deviceGroup.device.needs_rename">
                                                     <span class="text-xs text-gray-500" x-text="t('entity.suggestion') + ':'"></span>
                                                 </template>
                                                 <template x-if="deviceGroup && deviceGroup.device && !deviceGroup.device.editing">
                                                     <code class="text-sm font-mono cursor-pointer hover:underline"
                                                           :class="deviceGroup && deviceGroup.device && deviceGroup.device.has_override ? 'text-blue-700' : 'text-amber-700'"
-                                                          x-text="deviceGroup && deviceGroup.device ? (deviceGroup.device.has_override ? deviceGroup.device.override_name : deviceGroup.device.suggested_base_name) : ''"
+                                                          x-text="deviceGroup && deviceGroup.device ? (deviceGroup.device.has_override ? deviceGroup.device.override_name : deviceGroup.device.suggested_name) : ''"
                                                           @click="startDeviceEdit(deviceGroup.device)"></code>
                                                 </template>
                                                 <template x-if="deviceGroup && deviceGroup.device && deviceGroup.device.editing">
@@ -321,15 +321,15 @@
                                                            @keyup.escape.stop="cancelDeviceEdit(deviceGroup.device)"
                                                            @blur="handleDeviceBlur($event, deviceGroup.device)"
                                                            class="text-sm font-mono px-2 py-1 border border-amber-500 rounded focus:ring-2 focus:ring-blue-500"
-                                                           placeholder="Device Name Override"
+                                                           :placeholder="t('device.new_name')"
                                                            x-init="$nextTick(() => $el.focus())">
                                                 </template>
                                             </div>
                                         </div>
                                         <div class="flex items-center space-x-2">
-                                            <template x-if="deviceGroup.device && !deviceGroup.device.has_override">
+                                            <template x-if="deviceGroup.device && !deviceGroup.device.has_override && deviceGroup.device.needs_rename">
                                                 <button x-show="deviceGroup && deviceGroup.device && !deviceGroup.device.editing"
-                                                        @click="if (deviceGroup && deviceGroup.device) { deviceGroup.device.override_name = deviceGroup.device.suggested_base_name; saveDeviceEdit(deviceGroup.device); }"
+                                                        @click="if (deviceGroup && deviceGroup.device) { deviceGroup.device.override_name = deviceGroup.device.suggested_name; saveDeviceEdit(deviceGroup.device); }"
                                                         class="text-xs text-green-600 hover:text-green-700">
                                                     <i class="ri-check-line mr-1"></i>
                                                     <span x-text="t('entity.accept_suggestion')"></span>
@@ -749,6 +749,15 @@
                     }
                 },
 
+                getAreaDisplayName(area) {
+                    if (!area) return '';
+                    // Check if this is the unassigned area marker
+                    if (area.name === '__unassigned__' || area.display_name === '__unassigned__') {
+                        return this.t('filters.unassigned_area');
+                    }
+                    return area.display_name || area.name;
+                },
+
                 onAreaChange(updateUrl = true) {
                     // Speichere die aktuelle Domain
                     const previousDomain = this.selectedDomain;
@@ -910,18 +919,9 @@
                 },
 
                 getDevicePreviewName(device) {
-                    // Berechne den vollständigen Gerätenamen basierend auf dem aktuellen Override
                     if (!device) return '';
-
-                    // Extrahiere den Raumnamen aus suggested_name (vor dem ersten Space nach Raum)
-                    const parts = device.suggested_name.split(' ');
-                    const roomName = parts[0]; // Erster Teil ist der Raum
-
-                    // Verwende Override wenn vorhanden, sonst suggested_base_name
-                    const baseName = device.override_name || device.suggested_base_name;
-
-                    // Baue vollständigen Namen
-                    return `${roomName} ${baseName}`;
+                    // Device override is the full device name, suggested_name is the full suggested name
+                    return device.override_name || device.suggested_name;
                 },
 
                 getEntitySuggestion(entity) {
@@ -1009,8 +1009,8 @@
                         if (change && change.device && change.entities && change.entities.some(e => e && e.old_id === entity.old_id)) {
                             const device = change.device;
 
-                            // Hole Device Basisnamen (mit Override wenn vorhanden)
-                            deviceBaseName = device.override_name || device.suggested_base_name;
+                            // Get full device name (override or suggested name)
+                            deviceBaseName = device.override_name || device.suggested_name;
 
                             // Extrahiere Raum aus Device suggested_name
                             const parts = device.suggested_name.split(' ');
@@ -1072,9 +1072,9 @@
                     for (let change of this.changes) {
                         // Prüfe ob die Entity zu diesem Device gehört
                         if (change && change.device && change.entities && change.entities.some(e => e && e.old_id === entity.old_id)) {
-                            // Hole Device Namen (mit Override wenn vorhanden)
+                            // Get full device name (override or suggested name)
                             const device = change.device;
-                            deviceName = device.override_name || device.suggested_base_name;
+                            deviceName = device.override_name || device.suggested_name;
 
                             // Extrahiere Raum aus Device suggested_name
                             const parts = device.suggested_name.split(' ');
@@ -1166,10 +1166,10 @@
 
                 startDeviceEdit(device) {
                     device.editing = true;
-                    // Speichere den Original-Wert für Cancel
+                    // Save original value for cancel
                     device._original_override_name = device.override_name;
-                    // Wenn ein Override existiert, zeige diesen, sonst den Vorschlag
-                    device.override_name = device.has_override ? device.override_name : device.suggested_base_name;
+                    // Show override if exists, otherwise the suggested full name
+                    device.override_name = device.has_override ? device.override_name : device.suggested_name;
 
                     // Focus will be handled by x-init on the input element
                 },
@@ -1505,13 +1505,12 @@
                     const selectedEntities = [];
                     const selectedDevices = [];
 
-                    // Sammle alle ausgewählten Entities und Devices
+                    // Collect all selected entities and devices
                     this.changes.forEach(deviceGroup => {
                         if (deviceGroup.device && deviceGroup.device.selected) {
                             selectedDevices.push({
                                 device_id: deviceGroup.device.id,
                                 new_name: this.getDevicePreviewName(deviceGroup.device),
-                                base_name: deviceGroup.device.override_name || deviceGroup.device.suggested_base_name,
                                 entities: deviceGroup.entities.map(e => e.old_id)
                             });
                         }
