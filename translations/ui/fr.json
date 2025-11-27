@@ -46,6 +46,10 @@
     "no_entities_found": "No entities found for this selection",
     "open_device_in_ha": "Open device in Home Assistant",
     "accept_suggestion": "Accept suggestion",
+    "accept": "Accept",
+    "accept_current_name": "Accept current name as correct",
+    "accept_current_basename": "Accept current basename as override",
+    "marked_for_acceptance": "To accept",
     "selected_badge": "Selected",
     "all_related_entities_note": "All related entity IDs will be adjusted accordingly",
     "save_cancel_hint": "{save} to save, {cancel} to cancel",
@@ -82,7 +86,8 @@
     "failed": "failed",
     "dependency_warnings": "dependency warnings",
     "dependencies_update_warning_title": "Dependencies could not be automatically updated",
-    "dependencies_update_warning_desc": "Please check the following entities manually in Home Assistant:"
+    "dependencies_update_warning_desc": "Please check the following entities manually in Home Assistant:",
+    "entity_marked_for_acceptance": "Entity marked for acceptance"
   },
   "dependencies": {
     "title": "Dependencies for",
@@ -107,7 +112,8 @@
     "count_singular": "Device",
     "count_plural": "Devices",
     "current_name": "Current name",
-    "new_name": "New name"
+    "new_name": "New name",
+    "open_details": "Open device details"
   },
   "units": {
     "entities": "Entities",
