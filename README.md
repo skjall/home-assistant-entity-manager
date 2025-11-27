@@ -179,17 +179,6 @@ docker run --rm -it -p 5000:5000 \
 5. Push to the branch (`git push origin feature/amazing-feature`)
 6. Open a Pull Request
 
-### Automated Code Reviews
-
-All pull requests are automatically reviewed by Claude Code. The review bot will:
-- Analyze code quality and suggest improvements
-- Check for security issues
-- Verify Home Assistant Add-on conventions
-- Review error handling and edge cases
-- Ensure documentation is adequate
-
-You can also trigger additional reviews by commenting `@claude` in any PR or issue.
-
 ### Development Guidelines
 
 - All code must have type hints

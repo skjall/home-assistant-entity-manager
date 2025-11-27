@@ -8,11 +8,7 @@ on:
       - "*.md"
       - "LICENSE"
   pull_request:
-    branches: [main, next-release]
-    paths-ignore:
-      - "translations/**"
-      - "*.md"
-      - "LICENSE"
+    branches: [main]
 
 jobs:
   lint:
