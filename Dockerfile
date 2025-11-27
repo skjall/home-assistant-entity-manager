@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.13-alpine3.20
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.14-alpine3.20
 FROM $BUILD_FROM
 
 # Install runtime dependencies
@@ -12,7 +12,7 @@ RUN apk add --no-cache nodejs npm
 
 # Build frontend assets
 WORKDIR /build
-COPY package.json package-lock.json postcss.config.js tailwind.config.js ./
+COPY package.json package-lock.json postcss.config.js ./
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY templates/ ./templates/

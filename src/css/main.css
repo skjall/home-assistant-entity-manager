@@ -1,6 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Content sources for Tailwind */
+@source "../../templates/**/*.html";
+@source "../../src/**/*.js";
 
 /* Custom styles for Entity Manager */
 [x-cloak] { display: none !important; }

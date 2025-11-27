@@ -1,6 +1,6 @@
 {
   "name": "Entity Manager (Alpha)",
-  "version": "0.1.63-alpha",
+  "version": "0.1.64-alpha",
   "slug": "entity_manager",
   "description": "⚠️ ALPHA VERSION - DO NOT USE IN PRODUCTION ⚠️ Manage and standardize Home Assistant entity names",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
