@@ -524,6 +524,18 @@ async def _preview_changes_async():
             device_override = renamer_state["naming_overrides"].get_device_override(device_id) if device_id else None
 
             current_friendly_name = current_info.get("friendly_name", old_id)
+
+            # Extract current basename from friendly_name by removing device name prefix
+            current_basename = None
+            if device_info and current_friendly_name:
+                device_name = device_info["name"]
+                # Check if friendly_name starts with device name
+                if current_friendly_name.startswith(device_name):
+                    current_basename = current_friendly_name[len(device_name) :].strip()
+                elif current_friendly_name != device_name:
+                    # Friendly name doesn't start with device name, use the whole thing
+                    current_basename = current_friendly_name
+
             entity_change = {
                 "old_id": old_id,
                 "new_id": new_id,
@@ -537,6 +549,7 @@ async def _preview_changes_async():
                 "has_override": entity_override is not None,
                 "override_name": (entity_override.get("name") if entity_override else None),
                 "disabled_by": entity_reg.get("disabled_by"),  # Add disabled status
+                "current_basename": current_basename,  # The extracted basename from current friendly_name
             }
 
             # Gruppiere nach Device
@@ -548,6 +561,9 @@ async def _preview_changes_async():
                     # Extrahiere aktuellen Device Namen ohne Raum
                     current_device_name = device_info["name"]
 
+                    # Check if device has a real area (not "Nicht zugeordnet")
+                    has_real_area = area_name != "Nicht zugeordnet"
+
                     # Entferne Raumnamen vom Anfang des Device Names
                     # Normalize for comparison
                     area_normalized = area_name.lower()
@@ -555,15 +571,22 @@ async def _preview_changes_async():
 
                     # Extrahiere Basis-Device-Namen ohne Raum
                     base_device_name = current_device_name
-                    if device_normalized.startswith(area_normalized):
+                    if has_real_area and device_normalized.startswith(area_normalized):
                         # Entferne Raumnamen vom Anfang
                         base_device_name = current_device_name[len(area_name) :].strip()
 
                     # Neuer Vorschlag: Aktueller Raum + Device Name (oder Override)
+                    # Only prepend area if device is actually assigned to an area
                     if device_override:
-                        device_suggested_name = f"{area_name} {device_override['name']}"
+                        if has_real_area:
+                            device_suggested_name = f"{area_name} {device_override['name']}"
+                        else:
+                            device_suggested_name = device_override["name"]
                     else:
-                        device_suggested_name = f"{area_name} {base_device_name}"
+                        if has_real_area:
+                            device_suggested_name = f"{area_name} {base_device_name}"
+                        else:
+                            device_suggested_name = base_device_name
 
                 devices_map[device_key] = {
                     "device_info": device_info,

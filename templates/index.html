@@ -268,18 +268,20 @@
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between">
                                                 <div class="flex items-center space-x-3">
-                                                    <i class="ri-cpu-line text-gray-600"></i>
+                                                    <div class="relative">
+                                                        <i class="ri-cpu-line text-gray-600"></i>
+                                                        <a x-show="deviceGroup && deviceGroup.device && deviceGroup.device.id"
+                                                           :href="'/config/devices/device/' + (deviceGroup && deviceGroup.device ? deviceGroup.device.id : '')"
+                                                           target="_blank"
+                                                           class="absolute -top-1 -right-1 text-blue-600 hover:text-blue-700 bg-white rounded-full shadow-sm"
+                                                           :title="t('device.open_details')"
+                                                           @click.stop>
+                                                            <i class="ri-external-link-line text-xs"></i>
+                                                        </a>
+                                                    </div>
                                                     <div>
                                                         <div class="flex items-center space-x-2">
                                                             <h3 class="font-semibold text-gray-900" x-text="deviceGroup && deviceGroup.device ? deviceGroup.device.current_name : ''"></h3>
-                                                            <a x-show="deviceGroup && deviceGroup.device && deviceGroup.device.id"
-                                                               :href="'/config/devices/device/' + (deviceGroup && deviceGroup.device ? deviceGroup.device.id : '')"
-                                                               target="_blank"
-                                                               class="text-blue-600 hover:text-blue-700"
-                                                               :title="t('entity.open_device_in_ha')"
-                                                               @click.stop>
-                                                                <i class="ri-external-link-line text-sm"></i>
-                                                            </a>
                                                         </div>
                                                         <p class="text-xs text-gray-500">
                                                             <span x-show="deviceGroup && deviceGroup.device && deviceGroup.device.manufacturer" x-text="deviceGroup && deviceGroup.device ? deviceGroup.device.manufacturer : ''"></span>
@@ -434,14 +436,21 @@
                                                     <!-- Status & Actions -->
                                                     <div class="flex items-center space-x-2">
                                                         <!-- Basename editing -->
-                                                        <div class="flex items-center space-x-2">
+                                                        <div class="flex items-center space-x-1">
                                                             <span class="text-xs text-gray-500" x-text="t('entity.basename')"></span>
                                                             <template x-if="entity && !entity.editing">
                                                                 <code class="text-xs font-mono cursor-pointer hover:underline"
-                                                                      :class="entity ? (entity.has_override ? 'text-blue-700' : (entityRequiresManualBasename(entity) ? 'text-red-600' : 'text-amber-700')) : 'text-gray-500'"
-                                                                      x-text="entity ? (entity.has_override ? entity.override_name : (entityRequiresManualBasename(entity) ? t('entity.click_to_edit') : getEntitySuggestion(entity))) : ''"
+                                                                      :class="entity ? (entity.has_override ? 'text-blue-700' : (entity.current_basename ? 'text-gray-700' : (entityRequiresManualBasename(entity) ? 'text-red-600' : 'text-amber-700'))) : 'text-gray-500'"
+                                                                      x-text="entity ? (entity.has_override ? entity.override_name : (entity.current_basename || (entityRequiresManualBasename(entity) ? t('entity.click_to_edit') : getEntitySuggestion(entity)))) : ''"
                                                                       @click="startEntityEdit(entity)"></code>
                                                             </template>
+                                                            <!-- Accept current basename button -->
+                                                            <button x-show="entity && !entity.editing && !entity.has_override && entity.current_basename"
+                                                                    @click.stop="acceptCurrentBasename(entity)"
+                                                                    class="text-green-600 hover:text-green-700 hover:bg-green-50 rounded p-0.5 transition-colors"
+                                                                    :title="t('entity.accept_current_basename')">
+                                                                <i class="ri-check-line text-sm"></i>
+                                                            </button>
                                                             <template x-if="entity && entity.editing">
                                                                 <input type="text"
                                                                        x-model="entity.override_name"
@@ -455,11 +464,19 @@
                                                         </div>
 
                                                         <!-- Status badges -->
-                                                        <button x-show="entity && entity.needs_rename && !entity.has_override && !entityRequiresManualBasename(entity)"
+                                                        <button x-show="entity && entity.needs_rename && !entity.has_override && !entity.current_basename && !entityRequiresManualBasename(entity)"
                                                                 @click.stop="acceptEntitySuggestion(entity)"
                                                                 class="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
                                                                 :title="t('entity.accept_suggestion')">
                                                             <span x-text="t('entity.suggestion')"></span>
+                                                        </button>
+                                                        <!-- Accept button for entities with correct names -->
+                                                        <button x-show="entity && !entity.needs_rename && !entity.has_maintained_label"
+                                                                @click.stop="acceptCurrentName(entity)"
+                                                                class="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                                                                :title="t('entity.accept_current_name')">
+                                                            <i class="ri-check-line mr-0.5"></i>
+                                                            <span x-text="t('entity.accept')"></span>
                                                         </button>
                                                         <span x-show="entity && entity.needs_rename && !entity.has_override && entityRequiresManualBasename(entity)"
                                                               class="text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700"
@@ -473,6 +490,11 @@
                                                         <span x-show="entity && !entity.needs_rename && entity.has_maintained_label"
                                                               class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full">
                                                             <i class="ri-check-line"></i> <span x-text="t('entity.maintained')"></span>
+                                                        </span>
+                                                        <!-- Show selected state for entities marked for acceptance -->
+                                                        <span x-show="entity && !entity.needs_rename && entity.selected && !entity.has_maintained_label"
+                                                              class="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                                                            <i class="ri-checkbox-circle-line mr-0.5"></i> <span x-text="t('entity.marked_for_acceptance')"></span>
                                                         </span>
                                                         <span x-show="entity && entity.disabled_by"
                                                               class="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full"
@@ -1339,6 +1361,26 @@
                             this.cancelEntityEdit(entity);
                         }
                     }, 200);
+                },
+
+                acceptCurrentName(entity) {
+                    // Mark entity as "maintained" without changing its name
+                    if (!entity || entity.has_maintained_label) return;
+
+                    // Select the entity to include it in the execution
+                    entity.selected = true;
+                    this.updateSelectedCount();
+
+                    // Show visual feedback
+                    this.showMessage(this.t('messages.entity_marked_for_acceptance'), 'success');
+                },
+
+                acceptCurrentBasename(entity) {
+                    // Accept the current basename extracted from friendly_name as override
+                    if (!entity || !entity.current_basename) return;
+
+                    entity.override_name = entity.current_basename;
+                    this.saveEntityEdit(entity);
                 },
 
                 acceptEntitySuggestion(entity) {
