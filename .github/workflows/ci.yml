@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [next-release]
+    paths-ignore:
+      - "translations/**"
+      - "*.md"
+      - "LICENSE"
+  pull_request:
+    branches: [main, next-release]
+    paths-ignore:
+      - "translations/**"
+      - "*.md"
+      - "LICENSE"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort
+
+      - name: Lint with flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82,E741,E722,F401,F402,F541,F841 --show-source --statistics --exclude=venv*,legacy,node_modules
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics --exclude=venv*,legacy,node_modules --extend-ignore=C901,E501,E203
+
+      - name: Check formatting with black
+        run: |
+          black --check --line-length 120 --target-version py312 --exclude="(venv*|legacy|node_modules)" .
+
+      - name: Check import order with isort
+        run: |
+          isort --check-only --profile black --line-length 120 --skip-glob="venv*" --skip-glob="legacy/*" --skip-glob="node_modules/*" .
+
+  build:
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get base image
+        id: base
+        run: |
+          BASE_IMAGE=$(jq -r ".build_from[\"${{ matrix.arch }}\"]" build.json)
+          echo "base_image=$BASE_IMAGE" >> $GITHUB_OUTPUT
+
+      - name: Set platform
+        id: platform
+        run: |
+          case "${{ matrix.arch }}" in
+            amd64) echo "platform=linux/amd64" >> $GITHUB_OUTPUT ;;
+            aarch64) echo "platform=linux/arm64" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Build Add-on
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: local/entity_manager:${{ matrix.arch }}
+          build-args: |
+            BUILD_FROM=${{ steps.base.outputs.base_image }}
+          platforms: ${{ steps.platform.outputs.platform }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON files
+        run: |
+          python3 -m json.tool config.json > /dev/null && echo "✓ config.json valid"
+          python3 -m json.tool build.json > /dev/null && echo "✓ build.json valid"
+          python3 -m json.tool repository.json > /dev/null && echo "✓ repository.json valid"
+
+      - name: Check required fields
+        run: |
+          jq -e '.name and .version and .slug and .description and .arch' config.json > /dev/null
+          echo "✓ config.json has all required fields"

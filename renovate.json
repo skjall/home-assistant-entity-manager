@@ -3,7 +3,7 @@
   "extends": [
     "config:recommended"
   ],
-  "baseBranches": [
+  "baseBranchPatterns": [
     "next-release"
   ],
   "constraints": {
@@ -60,13 +60,26 @@
       "description": "Pinned due to pytest-homeassistant-custom-component dependency"
     },
     {
-      "matchManagers": ["npm"],
-      "matchPackageNames": ["alpinejs", "remixicon"],
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "alpinejs",
+        "remixicon"
+      ],
       "groupName": "Frontend dependencies"
     },
     {
-      "matchManagers": ["npm"],
-      "matchPackageNames": ["tailwindcss", "postcss", "postcss-cli", "autoprefixer", "esbuild"],
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "tailwindcss",
+        "postcss",
+        "postcss-cli",
+        "autoprefixer",
+        "esbuild"
+      ],
       "groupName": "Build dependencies"
     }
   ],

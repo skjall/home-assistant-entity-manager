@@ -46,10 +46,10 @@
     "no_entities_found": "Keine Entitäten für diese Auswahl gefunden",
     "open_device_in_ha": "Gerät in Home Assistant öffnen",
     "accept_suggestion": "Vorschlag annehmen",
-    "accept": "Akzeptieren",
-    "accept_current_name": "Aktuellen Namen als korrekt akzeptieren",
-    "accept_current_basename": "Aktuellen Basisnamen übernehmen",
-    "marked_for_acceptance": "Zum Akzeptieren",
+    "accept": "Accept",
+    "accept_current_name": "Accept current name as correct",
+    "accept_current_basename": "Accept current basename as override",
+    "marked_for_acceptance": "To accept",
     "selected_badge": "Ausgewählt",
     "all_related_entities_note": "Alle zugehörigen Entitäts-IDs werden entsprechend angepasst",
     "save_cancel_hint": "{save} um zu speichern, {cancel} um abzubrechen",
@@ -87,7 +87,7 @@
     "dependency_warnings": "Abhängigkeitswarnungen",
     "dependencies_update_warning_title": "Abhängigkeiten konnten nicht automatisch aktualisiert werden",
     "dependencies_update_warning_desc": "Bitte überprüfen Sie die folgenden Entitäten manuell im Home Assistant:",
-    "entity_marked_for_acceptance": "Entität zur Akzeptierung markiert"
+    "entity_marked_for_acceptance": "Entity marked for acceptance"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",
@@ -113,7 +113,7 @@
     "count_plural": "Geräte",
     "current_name": "Aktueller Name",
     "new_name": "Neuer Name",
-    "open_details": "Gerätedetails öffnen"
+    "open_details": "Open device details"
   },
   "units": {
     "entities": "Entitäten",
