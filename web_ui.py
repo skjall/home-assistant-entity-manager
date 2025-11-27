@@ -23,6 +23,9 @@ from naming_overrides import NamingOverrides
 # Don't load .env in Add-on mode - use environment variables from Supervisor
 # load_dotenv()
 
+# Language-independent constant for entities without area assignment
+UNASSIGNED_AREA = "__unassigned__"
+
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 # Support for Ingress proxy headers
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
@@ -111,8 +114,8 @@ async def load_areas_and_entities():
             entities_by_area[area_name] = {"domains": {}}
             logger.debug(f"Added area: {area_name} (ID: {area_id})")
 
-        # Add "Not assigned"
-        entities_by_area["Nicht zugeordnet"] = {"domains": {}}
+        # Add "Not assigned" (using language-independent constant)
+        entities_by_area[UNASSIGNED_AREA] = {"domains": {}}
 
         # Create device-entity mapping from the devices
         device_entities = {}
@@ -133,7 +136,7 @@ async def load_areas_and_entities():
         for state in states:
             entity_id = state["entity_id"]
             domain = entity_id.split(".")[0]
-            area_name = "Nicht zugeordnet"
+            area_name = UNASSIGNED_AREA
 
             # Try to find area from various sources
 
@@ -149,7 +152,7 @@ async def load_areas_and_entities():
                     area_name = areas_dict[entity_reg["area_id"]]
 
             # 2. From Entity Attributes (some entities have area_id or device_id)
-            if area_name == "Nicht zugeordnet":
+            if area_name == UNASSIGNED_AREA:
                 attributes = state.get("attributes", {})
 
                 # Direct area_id in attributes
@@ -165,7 +168,7 @@ async def load_areas_and_entities():
                             area_name = areas_dict[device["area_id"]]
 
             # 3. Try to find the device via entity name
-            if area_name == "Nicht zugeordnet":
+            if area_name == UNASSIGNED_AREA:
                 # Extract possible device parts from entity ID
                 entity_parts = entity_id.split(".")[-1].split("_")
 
@@ -180,7 +183,7 @@ async def load_areas_and_entities():
                             break
 
             # 4. Try to recognize the room from entity ID (Fallback)
-            if area_name == "Nicht zugeordnet":
+            if area_name == UNASSIGNED_AREA:
                 entity_lower = entity_id.lower()
                 for area_id, name in areas_dict.items():
                     # Normalize area names for comparison
@@ -221,7 +224,7 @@ async def load_areas_and_entities():
             if entity_reg.get("disabled_by") is not None:
                 disabled_count += 1
                 domain = entity_id.split(".")[0]
-                area_name = "Nicht zugeordnet"
+                area_name = UNASSIGNED_AREA
 
                 # Find area from device or entity registry
                 device_id = entity_reg.get("device_id")
@@ -555,38 +558,31 @@ async def _preview_changes_async():
             # Gruppiere nach Device
             device_key = device_id or "no_device"
             if device_key not in devices_map:
-                # Generiere Device Suggestion
+                # Device naming logic:
+                # - Device with area: suggested_name = "{area} {device_name}" (if not already prefixed)
+                # - Device without area: suggested_name = current device name (no change)
+                # - Override: use override as full device name (with area prefix if has area)
                 device_suggested_name = None
                 if device_info:
-                    # Extrahiere aktuellen Device Namen ohne Raum
                     current_device_name = device_info["name"]
+                    has_real_area = area_name != UNASSIGNED_AREA
 
-                    # Check if device has a real area (not "Nicht zugeordnet")
-                    has_real_area = area_name != "Nicht zugeordnet"
-
-                    # Entferne Raumnamen vom Anfang des Device Names
-                    # Normalize for comparison
-                    area_normalized = area_name.lower()
-                    device_normalized = current_device_name.lower()
-
-                    # Extrahiere Basis-Device-Namen ohne Raum
-                    base_device_name = current_device_name
-                    if has_real_area and device_normalized.startswith(area_normalized):
-                        # Entferne Raumnamen vom Anfang
-                        base_device_name = current_device_name[len(area_name) :].strip()
-
-                    # Neuer Vorschlag: Aktueller Raum + Device Name (oder Override)
-                    # Only prepend area if device is actually assigned to an area
                     if device_override:
-                        if has_real_area:
-                            device_suggested_name = f"{area_name} {device_override['name']}"
+                        # Override is the full device name (user can include area or not)
+                        device_suggested_name = device_override["name"]
+                    elif has_real_area:
+                        # Check if device name already starts with area name
+                        area_normalized = area_name.lower()
+                        device_normalized = current_device_name.lower()
+                        if device_normalized.startswith(area_normalized):
+                            # Already has area prefix, keep as is
+                            device_suggested_name = current_device_name
                         else:
-                            device_suggested_name = device_override["name"]
+                            # Add area prefix
+                            device_suggested_name = f"{area_name} {current_device_name}"
                     else:
-                        if has_real_area:
-                            device_suggested_name = f"{area_name} {base_device_name}"
-                        else:
-                            device_suggested_name = base_device_name
+                        # No area, keep device name as is
+                        device_suggested_name = current_device_name
 
                 devices_map[device_key] = {
                     "device_info": device_info,
@@ -595,12 +591,12 @@ async def _preview_changes_async():
                             "id": device_id,
                             "current_name": (device_info["name"] if device_info else None),
                             "suggested_name": device_suggested_name,
-                            "suggested_base_name": (base_device_name if device_info else None),
                             "has_override": device_override is not None,
                             "override_name": (device_override.get("name") if device_override else None),
                             "needs_rename": device_info and device_info["name"] != device_suggested_name,
                             "manufacturer": (device_info.get("manufacturer", "") if device_info else None),
                             "model": (device_info.get("model", "") if device_info else None),
+                            "has_area": has_real_area,
                         }
                         if device_info
                         else None
@@ -744,17 +740,15 @@ async def _execute_changes_async():
         for device_data in selected_devices:
             device_id = device_data["device_id"]
             new_device_name = device_data["new_name"]
-            base_name = device_data.get("base_name", new_device_name)  # Fallback zum vollen Namen
             device_entities = device_data["entities"]
 
             try:
-                # Benenne Device um
                 logger.info(f"Renaming device {device_id} to {new_device_name}")
                 success = await device_registry.rename_device(device_id, new_device_name)
 
                 if success:
-                    # Speichere Override mit Basisname
-                    renamer_state["naming_overrides"].set_device_override(device_id, base_name)
+                    # Store the full device name as override
+                    renamer_state["naming_overrides"].set_device_override(device_id, new_device_name)
 
                     results["device_success"].append(
                         {
