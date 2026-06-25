@@ -2253,7 +2253,7 @@
                             <div class="relative">
                                 <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input type="text" x-model="swap.oldSearch" placeholder="Gerät suchen…" autocomplete="off"
-                                       class="area-select pl-9 w-full" :class="swap.oldId?'border-green-400 ring-2 ring-green-100':''"
+                                       class="area-select w-full" style="padding-left:2.25rem; padding-right:2.25rem" :class="swap.oldId?'border-green-400 ring-2 ring-green-100':''"
                                        @focus="swap.oldOpen=true; swap.newOpen=false" @input="swap.oldOpen=true; swap.oldId=''">
                                 <i x-show="swap.oldId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
@@ -2277,7 +2277,7 @@
                             <div class="relative">
                                 <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input type="text" x-model="swap.newSearch" placeholder="Gerät suchen…" autocomplete="off"
-                                       class="area-select pl-9 w-full" :class="swap.newId?'border-green-400 ring-2 ring-green-100':''"
+                                       class="area-select w-full" style="padding-left:2.25rem; padding-right:2.25rem" :class="swap.newId?'border-green-400 ring-2 ring-green-100':''"
                                        @focus="swap.newOpen=true; swap.oldOpen=false" @input="swap.newOpen=true; swap.newId=''">
                                 <i x-show="swap.newId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
