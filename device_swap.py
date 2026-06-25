@@ -363,6 +363,10 @@ class SwapExecutor:
         renamed = job.setdefault("new_renamed", {})
         target_prefix = _common_prefix_tokens([_object_id(i) for i in job.get("old_device_entities", [])])
         new_prefix = _common_prefix_tokens([_object_id(i) for i in job.get("new_device_entities", [])])
+        # Friendly-Name nachziehen: alter Device-Name (des neuen Geräts) -> Zielname,
+        # Entity-Bezeichnung (Suffix des Friendly-Namens) bleibt erhalten.
+        old_dev_name = (job.get("new_device") or {}).get("name", "")
+        target_name = job.get("target_device_name", "")
         for current in job.get("new_device_entities", []):
             if current in renamed:
                 continue  # idempotent (Resume)
@@ -370,11 +374,31 @@ class SwapExecutor:
             target_obj = "_".join(target_prefix + ([suffix] if suffix else []))
             target = f"{_domain(current)}.{target_obj}" if target_obj else current
 
-            if target != current:
-                await self.entity_registry.rename_entity(current, target, None)
-                self._log(job, STATE_RENAMING_ENTITIES, f"Renamed entity {current} -> {target}")
+            new_friendly = self._swap_friendly(current, old_dev_name, target_name)
+
+            if target != current or new_friendly:
+                await self.entity_registry.rename_entity(current, target, new_friendly)
+                msg = f"Renamed entity {current} -> {target}"
+                if new_friendly:
+                    msg += f" ('{new_friendly}')"
+                self._log(job, STATE_RENAMING_ENTITIES, msg)
             renamed[current] = target
             self._persist(job)
+
+    def _swap_friendly(self, entity_id: str, old_dev_name: str, target_name: str) -> Optional[str]:
+        """Neuer Friendly-Name: Device-Präfix tauschen, Entity-Bezeichnung behalten.
+
+        'Küche Fenster IKEA Batteriespannung' -> 'Küche Fenster Batteriespannung'.
+        None, wenn der aktuelle Friendly-Name nicht mit dem alten Device-Namen beginnt
+        (dann nichts anfassen, um nichts kaputtzumachen).
+        """
+        if not old_dev_name or not target_name:
+            return None
+        cur = (self.states_by_id.get(entity_id, {}).get("attributes") or {}).get("friendly_name")
+        if not cur or not cur.startswith(old_dev_name):
+            return None
+        basename = cur[len(old_dev_name) :].strip()
+        return f"{target_name} {basename}".strip() if basename else target_name
 
     async def _update_dependencies(self, job: Dict[str, Any]) -> None:
         """Referenzen umbiegen: ursprüngliche alte ID -> finale neue ID (pro Paar idempotent)."""
