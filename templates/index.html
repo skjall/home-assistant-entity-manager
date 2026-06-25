@@ -2671,18 +2671,42 @@
                 },
 
                 async swapResume(jobId) {
-                    this.swap.busy = true;
                     this.swap.error = '';
                     this.swap.show = true;
                     try {
                         const j = await fetch(`api/swap/${jobId}`).then(r => r.json());
+                        if (j.error) throw new Error(j.error);
                         this.swap.job = j;
                         this.swap.disposition = j.old_device_disposition || 'keep';
-                        this.swap.step = 4;
-                        const e = await fetch(`api/swap/${jobId}/execute`, { method: 'POST' });
-                        const ej = await e.json();
-                        if (!e.ok) throw new Error(ej.error || 'Fortsetzen fehlgeschlagen');
-                        this.swap.job = ej;
+                        this.swap.oldId = j.old_device?.device_id || '';
+                        this.swap.newId = j.new_device?.device_id || '';
+                        this.swap.oldSearch = j.old_device?.name || '';
+                        this.swap.newSearch = j.new_device?.name || '';
+
+                        if (j.state === 'PROPOSED') {
+                            // zurück zur Zuordnung, wo der Nutzer war
+                            this._initMappingFromJob(j);
+                            this.swap.step = 2;
+                        } else if (j.state === 'CONFIRMED') {
+                            // bestätigtes Mapping rekonstruieren -> Vorschau
+                            this.swap.mapping = (j.entity_mapping || []).map(m => ({
+                                old_entity_id: m.old_entity_id,
+                                new_entity_id: m.new_entity_id_current,
+                                device_class: null,
+                                confidence: 0
+                            }));
+                            this.swap.step = 3;
+                        } else if (j.state === 'COMPLETED' || j.state === 'ABORTED') {
+                            this.swap.step = 4;
+                        } else {
+                            // mitten in der Ausführung oder FAILED -> fortsetzen
+                            this.swap.step = 4;
+                            this.swap.busy = true;
+                            const e = await fetch(`api/swap/${jobId}/execute`, { method: 'POST' });
+                            const ej = await e.json();
+                            if (!e.ok) throw new Error(ej.error || 'Fortsetzen fehlgeschlagen');
+                            this.swap.job = ej;
+                        }
                     } catch (e) {
                         this.swap.error = e.message;
                     } finally {
