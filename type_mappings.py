@@ -14,6 +14,7 @@ Example resolution for "battery" with German user preference:
 3. Check system_defaults["device_class"]["battery"]["de"] -> "Batterie"
 4. Fallback -> "Battery"
 """
+
 import json
 import logging
 from pathlib import Path
@@ -38,7 +39,12 @@ DEFAULT_SYSTEM_MAPPINGS = {
         "co2": {"en": "CO2", "de": "CO2", "es": "CO2", "fr": "CO2"},
         "pm25": {"en": "PM2.5", "de": "PM2.5", "es": "PM2.5", "fr": "PM2.5"},
         "pm10": {"en": "PM10", "de": "PM10", "es": "PM10", "fr": "PM10"},
-        "signal_strength": {"en": "Signal Strength", "de": "Signalstärke", "es": "Intensidad de Señal", "fr": "Force du Signal"},
+        "signal_strength": {
+            "en": "Signal Strength",
+            "de": "Signalstärke",
+            "es": "Intensidad de Señal",
+            "fr": "Force du Signal",
+        },
         "timestamp": {"en": "Timestamp", "de": "Zeitstempel", "es": "Marca de Tiempo", "fr": "Horodatage"},
         "duration": {"en": "Duration", "de": "Dauer", "es": "Duración", "fr": "Durée"},
         # Binary sensors
@@ -78,18 +84,53 @@ DEFAULT_SYSTEM_MAPPINGS = {
     },
     "integration_defaults": {
         "zigbee2mqtt": {
-            "linkquality": {"en": "Link Quality", "de": "Verbindungsqualität", "es": "Calidad de Enlace", "fr": "Qualité de Liaison"},
-            "update_available": {"en": "Update Available", "de": "Update verfügbar", "es": "Actualización Disponible", "fr": "Mise à Jour Disponible"},
-            "occupancy_timeout": {"en": "Occupancy Timeout", "de": "Anwesenheits-Timeout", "es": "Tiempo de Ocupación", "fr": "Délai d'Occupation"},
+            "linkquality": {
+                "en": "Link Quality",
+                "de": "Verbindungsqualität",
+                "es": "Calidad de Enlace",
+                "fr": "Qualité de Liaison",
+            },
+            "update_available": {
+                "en": "Update Available",
+                "de": "Update verfügbar",
+                "es": "Actualización Disponible",
+                "fr": "Mise à Jour Disponible",
+            },
+            "occupancy_timeout": {
+                "en": "Occupancy Timeout",
+                "de": "Anwesenheits-Timeout",
+                "es": "Tiempo de Ocupación",
+                "fr": "Délai d'Occupation",
+            },
             "action": {"en": "Action", "de": "Aktion", "es": "Acción", "fr": "Action"},
             "click": {"en": "Click", "de": "Klick", "es": "Clic", "fr": "Clic"},
             "sensitivity": {"en": "Sensitivity", "de": "Empfindlichkeit", "es": "Sensibilidad", "fr": "Sensibilité"},
-            "led_indication": {"en": "LED Indication", "de": "LED-Anzeige", "es": "Indicación LED", "fr": "Indication LED"},
-            "power_outage_memory": {"en": "Power Outage Memory", "de": "Stromausfall-Speicher", "es": "Memoria de Corte de Energía", "fr": "Mémoire de Coupure"},
-            "child_lock": {"en": "Child Lock", "de": "Kindersicherung", "es": "Bloqueo Infantil", "fr": "Verrouillage Enfant"},
+            "led_indication": {
+                "en": "LED Indication",
+                "de": "LED-Anzeige",
+                "es": "Indicación LED",
+                "fr": "Indication LED",
+            },
+            "power_outage_memory": {
+                "en": "Power Outage Memory",
+                "de": "Stromausfall-Speicher",
+                "es": "Memoria de Corte de Energía",
+                "fr": "Mémoire de Coupure",
+            },
+            "child_lock": {
+                "en": "Child Lock",
+                "de": "Kindersicherung",
+                "es": "Bloqueo Infantil",
+                "fr": "Verrouillage Enfant",
+            },
         },
         "hue": {
-            "color_temp_startup": {"en": "Startup Color Temp", "de": "Start-Farbtemperatur", "es": "Temp. Color Inicio", "fr": "Temp. Couleur Démarrage"},
+            "color_temp_startup": {
+                "en": "Startup Color Temp",
+                "de": "Start-Farbtemperatur",
+                "es": "Temp. Color Inicio",
+                "fr": "Temp. Couleur Démarrage",
+            },
             "dynamics": {"en": "Dynamics", "de": "Dynamik", "es": "Dinámica", "fr": "Dynamique"},
         },
         "esphome": {
@@ -288,34 +329,40 @@ class TypeMappings:
         for type_key, lang_mapping in self.system_mappings.get("device_class", {}).items():
             if type_key not in seen_keys:
                 seen_keys.add(type_key)
-                all_types.append({
-                    "key": type_key,
-                    "system_default": lang_mapping.get(language, lang_mapping.get("en", type_key.title())),
-                    "user_mapping": self.user_mappings.get(type_key),
-                    "source": "device_class",
-                })
+                all_types.append(
+                    {
+                        "key": type_key,
+                        "system_default": lang_mapping.get(language, lang_mapping.get("en", type_key.title())),
+                        "user_mapping": self.user_mappings.get(type_key),
+                        "source": "device_class",
+                    }
+                )
 
         # Collect from integration defaults
         for integration, mappings in self.system_mappings.get("integration_defaults", {}).items():
             for type_key, lang_mapping in mappings.items():
                 if type_key not in seen_keys:
                     seen_keys.add(type_key)
-                    all_types.append({
-                        "key": type_key,
-                        "system_default": lang_mapping.get(language, lang_mapping.get("en", type_key.title())),
-                        "user_mapping": self.user_mappings.get(type_key),
-                        "source": f"integration:{integration}",
-                    })
+                    all_types.append(
+                        {
+                            "key": type_key,
+                            "system_default": lang_mapping.get(language, lang_mapping.get("en", type_key.title())),
+                            "user_mapping": self.user_mappings.get(type_key),
+                            "source": f"integration:{integration}",
+                        }
+                    )
 
         # Add user mappings not in system
         for type_key, translation in self.user_mappings.items():
             if type_key not in seen_keys:
-                all_types.append({
-                    "key": type_key,
-                    "system_default": None,
-                    "user_mapping": translation,
-                    "source": "user_custom",
-                })
+                all_types.append(
+                    {
+                        "key": type_key,
+                        "system_default": None,
+                        "user_mapping": translation,
+                        "source": "user_custom",
+                    }
+                )
 
         # Sort by key
         all_types.sort(key=lambda x: x["key"])

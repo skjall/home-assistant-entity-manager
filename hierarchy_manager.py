@@ -9,10 +9,11 @@ This module provides hierarchical name inheritance where:
 
 Changes at higher levels automatically cascade to all descendants.
 """
-import logging
-import re
+
 from dataclasses import dataclass, field
 from datetime import datetime
+import logging
+import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ def strip_prefix(full_name: str, prefix: str) -> str:
 
     # Check if full_name starts with prefix (with space separator)
     if full_lower.startswith(prefix_lower + " "):
-        return full_name[len(prefix) + 1:].strip()
+        return full_name[len(prefix) + 1 :].strip()
 
     # Check exact match (prefix == full name)
     if full_lower == prefix_lower:
@@ -350,8 +351,7 @@ class HierarchyManager:
                 self._area_to_entities[area_id].add(registry_id)
 
         logger.info(
-            f"Hierarchy loaded: {len(self.areas)} areas, "
-            f"{len(self.devices)} devices, {len(self.entities)} entities"
+            f"Hierarchy loaded: {len(self.areas)} areas, " f"{len(self.devices)} devices, {len(self.entities)} entities"
         )
 
     def _extract_base_name(
@@ -415,7 +415,7 @@ class HierarchyManager:
             if device:
                 device_display = device.get_display_name(area)
                 if original_name.lower().startswith(device_display.lower()):
-                    remainder = original_name[len(device_display):].strip()
+                    remainder = original_name[len(device_display) :].strip()
                     if remainder:
                         return remainder
             return original_name
@@ -453,9 +453,7 @@ class HierarchyManager:
 
         return result
 
-    def _get_area_for_entity(
-        self, entity: EntityNode, device: Optional[DeviceNode]
-    ) -> Optional[AreaNode]:
+    def _get_area_for_entity(self, entity: EntityNode, device: Optional[DeviceNode]) -> Optional[AreaNode]:
         """Get the area for an entity (via device or direct assignment)."""
         if device and device.area_id:
             return self.areas.get(device.area_id)

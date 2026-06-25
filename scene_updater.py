@@ -2,6 +2,7 @@
 """
 Scene Updater - Aktualisiert Entity IDs in Scenes über die REST API
 """
+
 import asyncio
 import logging
 import os

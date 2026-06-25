@@ -2,12 +2,12 @@
 """
 Reference Checker - Prüft Automations/Scenes/Scripts auf verwaiste Entity-Referenzen.
 """
+
 import asyncio
-import json
+from dataclasses import asdict, dataclass
 import logging
 import os
 import re
-from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import aiohttp

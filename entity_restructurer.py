@@ -11,6 +11,7 @@ Integrates with:
 - HierarchyManager: For cascade updates when renaming areas/devices
 - TypeMappings: For multilingual entity type translations
 """
+
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -532,9 +533,7 @@ class EntityRestructurer:
         # No hierarchy manager - devices are renamed via HA API directly
         return {}
 
-    def update_entity_name(
-        self, registry_id: str, new_name: str, learn_mapping: bool = False
-    ) -> Tuple[str, str]:
+    def update_entity_name(self, registry_id: str, new_name: str, learn_mapping: bool = False) -> Tuple[str, str]:
         """
         Update entity base name.
 

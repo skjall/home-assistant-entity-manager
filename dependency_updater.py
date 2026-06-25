@@ -2,6 +2,7 @@
 """
 Dependency Updater - Aktualisiert Entity IDs in Scenes, Scripts und Automations
 """
+
 import asyncio
 import json
 import logging

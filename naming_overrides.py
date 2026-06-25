@@ -10,6 +10,7 @@ Schema Version History:
 Only entity suffix overrides are stored. Device and area names
 come directly from the Home Assistant API.
 """
+
 import json
 import logging
 from pathlib import Path

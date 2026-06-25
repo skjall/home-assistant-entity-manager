@@ -2,6 +2,7 @@
 """
 Device Registry - Verwaltet Geräte in Home Assistant
 """
+
 import logging
 from typing import Any, Dict, Optional
 
