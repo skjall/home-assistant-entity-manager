@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 from dotenv import load_dotenv
 
+from entity_ref_utils import replace_entity_in_obj
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -113,50 +115,19 @@ class DependencyUpdater:
                     return False
 
     def replace_entity_in_dict(self, data: Any, old_entity_id: str, new_entity_id: str) -> bool:
-        """Rekursiv Entity IDs in einem Dictionary ersetzen.
+        """Rekursiv Entity IDs in einem Dictionary ersetzen (in-place).
 
         Unterstützt:
         - entity_id: "entity.id" (direkter Wert)
         - entity_id: ["entity.id", ...] (Liste unter entity_id Key)
         - beliebiger_key: "entity.id" (z.B. Blueprint-Inputs)
         - beliebiger_key: ["entity.id", ...] (z.B. Blueprint-Input Listen)
-        - Templates mit {{ entity.id }}
+        - Templates mit {{ entity.id }} (wortgrenzen-sicher)
+
+        Delegiert an die zentrale Logik in entity_ref_utils, damit Scanner,
+        Updater und Lovelace-Updater dieselbe Ersetzung verwenden.
         """
-        changed = False
-
-        if isinstance(data, dict):
-            for key, value in data.items():
-                if isinstance(value, str):
-                    # Direkte String-Werte die exakt die Entity-ID sind
-                    if value == old_entity_id:
-                        data[key] = new_entity_id
-                        changed = True
-                    # Templates mit Entity-Referenzen
-                    elif "{{" in value and "}}" in value and old_entity_id in value:
-                        data[key] = value.replace(old_entity_id, new_entity_id)
-                        changed = True
-                elif isinstance(value, list):
-                    # Listen mit Entity-ID Strings (z.B. entity_id oder Blueprint-Input)
-                    if old_entity_id in value:
-                        data[key] = [new_entity_id if e == old_entity_id else e for e in value]
-                        changed = True
-                    # Rekursiv in Listen von Dicts
-                    if self.replace_entity_in_dict(value, old_entity_id, new_entity_id):
-                        changed = True
-                elif isinstance(value, dict):
-                    if self.replace_entity_in_dict(value, old_entity_id, new_entity_id):
-                        changed = True
-
-        elif isinstance(data, list):
-            for i, item in enumerate(data):
-                if isinstance(item, str) and item == old_entity_id:
-                    data[i] = new_entity_id
-                    changed = True
-                elif isinstance(item, (dict, list)):
-                    if self.replace_entity_in_dict(item, old_entity_id, new_entity_id):
-                        changed = True
-
-        return changed
+        return replace_entity_in_obj(data, old_entity_id, new_entity_id)
 
     async def update_script_entities(self, script_id: str, old_entity_id: str, new_entity_id: str) -> bool:
         """Aktualisiere Entity in einem Script"""

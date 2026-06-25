@@ -103,6 +103,74 @@ class DeviceRegistry:
             logger.error(f"Error assigning device {device_id} to area: {str(e)}")
             raise
 
+    async def disable_device(self, device_id: str) -> Dict[str, Any]:
+        """Deaktiviert ein Gerät (disabled_by='user')."""
+        logger.info(f"Disabling device {device_id}")
+
+        try:
+            msg_id = await self.ws._send_message(
+                {
+                    "type": "config/device_registry/update",
+                    "device_id": device_id,
+                    "disabled_by": "user",
+                }
+            )
+
+            response = await self.ws._receive_message()
+            while response.get("id") != msg_id:
+                response = await self.ws._receive_message()
+
+            if not response.get("success"):
+                error_msg = response.get("error", {}).get("message", "Unknown error")
+                logger.error(f"Failed to disable device: {error_msg}")
+                raise Exception(f"Failed to disable device: {error_msg}")
+
+            logger.info(f"Successfully disabled device {device_id}")
+            return {"success": True, "device_id": device_id}
+
+        except Exception as e:
+            logger.error(f"Error disabling device {device_id}: {str(e)}")
+            raise
+
+    async def remove_config_entry(self, device_id: str, config_entry_id: str) -> Dict[str, Any]:
+        """Entfernt ein Gerät über einen seiner Config-Entries.
+
+        Dies ist derselbe Pfad, den auch das HA-Frontend beim "Gerät löschen"
+        nutzt; für Integrationen wie Matter/Z2M (MQTT) löst HA dabei das
+        eigentliche Entfernen aus der Integration aus.
+
+        Manche Integrationen lehnen das Entfernen ab (z.B. Matter, wenn das
+        Gerät noch erreichbar ist) - dann wirft diese Methode eine Exception
+        mit der HA-Fehlermeldung, die der Aufrufer als Teilerfolg behandeln kann.
+        """
+        logger.info(f"Removing config_entry {config_entry_id} from device {device_id}")
+
+        try:
+            msg_id = await self.ws._send_message(
+                {
+                    "type": "config/device_registry/remove_config_entry",
+                    "device_id": device_id,
+                    "config_entry_id": config_entry_id,
+                }
+            )
+
+            response = await self.ws._receive_message()
+            while response.get("id") != msg_id:
+                response = await self.ws._receive_message()
+
+            if not response.get("success"):
+                error_msg = response.get("error", {}).get("message", "Unknown error")
+                logger.error(f"Failed to remove config_entry from device: {error_msg}")
+                raise Exception(f"Failed to remove device: {error_msg}")
+
+            # result is the updated device (None/empty if the device was fully removed)
+            logger.info(f"Successfully removed config_entry {config_entry_id} from device {device_id}")
+            return {"success": True, "device_id": device_id, "result": response.get("result")}
+
+        except Exception as e:
+            logger.error(f"Error removing config_entry from device {device_id}: {str(e)}")
+            raise
+
     async def get_device(self, device_id: str) -> Optional[Dict[str, Any]]:
         """Holt Geräteinformationen"""
         try:
