@@ -2207,12 +2207,12 @@
                     </div>
 
                     <label class="block text-sm font-medium mb-1">Altes Gerät (wird ersetzt)</label>
-                    <div class="relative mb-3">
+                    <div class="relative mb-3" :class="swap.oldOpen?'z-30':'z-10'" @click.away="swap.oldOpen=false">
                         <input type="text" x-model="swap.oldSearch" placeholder="Gerät suchen…" autocomplete="off"
                                class="area-select" :class="swap.oldId?'border-green-400':''"
                                @focus="swap.oldOpen=true" @input="swap.oldOpen=true; swap.oldId=''">
-                        <div x-show="swap.oldOpen" @click.away="swap.oldOpen=false"
-                             class="absolute z-20 mt-1 bg-white border rounded shadow-lg max-h-60 overflow-y-auto w-full">
+                        <div x-show="swap.oldOpen"
+                             class="absolute z-30 mt-1 bg-white border rounded shadow-lg max-h-60 overflow-y-auto w-full">
                             <template x-for="d in swapFilteredDevices(swap.oldSearch)" :key="d.device_id">
                                 <div @click="swapPickDevice('old', d)"
                                      class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
@@ -2223,12 +2223,12 @@
                     </div>
 
                     <label class="block text-sm font-medium mb-1">Neues Gerät</label>
-                    <div class="relative mb-3">
+                    <div class="relative mb-3" :class="swap.newOpen?'z-30':'z-10'" @click.away="swap.newOpen=false">
                         <input type="text" x-model="swap.newSearch" placeholder="Gerät suchen…" autocomplete="off"
                                class="area-select" :class="swap.newId?'border-green-400':''"
                                @focus="swap.newOpen=true" @input="swap.newOpen=true; swap.newId=''">
-                        <div x-show="swap.newOpen" @click.away="swap.newOpen=false"
-                             class="absolute z-20 mt-1 bg-white border rounded shadow-lg max-h-60 overflow-y-auto w-full">
+                        <div x-show="swap.newOpen"
+                             class="absolute z-30 mt-1 bg-white border rounded shadow-lg max-h-60 overflow-y-auto w-full">
                             <template x-for="d in swapFilteredDevices(swap.newSearch)" :key="d.device_id">
                                 <div @click="swapPickDevice('new', d)"
                                      class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
