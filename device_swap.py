@@ -240,6 +240,7 @@ class SwapExecutor:
         restructurer: Any,
         states_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
         timestamp: str = "",
+        lovelace_updater: Any = None,
     ):
         self.store = store
         self.device_registry = device_registry
@@ -249,6 +250,7 @@ class SwapExecutor:
         self.restructurer = restructurer
         self.states_by_id = states_by_id or {}
         self.timestamp = timestamp
+        self.lovelace_updater = lovelace_updater
 
     # --- Persistenz-Helfer ---
 
@@ -386,7 +388,14 @@ class SwapExecutor:
             current = pair["new_entity_id_current"]
             new_id = renamed.get(current, current)  # finale ID nach RENAMING_ENTITIES
             await self.dependency_updater.update_all_dependencies(old_id, new_id, states)
-            # Dashboards werden in einer späteren Ausbaustufe hier ergänzt.
+            # Dashboards (Lovelace, Storage-Mode) ebenfalls umbiegen
+            if self.lovelace_updater is not None:
+                try:
+                    changed = await self.lovelace_updater.update_all_dashboards(old_id, new_id)
+                    if changed:
+                        self._log(job, STATE_UPDATING_DEPENDENCIES, f"Dashboards updated: {', '.join(changed)}")
+                except Exception as e:  # noqa: BLE001 - dashboards must not block the swap
+                    self._log(job, STATE_UPDATING_DEPENDENCIES, f"Dashboard update failed for {old_id}: {e}")
             pair["new_entity_id_target"] = new_id
             pair["status"] = "deps_done"
             self._log(job, STATE_UPDATING_DEPENDENCIES, f"Rewired references {old_id} -> {new_id}")

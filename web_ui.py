@@ -30,6 +30,7 @@ from entity_restructurer import EntityRestructurer
 from ha_client import HomeAssistantClient
 from ha_websocket import HomeAssistantWebSocket
 from hierarchy_manager import normalize_name
+from lovelace_updater import LovelaceUpdater
 from naming_overrides import NamingOverrides
 from reference_checker import ReferenceChecker
 from type_mappings import TypeMappings
@@ -2786,10 +2787,12 @@ async def _swap_propose_async():
 
     client = await init_client()
     states = await client.get_states()
+    dashboard_refs = set()
     ws = HomeAssistantWebSocket(_ws_url(), os.getenv("HA_TOKEN"))
     await ws.connect()
     try:
         await renamer_state["restructurer"].load_structure(ws)
+        dashboard_refs = await LovelaceUpdater(ws).get_referenced_entity_ids()
     finally:
         await ws.disconnect()
 
@@ -2803,8 +2806,10 @@ async def _swap_propose_async():
 
     # Nur referenzierte (in use) alte Entities mappen - ungenutzte werden ohnehin
     # über die Device-Rename-Logik mitbenannt und brauchen kein Mapping.
+    # in use = Automations/Scenes/Scripts (REST) + Dashboards (WS).
     ref_checker = ReferenceChecker(os.getenv("HA_URL"), os.getenv("HA_TOKEN"))
     referenced = await ref_checker.get_all_referenced_entity_ids()
+    referenced |= dashboard_refs
     old_ents_in_use = [e for e in old_ents if e.get("entity_id") in referenced]
 
     proposal = propose_mapping(old_ents_in_use, new_ents, states_by_id)
@@ -2915,6 +2920,7 @@ async def _swap_execute_async(job_id):
             restructurer=renamer_state["restructurer"],
             states_by_id={s["entity_id"]: s for s in states},
             timestamp=_iso_now(),
+            lovelace_updater=LovelaceUpdater(ws),
         )
         job = await executor.run(job)
     finally:

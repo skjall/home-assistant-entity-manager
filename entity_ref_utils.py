@@ -18,6 +18,31 @@ z.B. `..._tur` faelschlich in `..._tur_2` treffen. Daher:
 import re
 from typing import Any, Tuple
 
+_ENTITY_ID_RE = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
+
+
+def extract_entity_ids(data: Any) -> set:
+    """Sammelt rekursiv alle Strings, die wie eine entity_id (domain.object_id) aussehen.
+
+    Bewusst grob (auch in Freitext/Templates) - dient nur dem in-use-Check (kommt eine
+    konkrete entity_id irgendwo vor?), nicht der exakten Referenz-Klassifizierung.
+    """
+    found: set = set()
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, str):
+            for m in _ENTITY_ID_RE.findall(node):
+                found.add(m)
+        elif isinstance(node, dict):
+            for v in node.values():
+                _walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                _walk(v)
+
+    _walk(data)
+    return found
+
 
 def replace_entity_ref_in_string(value: str, old_entity_id: str, new_entity_id: str) -> Tuple[str, bool]:
     """Ersetzt eine Entity-ID in einem einzelnen String.
