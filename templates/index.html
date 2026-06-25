@@ -2174,147 +2174,243 @@
              x-transition:enter-end="opacity-100"
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
              @click.self="closeSwap()">
-            <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold"><i class="ri-exchange-line mr-2 text-blue-600"></i>Gerät ersetzen</h3>
-                    <button @click="closeSwap()" class="btn btn-ghost"><i class="ri-close-line"></i></button>
+            <div class="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100">
+
+                <!-- HEADER -->
+                <div class="flex items-start gap-3 px-6 py-4 border-b border-gray-100">
+                    <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                        <i class="ri-exchange-line text-blue-600 text-xl"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-lg font-semibold text-gray-900">Gerät ersetzen</h3>
+                        <p class="text-sm text-gray-500 truncate" x-show="swap.step > 1">
+                            <span x-text="swap.job?.old_device?.name || swap.oldSearch"></span>
+                            <i class="ri-arrow-right-line mx-1 text-gray-400"></i>
+                            <span class="text-blue-600 font-medium" x-text="swap.job?.new_device?.name || swap.newSearch"></span>
+                        </p>
+                    </div>
+                    <button @click="closeSwap()" class="btn btn-ghost shrink-0"><i class="ri-close-line text-lg"></i></button>
                 </div>
 
-                <div class="flex flex-wrap gap-2 mb-4 text-xs items-center">
-                    <span :class="swap.step>=1?'font-bold text-blue-600':'text-gray-400'">1. Geräte</span><span class="text-gray-300">›</span>
-                    <span :class="swap.step>=2?'font-bold text-blue-600':'text-gray-400'">2. Zuordnung</span><span class="text-gray-300">›</span>
-                    <span :class="swap.step>=3?'font-bold text-blue-600':'text-gray-400'">3. Vorschau</span><span class="text-gray-300">›</span>
-                    <span :class="swap.step>=4?'font-bold text-blue-600':'text-gray-400'">4. Ausführung</span>
-                </div>
-
-                <div x-show="swap.error" class="bg-red-100 text-red-700 rounded p-2 mb-3 text-sm" x-text="swap.error"></div>
-
-                <!-- Step 1: Geräte wählen -->
-                <div x-show="swap.step === 1">
-                    <div x-show="swap.loading" class="text-gray-500 py-4">Lade Geräte…</div>
-
-                    <div x-show="swap.resumeJobs.length" class="bg-yellow-50 border border-yellow-300 rounded p-3 mb-3">
-                        <p class="text-sm font-medium mb-2">Offene Austausch-Vorgänge:</p>
-                        <template x-for="j in swap.resumeJobs" :key="j.job_id">
-                            <div class="flex items-center justify-between text-sm py-1">
-                                <span x-text="(j.old_device?.name||'?') + ' → ' + (j.new_device?.name||'?') + '  ['+j.state+']'"></span>
-                                <span class="flex gap-1">
-                                    <button @click="swapResume(j.job_id)" class="btn btn-ghost text-blue-600">Fortsetzen</button>
-                                    <button x-show="j.state==='PROPOSED'||j.state==='CONFIRMED'" @click="swapAbort(j.job_id)" class="btn btn-ghost text-gray-500">Verwerfen</button>
-                                </span>
-                            </div>
-                        </template>
-                    </div>
-
-                    <label class="block text-sm font-medium mb-1">Altes Gerät (wird ersetzt)</label>
-                    <div class="relative mb-3" :class="swap.oldOpen?'z-30':'z-10'" @click.away="swap.oldOpen=false">
-                        <input type="text" x-model="swap.oldSearch" placeholder="Gerät suchen…" autocomplete="off"
-                               class="area-select" :class="swap.oldId?'border-green-400':''"
-                               @focus="swap.oldOpen=true" @input="swap.oldOpen=true; swap.oldId=''">
-                        <div x-show="swap.oldOpen"
-                             class="absolute z-30 mt-1 bg-white border rounded shadow-lg max-h-60 overflow-y-auto w-full">
-                            <template x-for="d in swapFilteredDevices(swap.oldSearch)" :key="d.device_id">
-                                <div @click="swapPickDevice('old', d)"
-                                     class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
-                                     x-text="(d.area?d.area+' / ':'')+d.name+' ('+d.entity_count+')'"></div>
-                            </template>
-                            <div x-show="!swapFilteredDevices(swap.oldSearch).length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
-                        </div>
-                    </div>
-
-                    <label class="block text-sm font-medium mb-1">Neues Gerät</label>
-                    <div class="relative mb-3" :class="swap.newOpen?'z-30':'z-10'" @click.away="swap.newOpen=false">
-                        <input type="text" x-model="swap.newSearch" placeholder="Gerät suchen…" autocomplete="off"
-                               class="area-select" :class="swap.newId?'border-green-400':''"
-                               @focus="swap.newOpen=true" @input="swap.newOpen=true; swap.newId=''">
-                        <div x-show="swap.newOpen"
-                             class="absolute z-30 mt-1 bg-white border rounded shadow-lg max-h-60 overflow-y-auto w-full">
-                            <template x-for="d in swapFilteredDevices(swap.newSearch)" :key="d.device_id">
-                                <div @click="swapPickDevice('new', d)"
-                                     class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
-                                     x-text="(d.area?d.area+' / ':'')+d.name+' ('+d.entity_count+')'"></div>
-                            </template>
-                            <div x-show="!swapFilteredDevices(swap.newSearch).length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-end gap-2 mt-4">
-                        <button @click="closeSwap()" class="btn btn-ghost">Abbrechen</button>
-                        <button @click="swapPropose()" class="btn btn-primary" :disabled="swap.busy">
-                            <span x-text="swap.busy?'…':'Weiter'"></span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Step 2: Mapping -->
-                <div x-show="swap.step === 2">
-                    <p class="text-sm text-gray-600 mb-2">Ordne die Entities des alten Geräts denen des neuen zu. „nicht übertragen" lässt eine Referenz unverändert.</p>
-                    <div class="border rounded divide-y max-h-80 overflow-y-auto">
-                        <template x-for="row in swap.mapping" :key="row.old_entity_id">
-                            <div class="flex items-center gap-2 p-2 text-sm">
-                                <div class="flex-1 truncate" :title="row.old_entity_id">
-                                    <span x-text="row.old_entity_id"></span>
-                                    <span x-show="row.device_class" class="text-xs text-gray-400" x-text="'('+row.device_class+')'"></span>
+                <!-- STEPPER -->
+                <div class="px-6 py-4 bg-gray-50 border-b border-gray-100">
+                    <div class="flex items-center">
+                        <template x-for="(s, i) in swap.steps" :key="s.n">
+                            <div class="flex items-center" :class="i < swap.steps.length - 1 ? 'flex-1' : ''">
+                                <div class="flex flex-col items-center gap-1.5 shrink-0">
+                                    <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-all"
+                                         :class="swap.step > s.n ? 'bg-green-500 text-white' : swap.step === s.n ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-white text-gray-400 border border-gray-300'">
+                                        <i x-show="swap.step > s.n" class="ri-check-line text-lg"></i>
+                                        <i x-show="swap.step === s.n" :class="s.icon"></i>
+                                        <span x-show="swap.step < s.n" x-text="s.n"></span>
+                                    </div>
+                                    <span class="text-xs whitespace-nowrap" :class="swap.step >= s.n ? 'font-semibold text-blue-600' : 'text-gray-400'" x-text="s.label"></span>
                                 </div>
-                                <i class="ri-arrow-right-line text-gray-400"></i>
-                                <select x-model="row.new_entity_id" class="area-select flex-1">
-                                    <option value="">— nicht übertragen —</option>
-                                    <template x-for="opt in swap.newEntityOptions" :key="opt">
-                                        <option :value="opt" x-text="opt"></option>
-                                    </template>
-                                </select>
+                                <div x-show="i < swap.steps.length - 1" class="flex-1 h-0.5 mx-2 mb-5 rounded transition-colors" :class="swap.step > s.n ? 'bg-green-500' : 'bg-gray-200'"></div>
                             </div>
                         </template>
                     </div>
-                    <div class="flex justify-between gap-2 mt-4">
-                        <button @click="swap.step=1" class="btn btn-ghost">Zurück</button>
-                        <button @click="goToPreview()" class="btn btn-primary">Weiter</button>
-                    </div>
                 </div>
 
-                <!-- Step 3: Vorschau + Disposition -->
-                <div x-show="swap.step === 3">
-                    <p class="text-sm text-gray-600 mb-2">Das neue Gerät erhält den Namen <strong x-text="swap.job?.target_device_name"></strong>. Folgende Referenzen werden umgebogen:</p>
-                    <div class="border rounded divide-y max-h-56 overflow-y-auto mb-3 text-sm">
-                        <template x-for="p in swapActivePairs()" :key="p.old_entity_id">
-                            <div class="p-2"><span x-text="p.old_entity_id"></span> <i class="ri-arrow-right-line text-gray-400"></i> <span class="text-blue-600" x-text="p.new_entity_id"></span></div>
-                        </template>
+                <!-- BODY (scrollt) -->
+                <div class="flex-1 overflow-y-auto px-6 py-5">
+                    <div x-show="swap.error" class="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
+                        <i class="ri-error-warning-line mt-0.5 shrink-0"></i><span x-text="swap.error"></span>
                     </div>
-                    <label class="block text-sm font-medium mb-1">Was soll mit dem alten Gerät passieren?</label>
-                    <select x-model="swap.disposition" class="area-select mb-3">
-                        <option value="keep">Behalten (umbenennen zu „… (ersetzt)")</option>
-                        <option value="disable">Deaktivieren</option>
-                        <option value="delete">Löschen (inkl. nativ aus der Integration)</option>
-                    </select>
-                    <div class="bg-yellow-50 border border-yellow-300 rounded p-2 text-xs text-yellow-800 mb-3">
-                        Hinweis: Geräte-Trigger (über device_id) und YAML-Dashboards werden nicht automatisch umgebogen.
-                    </div>
-                    <div class="flex justify-between gap-2 mt-2">
-                        <button @click="swap.step=2" class="btn btn-ghost">Zurück</button>
-                        <button @click="swapExecute()" class="btn bg-blue-600 text-white hover:bg-blue-700" :disabled="swap.busy">
-                            <span x-text="swap.busy?'Wird ausgeführt…':'Austausch starten'"></span>
-                        </button>
-                    </div>
-                </div>
 
-                <!-- Step 4: Ausführung/Status -->
-                <div x-show="swap.step === 4">
-                    <div x-show="swap.busy" class="text-gray-600 mb-3"><i class="ri-loader-4-line animate-spin mr-2"></i>Austausch läuft…</div>
-                    <div x-show="!swap.busy && swap.job">
-                        <div x-show="swap.job?.state==='COMPLETED'" class="bg-green-100 text-green-800 rounded p-3 mb-3"><i class="ri-check-line mr-2"></i>Austausch abgeschlossen.</div>
-                        <div x-show="swap.job?.state==='FAILED'" class="bg-red-100 text-red-800 rounded p-3 mb-3">
-                            <i class="ri-error-warning-line mr-2"></i>Fehlgeschlagen bei Schritt <span x-text="swap.job?.failed_step"></span>. Erneut versuchen setzt fort.
+                    <!-- Step 1: Geräte wählen -->
+                    <div x-show="swap.step === 1">
+                        <div x-show="swap.loading" class="flex items-center gap-2 text-gray-500 py-6 justify-center">
+                            <i class="ri-loader-4-line animate-spin text-lg"></i> Lade Geräte…
+                        </div>
+
+                        <div x-show="swap.resumeJobs.length" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5">
+                            <p class="flex items-center gap-2 text-sm font-semibold text-amber-800 mb-3"><i class="ri-history-line"></i> Offene Austausch-Vorgänge</p>
+                            <template x-for="j in swap.resumeJobs" :key="j.job_id">
+                                <div class="flex items-center justify-between gap-3 bg-white rounded-lg border border-amber-100 px-3 py-2 mb-2">
+                                    <div class="min-w-0">
+                                        <p class="text-sm text-gray-700 truncate">
+                                            <span x-text="j.old_device?.name||'?'"></span>
+                                            <i class="ri-arrow-right-line text-gray-400 mx-1"></i>
+                                            <span x-text="j.new_device?.name||'?'"></span>
+                                        </p>
+                                        <span class="inline-block mt-0.5 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium" x-text="j.state"></span>
+                                    </div>
+                                    <div class="flex gap-1 shrink-0">
+                                        <button @click="swapResume(j.job_id)" class="btn btn-ghost text-blue-600 text-sm"><i class="ri-play-line mr-1"></i>Fortsetzen</button>
+                                        <button x-show="j.state==='PROPOSED'||j.state==='CONFIRMED'" @click="swapAbort(j.job_id)" class="btn btn-ghost text-gray-400 text-sm">Verwerfen</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Altes Gerät (durchsuchbar, Liste inline im Fluss) -->
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">Altes Gerät <span class="text-gray-400 font-normal">(wird ersetzt)</span></label>
+                        <div class="mb-4" @click.away="swap.oldOpen=false" @keydown.escape.stop="swap.oldOpen=false">
+                            <div class="relative">
+                                <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                                <input type="text" x-model="swap.oldSearch" placeholder="Gerät suchen…" autocomplete="off"
+                                       class="area-select pl-9" :class="swap.oldId?'border-green-400 ring-2 ring-green-100':''"
+                                       @focus="swap.oldOpen=true; swap.newOpen=false" @input="swap.oldOpen=true; swap.oldId=''">
+                                <i x-show="swap.oldId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
+                            </div>
+                            <div x-show="swap.oldOpen" class="mt-1 border border-gray-200 rounded-lg bg-white max-h-60 overflow-y-auto divide-y divide-gray-100">
+                                <template x-for="d in swapFilteredDevices(swap.oldSearch)" :key="d.device_id">
+                                    <button type="button" @click="swapPickDevice('old', d)"
+                                            class="flex items-center justify-between w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none cursor-pointer text-sm"
+                                            :class="d.device_id===swap.oldId?'bg-blue-100 font-medium':''">
+                                        <span class="truncate"><span class="text-gray-400" x-show="d.area" x-text="d.area+' / '"></span><span x-text="d.name"></span></span>
+                                        <span class="text-xs text-gray-400 shrink-0 ml-2" x-text="d.entity_count+' E.'"></span>
+                                    </button>
+                                </template>
+                                <div x-show="!swapFilteredDevices(swap.oldSearch).length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
+                                <div x-show="swap._lastCount > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swap._lastCount-50)+' weitere — Suche eingrenzen'"></div>
+                            </div>
+                        </div>
+
+                        <!-- Neues Gerät -->
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">Neues Gerät</label>
+                        <div class="mb-2" @click.away="swap.newOpen=false" @keydown.escape.stop="swap.newOpen=false">
+                            <div class="relative">
+                                <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                                <input type="text" x-model="swap.newSearch" placeholder="Gerät suchen…" autocomplete="off"
+                                       class="area-select pl-9" :class="swap.newId?'border-green-400 ring-2 ring-green-100':''"
+                                       @focus="swap.newOpen=true; swap.oldOpen=false" @input="swap.newOpen=true; swap.newId=''">
+                                <i x-show="swap.newId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
+                            </div>
+                            <div x-show="swap.newOpen" class="mt-1 border border-gray-200 rounded-lg bg-white max-h-60 overflow-y-auto divide-y divide-gray-100">
+                                <template x-for="d in swapFilteredDevices(swap.newSearch)" :key="d.device_id">
+                                    <button type="button" @click="swapPickDevice('new', d)"
+                                            class="flex items-center justify-between w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none cursor-pointer text-sm"
+                                            :class="d.device_id===swap.newId?'bg-blue-100 font-medium':''">
+                                        <span class="truncate"><span class="text-gray-400" x-show="d.area" x-text="d.area+' / '"></span><span x-text="d.name"></span></span>
+                                        <span class="text-xs text-gray-400 shrink-0 ml-2" x-text="d.entity_count+' E.'"></span>
+                                    </button>
+                                </template>
+                                <div x-show="!swapFilteredDevices(swap.newSearch).length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
+                                <div x-show="swap._lastCount > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swap._lastCount-50)+' weitere — Suche eingrenzen'"></div>
+                            </div>
                         </div>
                     </div>
-                    <div class="border rounded max-h-56 overflow-y-auto text-xs font-mono p-2 mb-3" x-show="swap.job?.log?.length">
-                        <template x-for="(l,i) in (swap.job?.log||[])" :key="i">
-                            <div><span class="text-gray-400" x-text="l.step"></span>: <span x-text="l.message"></span></div>
-                        </template>
+
+                    <!-- Step 2: Mapping -->
+                    <div x-show="swap.step === 2">
+                        <p class="text-sm text-gray-600 mb-4">Ordne die Entities des alten Geräts denen des neuen zu. <span class="text-gray-400">„nicht übertragen" lässt eine Referenz unverändert.</span></p>
+                        <div class="space-y-2">
+                            <template x-for="row in swap.mapping" :key="row.old_entity_id">
+                                <div class="rounded-lg border border-gray-200 p-3 transition hover:bg-gray-50" :class="!row.new_entity_id ? 'opacity-60' : ''">
+                                    <div class="flex items-center gap-3">
+                                        <div class="flex-1 min-w-0">
+                                            <p class="font-mono text-xs text-gray-700 truncate" :title="row.old_entity_id" x-text="row.old_entity_id"></p>
+                                            <div class="flex items-center gap-1.5 mt-1.5">
+                                                <span x-show="row.device_class" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium" x-text="row.device_class"></span>
+                                                <span x-show="row.confidence" class="text-xs px-2 py-0.5 rounded-full font-medium"
+                                                      :class="row.confidence >= 0.8 ? 'bg-green-100 text-green-700' : row.confidence >= 0.5 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'"
+                                                      x-text="Math.round(row.confidence * 100) + '%'"></span>
+                                            </div>
+                                        </div>
+                                        <div class="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0"><i class="ri-arrow-right-line text-blue-500"></i></div>
+                                        <div class="flex-1 min-w-0">
+                                            <select x-model="row.new_entity_id" class="area-select">
+                                                <option value="">— nicht übertragen —</option>
+                                                <template x-for="opt in swap.newEntityOptions" :key="opt">
+                                                    <option :value="opt" x-text="opt"></option>
+                                                </template>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
-                    <div class="flex justify-between gap-2 mt-2">
-                        <button @click="closeSwap(); loadHierarchy()" class="btn btn-ghost">Schließen</button>
-                        <button x-show="swap.job?.state==='FAILED'" @click="swapResume(swap.job.job_id)" class="btn btn-primary" :disabled="swap.busy">Erneut versuchen</button>
+
+                    <!-- Step 3: Vorschau + Disposition -->
+                    <div x-show="swap.step === 3">
+                        <p class="text-sm text-gray-600 mb-3">Das neue Gerät erhält den Namen <strong class="text-gray-900" x-text="swap.job?.target_device_name"></strong>. Folgende Referenzen werden umgebogen:</p>
+                        <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto mb-5">
+                            <template x-for="p in swapActivePairs()" :key="p.old_entity_id">
+                                <div class="flex items-center gap-2 px-3 py-2 text-xs font-mono">
+                                    <span class="text-gray-600 truncate flex-1" x-text="p.old_entity_id"></span>
+                                    <i class="ri-arrow-right-line text-gray-400 shrink-0"></i>
+                                    <span class="text-blue-600 truncate flex-1" x-text="p.new_entity_id"></span>
+                                </div>
+                            </template>
+                        </div>
+
+                        <p class="text-sm font-medium text-gray-700 mb-2">Was soll mit dem alten Gerät passieren?</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-5">
+                            <button type="button" @click="swap.disposition='keep'" class="text-left rounded-lg border p-3 transition" :class="swap.disposition==='keep' ? 'border-blue-500 ring-2 ring-blue-100 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'">
+                                <i class="ri-archive-line text-gray-500 text-lg"></i>
+                                <p class="text-sm font-medium text-gray-800 mt-1">Behalten</p>
+                                <p class="text-xs text-gray-500">Umbenennen zu „… (ersetzt)"</p>
+                            </button>
+                            <button type="button" @click="swap.disposition='disable'" class="text-left rounded-lg border p-3 transition" :class="swap.disposition==='disable' ? 'border-amber-500 ring-2 ring-amber-100 bg-amber-50' : 'border-gray-200 hover:bg-gray-50'">
+                                <i class="ri-pause-circle-line text-amber-500 text-lg"></i>
+                                <p class="text-sm font-medium text-gray-800 mt-1">Deaktivieren</p>
+                                <p class="text-xs text-gray-500">Gerät bleibt, inaktiv</p>
+                            </button>
+                            <button type="button" @click="swap.disposition='delete'" class="text-left rounded-lg border p-3 transition" :class="swap.disposition==='delete' ? 'border-red-500 ring-2 ring-red-100 bg-red-50' : 'border-gray-200 hover:bg-gray-50'">
+                                <i class="ri-delete-bin-line text-red-500 text-lg"></i>
+                                <p class="text-sm font-medium text-gray-800 mt-1">Löschen</p>
+                                <p class="text-xs text-gray-500">Inkl. aus Integration</p>
+                            </button>
+                        </div>
+
+                        <div class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <i class="ri-alert-line text-amber-500 text-lg shrink-0 mt-0.5"></i>
+                            <p class="text-xs text-amber-800 leading-relaxed">Geräte-Trigger (über <code class="font-mono">device_id</code>) und YAML-Dashboards werden <strong>nicht</strong> automatisch umgebogen.</p>
+                        </div>
                     </div>
+
+                    <!-- Step 4: Ausführung/Status -->
+                    <div x-show="swap.step === 4">
+                        <div class="flex flex-col items-center text-center py-4 mb-2">
+                            <template x-if="swap.busy">
+                                <div class="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mb-3"><i class="ri-loader-4-line animate-spin text-blue-600 text-2xl"></i></div>
+                            </template>
+                            <template x-if="!swap.busy && swap.job?.state==='COMPLETED'">
+                                <div class="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mb-3"><i class="ri-check-line text-green-600 text-3xl"></i></div>
+                            </template>
+                            <template x-if="!swap.busy && swap.job?.state==='FAILED'">
+                                <div class="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-3"><i class="ri-error-warning-line text-red-600 text-3xl"></i></div>
+                            </template>
+                            <p class="text-base font-semibold text-gray-900" x-text="swap.busy ? 'Austausch läuft…' : swap.job?.state==='COMPLETED' ? 'Austausch abgeschlossen' : swap.job?.state==='FAILED' ? 'Austausch fehlgeschlagen' : ''"></p>
+                            <p x-show="!swap.busy && swap.job?.state==='FAILED'" class="text-sm text-gray-500 mt-1">Fehlgeschlagen bei Schritt <span class="font-medium" x-text="swap.job?.failed_step"></span>. „Erneut versuchen" setzt fort.</p>
+                        </div>
+                        <div x-show="swap.job?.log?.length" class="rounded-lg border border-gray-200 overflow-hidden">
+                            <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200"><i class="ri-terminal-line text-gray-400"></i><span class="text-xs font-medium text-gray-500">Protokoll</span></div>
+                            <div class="max-h-52 overflow-y-auto text-xs font-mono p-3 space-y-1 bg-white">
+                                <template x-for="(l,i) in (swap.job?.log||[])" :key="i">
+                                    <div class="flex gap-2"><span class="text-blue-500 shrink-0" x-text="l.step"></span><span class="text-gray-700" x-text="l.message"></span></div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FOOTER (pro Schritt) -->
+                <div x-show="swap.step === 1" class="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
+                    <button @click="closeSwap()" class="btn btn-ghost">Abbrechen</button>
+                    <button @click="swapPropose()" class="btn btn-primary" :disabled="swap.busy || !swap.oldId || !swap.newId">
+                        <i x-show="swap.busy" class="ri-loader-4-line animate-spin mr-1"></i><span>Weiter</span><i x-show="!swap.busy" class="ri-arrow-right-line ml-1"></i>
+                    </button>
+                </div>
+                <div x-show="swap.step === 2" class="flex justify-between gap-2 px-6 py-4 border-t border-gray-100">
+                    <button @click="swap.step=1" class="btn btn-ghost"><i class="ri-arrow-left-line mr-1"></i>Zurück</button>
+                    <button @click="goToPreview()" class="btn btn-primary">Weiter<i class="ri-arrow-right-line ml-1"></i></button>
+                </div>
+                <div x-show="swap.step === 3" class="flex justify-between gap-2 px-6 py-4 border-t border-gray-100">
+                    <button @click="swap.step=2" class="btn btn-ghost"><i class="ri-arrow-left-line mr-1"></i>Zurück</button>
+                    <button @click="swapExecute()" class="btn" :class="swap.disposition==='delete' ? 'bg-red-600 text-white hover:bg-red-700' : 'btn-primary'" :disabled="swap.busy">
+                        <i x-show="swap.busy" class="ri-loader-4-line animate-spin mr-1"></i><span x-text="swap.busy ? 'Wird ausgeführt…' : 'Austausch starten'"></span>
+                    </button>
+                </div>
+                <div x-show="swap.step === 4" class="flex justify-between gap-2 px-6 py-4 border-t border-gray-100">
+                    <button @click="closeSwap(); loadHierarchy()" class="btn btn-ghost">Schließen</button>
+                    <button x-show="swap.job?.state==='FAILED'" @click="swapResume(swap.job.job_id)" class="btn btn-primary" :disabled="swap.busy"><i class="ri-refresh-line mr-1"></i>Erneut versuchen</button>
                 </div>
             </div>
         </div>
@@ -2385,7 +2481,14 @@
                     mapping: [],        // [{old_entity_id, new_entity_id, device_class, confidence}]
                     newEntityOptions: [],
                     disposition: 'keep',
-                    error: ''
+                    error: '',
+                    _lastCount: 0,
+                    steps: [
+                        { n: 1, label: 'Geräte', icon: 'ri-device-line' },
+                        { n: 2, label: 'Zuordnung', icon: 'ri-links-line' },
+                        { n: 3, label: 'Vorschau', icon: 'ri-eye-line' },
+                        { n: 4, label: 'Ausführung', icon: 'ri-play-circle-line' }
+                    ]
                 },
 
                 swapFilteredDevices(search) {
@@ -2393,6 +2496,7 @@
                     const list = s
                         ? this.swap.devices.filter(d => ((d.area || '') + ' ' + d.name).toLowerCase().includes(s))
                         : this.swap.devices;
+                    this.swap._lastCount = list.length;
                     return list.slice(0, 50);
                 },
 
