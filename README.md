@@ -2,7 +2,6 @@
 
 [![Beta](https://img.shields.io/badge/Status-Beta-orange.svg)](https://github.com/Skjall/home-assistant-entity-manager)
 [![GitHub Release](https://img.shields.io/github/release/Skjall/home-assistant-entity-manager.svg?style=flat-square)](https://github.com/Skjall/home-assistant-entity-manager/releases)
-[![Crowdin](https://badges.crowdin.net/home-assistant-entity-manager/localized.svg)](https://crowdin.com/project/home-assistant-entity-manager)
 [![License](https://img.shields.io/github/license/Skjall/home-assistant-entity-manager.svg?style=flat-square)](LICENSE)
 
 A Home Assistant Add-on for standardizing and managing entity names according to a consistent, logical naming convention with an integrated Web UI.

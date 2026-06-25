@@ -3,24 +3,10 @@
 # Copies files directly into running container via SSH
 #
 # Setup: Copy .env.example to .env and configure your settings
-#
-# Options:
-#   --crowdinsync  Sync translations with Crowdin before deploying
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Parse arguments
-CROWDIN_SYNC=false
-for arg in "$@"; do
-    case $arg in
-        --crowdinsync)
-            CROWDIN_SYNC=true
-            shift
-            ;;
-    esac
-done
 
 # Load .env file if exists
 if [ -f "$SCRIPT_DIR/.env" ]; then
@@ -56,22 +42,6 @@ echo -e "${YELLOW}=== Entity Manager Deploy ===${NC}"
 echo "Target: $SSH_USER@$HA_HOST:$SSH_PORT"
 echo "Container: $CONTAINER"
 echo ""
-
-# Crowdin sync if requested
-if [ "$CROWDIN_SYNC" = true ]; then
-    echo -e "[0/4] Syncing translations with Crowdin..."
-    if command -v crowdin &> /dev/null; then
-        cd "$SCRIPT_DIR"
-        crowdin upload sources --config crowdin.yml
-        crowdin upload translations --config crowdin.yml
-        echo -e "${GREEN}Crowdin sync complete${NC}"
-    else
-        echo -e "${RED}ERROR: Crowdin CLI not installed${NC}"
-        echo "Install with: npm install -g @crowdin/cli"
-        exit 1
-    fi
-    echo ""
-fi
 
 # Check SSH connection
 echo -e "[1/4] Testing SSH connection..."
