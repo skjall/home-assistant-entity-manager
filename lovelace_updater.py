@@ -69,6 +69,35 @@ class LovelaceUpdater:
                 targets.append(d.get("url_path"))
         return targets
 
+    async def _all_targets(self) -> List[Optional[str]]:
+        """Alle Dashboards (Standard + benutzerdefiniert, inkl. YAML) - nur zum Lesen."""
+        targets: List[Optional[str]] = [None]
+        for d in await self.list_dashboards():
+            if d.get("url_path"):
+                targets.append(d.get("url_path"))
+        return targets
+
+    async def scan_renames(self, rename_pairs: List) -> List[Dict[str, str]]:
+        """Findet, in welchen Dashboards die alten IDs noch vorkommen.
+
+        Nach dem automatischen Umbiegen (Storage) enthalten nur die nicht
+        schreibbaren (YAML-Mode) Dashboards die alten IDs noch -> daraus wird die
+        manuelle To-Do-Liste. Daher NACH update_all_dashboards aufrufen.
+        """
+        results: List[Dict[str, str]] = []
+        for url_path in await self._all_targets():
+            try:
+                config = await self.get_config(url_path)
+                if not isinstance(config, dict):
+                    continue
+                present = extract_entity_ids(config)
+                for old, new in rename_pairs:
+                    if old in present:
+                        results.append({"dashboard": url_path or "default", "old": old, "new": new})
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Dashboard %s scan_renames failed: %s", url_path or "default", e)
+        return results
+
     async def update_all_dashboards(self, old_entity_id: str, new_entity_id: str) -> List[str]:
         """Ersetzt old->new in allen Storage-Dashboards. Gibt geänderte url_paths zurück."""
         changed: List[str] = []
@@ -85,9 +114,9 @@ class LovelaceUpdater:
         return changed
 
     async def get_referenced_entity_ids(self) -> Set[str]:
-        """Alle in (Storage-)Dashboards referenzierten entity_ids - für die in-use-Erkennung."""
+        """Alle in Dashboards (inkl. YAML, nur lesend) referenzierten entity_ids - für in-use."""
         referenced: Set[str] = set()
-        for url_path in await self._storage_targets():
+        for url_path in await self._all_targets():
             try:
                 config = await self.get_config(url_path)
                 if isinstance(config, dict):

@@ -2388,6 +2388,21 @@
                             <p class="text-base font-semibold text-gray-900" x-text="swap.busy ? 'Austausch läuft…' : swap.job?.state==='COMPLETED' ? 'Austausch abgeschlossen' : swap.job?.state==='FAILED' ? 'Austausch fehlgeschlagen' : ''"></p>
                             <p x-show="!swap.busy && swap.job?.state==='FAILED'" class="text-sm text-gray-500 mt-1">Fehlgeschlagen bei Schritt <span class="font-medium" x-text="swap.job?.failed_step"></span>. „Erneut versuchen" setzt fort.</p>
                         </div>
+                        <!-- Manuell anzupassende YAML-Dashboards (nicht automatisch schreibbar) -->
+                        <div x-show="swap.job?.yaml_manual?.length" class="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden mb-3">
+                            <div class="flex items-center gap-2 px-3 py-2 bg-amber-100 border-b border-amber-200">
+                                <i class="ri-alert-line text-amber-600"></i>
+                                <span class="text-xs font-medium text-amber-800">YAML-Dashboards manuell anpassen</span>
+                            </div>
+                            <div class="max-h-40 overflow-y-auto text-xs p-3 space-y-1">
+                                <template x-for="(m,i) in (swap.job?.yaml_manual||[])" :key="i">
+                                    <div class="font-mono text-amber-900">
+                                        <span class="text-amber-700" x-text="m.dashboard"></span>:
+                                        <span x-text="m.old"></span> <i class="ri-arrow-right-line"></i> <span class="font-medium" x-text="m.new"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
                         <div x-show="swap.job?.log?.length" class="rounded-lg border border-gray-200 overflow-hidden">
                             <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200"><i class="ri-terminal-line text-gray-400"></i><span class="text-xs font-medium text-gray-500">Protokoll</span></div>
                             <div class="max-h-52 overflow-y-auto text-xs font-mono p-3 space-y-1 bg-white">

@@ -414,6 +414,31 @@ class SwapExecutor:
             job["device_id_rewired"] = True
             self._persist(job)
 
+        # YAML-Dashboards können nicht automatisch geschrieben werden. Nach dem
+        # automatischen Umbiegen (Storage) kommen die alten IDs nur noch in YAML-
+        # Dashboards vor -> daraus eine manuelle To-Do-Liste erstellen.
+        if self.lovelace_updater is not None and not job.get("yaml_scanned"):
+            rename_pairs = []
+            for pair in job["entity_mapping"]:
+                old_id = pair["old_entity_id"]
+                new_id = pair.get("new_entity_id_target") or pair["new_entity_id_current"]
+                if old_id != new_id:
+                    rename_pairs.append((old_id, new_id))
+            if rename_pairs:
+                try:
+                    manual = await self.lovelace_updater.scan_renames(rename_pairs)
+                    if manual:
+                        job["yaml_manual"] = manual
+                        self._log(
+                            job,
+                            STATE_UPDATING_DEPENDENCIES,
+                            f"{len(manual)} manual YAML dashboard change(s) needed",
+                        )
+                except Exception as e:  # noqa: BLE001 - scan must not block the swap
+                    self._log(job, STATE_UPDATING_DEPENDENCIES, f"YAML dashboard scan failed: {e}")
+            job["yaml_scanned"] = True
+            self._persist(job)
+
     async def _dispose_old_device(self, job: Dict[str, Any]) -> None:
         """Altes Gerät je nach Wahl behalten/deaktivieren/löschen (HA-Registry-Ebene)."""
         disposition = job.get("old_device_disposition", DISPOSITION_KEEP)
