@@ -2299,10 +2299,16 @@
                     <!-- Step 2: Mapping -->
                     <div x-show="swap.step === 2">
                         <div class="flex items-start justify-between gap-3 mb-4">
-                            <p class="text-sm text-gray-600">Ordne die Entities des alten Geräts denen des neuen zu. <span class="text-gray-400">„nicht übertragen" lässt eine Referenz unverändert.</span></p>
+                            <div>
+                                <p class="text-sm text-gray-600">Ordne die <strong>verwendeten</strong> Entities des alten Geräts denen des neuen zu. <span class="text-gray-400">Nur in Automationen/Szenen/Skripten referenzierte Entities müssen umgebogen werden; ungenutzte werden ohnehin mitbenannt.</span></p>
+                                <p x-show="swap.job?.proposal" class="text-xs text-gray-400 mt-1" x-text="(swap.job?.proposal?.old_in_use ?? 0)+' von '+(swap.job?.proposal?.old_total ?? 0)+' Entities werden referenziert'"></p>
+                            </div>
                             <label class="flex items-center gap-1.5 text-xs text-gray-500 shrink-0 cursor-pointer whitespace-nowrap" title="Auch Entities anderer Typen zur Auswahl anbieten">
                                 <input type="checkbox" x-model="swap.allTypes"> alle Typen
                             </label>
+                        </div>
+                        <div x-show="!swap.mapping.length" class="text-sm text-gray-500 bg-gray-50 rounded-lg p-4 text-center">
+                            Keine der Entities des alten Geräts wird referenziert — es muss nichts umgebogen werden. Du kannst direkt weiter.
                         </div>
                         <div class="space-y-2">
                             <template x-for="row in swap.mapping" :key="row.old_entity_id">
@@ -2633,8 +2639,10 @@
                 },
 
                 goToPreview() {
-                    if (!this.swapMappingValid()) {
-                        this.swap.error = 'Mindestens eine Zuordnung ist nötig.';
+                    // Wenn es verwendete Entities gibt, muss mindestens eine zugeordnet sein.
+                    // Gibt es keine (leere Liste), ist nichts umzubiegen -> direkt weiter erlaubt.
+                    if (this.swap.mapping.length && !this.swapMappingValid()) {
+                        this.swap.error = 'Bitte mindestens eine verwendete Entity zuordnen.';
                         return;
                     }
                     this.swap.error = '';

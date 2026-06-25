@@ -370,6 +370,21 @@ class ReferenceChecker:
 
             return scripts
 
+    async def get_all_referenced_entity_ids(self) -> Set[str]:
+        """Alle in Automations/Scenes/Scripts referenzierten Entity-IDs.
+
+        Dient dem Geräte-Austausch: nur tatsächlich verwendete (in use) Entities
+        müssen gemappt werden; ungenutzte werden über die Rename-Logik mitbenannt.
+        """
+        referenced: Set[str] = set()
+        for getter in (self._get_automation_configs, self._get_scene_configs, self._get_script_configs):
+            try:
+                for item in await getter():
+                    referenced |= self._extract_entity_ids(item.get("config", {}))
+            except Exception as e:  # noqa: BLE001 - ein fehlerhafter Config-Typ darf den Rest nicht stoppen
+                logger.warning(f"Failed to scan configs for references: {e}")
+        return referenced
+
     async def scan_all_references(
         self, use_cache: bool = True, entity_registry: Optional[Dict[str, Dict]] = None
     ) -> List[BrokenReference]:

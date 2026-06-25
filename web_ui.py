@@ -2800,7 +2800,16 @@ async def _swap_propose_async():
     states_by_id = {s["entity_id"]: s for s in states}
     old_ents = _device_entities(restructurer, old_id)
     new_ents = _device_entities(restructurer, new_id)
-    proposal = propose_mapping(old_ents, new_ents, states_by_id)
+
+    # Nur referenzierte (in use) alte Entities mappen - ungenutzte werden ohnehin
+    # über die Device-Rename-Logik mitbenannt und brauchen kein Mapping.
+    ref_checker = ReferenceChecker(os.getenv("HA_URL"), os.getenv("HA_TOKEN"))
+    referenced = await ref_checker.get_all_referenced_entity_ids()
+    old_ents_in_use = [e for e in old_ents if e.get("entity_id") in referenced]
+
+    proposal = propose_mapping(old_ents_in_use, new_ents, states_by_id)
+    proposal["old_total"] = len(old_ents)
+    proposal["old_in_use"] = len(old_ents_in_use)
 
     old_snap = _device_snapshot(restructurer, old_id)
     new_snap = _device_snapshot(restructurer, new_id)
@@ -2854,9 +2863,8 @@ def swap_confirm(job_id):
             continue
         entity_mapping.append({"old_entity_id": old_e, "new_entity_id_current": new_e, "status": "pending"})
 
-    if not entity_mapping:
-        return jsonify({"error": "entity_mapping must contain at least one valid pair"}), 400
-
+    # Leeres Mapping ist zulässig (keine verwendeten Entities) - dann werden nur
+    # Geräte umbenannt/behandelt, ohne Referenzen umzubiegen.
     job["entity_mapping"] = entity_mapping
     job["old_device_disposition"] = disposition
     job["state"] = device_swap.STATE_CONFIRMED
