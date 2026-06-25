@@ -2298,7 +2298,12 @@
 
                     <!-- Step 2: Mapping -->
                     <div x-show="swap.step === 2">
-                        <p class="text-sm text-gray-600 mb-4">Ordne die Entities des alten Geräts denen des neuen zu. <span class="text-gray-400">„nicht übertragen" lässt eine Referenz unverändert.</span></p>
+                        <div class="flex items-start justify-between gap-3 mb-4">
+                            <p class="text-sm text-gray-600">Ordne die Entities des alten Geräts denen des neuen zu. <span class="text-gray-400">„nicht übertragen" lässt eine Referenz unverändert.</span></p>
+                            <label class="flex items-center gap-1.5 text-xs text-gray-500 shrink-0 cursor-pointer whitespace-nowrap" title="Auch Entities anderer Typen zur Auswahl anbieten">
+                                <input type="checkbox" x-model="swap.allTypes"> alle Typen
+                            </label>
+                        </div>
                         <div class="space-y-2">
                             <template x-for="row in swap.mapping" :key="row.old_entity_id">
                                 <div class="rounded-lg border border-gray-200 p-3 transition hover:bg-gray-50" :class="!row.new_entity_id ? 'opacity-60' : ''">
@@ -2314,10 +2319,10 @@
                                         </div>
                                         <div class="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0"><i class="ri-arrow-right-line text-blue-500"></i></div>
                                         <div class="flex-1 min-w-0">
-                                            <select x-model="row.new_entity_id" class="area-select">
-                                                <option value="">— nicht übertragen —</option>
-                                                <template x-for="opt in swap.newEntityOptions" :key="opt">
-                                                    <option :value="opt" x-text="opt"></option>
+                                            <select @change="row.new_entity_id = $event.target.value" class="area-select w-full">
+                                                <option value="" :selected="!row.new_entity_id">— nicht übertragen —</option>
+                                                <template x-for="opt in swapMappingOptions(row)" :key="opt">
+                                                    <option :value="opt" :selected="opt === row.new_entity_id" x-text="opt"></option>
                                                 </template>
                                             </select>
                                         </div>
@@ -2481,6 +2486,7 @@
                     mapping: [],        // [{old_entity_id, new_entity_id, device_class, confidence}]
                     newEntityOptions: [],
                     disposition: 'keep',
+                    allTypes: false,
                     error: '',
                     _lastCount: 0,
                     steps: [
@@ -2516,6 +2522,20 @@
                         this.swap.newOpen = false;
                         if (!this.swap.newId) this.swap.newSearch = '';
                     }
+                },
+
+                _swapDomain(eid) {
+                    return (eid || '').split('.')[0];
+                },
+                // Auswahlmöglichkeiten je Mapping-Zeile: standardmäßig nur Entities des
+                // GLEICHEN Typs (Domain) wie die alte Entity; mit "alle Typen" überschreibbar.
+                swapMappingOptions(row) {
+                    if (this.swap.allTypes) return this.swap.newEntityOptions;
+                    const dom = this._swapDomain(row.old_entity_id);
+                    const filtered = this.swap.newEntityOptions.filter(o => this._swapDomain(o) === dom);
+                    // bereits gewählten (evtl. typ-fremden) Wert sichtbar halten
+                    if (row.new_entity_id && !filtered.includes(row.new_entity_id)) filtered.unshift(row.new_entity_id);
+                    return filtered;
                 },
 
                 swapPickDevice(which, d) {
