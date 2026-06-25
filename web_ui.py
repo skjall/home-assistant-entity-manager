@@ -4,6 +4,7 @@ Web UI für Home Assistant Entity Renamer - Add-on Version
 """
 
 import asyncio
+from datetime import datetime, timezone
 import html
 import json
 import logging
@@ -12,14 +13,18 @@ import re
 import time
 from typing import Optional
 import unicodedata
+import uuid
 
 import aiohttp
 from flask import Flask, jsonify, make_response, render_template, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from bridge_adapters import build_bridge
 from dependency_updater import DependencyUpdater
 from device_registry import DeviceRegistry
+import device_swap
+from device_swap import SwapExecutor, SwapJobStore, propose_mapping
 from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 from ha_client import HomeAssistantClient
@@ -62,6 +67,7 @@ renamer_state = {
     "proposed_changes": {},
     "naming_overrides": NamingOverrides("/data/naming_overrides.json"),
     "type_mappings": TypeMappings(user_mappings_path="/data/user_type_mappings.json"),
+    "swap_store": SwapJobStore("/data/device_swaps"),
 }
 
 
@@ -2653,6 +2659,272 @@ def settings_page():
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+# =============================================================================
+# Device Swap (Geräte-Austausch)
+# =============================================================================
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _ws_url() -> str:
+    base_url = os.getenv("HA_URL")
+    return base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
+
+
+def _device_snapshot(restructurer, device_id: str) -> dict:
+    """Erzeugt einen kompakten, persistierbaren Snapshot eines Geräts."""
+    from integration_bridge import extract_integrations
+
+    d = restructurer.devices.get(device_id, {}) or {}
+    return {
+        "device_id": device_id,
+        "name": d.get("name_by_user") or d.get("name") or "",
+        "integrations": extract_integrations(d),
+        "config_entries": d.get("config_entries", []),
+        "identifiers": d.get("identifiers", []),
+    }
+
+
+def _device_entities(restructurer, device_id: str) -> list:
+    """Alle Entity-Registry-Einträge eines Geräts."""
+    return [e for e in restructurer.entities.values() if e.get("device_id") == device_id]
+
+
+@app.route("/api/bridge/status", methods=["GET"])
+def bridge_status():
+    """Status der Integrations-Bridge (welche nativen Operationen möglich sind)."""
+    # MQTT/Z2M-Unterstützung wird in einer späteren Ausbaustufe ergänzt.
+    return jsonify(
+        {
+            "mqtt_available": False,
+            "z2m_supported": False,
+            "matter_remove_supported": True,
+        }
+    )
+
+
+@app.route("/api/swap/devices", methods=["GET"])
+def swap_devices():
+    """Liste aller Geräte (für die Auswahl im Swap-Wizard)."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_swap_devices_async())
+    finally:
+        loop.close()
+
+
+async def _swap_devices_async():
+    from integration_bridge import extract_integrations
+
+    await init_client()
+    ws = HomeAssistantWebSocket(_ws_url(), os.getenv("HA_TOKEN"))
+    await ws.connect()
+    try:
+        await renamer_state["restructurer"].load_structure(ws)
+    finally:
+        await ws.disconnect()
+
+    restructurer = renamer_state["restructurer"]
+    areas = {aid: a.get("name", "") for aid, a in restructurer.areas.items()}
+    devices = []
+    for device_id, d in restructurer.devices.items():
+        entity_count = len(_device_entities(restructurer, device_id))
+        devices.append(
+            {
+                "device_id": device_id,
+                "name": d.get("name_by_user") or d.get("name") or "",
+                "area": areas.get(d.get("area_id"), ""),
+                "area_id": d.get("area_id"),
+                "integrations": extract_integrations(d),
+                "entity_count": entity_count,
+            }
+        )
+    devices.sort(key=lambda x: (x["area"] or "~", x["name"]))
+    return jsonify({"devices": devices})
+
+
+@app.route("/api/swap/jobs", methods=["GET"])
+def swap_jobs():
+    """Nicht abgeschlossene Swap-Jobs (für Resume)."""
+    jobs = renamer_state["swap_store"].list_unfinished()
+    return jsonify({"jobs": jobs})
+
+
+@app.route("/api/swap/<job_id>", methods=["GET"])
+def swap_job_get(job_id):
+    """Aktueller Stand eines Swap-Jobs."""
+    job = renamer_state["swap_store"].load(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify(job)
+
+
+@app.route("/api/swap/propose", methods=["POST"])
+def swap_propose():
+    """Legt einen Swap-Job an und schlägt ein Entity-Mapping vor."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_swap_propose_async())
+    finally:
+        loop.close()
+
+
+async def _swap_propose_async():
+    data = request.json or {}
+    old_id = (data.get("old_device_id") or "").strip()
+    new_id = (data.get("new_device_id") or "").strip()
+    if not old_id or not new_id:
+        return jsonify({"error": "old_device_id and new_device_id required"}), 400
+    if old_id == new_id:
+        return jsonify({"error": "old and new device must differ"}), 400
+
+    client = await init_client()
+    states = await client.get_states()
+    ws = HomeAssistantWebSocket(_ws_url(), os.getenv("HA_TOKEN"))
+    await ws.connect()
+    try:
+        await renamer_state["restructurer"].load_structure(ws)
+    finally:
+        await ws.disconnect()
+
+    restructurer = renamer_state["restructurer"]
+    if old_id not in restructurer.devices or new_id not in restructurer.devices:
+        return jsonify({"error": "Unknown device id"}), 404
+
+    states_by_id = {s["entity_id"]: s for s in states}
+    old_ents = _device_entities(restructurer, old_id)
+    new_ents = _device_entities(restructurer, new_id)
+    proposal = propose_mapping(old_ents, new_ents, states_by_id)
+
+    old_snap = _device_snapshot(restructurer, old_id)
+    new_snap = _device_snapshot(restructurer, new_id)
+
+    now = _iso_now()
+    job = {
+        "version": device_swap.SCHEMA_VERSION,
+        "job_id": uuid.uuid4().hex,
+        "created": now,
+        "updated": now,
+        "state": device_swap.STATE_PROPOSED,
+        "old_device": old_snap,
+        "new_device": new_snap,
+        "target_device_name": old_snap["name"],
+        "old_device_disposition": device_swap.DISPOSITION_KEEP,
+        "proposal": proposal,
+        "entity_mapping": [],
+        "steps": {},
+        "log": [],
+    }
+    renamer_state["swap_store"].save(job)
+    return jsonify(job)
+
+
+@app.route("/api/swap/<job_id>/confirm", methods=["POST"])
+def swap_confirm(job_id):
+    """Bestätigt Mapping + Disposition und friert den Job ein (CONFIRMED)."""
+    data = request.json or {}
+    store = renamer_state["swap_store"]
+    job = store.load(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job["state"] not in (device_swap.STATE_PROPOSED, device_swap.STATE_CONFIRMED):
+        return jsonify({"error": f"Job cannot be confirmed in state {job['state']}"}), 409
+
+    mapping = data.get("entity_mapping") or []
+    disposition = data.get("old_device_disposition", device_swap.DISPOSITION_KEEP)
+    valid_dispositions = {
+        device_swap.DISPOSITION_KEEP,
+        device_swap.DISPOSITION_DISABLE,
+        device_swap.DISPOSITION_DELETE,
+    }
+    if disposition not in valid_dispositions:
+        return jsonify({"error": "Invalid old_device_disposition"}), 400
+
+    entity_mapping = []
+    for pair in mapping:
+        old_e = sanitize_entity_id(pair.get("old_entity_id"))
+        new_e = sanitize_entity_id(pair.get("new_entity_id"))
+        if not old_e or not new_e:
+            continue
+        entity_mapping.append({"old_entity_id": old_e, "new_entity_id_current": new_e, "status": "pending"})
+
+    if not entity_mapping:
+        return jsonify({"error": "entity_mapping must contain at least one valid pair"}), 400
+
+    job["entity_mapping"] = entity_mapping
+    job["old_device_disposition"] = disposition
+    job["state"] = device_swap.STATE_CONFIRMED
+    job["updated"] = _iso_now()
+    store.save(job)
+    return jsonify(job)
+
+
+@app.route("/api/swap/<job_id>/execute", methods=["POST"])
+def swap_execute(job_id):
+    """Führt den Job aus bzw. setzt ihn fort (idempotent)."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_swap_execute_async(job_id))
+    finally:
+        loop.close()
+
+
+async def _swap_execute_async(job_id):
+    store = renamer_state["swap_store"]
+    job = store.load(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job["state"] in (device_swap.STATE_PROPOSED, device_swap.STATE_ABORTED, device_swap.STATE_COMPLETED):
+        return jsonify({"error": f"Job not runnable in state {job['state']}"}), 409
+
+    client = await init_client()
+    states = await client.get_states()
+    token = os.getenv("HA_TOKEN")
+    ws = HomeAssistantWebSocket(_ws_url(), token)
+    await ws.connect()
+    try:
+        await renamer_state["restructurer"].load_structure(ws)
+        device_registry = DeviceRegistry(ws)
+        entity_registry = EntityRegistry(ws)
+        dependency_updater = DependencyUpdater(os.getenv("HA_URL"), token)
+        bridge = build_bridge(device_registry, mqtt_bridge=None)
+        executor = SwapExecutor(
+            store=store,
+            device_registry=device_registry,
+            entity_registry=entity_registry,
+            dependency_updater=dependency_updater,
+            bridge=bridge,
+            restructurer=renamer_state["restructurer"],
+            states_by_id={s["entity_id"]: s for s in states},
+            timestamp=_iso_now(),
+        )
+        job = await executor.run(job)
+    finally:
+        await ws.disconnect()
+
+    return jsonify(job)
+
+
+@app.route("/api/swap/<job_id>/abort", methods=["POST"])
+def swap_abort(job_id):
+    """Bricht einen noch nicht ausgeführten Job ab."""
+    store = renamer_state["swap_store"]
+    job = store.load(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job["state"] not in (device_swap.STATE_PROPOSED, device_swap.STATE_CONFIRMED):
+        return jsonify({"error": "Job already started; cannot abort, use resume instead"}), 409
+    job["state"] = device_swap.STATE_ABORTED
+    job["updated"] = _iso_now()
+    store.save(job)
+    return jsonify(job)
 
 
 if __name__ == "__main__":
