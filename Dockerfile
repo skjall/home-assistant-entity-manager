@@ -39,9 +39,12 @@ COPY entity_registry.py /app/
 COPY entity_restructurer.py /app/
 COPY ha_client.py /app/
 COPY ha_websocket.py /app/
+COPY hierarchy_manager.py /app/
 COPY label_registry.py /app/
 COPY naming_overrides.py /app/
+COPY reference_checker.py /app/
 COPY scene_updater.py /app/
+COPY type_mappings.py /app/
 COPY templates/ /app/templates/
 COPY translations/ /app/translations/
 WORKDIR /app

@@ -1,8 +1,8 @@
 {
-  "name": "Entity Manager (Alpha)",
-  "version": "0.2.0-alpha",
+  "name": "Entity Manager (Beta)",
+  "version": "1.0.0-beta",
   "slug": "entity_manager",
-  "description": "⚠️ ALPHA VERSION - DO NOT USE IN PRODUCTION ⚠️ Manage and standardize Home Assistant entity names",
+  "description": "⚠️ BETA VERSION - USE WITH CAUTION ⚠️ Manage and standardize Home Assistant entity names",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
   "startup": "application",
   "boot": "auto",
