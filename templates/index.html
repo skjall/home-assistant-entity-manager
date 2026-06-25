@@ -2318,9 +2318,6 @@
                                             <p class="font-mono text-xs text-gray-700 truncate" :title="row.old_entity_id" x-text="row.old_entity_id"></p>
                                             <div class="flex items-center gap-1.5 mt-1.5">
                                                 <span x-show="row.device_class" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium" x-text="row.device_class"></span>
-                                                <span x-show="row.confidence" class="text-xs px-2 py-0.5 rounded-full font-medium"
-                                                      :class="row.confidence >= 0.8 ? 'bg-green-100 text-green-700' : row.confidence >= 0.5 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'"
-                                                      x-text="Math.round(row.confidence * 100) + '%'"></span>
                                             </div>
                                         </div>
                                         <div class="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0"><i class="ri-arrow-right-line text-blue-500"></i></div>

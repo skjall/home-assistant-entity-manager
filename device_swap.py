@@ -16,7 +16,6 @@ Dieses Modul enthält die Persistenz (SwapJobStore), den Mapping-Vorschlag
 injiziert; dieses Modul kennt keine Flask-/Request-Details.
 """
 
-import difflib
 import json
 import logging
 import os
@@ -137,82 +136,85 @@ def _device_class_for(entity_id: str, states_by_id: Dict[str, Dict]) -> Optional
     return (state.get("attributes") or {}).get("device_class")
 
 
-def _name_similarity(a: str, b: str) -> float:
-    """Ähnlichkeit zweier object_ids (0..1), case-insensitiv."""
-    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
+def _common_prefix_tokens(object_ids: List[str]) -> List[str]:
+    """Längster gemeinsamer Token-Präfix (an '_' gesplittet) der object_ids.
+
+    Das ist der Bereichs-/Device-Präfix (z.B. ['kuche','fenster'] bzw.
+    ['kuche','fenster','ikea']). Das letzte Token bleibt immer erhalten,
+    damit nie ein leerer Entity-Name entsteht.
+    """
+    splits = [o.split("_") for o in object_ids if o]
+    if not splits:
+        return []
+    limit = min(len(s) for s in splits) - 1  # mind. letztes Token bleibt Suffix
+    prefix: List[str] = []
+    for i in range(max(0, limit)):
+        tok = splits[0][i]
+        if all(s[i] == tok for s in splits):
+            prefix.append(tok)
+        else:
+            break
+    return prefix
+
+
+def _entity_name(entity_id: str, prefix_tokens: List[str]) -> str:
+    """Entity-Name = object_id ohne Bereichs-/Device-Präfix (z.B. 'batterie')."""
+    obj = _object_id(entity_id).split("_")
+    n = len(prefix_tokens)
+    if 0 < n < len(obj) and obj[:n] == prefix_tokens:
+        return "_".join(obj[n:])
+    return _object_id(entity_id)
 
 
 def propose_mapping(
     old_entities: List[Dict[str, Any]],
     new_entities: List[Dict[str, Any]],
     states_by_id: Dict[str, Dict[str, Any]],
+    in_use_ids: Optional[set] = None,
 ) -> Dict[str, Any]:
-    """Schlägt ein Entity-Mapping zwischen altem und neuem Gerät vor.
+    """Schlägt ein Entity-Mapping vor: gleicher Typ (Domain) + gleicher Entity-Name.
 
-    Strategie: zuerst exakte (domain, device_class)-Paare, bei mehreren Kandidaten
-    nach Namensähnlichkeit; danach reiner Namensabgleich innerhalb der Domain.
-    Jede neue Entity wird höchstens einmal zugeordnet.
-
-    Args:
-        old_entities: Entity-Registry-Einträge des alten Geräts (mit "entity_id").
-        new_entities: Entity-Registry-Einträge des neuen Geräts.
-        states_by_id: Mapping entity_id -> State (für device_class).
+    Der Entity-Name ist der object_id ohne Bereichs-/Device-Präfix (z.B. 'batterie').
+    Es werden NUR exakte Treffer (Domain + Entity-Name) vorgeschlagen - alles andere
+    bleibt leer und wird manuell zugeordnet. Die Präfixe werden über ALLE Entities des
+    jeweiligen Geräts bestimmt; gemappt werden nur die in-use Entities (falls angegeben).
 
     Returns:
-        {"pairs": [{old_entity_id,new_entity_id,device_class,confidence}],
-         "unmapped_old": [entity_id...], "unmapped_new": [entity_id...]}
+        {"pairs": [{old_entity_id,new_entity_id,device_class}],
+         "unmapped_old": [...], "unmapped_new": [...]}
     """
     old_ids = [e["entity_id"] for e in old_entities]
     new_ids = [e["entity_id"] for e in new_entities]
-    remaining_new = list(new_ids)
+
+    old_prefix = _common_prefix_tokens([_object_id(i) for i in old_ids])
+    new_prefix = _common_prefix_tokens([_object_id(i) for i in new_ids])
+
+    # neue Entities nach (Domain, Entity-Name) indexieren
+    new_by_key: Dict[Any, List[str]] = {}
+    for nid in new_ids:
+        new_by_key.setdefault((_domain(nid), _entity_name(nid, new_prefix)), []).append(nid)
+
+    to_map = [oid for oid in old_ids if (in_use_ids is None or oid in in_use_ids)]
 
     pairs: List[Dict[str, Any]] = []
-
-    def take_best(old_id: str, candidates: List[str], base_conf: float) -> Optional[Dict[str, Any]]:
-        if not candidates:
-            return None
-        old_obj = _object_id(old_id)
-        best = max(candidates, key=lambda nid: _name_similarity(old_obj, _object_id(nid)))
-        sim = _name_similarity(old_obj, _object_id(best))
-        confidence = round(min(1.0, base_conf + 0.3 * sim), 2)
-        return {
-            "old_entity_id": old_id,
-            "new_entity_id": best,
-            "device_class": _device_class_for(old_id, states_by_id),
-            "confidence": confidence,
-        }
-
-    # 1) Match über gleiche Domain + device_class
-    for old_id in old_ids:
-        dom = _domain(old_id)
-        dc = _device_class_for(old_id, states_by_id)
-        candidates = [
-            nid for nid in remaining_new if _domain(nid) == dom and _device_class_for(nid, states_by_id) == dc
-        ]
-        # Nur als "device_class-Match" werten, wenn device_class gesetzt ist;
-        # sonst ist es nur ein Domain-Match (schwächer) -> in Schritt 2.
-        if dc is not None and candidates:
-            pair = take_best(old_id, candidates, base_conf=0.6)
-            if pair:
-                pairs.append(pair)
-                remaining_new.remove(pair["new_entity_id"])
+    used_new: set = set()
+    for old_id in to_map:
+        key = (_domain(old_id), _entity_name(old_id, old_prefix))
+        candidates = [nid for nid in new_by_key.get(key, []) if nid not in used_new]
+        if candidates:
+            chosen = candidates[0]
+            used_new.add(chosen)
+            pairs.append(
+                {
+                    "old_entity_id": old_id,
+                    "new_entity_id": chosen,
+                    "device_class": _device_class_for(old_id, states_by_id),
+                }
+            )
 
     matched_old = {p["old_entity_id"] for p in pairs}
-
-    # 2) Restliche: Match nur über Domain + Namensähnlichkeit
-    for old_id in old_ids:
-        if old_id in matched_old:
-            continue
-        dom = _domain(old_id)
-        candidates = [nid for nid in remaining_new if _domain(nid) == dom]
-        pair = take_best(old_id, candidates, base_conf=0.3)
-        if pair and pair["confidence"] >= 0.4:
-            pairs.append(pair)
-            remaining_new.remove(pair["new_entity_id"])
-            matched_old.add(old_id)
-
-    unmapped_old = [oid for oid in old_ids if oid not in matched_old]
-    unmapped_new = list(remaining_new)
+    unmapped_old = [oid for oid in to_map if oid not in matched_old]
+    unmapped_new = [nid for nid in new_ids if nid not in used_new]
 
     return {"pairs": pairs, "unmapped_old": unmapped_old, "unmapped_new": unmapped_new}
 

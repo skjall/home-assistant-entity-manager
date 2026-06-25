@@ -2810,11 +2810,11 @@ async def _swap_propose_async():
     ref_checker = ReferenceChecker(os.getenv("HA_URL"), os.getenv("HA_TOKEN"))
     referenced = await ref_checker.get_all_referenced_entity_ids()
     referenced |= dashboard_refs
-    old_ents_in_use = [e for e in old_ents if e.get("entity_id") in referenced]
 
-    proposal = propose_mapping(old_ents_in_use, new_ents, states_by_id)
+    # Präfixe über ALLE Entities bestimmen, gemappt werden nur die in-use.
+    proposal = propose_mapping(old_ents, new_ents, states_by_id, in_use_ids=referenced)
     proposal["old_total"] = len(old_ents)
-    proposal["old_in_use"] = len(old_ents_in_use)
+    proposal["old_in_use"] = len([e for e in old_ents if e.get("entity_id") in referenced])
 
     old_snap = _device_snapshot(restructurer, old_id)
     new_snap = _device_snapshot(restructurer, new_id)
