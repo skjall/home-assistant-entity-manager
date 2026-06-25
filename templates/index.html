@@ -2249,12 +2249,12 @@
 
                         <!-- Altes Gerät (durchsuchbar, Liste inline im Fluss) -->
                         <label class="block text-sm font-medium text-gray-700 mb-1.5">Altes Gerät <span class="text-gray-400 font-normal">(wird ersetzt)</span></label>
-                        <div class="mb-4" @click.away="swap.oldOpen=false" @keydown.escape.stop="swap.oldOpen=false">
+                        <div class="mb-4" @click.away="swapCloseList('old')" @keydown.escape.stop="swapCloseList('old')">
                             <div class="relative">
                                 <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input type="text" x-model="swap.oldSearch" placeholder="Gerät suchen…" autocomplete="off"
                                        class="area-select w-full" style="padding-left:2.25rem; padding-right:2.25rem" :class="swap.oldId?'border-green-400 ring-2 ring-green-100':''"
-                                       @focus="swap.oldOpen=true; swap.newOpen=false" @input="swap.oldOpen=true; swap.oldId=''">
+                                       @focus="swap.oldOpen=true; swap.newOpen=false" @click="swap.oldOpen=true" @input="swap.oldOpen=true; swap.oldId=''">
                                 <i x-show="swap.oldId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
                             <div x-show="swap.oldOpen" class="mt-1 border border-gray-200 rounded-lg bg-white max-h-60 overflow-y-auto divide-y divide-gray-100">
@@ -2267,18 +2267,18 @@
                                     </button>
                                 </template>
                                 <div x-show="!swapFilteredDevices(swap.oldSearch).length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
-                                <div x-show="swap._lastCount > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swap._lastCount-50)+' weitere — Suche eingrenzen'"></div>
+                                <div x-show="swapMatchCount(swap.oldSearch) > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swapMatchCount(swap.oldSearch)-50)+' weitere — Suche eingrenzen'"></div>
                             </div>
                         </div>
 
                         <!-- Neues Gerät -->
                         <label class="block text-sm font-medium text-gray-700 mb-1.5">Neues Gerät</label>
-                        <div class="mb-2" @click.away="swap.newOpen=false" @keydown.escape.stop="swap.newOpen=false">
+                        <div class="mb-2" @click.away="swapCloseList('new')" @keydown.escape.stop="swapCloseList('new')">
                             <div class="relative">
                                 <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input type="text" x-model="swap.newSearch" placeholder="Gerät suchen…" autocomplete="off"
                                        class="area-select w-full" style="padding-left:2.25rem; padding-right:2.25rem" :class="swap.newId?'border-green-400 ring-2 ring-green-100':''"
-                                       @focus="swap.newOpen=true; swap.oldOpen=false" @input="swap.newOpen=true; swap.newId=''">
+                                       @focus="swap.newOpen=true; swap.oldOpen=false" @click="swap.newOpen=true" @input="swap.newOpen=true; swap.newId=''">
                                 <i x-show="swap.newId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
                             <div x-show="swap.newOpen" class="mt-1 border border-gray-200 rounded-lg bg-white max-h-60 overflow-y-auto divide-y divide-gray-100">
@@ -2291,7 +2291,7 @@
                                     </button>
                                 </template>
                                 <div x-show="!swapFilteredDevices(swap.newSearch).length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
-                                <div x-show="swap._lastCount > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swap._lastCount-50)+' weitere — Suche eingrenzen'"></div>
+                                <div x-show="swapMatchCount(swap.newSearch) > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swapMatchCount(swap.newSearch)-50)+' weitere — Suche eingrenzen'"></div>
                             </div>
                         </div>
                     </div>
@@ -2491,13 +2491,31 @@
                     ]
                 },
 
+                _swapNorm(s) {
+                    // normalisiert für Suche: Kleinbuchstaben, Sonderzeichen (inkl. "/") -> Leerzeichen
+                    return (s || '').toLowerCase().replace(/[^a-z0-9äöüß]+/gi, ' ').trim();
+                },
+                _swapMatches(search) {
+                    const q = this._swapNorm(search);
+                    if (!q) return this.swap.devices;
+                    return this.swap.devices.filter(d => this._swapNorm((d.area || '') + ' ' + d.name).includes(q));
+                },
                 swapFilteredDevices(search) {
-                    const s = (search || '').toLowerCase().trim();
-                    const list = s
-                        ? this.swap.devices.filter(d => ((d.area || '') + ' ' + d.name).toLowerCase().includes(s))
-                        : this.swap.devices;
-                    this.swap._lastCount = list.length;
-                    return list.slice(0, 50);
+                    // KEIN Side-Effect (reine Funktion) - sonst bricht Alpine-Reaktivität
+                    return this._swapMatches(search).slice(0, 50);
+                },
+                swapMatchCount(search) {
+                    return this._swapMatches(search).length;
+                },
+                swapCloseList(which) {
+                    // Liste schließen; wenn kein gültiges Gerät gepickt wurde, ungültigen Freitext verwerfen
+                    if (which === 'old') {
+                        this.swap.oldOpen = false;
+                        if (!this.swap.oldId) this.swap.oldSearch = '';
+                    } else {
+                        this.swap.newOpen = false;
+                        if (!this.swap.newId) this.swap.newSearch = '';
+                    }
                 },
 
                 swapPickDevice(which, d) {
