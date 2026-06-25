@@ -2258,7 +2258,7 @@
                                 <i x-show="swap.oldId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
                             <div x-show="swap.oldOpen" class="mt-1 border border-gray-200 rounded-lg bg-white max-h-60 overflow-y-auto divide-y divide-gray-100">
-                                <template x-for="d in swapFilteredDevices(swap.oldSearch)" :key="d.device_id">
+                                <template x-for="d in swapFilteredDevices(swap.oldSearch, 'old')" :key="d.device_id">
                                     <button type="button" @click="swapPickDevice('old', d)"
                                             class="flex items-center justify-between w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none cursor-pointer text-sm"
                                             :class="d.device_id===swap.oldId?'bg-blue-100 font-medium':''">
@@ -2266,8 +2266,8 @@
                                         <span class="text-xs text-gray-400 shrink-0 ml-2" x-text="d.entity_count+' E.'"></span>
                                     </button>
                                 </template>
-                                <div x-show="!swapFilteredDevices(swap.oldSearch).length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
-                                <div x-show="swapMatchCount(swap.oldSearch) > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swapMatchCount(swap.oldSearch)-50)+' weitere — Suche eingrenzen'"></div>
+                                <div x-show="!swapFilteredDevices(swap.oldSearch, 'old').length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
+                                <div x-show="swapMatchCount(swap.oldSearch, 'old') > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swapMatchCount(swap.oldSearch, 'old')-50)+' weitere — Suche eingrenzen'"></div>
                             </div>
                         </div>
 
@@ -2282,7 +2282,7 @@
                                 <i x-show="swap.newId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
                             <div x-show="swap.newOpen" class="mt-1 border border-gray-200 rounded-lg bg-white max-h-60 overflow-y-auto divide-y divide-gray-100">
-                                <template x-for="d in swapFilteredDevices(swap.newSearch)" :key="d.device_id">
+                                <template x-for="d in swapFilteredDevices(swap.newSearch, 'new')" :key="d.device_id">
                                     <button type="button" @click="swapPickDevice('new', d)"
                                             class="flex items-center justify-between w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none cursor-pointer text-sm"
                                             :class="d.device_id===swap.newId?'bg-blue-100 font-medium':''">
@@ -2290,8 +2290,8 @@
                                         <span class="text-xs text-gray-400 shrink-0 ml-2" x-text="d.entity_count+' E.'"></span>
                                     </button>
                                 </template>
-                                <div x-show="!swapFilteredDevices(swap.newSearch).length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
-                                <div x-show="swapMatchCount(swap.newSearch) > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swapMatchCount(swap.newSearch)-50)+' weitere — Suche eingrenzen'"></div>
+                                <div x-show="!swapFilteredDevices(swap.newSearch, 'new').length" class="px-3 py-2 text-sm text-gray-400">Kein Treffer</div>
+                                <div x-show="swapMatchCount(swap.newSearch, 'new') > 50" class="px-3 py-2 text-xs text-gray-400 bg-gray-50" x-text="'… '+(swapMatchCount(swap.newSearch, 'new')-50)+' weitere — Suche eingrenzen'"></div>
                             </div>
                         </div>
                     </div>
@@ -2507,17 +2507,22 @@
                     // normalisiert für Suche: Kleinbuchstaben, Sonderzeichen (inkl. "/") -> Leerzeichen
                     return (s || '').toLowerCase().replace(/[^a-z0-9äöüß]+/gi, ' ').trim();
                 },
-                _swapMatches(search) {
+                _swapMatches(search, which) {
+                    // das jeweils andere bereits gewählte Gerät ausschließen (kein Self-Swap)
+                    const exclude = which === 'old' ? this.swap.newId : which === 'new' ? this.swap.oldId : '';
                     const q = this._swapNorm(search);
-                    if (!q) return this.swap.devices;
-                    return this.swap.devices.filter(d => this._swapNorm((d.area || '') + ' ' + d.name).includes(q));
+                    let list = q
+                        ? this.swap.devices.filter(d => this._swapNorm((d.area || '') + ' ' + d.name).includes(q))
+                        : this.swap.devices;
+                    if (exclude) list = list.filter(d => d.device_id !== exclude);
+                    return list;
                 },
-                swapFilteredDevices(search) {
+                swapFilteredDevices(search, which) {
                     // KEIN Side-Effect (reine Funktion) - sonst bricht Alpine-Reaktivität
-                    return this._swapMatches(search).slice(0, 50);
+                    return this._swapMatches(search, which).slice(0, 50);
                 },
-                swapMatchCount(search) {
-                    return this._swapMatches(search).length;
+                swapMatchCount(search, which) {
+                    return this._swapMatches(search, which).length;
                 },
                 swapCloseList(which) {
                     // Liste schließen; wenn kein gültiges Gerät gepickt wurde, ungültigen Freitext verwerfen
