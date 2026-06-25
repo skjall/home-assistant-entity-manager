@@ -2825,6 +2825,9 @@ async def _swap_propose_async():
         "new_device": new_snap,
         "target_device_name": old_snap["name"],
         "old_device_disposition": device_swap.DISPOSITION_KEEP,
+        # ALLE alten Entities (müssen freigemacht werden) und ALLE neuen (werden umbenannt)
+        "old_device_entities": sorted(e["entity_id"] for e in old_ents),
+        "new_device_entities": sorted(e["entity_id"] for e in new_ents),
         "proposal": proposal,
         "entity_mapping": [],
         "steps": {},

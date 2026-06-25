@@ -314,12 +314,28 @@ class SwapExecutor:
     # --- Einzelschritte (idempotent) ---
 
     async def _free_old_name(self, job: Dict[str, Any]) -> None:
-        """Altes Gerät auf einen temporären Namen umbenennen (ohne Cascade)."""
+        """Altes Gerät freimachen: Device + ALLE alten Entities umbenennen, OHNE Cascade.
+
+        Macht die Ziel-IDs (z.B. kuche_fenster_*) frei, damit die neuen Entities sie
+        übernehmen können. Die Dependencies zeigen weiter auf die *ursprünglichen* alten
+        IDs und werden erst in UPDATING_DEPENDENCIES umgebogen.
+        """
         old = job["old_device"]
         temp_name = job.get("old_device_temp_name") or f"{old['name']} (swap-out)"
         job["old_device_temp_name"] = temp_name
         await self.device_registry.rename_device(old["device_id"], temp_name)
         self._log(job, STATE_FREEING_OLD_NAME, f"Old device renamed to '{temp_name}'")
+
+        freed = job.setdefault("old_freed", {})
+        for old_id in job.get("old_device_entities", []):
+            if old_id in freed:
+                continue  # idempotent (Resume)
+            domain, _, obj = old_id.partition(".")
+            temp_id = f"{domain}.{obj}_swapout"
+            await self.entity_registry.rename_entity(old_id, temp_id)
+            freed[old_id] = temp_id
+            self._log(job, STATE_FREEING_OLD_NAME, f"Freed old entity {old_id} -> {temp_id}")
+            self._persist(job)
 
     async def _rename_new_device(self, job: Dict[str, Any]) -> None:
         """Neues Gerät bekommt den (jetzt freien) Zielnamen (= ursprünglicher alter Name)."""
@@ -332,11 +348,16 @@ class SwapExecutor:
             await self.restructurer.load_structure(self.entity_registry.ws)
 
     async def _rename_entities(self, job: Dict[str, Any]) -> None:
-        """Gemappte neue Entities auf saubere Ziel-IDs bringen (pro-Entity idempotent)."""
-        for pair in job["entity_mapping"]:
-            if pair.get("status") in ("renamed", "deps_done"):
-                continue
-            current = pair["new_entity_id_current"]
+        """ALLE Entities des neuen Geräts auf saubere Ziel-IDs bringen (Identität des alten Geräts).
+
+        Nutzt generate_new_entity_id (das neue Device trägt jetzt den Namen des alten),
+        sodass der Bereichs-/Device-Präfix übernommen wird und der Entity-Suffix bleibt.
+        Pro-Entity idempotent über new_renamed.
+        """
+        renamed = job.setdefault("new_renamed", {})
+        for current in job.get("new_device_entities", []):
+            if current in renamed:
+                continue  # idempotent (Resume)
             state = self.states_by_id.get(current, {})
             target = current
             friendly = None
@@ -351,21 +372,22 @@ class SwapExecutor:
             if target != current:
                 await self.entity_registry.rename_entity(current, target, friendly)
                 self._log(job, STATE_RENAMING_ENTITIES, f"Renamed entity {current} -> {target}")
-            pair["new_entity_id_target"] = target
-            pair["new_friendly_name_target"] = friendly
-            pair["status"] = "renamed"
+            renamed[current] = target
             self._persist(job)
 
     async def _update_dependencies(self, job: Dict[str, Any]) -> None:
-        """Referenzen vom alten auf das neue Gerät umbiegen (pro Paar idempotent)."""
+        """Referenzen umbiegen: ursprüngliche alte ID -> finale neue ID (pro Paar idempotent)."""
         states = list(self.states_by_id.values()) or None
+        renamed = job.get("new_renamed", {})
         for pair in job["entity_mapping"]:
             if pair.get("status") == "deps_done":
                 continue
             old_id = pair["old_entity_id"]
-            new_id = pair.get("new_entity_id_target") or pair["new_entity_id_current"]
+            current = pair["new_entity_id_current"]
+            new_id = renamed.get(current, current)  # finale ID nach RENAMING_ENTITIES
             await self.dependency_updater.update_all_dependencies(old_id, new_id, states)
             # Dashboards werden in einer späteren Ausbaustufe hier ergänzt.
+            pair["new_entity_id_target"] = new_id
             pair["status"] = "deps_done"
             self._log(job, STATE_UPDATING_DEPENDENCIES, f"Rewired references {old_id} -> {new_id}")
             self._persist(job)
