@@ -2938,10 +2938,9 @@ def swap_abort(job_id):
         return jsonify({"error": "Job not found"}), 404
     if job["state"] not in (device_swap.STATE_PROPOSED, device_swap.STATE_CONFIRMED):
         return jsonify({"error": "Job already started; cannot abort, use resume instead"}), 409
-    job["state"] = device_swap.STATE_ABORTED
-    job["updated"] = _iso_now()
-    store.save(job)
-    return jsonify(job)
+    # Vor der Ausführung wurde nichts am System geändert -> Job ganz entfernen (keine Leiche).
+    store.delete(job_id)
+    return jsonify({"success": True, "deleted": job_id})
 
 
 if __name__ == "__main__":
