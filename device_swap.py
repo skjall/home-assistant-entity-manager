@@ -403,6 +403,17 @@ class SwapExecutor:
             self._log(job, STATE_UPDATING_DEPENDENCIES, f"Rewired references {old_id} -> {new_id}")
             self._persist(job)
 
+        # Geräte-Trigger/-Aktionen umbiegen: alte device_id -> neue device_id.
+        # device_id ist eine eindeutige UUID -> exakte Wert-Ersetzung (idempotent).
+        if not job.get("device_id_rewired"):
+            old_did = job.get("old_device", {}).get("device_id")
+            new_did = job.get("new_device", {}).get("device_id")
+            if old_did and new_did and old_did != new_did:
+                await self.dependency_updater.update_all_dependencies(old_did, new_did, states)
+                self._log(job, STATE_UPDATING_DEPENDENCIES, f"Rewired device triggers {old_did} -> {new_did}")
+            job["device_id_rewired"] = True
+            self._persist(job)
+
     async def _dispose_old_device(self, job: Dict[str, Any]) -> None:
         """Altes Gerät je nach Wahl behalten/deaktivieren/löschen (HA-Registry-Ebene)."""
         disposition = job.get("old_device_disposition", DISPOSITION_KEEP)
