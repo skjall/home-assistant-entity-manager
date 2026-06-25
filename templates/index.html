@@ -2174,7 +2174,7 @@
              x-transition:enter-end="opacity-100"
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
              @click.self="closeSwap()">
-            <div class="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            <div class="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100">
@@ -2215,8 +2215,8 @@
                     </div>
                 </div>
 
-                <!-- BODY (scrollt) -->
-                <div class="flex-1 overflow-y-auto px-6 py-5">
+                <!-- BODY -->
+                <div class="px-6 py-5">
                     <div x-show="swap.error" class="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
                         <i class="ri-error-warning-line mt-0.5 shrink-0"></i><span x-text="swap.error"></span>
                     </div>
@@ -2253,7 +2253,7 @@
                             <div class="relative">
                                 <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input type="text" x-model="swap.oldSearch" placeholder="Gerät suchen…" autocomplete="off"
-                                       class="area-select pl-9" :class="swap.oldId?'border-green-400 ring-2 ring-green-100':''"
+                                       class="area-select pl-9 w-full" :class="swap.oldId?'border-green-400 ring-2 ring-green-100':''"
                                        @focus="swap.oldOpen=true; swap.newOpen=false" @input="swap.oldOpen=true; swap.oldId=''">
                                 <i x-show="swap.oldId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
@@ -2277,7 +2277,7 @@
                             <div class="relative">
                                 <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input type="text" x-model="swap.newSearch" placeholder="Gerät suchen…" autocomplete="off"
-                                       class="area-select pl-9" :class="swap.newId?'border-green-400 ring-2 ring-green-100':''"
+                                       class="area-select pl-9 w-full" :class="swap.newId?'border-green-400 ring-2 ring-green-100':''"
                                        @focus="swap.newOpen=true; swap.oldOpen=false" @input="swap.newOpen=true; swap.newId=''">
                                 <i x-show="swap.newId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
