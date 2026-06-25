@@ -1479,6 +1479,9 @@
                     <button @click="loadHierarchy()" class="btn btn-ghost" :title="t('buttons.reload')">
                         <i class="ri-refresh-line"></i>
                     </button>
+                    <button @click="openSwap()" class="btn btn-ghost" title="Gerät ersetzen">
+                        <i class="ri-loop-left-line"></i>
+                    </button>
                     <a href="settings" class="btn btn-ghost" :title="t('header.settings')">
                         <i class="ri-settings-3-line"></i>
                     </a>
@@ -2163,6 +2166,142 @@
                 </div>
             </div>
         </div>
+        <!-- Device Swap Wizard -->
+        <div x-cloak
+             x-show="swap.show"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+             @click.self="closeSwap()">
+            <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold"><i class="ri-loop-left-line mr-2 text-blue-600"></i>Gerät ersetzen</h3>
+                    <button @click="closeSwap()" class="btn btn-ghost"><i class="ri-close-line"></i></button>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mb-4 text-xs items-center">
+                    <span :class="swap.step>=1?'font-bold text-blue-600':'text-gray-400'">1. Geräte</span><span class="text-gray-300">›</span>
+                    <span :class="swap.step>=2?'font-bold text-blue-600':'text-gray-400'">2. Zuordnung</span><span class="text-gray-300">›</span>
+                    <span :class="swap.step>=3?'font-bold text-blue-600':'text-gray-400'">3. Vorschau</span><span class="text-gray-300">›</span>
+                    <span :class="swap.step>=4?'font-bold text-blue-600':'text-gray-400'">4. Ausführung</span>
+                </div>
+
+                <div x-show="swap.error" class="bg-red-100 text-red-700 rounded p-2 mb-3 text-sm" x-text="swap.error"></div>
+
+                <!-- Step 1: Geräte wählen -->
+                <div x-show="swap.step === 1">
+                    <div x-show="swap.loading" class="text-gray-500 py-4">Lade Geräte…</div>
+
+                    <div x-show="swap.resumeJobs.length" class="bg-yellow-50 border border-yellow-300 rounded p-3 mb-3">
+                        <p class="text-sm font-medium mb-2">Offene Austausch-Vorgänge:</p>
+                        <template x-for="j in swap.resumeJobs" :key="j.job_id">
+                            <div class="flex items-center justify-between text-sm py-1">
+                                <span x-text="(j.old_device?.name||'?') + ' → ' + (j.new_device?.name||'?') + '  ['+j.state+']'"></span>
+                                <span class="flex gap-1">
+                                    <button @click="swapResume(j.job_id)" class="btn btn-ghost text-blue-600">Fortsetzen</button>
+                                    <button x-show="j.state==='PROPOSED'||j.state==='CONFIRMED'" @click="swapAbort(j.job_id)" class="btn btn-ghost text-gray-500">Verwerfen</button>
+                                </span>
+                            </div>
+                        </template>
+                    </div>
+
+                    <label class="block text-sm font-medium mb-1">Altes Gerät (wird ersetzt)</label>
+                    <select x-model="swap.oldId" class="area-select mb-3">
+                        <option value="">— wählen —</option>
+                        <template x-for="d in swap.devices" :key="d.device_id">
+                            <option :value="d.device_id" x-text="(d.area?d.area+' / ':'')+d.name+' ('+d.entity_count+')'"></option>
+                        </template>
+                    </select>
+
+                    <label class="block text-sm font-medium mb-1">Neues Gerät</label>
+                    <select x-model="swap.newId" class="area-select mb-3">
+                        <option value="">— wählen —</option>
+                        <template x-for="d in swap.devices" :key="d.device_id">
+                            <option :value="d.device_id" x-text="(d.area?d.area+' / ':'')+d.name+' ('+d.entity_count+')'"></option>
+                        </template>
+                    </select>
+
+                    <div class="flex justify-end gap-2 mt-4">
+                        <button @click="closeSwap()" class="btn btn-ghost">Abbrechen</button>
+                        <button @click="swapPropose()" class="btn btn-primary" :disabled="swap.busy">
+                            <span x-text="swap.busy?'…':'Weiter'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Mapping -->
+                <div x-show="swap.step === 2">
+                    <p class="text-sm text-gray-600 mb-2">Ordne die Entities des alten Geräts denen des neuen zu. „nicht übertragen" lässt eine Referenz unverändert.</p>
+                    <div class="border rounded divide-y max-h-80 overflow-y-auto">
+                        <template x-for="row in swap.mapping" :key="row.old_entity_id">
+                            <div class="flex items-center gap-2 p-2 text-sm">
+                                <div class="flex-1 truncate" :title="row.old_entity_id">
+                                    <span x-text="row.old_entity_id"></span>
+                                    <span x-show="row.device_class" class="text-xs text-gray-400" x-text="'('+row.device_class+')'"></span>
+                                </div>
+                                <i class="ri-arrow-right-line text-gray-400"></i>
+                                <select x-model="row.new_entity_id" class="area-select flex-1">
+                                    <option value="">— nicht übertragen —</option>
+                                    <template x-for="opt in swap.newEntityOptions" :key="opt">
+                                        <option :value="opt" x-text="opt"></option>
+                                    </template>
+                                </select>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="flex justify-between gap-2 mt-4">
+                        <button @click="swap.step=1" class="btn btn-ghost">Zurück</button>
+                        <button @click="goToPreview()" class="btn btn-primary">Weiter</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Vorschau + Disposition -->
+                <div x-show="swap.step === 3">
+                    <p class="text-sm text-gray-600 mb-2">Das neue Gerät erhält den Namen <strong x-text="swap.job?.target_device_name"></strong>. Folgende Referenzen werden umgebogen:</p>
+                    <div class="border rounded divide-y max-h-56 overflow-y-auto mb-3 text-sm">
+                        <template x-for="p in swapActivePairs()" :key="p.old_entity_id">
+                            <div class="p-2"><span x-text="p.old_entity_id"></span> <i class="ri-arrow-right-line text-gray-400"></i> <span class="text-blue-600" x-text="p.new_entity_id"></span></div>
+                        </template>
+                    </div>
+                    <label class="block text-sm font-medium mb-1">Was soll mit dem alten Gerät passieren?</label>
+                    <select x-model="swap.disposition" class="area-select mb-3">
+                        <option value="keep">Behalten (umbenennen zu „… (ersetzt)")</option>
+                        <option value="disable">Deaktivieren</option>
+                        <option value="delete">Löschen (inkl. nativ aus der Integration)</option>
+                    </select>
+                    <div class="bg-yellow-50 border border-yellow-300 rounded p-2 text-xs text-yellow-800 mb-3">
+                        Hinweis: Geräte-Trigger (über device_id) und YAML-Dashboards werden nicht automatisch umgebogen.
+                    </div>
+                    <div class="flex justify-between gap-2 mt-2">
+                        <button @click="swap.step=2" class="btn btn-ghost">Zurück</button>
+                        <button @click="swapExecute()" class="btn bg-blue-600 text-white hover:bg-blue-700" :disabled="swap.busy">
+                            <span x-text="swap.busy?'Wird ausgeführt…':'Austausch starten'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Ausführung/Status -->
+                <div x-show="swap.step === 4">
+                    <div x-show="swap.busy" class="text-gray-600 mb-3"><i class="ri-loader-4-line animate-spin mr-2"></i>Austausch läuft…</div>
+                    <div x-show="!swap.busy && swap.job">
+                        <div x-show="swap.job?.state==='COMPLETED'" class="bg-green-100 text-green-800 rounded p-3 mb-3"><i class="ri-check-line mr-2"></i>Austausch abgeschlossen.</div>
+                        <div x-show="swap.job?.state==='FAILED'" class="bg-red-100 text-red-800 rounded p-3 mb-3">
+                            <i class="ri-error-warning-line mr-2"></i>Fehlgeschlagen bei Schritt <span x-text="swap.job?.failed_step"></span>. Erneut versuchen setzt fort.
+                        </div>
+                    </div>
+                    <div class="border rounded max-h-56 overflow-y-auto text-xs font-mono p-2 mb-3" x-show="swap.job?.log?.length">
+                        <template x-for="(l,i) in (swap.job?.log||[])" :key="i">
+                            <div><span class="text-gray-400" x-text="l.step"></span>: <span x-text="l.message"></span></div>
+                        </template>
+                    </div>
+                    <div class="flex justify-between gap-2 mt-2">
+                        <button @click="closeSwap(); loadHierarchy()" class="btn btn-ghost">Schließen</button>
+                        <button x-show="swap.job?.state==='FAILED'" @click="swapResume(swap.job.job_id)" class="btn btn-primary" :disabled="swap.busy">Erneut versuchen</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -2210,6 +2349,173 @@
                 deleteModal: {
                     show: false,
                     entity: null
+                },
+
+                // === Device Swap Wizard ===
+                swap: {
+                    show: false,
+                    step: 1,            // 1=Geräte, 2=Mapping, 3=Vorschau, 4=Ausführung
+                    loading: false,
+                    busy: false,
+                    devices: [],
+                    resumeJobs: [],
+                    oldId: '',
+                    newId: '',
+                    job: null,
+                    mapping: [],        // [{old_entity_id, new_entity_id, device_class, confidence}]
+                    newEntityOptions: [],
+                    disposition: 'keep',
+                    error: ''
+                },
+
+                async openSwap() {
+                    this.swap.show = true;
+                    this.swap.step = 1;
+                    this.swap.loading = true;
+                    this.swap.error = '';
+                    this.swap.job = null;
+                    this.swap.oldId = '';
+                    this.swap.newId = '';
+                    try {
+                        const [dev, jobs] = await Promise.all([
+                            fetch('api/swap/devices').then(r => r.json()),
+                            fetch('api/swap/jobs').then(r => r.json())
+                        ]);
+                        this.swap.devices = dev.devices || [];
+                        this.swap.resumeJobs = jobs.jobs || [];
+                    } catch (e) {
+                        this.swap.error = 'Fehler beim Laden: ' + e.message;
+                    } finally {
+                        this.swap.loading = false;
+                    }
+                },
+
+                closeSwap() {
+                    this.swap.show = false;
+                },
+
+                async swapPropose() {
+                    if (!this.swap.oldId || !this.swap.newId || this.swap.oldId === this.swap.newId) {
+                        this.swap.error = 'Bitte zwei verschiedene Geräte wählen.';
+                        return;
+                    }
+                    this.swap.busy = true;
+                    this.swap.error = '';
+                    try {
+                        const r = await fetch('api/swap/propose', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ old_device_id: this.swap.oldId, new_device_id: this.swap.newId })
+                        });
+                        const job = await r.json();
+                        if (!r.ok) throw new Error(job.error || 'Vorschlag fehlgeschlagen');
+                        this._initMappingFromJob(job);
+                        this.swap.step = 2;
+                    } catch (e) {
+                        this.swap.error = e.message;
+                    } finally {
+                        this.swap.busy = false;
+                    }
+                },
+
+                _initMappingFromJob(job) {
+                    this.swap.job = job;
+                    const p = job.proposal || { pairs: [], unmapped_old: [], unmapped_new: [] };
+                    const newOpts = new Set();
+                    (p.pairs || []).forEach(x => newOpts.add(x.new_entity_id));
+                    (p.unmapped_new || []).forEach(x => newOpts.add(x));
+                    this.swap.newEntityOptions = Array.from(newOpts).sort();
+                    const rows = (p.pairs || []).map(x => ({
+                        old_entity_id: x.old_entity_id,
+                        new_entity_id: x.new_entity_id,
+                        device_class: x.device_class,
+                        confidence: x.confidence
+                    }));
+                    (p.unmapped_old || []).forEach(oid => rows.push({
+                        old_entity_id: oid, new_entity_id: '', device_class: null, confidence: 0
+                    }));
+                    this.swap.mapping = rows;
+                },
+
+                swapMappingValid() {
+                    return this.swap.mapping.some(r => r.new_entity_id);
+                },
+
+                swapActivePairs() {
+                    return this.swap.mapping.filter(r => r.new_entity_id);
+                },
+
+                goToPreview() {
+                    if (!this.swapMappingValid()) {
+                        this.swap.error = 'Mindestens eine Zuordnung ist nötig.';
+                        return;
+                    }
+                    this.swap.error = '';
+                    this.swap.step = 3;
+                },
+
+                async swapExecute() {
+                    this.swap.busy = true;
+                    this.swap.error = '';
+                    try {
+                        const pairs = this.swapActivePairs().map(r => ({
+                            old_entity_id: r.old_entity_id, new_entity_id: r.new_entity_id
+                        }));
+                        const c = await fetch(`api/swap/${this.swap.job.job_id}/confirm`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ entity_mapping: pairs, old_device_disposition: this.swap.disposition })
+                        });
+                        const cj = await c.json();
+                        if (!c.ok) throw new Error(cj.error || 'Bestätigung fehlgeschlagen');
+                        this.swap.step = 4;
+                        const e = await fetch(`api/swap/${this.swap.job.job_id}/execute`, { method: 'POST' });
+                        const ej = await e.json();
+                        if (!e.ok) throw new Error(ej.error || 'Ausführung fehlgeschlagen');
+                        this.swap.job = ej;
+                        if (ej.state === 'COMPLETED') {
+                            this.showMessage('Geräte-Austausch abgeschlossen', 'success');
+                        }
+                    } catch (e) {
+                        this.swap.error = e.message;
+                    } finally {
+                        this.swap.busy = false;
+                    }
+                },
+
+                async swapResume(jobId) {
+                    this.swap.busy = true;
+                    this.swap.error = '';
+                    this.swap.show = true;
+                    try {
+                        const j = await fetch(`api/swap/${jobId}`).then(r => r.json());
+                        this.swap.job = j;
+                        this.swap.disposition = j.old_device_disposition || 'keep';
+                        this.swap.step = 4;
+                        const e = await fetch(`api/swap/${jobId}/execute`, { method: 'POST' });
+                        const ej = await e.json();
+                        if (!e.ok) throw new Error(ej.error || 'Fortsetzen fehlgeschlagen');
+                        this.swap.job = ej;
+                    } catch (e) {
+                        this.swap.error = e.message;
+                    } finally {
+                        this.swap.busy = false;
+                    }
+                },
+
+                async swapAbort(jobId) {
+                    try {
+                        await fetch(`api/swap/${jobId}/abort`, { method: 'POST' });
+                        this.swap.resumeJobs = this.swap.resumeJobs.filter(j => j.job_id !== jobId);
+                    } catch (e) {
+                        this.swap.error = e.message;
+                    }
+                },
+
+                swapDeviceLabel(id) {
+                    const d = this.swap.devices.find(x => x.device_id === id);
+                    if (!d) return id;
+                    return (d.area ? d.area + ' / ' : '') + d.name + ' (' + d.entity_count + ')';
                 },
 
                 // Mobile navigation state
