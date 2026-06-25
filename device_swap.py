@@ -352,29 +352,26 @@ class SwapExecutor:
             await self.restructurer.load_structure(self.entity_registry.ws)
 
     async def _rename_entities(self, job: Dict[str, Any]) -> None:
-        """ALLE Entities des neuen Geräts auf saubere Ziel-IDs bringen (Identität des alten Geräts).
+        """ALLE Entities des neuen Geräts auf die Identität des alten Geräts bringen.
 
-        Nutzt generate_new_entity_id (das neue Device trägt jetzt den Namen des alten),
-        sodass der Bereichs-/Device-Präfix übernommen wird und der Entity-Suffix bleibt.
-        Pro-Entity idempotent über new_renamed.
+        Reiner Präfix-Tausch: Entity-Suffix (object_id ohne Device-Präfix) bleibt,
+        nur der Bereichs-/Device-Präfix wird vom neuen auf den des alten Geräts
+        getauscht (`..._ikea_batteriespannung` -> `..._batteriespannung`). Die
+        Präfixe werden per Longest-Common-Prefix bestimmt (wie in propose_mapping) -
+        unabhängig von device_class/Übersetzungen. Pro-Entity idempotent.
         """
         renamed = job.setdefault("new_renamed", {})
+        target_prefix = _common_prefix_tokens([_object_id(i) for i in job.get("old_device_entities", [])])
+        new_prefix = _common_prefix_tokens([_object_id(i) for i in job.get("new_device_entities", [])])
         for current in job.get("new_device_entities", []):
             if current in renamed:
                 continue  # idempotent (Resume)
-            state = self.states_by_id.get(current, {})
-            target = current
-            friendly = None
-            try:
-                gen_id, gen_friendly = self.restructurer.generate_new_entity_id(current, state)
-                if gen_id:
-                    target = gen_id
-                    friendly = gen_friendly
-            except Exception as e:  # noqa: BLE001 - generate ist best effort
-                self._log(job, STATE_RENAMING_ENTITIES, f"generate_new_entity_id failed for {current}: {e}")
+            suffix = _entity_name(current, new_prefix)  # object_id ohne neuen Device-Präfix
+            target_obj = "_".join(target_prefix + ([suffix] if suffix else []))
+            target = f"{_domain(current)}.{target_obj}" if target_obj else current
 
             if target != current:
-                await self.entity_registry.rename_entity(current, target, friendly)
+                await self.entity_registry.rename_entity(current, target, None)
                 self._log(job, STATE_RENAMING_ENTITIES, f"Renamed entity {current} -> {target}")
             renamed[current] = target
             self._persist(job)
