@@ -1,9 +1,9 @@
 {
   "header": {
     "title": "Gestionnaire d'entités",
-    "version_badge": "ALPHA",
-    "warning_banner": "VERSION ALPHA - DÉVELOPPEMENT UNIQUEMENT",
-    "warning_description": "Ne pas utiliser en production ! Ce module complémentaire est en développement précoce et peut causer des problèmes.",
+    "version_badge": "BETA",
+    "warning_banner": "VERSION BÊTA - À UTILISER AVEC PRUDENCE",
+    "warning_description": "À utiliser avec prudence ! Ce module complémentaire est en développement actif et peut encore causer des problèmes.",
     "settings": "Paramètres"
   },
   "panels": {

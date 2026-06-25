@@ -31,26 +31,13 @@ COPY requirements.txt /tmp/
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
 # Copy application files
-COPY web_ui.py /app/
-COPY dependency_scanner.py /app/
-COPY dependency_updater.py /app/
-COPY device_registry.py /app/
-COPY entity_registry.py /app/
-COPY entity_restructurer.py /app/
-COPY ha_client.py /app/
-COPY ha_websocket.py /app/
-COPY hierarchy_manager.py /app/
-COPY label_registry.py /app/
-COPY naming_overrides.py /app/
-COPY reference_checker.py /app/
-COPY scene_updater.py /app/
-COPY type_mappings.py /app/
+# Copy ALL root-level Python modules so a newly added module can never be
+# missing from the image (previously each .py was listed individually, which
+# silently dropped modules added during refactoring -> ModuleNotFoundError).
+COPY *.py /app/
 COPY templates/ /app/templates/
 COPY translations/ /app/translations/
 WORKDIR /app
-
-# Copy optional naming_overrides.json if it exists
-RUN echo '{}' > /app/naming_overrides.json
 
 # Copy run script
 COPY run.sh /run.sh

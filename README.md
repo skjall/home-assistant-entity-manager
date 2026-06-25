@@ -1,13 +1,13 @@
 # Home Assistant Entity Manager Add-on
 
-[![Alpha](https://img.shields.io/badge/Status-Alpha-red.svg)](https://github.com/Skjall/home-assistant-entity-manager)
+[![Beta](https://img.shields.io/badge/Status-Beta-orange.svg)](https://github.com/Skjall/home-assistant-entity-manager)
 [![GitHub Release](https://img.shields.io/github/release/Skjall/home-assistant-entity-manager.svg?style=flat-square)](https://github.com/Skjall/home-assistant-entity-manager/releases)
 [![Crowdin](https://badges.crowdin.net/home-assistant-entity-manager/localized.svg)](https://crowdin.com/project/home-assistant-entity-manager)
 [![License](https://img.shields.io/github/license/Skjall/home-assistant-entity-manager.svg?style=flat-square)](LICENSE)
 
 A Home Assistant Add-on for standardizing and managing entity names according to a consistent, logical naming convention with an integrated Web UI.
 
-> **⚠️ ALPHA SOFTWARE**: This Add-on is in early development and may have bugs. DO NOT use in production environments. Please report any issues on the [GitHub Issues](https://github.com/Skjall/home-assistant-entity-manager/issues) page.
+> **⚠️ BETA SOFTWARE**: This Add-on is under active development and may still have bugs. Use with caution and test before relying on it in production. Please report any issues on the [GitHub Issues](https://github.com/Skjall/home-assistant-entity-manager/issues) page.
 
 ## Features
 
@@ -35,7 +35,7 @@ A Home Assistant Add-on for standardizing and managing entity names according to
 2. Click the three dots menu → Repositories
 3. Add this repository: `https://github.com/Skjall/home-assistant-entity-manager`
 4. Click "Add"
-5. Find "Entity Manager (Alpha)" in the add-on store
+5. Find "Entity Manager (Beta)" in the add-on store
 6. Click on it and then click "Install"
 7. Start the add-on
 8. Click "OPEN WEB UI" to access the interface

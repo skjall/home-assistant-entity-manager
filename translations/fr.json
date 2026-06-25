@@ -1,5 +1,5 @@
 {
-  "title": "Gestionnaire d'entités (Alpha)",
+  "title": "Gestionnaire d'entités (Beta)",
   "description": "Gérer et standardiser les noms des entités Home Assistant",
   "configuration": {
     "log_level": {

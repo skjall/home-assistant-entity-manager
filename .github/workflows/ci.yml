@@ -71,12 +71,21 @@ jobs:
         with:
           context: .
           push: false
+          load: ${{ matrix.arch == 'amd64' }}
           tags: local/entity_manager:${{ matrix.arch }}
           build-args: |
             BUILD_FROM=${{ steps.base.outputs.base_image }}
           platforms: ${{ steps.platform.outputs.platform }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Smoke test: import the app inside the built image to catch missing
+      # modules / broken imports that the Docker build itself does not detect.
+      - name: Import smoke test
+        if: matrix.arch == 'amd64'
+        run: |
+          docker run --rm --entrypoint python3 local/entity_manager:amd64 -c "import web_ui" \
+            && echo "✓ web_ui imports cleanly in the built image"
 
   validate:
     runs-on: ubuntu-latest

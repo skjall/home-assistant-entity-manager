@@ -5,8 +5,8 @@ export LOG_LEVEL=$(bashio::config 'log_level' || echo 'info')
 export ENABLE_DISABLED_ENTITIES=$(bashio::config 'enable_disabled_entities' || echo 'false')
 
 bashio::log.info "Starting Entity Manager..."
-bashio::log.warning "⚠️ ALPHA VERSION - This add-on is in early development!"
-bashio::log.warning "⚠️ Use at your own risk - Not recommended for production!"
+bashio::log.warning "⚠️ BETA VERSION - This add-on is under active development!"
+bashio::log.warning "⚠️ Use with caution - Test before relying on it in production!"
 
 # Set environment variables
 export HA_URL="http://supervisor/core"

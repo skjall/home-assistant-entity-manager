@@ -1,9 +1,9 @@
 {
   "header": {
     "title": "Entitäts-Manager",
-    "version_badge": "ALPHA",
-    "warning_banner": "ALPHA VERSION - NUR ZUR ENTWICKLUNG",
-    "warning_description": "Nicht in Produktion verwenden! Dieses Add-on befindet sich in einer frühen Entwicklungsphase und kann Probleme verursachen.",
+    "version_badge": "BETA",
+    "warning_banner": "BETA VERSION - MIT VORSICHT VERWENDEN",
+    "warning_description": "Mit Vorsicht verwenden! Dieses Add-on befindet sich in aktiver Entwicklung und kann noch Probleme verursachen.",
     "settings": "Einstellungen"
   },
   "panels": {
