@@ -458,11 +458,15 @@ class SwapExecutor:
         old = job["old_device"]
         result = await self.bridge.remove_native(old, force=True)
         if not result.success:
-            # Teilerfolg: Referenzen sind umgebogen, aber Gerät blieb (z.B. Matter rejected).
+            # Teilerfolg statt Abbruch: Referenzen/Entities sind bereits umgebogen.
+            # Natives Entfernen scheiterte (z.B. Matter lehnt ab, solange das Gerät
+            # erreichbar ist) -> Warnung, der Nutzer entfernt das Altgerät manuell.
+            job["native_remove_warning"] = result.error
             self._log(
                 job,
                 STATE_NATIVE_REMOVE,
-                f"Native removal not completed ({result.error}); references already rewired",
+                f"Native removal not completed ({result.error}); "
+                f"please remove the old device manually. References already rewired.",
             )
-            raise Exception(f"Native removal failed: {result.error}")
+            return
         self._log(job, STATE_NATIVE_REMOVE, "Old device natively removed")

@@ -51,8 +51,15 @@ class RegistryAdapter(IntegrationBridgeAdapter):
         )
 
     async def remove_native(self, device_data: Dict[str, Any], *, force: bool = False) -> BridgeResult:
-        device_id = device_data.get("id")
+        # Snapshots nutzen "device_id", rohe Registry-Einträge "id" -> beide akzeptieren.
+        device_id = device_data.get("device_id") or device_data.get("id")
         config_entry_id = extract_config_entry_id(device_data)
+        if not device_id:
+            return BridgeResult(
+                success=False,
+                native_supported=True,
+                error="No device_id in device data; cannot remove via registry",
+            )
         if not config_entry_id:
             return BridgeResult(
                 success=False,

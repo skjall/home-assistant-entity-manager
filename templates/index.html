@@ -2366,11 +2366,6 @@
                                 <p class="text-xs text-gray-500">Inkl. aus Integration</p>
                             </button>
                         </div>
-
-                        <div class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                            <i class="ri-alert-line text-amber-500 text-lg shrink-0 mt-0.5"></i>
-                            <p class="text-xs text-amber-800 leading-relaxed">Geräte-Trigger (über <code class="font-mono">device_id</code>) und YAML-Dashboards werden <strong>nicht</strong> automatisch umgebogen.</p>
-                        </div>
                     </div>
 
                     <!-- Step 4: Ausführung/Status -->
@@ -2387,6 +2382,17 @@
                             </template>
                             <p class="text-base font-semibold text-gray-900" x-text="swap.busy ? 'Austausch läuft…' : swap.job?.state==='COMPLETED' ? 'Austausch abgeschlossen' : swap.job?.state==='FAILED' ? 'Austausch fehlgeschlagen' : ''"></p>
                             <p x-show="!swap.busy && swap.job?.state==='FAILED'" class="text-sm text-gray-500 mt-1">Fehlgeschlagen bei Schritt <span class="font-medium" x-text="swap.job?.failed_step"></span>. „Erneut versuchen" setzt fort.</p>
+                        </div>
+                        <!-- Natives Entfernen scheiterte (Teilerfolg) -->
+                        <div x-show="swap.job?.native_remove_warning" class="rounded-lg border border-amber-200 bg-amber-50 p-3 mb-3">
+                            <div class="flex items-start gap-2">
+                                <i class="ri-alert-line text-amber-600 mt-0.5"></i>
+                                <div class="text-xs text-amber-900">
+                                    <p class="font-medium">Altgerät konnte nicht automatisch entfernt werden</p>
+                                    <p class="mt-0.5">Die Referenzen sind umgebogen, aber das alte Gerät blieb (z. B. weil es noch erreichbar ist). Bitte manuell in Home Assistant entfernen.</p>
+                                    <p class="mt-1 font-mono text-amber-700" x-text="swap.job?.native_remove_warning"></p>
+                                </div>
+                            </div>
                         </div>
                         <!-- Manuell anzupassende YAML-Dashboards (nicht automatisch schreibbar) -->
                         <div x-show="swap.job?.yaml_manual?.length" class="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden mb-3">
