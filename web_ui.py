@@ -268,6 +268,31 @@ async def _ensure_mqtt_bridge():
         return None
 
 
+async def _sync_z2m_name(device_registry, device_id: str, new_name: str) -> dict:
+    """Gleicht den Z2M-friendly_name an den neuen HA-Namen an (nur Z2M-Geräte).
+
+    Nicht fatal: Ohne MQTT/Z2M oder bei Fehlern wird nur geloggt; der normale
+    Rename läuft unabhängig weiter. Gibt einen Status fürs Reporting zurück.
+    """
+    try:
+        device_data = renamer_state["restructurer"].devices.get(device_id)
+        if not device_data:
+            return {"synced": False, "supported": False, "error": None}
+        mqtt_bridge = await _ensure_mqtt_bridge()
+        bridge = build_bridge(device_registry, mqtt_bridge=mqtt_bridge)
+        res = await bridge.rename_native(device_data, new_name)
+        if not res.native_supported:
+            return {"synced": False, "supported": False, "error": None}
+        if res.success:
+            logger.info("Z2M name synced for %s -> '%s'", device_id, new_name)
+            return {"synced": True, "supported": True, "error": None}
+        logger.warning("Z2M name sync failed for %s: %s", device_id, res.error)
+        return {"synced": False, "supported": True, "error": res.error}
+    except Exception as e:  # noqa: BLE001 - native sync must never block the rename
+        logger.warning("Z2M name sync error for %s: %s", device_id, e)
+        return {"synced": False, "supported": True, "error": str(e)}
+
+
 async def load_areas_and_entities():
     """Lade alle Areas und ihre Entities"""
     try:
@@ -986,11 +1011,19 @@ async def _execute_changes_async():
                 success = await device_registry.rename_device(device_id, new_device_name)
 
                 if success:
+                    # Z2M-friendly_name angleichen (nur Z2M-Geräte, nicht fatal)
+                    z2m_sync = await _sync_z2m_name(device_registry, device_id, new_device_name)
                     results["device_success"].append(
                         {
                             "device_id": device_id,
                             "new_name": new_device_name,
                             "message": f"Gerät erfolgreich umbenannt zu: {new_device_name}",
+                            "z2m_synced": z2m_sync.get("synced"),
+                            "z2m_failed": (
+                                z2m_sync.get("error")
+                                if z2m_sync.get("supported") and not z2m_sync.get("synced")
+                                else None
+                            ),
                         }
                     )
 
@@ -2224,6 +2257,9 @@ async def _rename_device_async():
                     500,
                 )
 
+            # Z2M-friendly_name an den neuen Namen angleichen (nur Z2M-Geräte, nicht fatal)
+            z2m_sync = await _sync_z2m_name(device_registry, device_id, new_name)
+
             # Update entities: rename ID + friendly name + update dependencies
             entities_updated = 0
             entities_failed = 0
@@ -2361,6 +2397,10 @@ async def _rename_device_async():
                     "entities_updated": entities_updated,
                     "entities_failed": entities_failed,
                     "dependencies_updated": dependencies_updated,
+                    "z2m_synced": z2m_sync.get("synced"),
+                    "z2m_failed": (
+                        z2m_sync.get("error") if z2m_sync.get("supported") and not z2m_sync.get("synced") else None
+                    ),
                 }
             )
 
