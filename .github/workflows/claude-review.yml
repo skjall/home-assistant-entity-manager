@@ -1,0 +1,42 @@
+name: Claude Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Run on every PR, or when someone writes "@claude" in a comment.
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review the changes in this pull request. Focus on:
+            - Correctness bugs and regressions
+            - Security concerns (this add-on talks to Home Assistant via tokens/WebSocket)
+            - Adherence to the repo conventions in CLAUDE.md (type hints, docstrings,
+              Black 120-char line length, English log messages)
+            Post concise inline comments on the specific lines that need attention.
+            Skip nitpicks; only raise findings worth acting on.
+          # Swap to claude-opus-4-8 for deeper reviews at higher quota cost.
+          claude_args: |
+            --model claude-sonnet-4-6
+            --max-turns 10
