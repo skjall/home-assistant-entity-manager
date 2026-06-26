@@ -8,7 +8,7 @@ on:
       - "*.md"
       - "LICENSE"
   pull_request:
-    branches: [main]
+    branches: [main, next-release]
 
 jobs:
   lint:
