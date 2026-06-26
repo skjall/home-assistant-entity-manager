@@ -1,0 +1,51 @@
+name: Request review
+
+# Request the maintainer's review only on external contributor PRs. Routine
+# Renovate PRs that auto-merge don't ping anyone (Renovate requests reviews
+# itself only on majors / frontend deps, via renovate.json). Maintainer and
+# bot PRs are skipped here.
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const repo = { owner: context.repo.owner, repo: context.repo.repo };
+            const pr = context.payload.pull_request;
+            const REVIEWER = "skjall";
+
+            // Bots (Renovate/Dependabot) handle their own review routing.
+            if (pr.user.type === "Bot" || /\[bot\]$/.test(pr.user.login)) {
+              core.info(`Bot PR by ${pr.user.login} — no review request`);
+              return;
+            }
+
+            // Maintainers (owner/members/collaborators) don't need a review
+            // request for their own changes; only external contributors do.
+            const MAINTAINER = ["OWNER", "MEMBER", "COLLABORATOR"];
+            if (MAINTAINER.includes(pr.author_association)) {
+              core.info(`Maintainer PR (${pr.author_association}) by ${pr.user.login} — no review request`);
+              return;
+            }
+
+            // GitHub cannot request a review from the PR author.
+            if (pr.user.login === REVIEWER) {
+              core.info(`PR authored by the reviewer — skipping`);
+              return;
+            }
+
+            await github.rest.pulls.requestReviewers({
+              ...repo,
+              pull_number: pr.number,
+              reviewers: [REVIEWER],
+            });
+            core.info(`Requested review from ${REVIEWER} on contributor PR #${pr.number}`);
