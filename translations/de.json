@@ -1,5 +1,5 @@
 {
-  "title": "Entitäts-Manager (Beta)",
+  "title": "Entitäts-Manager",
   "description": "Verwalten und standardisieren Sie Home Assistant Entitäts-Namen",
   "configuration": {
     "log_level": {

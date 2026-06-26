@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report a bug! This add-on is **beta software** —
-        please include as much detail as possible so we can reproduce the issue.
+        Thanks for taking the time to report a bug!
+        Please include as much detail as possible so we can reproduce the issue.
   - type: checkboxes
     id: preflight
     attributes:
@@ -20,8 +20,8 @@ body:
     id: addon-version
     attributes:
       label: Add-on version
-      description: See Settings → Add-ons → Entity Manager (e.g. 1.0.3-beta)
-      placeholder: "1.0.3-beta"
+      description: See Settings → Add-ons → Entity Manager (e.g. 1.0.3)
+      placeholder: "1.0.3"
     validations:
       required: true
   - type: input

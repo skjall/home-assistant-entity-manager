@@ -1,5 +1,5 @@
 {
-  "title": "Gestor de Entidades (Beta)",
+  "title": "Gestor de Entidades",
   "description": "Gestionar y estandarizar nombres de entidades de Home Assistant",
   "configuration": {
     "log_level": {

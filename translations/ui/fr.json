@@ -1,9 +1,6 @@
 {
   "header": {
     "title": "Gestionnaire d'entités",
-    "version_badge": "BETA",
-    "warning_banner": "VERSION BÊTA - À UTILISER AVEC PRUDENCE",
-    "warning_description": "À utiliser avec prudence ! Ce module complémentaire est en développement actif et peut encore causer des problèmes.",
     "settings": "Paramètres"
   },
   "panels": {
@@ -322,6 +319,20 @@
     "exported_count": "{count} correspondances exportées",
     "imported_count": "{count} correspondances importées",
     "import_partial": "{imported} importées, {errors} erreurs",
-    "import_empty": "Aucune correspondance valide à importer"
+    "import_empty": "Aucune correspondance valide à importer",
+    "api_access": "Accès API externe",
+    "api_access_hint": "Générez un jeton pour qu'un outil externe puisse lire le journal de renommage via un port exposé. Le jeton n'est affiché qu'une seule fois et n'est stocké que sous forme de hachage. Sans jeton, l'API reste accessible uniquement via Ingress.",
+    "api_token_status_none": "Aucun jeton configuré",
+    "api_token_status_active": "Jeton actif",
+    "api_token_created": "Créé",
+    "api_token_last_used": "Dernière utilisation",
+    "api_token_never": "jamais",
+    "api_token_generate": "Générer un jeton",
+    "api_token_regenerate": "Régénérer",
+    "api_token_revoke": "Révoquer",
+    "api_token_show_once": "Copiez ce jeton maintenant — il n'est affiché qu'une seule fois et ne pourra pas être récupéré ensuite.",
+    "api_token_copy": "Copier",
+    "api_token_copied": "Copié !",
+    "api_token_revoke_confirm": "Révoquer le jeton actuel ? Les outils externes qui l'utilisent cesseront de fonctionner."
   }
 }

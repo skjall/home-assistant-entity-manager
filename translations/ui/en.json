@@ -1,9 +1,6 @@
 {
   "header": {
     "title": "Entity Manager",
-    "version_badge": "BETA",
-    "warning_banner": "BETA VERSION - USE WITH CAUTION",
-    "warning_description": "Use with caution! This add-on is under active development and may still have issues.",
     "settings": "Settings"
   },
   "panels": {
@@ -302,7 +299,21 @@
     "exported_count": "{count} mappings exported",
     "imported_count": "{count} mappings imported",
     "import_partial": "{imported} imported, {errors} errors",
-    "import_empty": "No valid mappings to import"
+    "import_empty": "No valid mappings to import",
+    "api_access": "External API access",
+    "api_access_hint": "Generate a token to let an external tool read the rename log over a mapped port. The token is shown once and stored only as a hash. Without a token the API stays reachable only via Ingress.",
+    "api_token_status_none": "No token configured",
+    "api_token_status_active": "Token active",
+    "api_token_created": "Created",
+    "api_token_last_used": "Last used",
+    "api_token_never": "never",
+    "api_token_generate": "Generate token",
+    "api_token_regenerate": "Regenerate",
+    "api_token_revoke": "Revoke",
+    "api_token_show_once": "Copy this token now — it is shown only once and cannot be retrieved later.",
+    "api_token_copy": "Copy",
+    "api_token_copied": "Copied!",
+    "api_token_revoke_confirm": "Revoke the current token? External tools using it will stop working."
   },
   "type_mappings": {
     "light": "Light",
