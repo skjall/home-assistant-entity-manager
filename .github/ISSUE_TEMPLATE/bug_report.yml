@@ -1,0 +1,69 @@
+name: "🐛 Bug report"
+description: Report a problem with the Entity Manager add-on
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! This add-on is **beta software** —
+        please include as much detail as possible so we can reproduce the issue.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched existing issues and this has not been reported yet
+          required: true
+        - label: I am running the latest available version of the add-on
+          required: true
+  - type: input
+    id: addon-version
+    attributes:
+      label: Add-on version
+      description: See Settings → Add-ons → Entity Manager (e.g. 1.0.3-beta)
+      placeholder: "1.0.3-beta"
+    validations:
+      required: true
+  - type: input
+    id: ha-version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2025.7.2"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce the problem?
+      placeholder: |
+        1. Open the add-on
+        2. Select area '...'
+        3. Click '...'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Add-on logs
+      description: Relevant log output (Settings → Add-ons → Entity Manager → Logs). This is automatically formatted, no backticks needed.
+      render: shell
+  - type: dropdown
+    id: integration
+    attributes:
+      label: Affected integration (if relevant)
+      description: Especially for device swap / Z2M issues.
+      options:
+        - "Not applicable"
+        - "Zigbee2MQTT (MQTT)"
+        - "Matter"
+        - "ZHA"
+        - "Other"
