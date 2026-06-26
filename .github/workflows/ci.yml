@@ -2,13 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [next-release]
+    branches: [main]
     paths-ignore:
       - "translations/**"
       - "*.md"
       - "LICENSE"
   pull_request:
-    branches: [main, next-release]
+    branches: [main]
 
 jobs:
   lint:

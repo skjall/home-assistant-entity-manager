@@ -3,7 +3,7 @@
 # feature-worktree.sh — create an isolated git worktree + feature branch.
 #
 # For working on several changes in parallel (e.g. multiple Claude sessions):
-# each task gets its own working directory and its own branch off `next-release`,
+# each task gets its own working directory and its own branch off `main`,
 # so the changes never collide in the main checkout.
 #
 # Usage:
@@ -15,11 +15,11 @@
 #
 # Creates:
 #   ../<repo>-<slug>      worktree directory (sibling of the repo)
-#   feature/<slug>        branch, based on origin/next-release
+#   feature/<slug>        branch, based on origin/main
 #
 # When done:
 #   cd <worktree>
-#   git push -u origin <branch>        # then open a PR against next-release
+#   git push -u origin <branch>        # then open a PR against main
 #   cd -                               # back to main checkout
 #   git worktree remove ../<repo>-<slug>
 #
@@ -43,17 +43,17 @@ if git show-ref --quiet "refs/heads/${branch}"; then
   exit 1
 fi
 
-git worktree add "$dir" -b "$branch" origin/next-release
+git worktree add "$dir" -b "$branch" origin/main
 
 cat <<EOF
 
 ✓ Worktree: ${dir}
-✓ Branch:   ${branch}  (based on origin/next-release)
+✓ Branch:   ${branch}  (based on origin/main)
 
 Next:
   cd "${dir}"
   # ... make changes, commit ...
-  git push -u origin ${branch}        # then open a PR against 'next-release'
+  git push -u origin ${branch}        # then open a PR against `main`
 
 Cleanup when merged:
   git worktree remove "${dir}"

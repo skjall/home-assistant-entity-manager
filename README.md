@@ -178,12 +178,13 @@ docker run --rm -it -p 5000:5000 \
 Contributions are welcome! Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the
 full guide. In short:
 
-1. Fork the repository and branch off **`next-release`** (`git checkout -b feature/amazing-feature next-release`)
-2. Make your changes; ensure `flake8` / `black` / `isort` pass
+1. Fork the repository and branch off **`main`** (`git checkout -b feature/amazing-feature main`)
+2. Make your changes; ensure `flake8` / `black` / `isort` / `pytest` pass
 3. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, …)
-4. Open a Pull Request **against `next-release`** (not `main`)
+4. Open a Pull Request **against `main`** — once CI is green it gets squash-merged
 
-`main` is the release branch and is only updated via `next-release`.
+We use GitHub Flow: `main` is the only long-lived branch; releases are tags created by
+bumping the version in `config.json`.
 
 ## License
 

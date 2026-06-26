@@ -72,3 +72,7 @@ node_modules/
 
 # Build output
 static/
+
+# secrets / tokens (never commit)
+token.txt
+*.token

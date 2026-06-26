@@ -20,6 +20,14 @@ jobs:
           script: |
             const repo = { owner: context.repo.owner, repo: context.repo.repo };
             const pr = context.payload.pull_request;
+
+            // Bot PRs (Renovate / Dependabot) don't need a linked issue — they are
+            // tracked centrally via the dependency dashboard.
+            if (pr.user.type === "Bot" || /\[bot\]$/.test(pr.user.login) || pr.user.login === "renovate-bot") {
+              core.info(`Bot PR by ${pr.user.login} — skipping linked-issue check`);
+              return;
+            }
+
             const body = pr.body || "";
             const re = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i;
             const linked = re.test(body);

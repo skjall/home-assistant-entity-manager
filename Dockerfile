@@ -1,30 +1,26 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.14-alpine3.20
-FROM $BUILD_FROM
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    python3-dev
-
-# Install Node.js temporarily for building frontend
-RUN apk add --no-cache nodejs npm
-
-# Build frontend assets
+# Build the frontend on the native build platform. Running npm/node under QEMU
+# emulation (e.g. for aarch64 on an amd64 runner) crashes with SIGILL (exit 132),
+# so we build it once natively and copy the arch-independent assets into the image.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend
 WORKDIR /build
 COPY package.json package-lock.json postcss.config.js ./
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY templates/ ./templates/
-# Create static directories
-RUN mkdir -p static/js static/fonts
-RUN npm ci && \
-    npm run build && \
-    mkdir -p /app/static && \
-    cp -r static/* /app/static/ && \
-    cd / && \
-    rm -rf /build && \
-    apk del nodejs npm
+RUN mkdir -p static/js static/fonts && npm ci && npm run build
+
+FROM $BUILD_FROM
+
+# Runtime build dependencies for Python packages
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    python3-dev
+
+# Frontend assets (built natively in the previous stage)
+COPY --from=frontend /build/static/ /app/static/
 
 # Install Python dependencies
 COPY requirements.txt /tmp/
