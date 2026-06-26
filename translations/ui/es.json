@@ -1,9 +1,6 @@
 {
   "header": {
     "title": "Gestor de Entidades",
-    "version_badge": "BETA",
-    "warning_banner": "VERSIÓN BETA - USAR CON PRECAUCIÓN",
-    "warning_description": "¡Usar con precaución! Este complemento está en desarrollo activo y aún puede causar problemas.",
     "settings": "Configuración"
   },
   "panels": {

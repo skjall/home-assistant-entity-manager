@@ -214,7 +214,6 @@ async def init_client():
         # In Add-on mode, use Supervisor API
         base_url = os.getenv("HA_URL", "http://supervisor/core")
         token = os.getenv("HA_TOKEN", os.getenv("SUPERVISOR_TOKEN"))
-        logger.info("BETA VERSION - Entity Manager Add-on")
         logger.info(f"Connecting to Home Assistant at {base_url}")
         renamer_state["client"] = HomeAssistantClient(base_url, token)
         renamer_state["restructurer"] = EntityRestructurer(
@@ -3106,7 +3105,6 @@ if __name__ == "__main__":
 
     # In Add-on mode, use port 5000 for Ingress
     port = int(os.getenv("WEB_UI_PORT", 5000))
-    print("\nBETA VERSION - Entity Manager Add-on")
     print(f"\nStarting Web UI on port {port}\n")
 
     # Run without debug in production

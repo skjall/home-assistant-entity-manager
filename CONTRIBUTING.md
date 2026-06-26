@@ -4,7 +4,7 @@ Thanks for your interest in improving the **Home Assistant Entity Manager** add-
 This document describes the branching model, how to set up a development environment,
 and the conventions we follow.
 
-> This add-on is **beta software**. Contributions, bug reports and ideas are very welcome.
+> Contributions, bug reports and ideas are very welcome.
 
 ## Branching model (GitHub Flow)
 

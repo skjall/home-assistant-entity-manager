@@ -1,12 +1,9 @@
 # Home Assistant Entity Manager Add-on
 
-[![Beta](https://img.shields.io/badge/Status-Beta-orange.svg)](https://github.com/Skjall/home-assistant-entity-manager)
 [![GitHub Release](https://img.shields.io/github/release/Skjall/home-assistant-entity-manager.svg?style=flat-square)](https://github.com/Skjall/home-assistant-entity-manager/releases)
 [![License](https://img.shields.io/github/license/Skjall/home-assistant-entity-manager.svg?style=flat-square)](LICENSE)
 
 A Home Assistant Add-on for standardizing and managing entity names according to a consistent, logical naming convention with an integrated Web UI.
-
-> **⚠️ BETA SOFTWARE**: This Add-on is under active development and may still have bugs. Use with caution and test before relying on it in production. Please report any issues on the [GitHub Issues](https://github.com/Skjall/home-assistant-entity-manager/issues) page.
 
 ## Features
 

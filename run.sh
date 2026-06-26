@@ -7,8 +7,6 @@ export ENABLE_Z2M_BRIDGE=$(bashio::config 'enable_z2m_bridge' || echo 'true')
 export Z2M_BASE_TOPIC=$(bashio::config 'z2m_base_topic' || echo 'zigbee2mqtt')
 
 bashio::log.info "Starting Entity Manager..."
-bashio::log.warning "⚠️ BETA VERSION - This add-on is under active development!"
-bashio::log.warning "⚠️ Use with caution - Test before relying on it in production!"
 
 # Set environment variables
 export HA_URL="http://supervisor/core"
