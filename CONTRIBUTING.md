@@ -6,17 +6,19 @@ and the conventions we follow.
 
 > This add-on is **beta software**. Contributions, bug reports and ideas are very welcome.
 
-## Branching model
+## Branching model (GitHub Flow)
 
 | Branch | Purpose |
 |---|---|
-| `main` | **Release branch.** Always deployable. Each push that changes `config.json` creates a tagged release. Never push directly. |
-| `next-release` | **Integration branch.** All feature/fix branches are merged here first; CI runs on every push. |
-| `feature/*`, `fix/*`, `chore/*` | Your working branches, created from `next-release`. |
+| `main` | The single long-lived branch. Always deployable; protected (CI must pass). |
+| `feature/*`, `fix/*`, `chore/*` | Your working branches, created from `main`. |
 
-**Flow:** `feature/*` → PR into **`next-release`** → (once stable) `next-release` → `main` → release.
+**Flow:** branch off `main` → PR into **`main`** → CI green → **squash-merge**. That's it.
 
-> ⚠️ **Always target `next-release` with your Pull Request, not `main`.**
+**Releases** are just tags: bump `version` in `config.json` on `main`, and the `Release`
+workflow tags `v<version>` + publishes a GitHub release. No separate release branch.
+
+> Open your Pull Request against **`main`**. There is no separate integration or release branch.
 
 ## Getting started
 
@@ -31,7 +33,7 @@ and the conventions we follow.
 ```bash
 git clone https://github.com/Skjall/home-assistant-entity-manager.git
 cd home-assistant-entity-manager
-git checkout next-release
+git checkout main
 git checkout -b feature/my-change
 
 npm ci          # install frontend dependencies
@@ -66,11 +68,11 @@ never collide in the main checkout and each lands in a separate branch:
 ```bash
 scripts/feature-worktree.sh dashboard-export
 #  -> ../home-assistant-entity-manager-dashboard-export
-#     branch: feature/dashboard-export (based on origin/next-release)
+#     branch: feature/dashboard-export (based on origin/main)
 
 cd ../home-assistant-entity-manager-dashboard-export
 # ... make changes, commit ...
-git push -u origin feature/dashboard-export      # open a PR against next-release
+git push -u origin feature/dashboard-export      # open a PR against main
 ```
 
 Each worktree is an independent working directory on its own branch, so parallel
@@ -116,11 +118,11 @@ clients. Run them with `pytest`. Please add/extend tests for backend logic you c
 
 The PR template lists the full checklist. In short:
 
-1. Branch off `next-release` and keep it up to date.
+1. Branch off `main` and keep it up to date.
 2. Lint passes (flake8 / black / isort) and JSON files are valid.
 3. Frontend changes include a rebuilt CSS (`npm run build:css`).
 4. Describe how you tested the change (and which integration: Z2M / Matter / ZHA).
-5. Open the PR against **`next-release`**.
+5. Open the PR against **`main`**.
 
 ## Issue & PR process
 
@@ -134,7 +136,7 @@ Issues and PRs are kept tidy with a few automated rules:
 - **Duplicate hint** — new issues get a comment linking possibly-related existing issues.
 
 Typical flow: open an issue (→ `triage`) → assign yourself (→ `in progress`) → open a PR
-with `Closes #N` against `next-release` (→ issue `in review`) → merge closes the issue (→ `done`).
+with `Closes #N` against `main` (→ issue `in review`) → merge closes the issue (→ `done`).
 
 ### Lifecycle automation
 
@@ -143,13 +145,14 @@ with `Closes #N` against `next-release` (→ issue `in review`) → merge closes
 - **Stale issues/PRs:** inactive items are labeled `stale` after 45 days and closed after
   another 14, unless they carry `status: in progress`, `status: blocked` or `pinned`.
 - **Branches:** PR branches are deleted automatically on merge. A weekly job removes branches
-  already contained in `next-release` and reports old unmerged ones (those are never auto-deleted).
+  already contained in `main` and reports old unmerged ones (those are never auto-deleted).
 
 ## Releasing (maintainers)
 
-1. Merge `next-release` into `main`.
-2. Bump `version` in `config.json` (keeps the `-beta` suffix for now).
-3. The `Release` workflow tags `v<version>` and publishes a GitHub release automatically.
+1. Bump `version` in `config.json` on `main` (keeps the `-beta` suffix for now).
+2. The `Release` workflow tags `v<version>` and publishes a GitHub release automatically.
+
+No release branch and no back-merges — `main` is the only long-lived branch.
 
 ## Reporting bugs / requesting features
 

@@ -1,7 +1,7 @@
 name: Stale branch cleanup
 
 # Auto-delete-on-merge already removes most PR branches. This catches the rest:
-# deletes branches fully contained in next-release, and only *reports* old unmerged
+# deletes branches fully contained in main, and only *reports* old unmerged
 # ones (never deletes work that might still be in progress).
 
 on:
@@ -20,7 +20,7 @@ jobs:
         with:
           script: |
             const repo = { owner: context.repo.owner, repo: context.repo.repo };
-            const KEEP = new Set(["main", "next-release"]);
+            const KEEP = new Set(["main"]);
             const STALE_DAYS = 60;
 
             const branches = await github.paginate(github.rest.repos.listBranches, { ...repo, per_page: 100 });
@@ -35,14 +35,14 @@ jobs:
               try {
                 cmp = await github.rest.repos.compareCommitsWithBasehead({
                   ...repo,
-                  basehead: `next-release...${b.name}`,
+                  basehead: `main...${b.name}`,
                 });
               } catch (e) {
                 continue;
               }
 
               if (cmp.data.ahead_by === 0) {
-                // fully contained in next-release -> merged -> delete
+                // fully contained in main -> merged -> delete
                 await github.rest.git.deleteRef({ ...repo, ref: `heads/${b.name}` }).catch(() => {});
                 deleted.push(b.name);
               } else {

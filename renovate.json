@@ -4,7 +4,7 @@
     "config:recommended"
   ],
   "baseBranchPatterns": [
-    "next-release"
+    "main"
   ],
   "constraints": {
     "python": "3.13"
@@ -43,7 +43,7 @@
       "groupName": "Build dependencies"
     },
     {
-      "description": "Auto-merge low-risk updates once CI is green (requires branch protection on next-release)",
+      "description": "Auto-merge low-risk updates once CI is green (requires branch protection on main)",
       "matchUpdateTypes": [
         "minor",
         "patch",
