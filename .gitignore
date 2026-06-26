@@ -73,6 +73,12 @@ node_modules/
 # Build output
 static/
 
+# Playwright (keep tests/visual/__screenshots__ committed as baselines)
+test-results/
+playwright-report/
+/blob-report/
+.playwright/
+
 # secrets / tokens (never commit)
 token.txt
 *.token

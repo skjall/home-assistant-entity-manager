@@ -135,3 +135,43 @@ jobs:
         run: |
           jq -e '.name and .version and .slug and .description and .arch' config.json > /dev/null
           echo "✓ config.json has all required fields"
+
+  visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies + build frontend
+        run: |
+          npm ci
+          npm run build
+          pip install -r requirements.txt
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Visual regression
+        run: |
+          if ls tests/visual/__screenshots__/**/*.png > /dev/null 2>&1; then
+            npx playwright test
+          else
+            echo "::warning::No visual baselines committed yet. Run the 'Visual baselines' workflow to seed them, then this check will compare against them."
+          fi
+
+      - name: Upload diff on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
