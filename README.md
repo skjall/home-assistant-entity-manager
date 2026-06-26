@@ -102,6 +102,63 @@ Create a `naming_overrides.json` file to customize naming:
 }
 ```
 
+### Rename Audit Log
+
+Every successful entity rename is appended to `/data/rename_log.jsonl` (old →
+new entity_id, friendly name, timestamp). This lets an external consumer find
+out where a vanished entity went instead of only seeing that it disappeared.
+
+Look it up via the API:
+
+```
+GET /api/rename_log?entity_id=light.kitchen_old
+```
+
+```json
+{
+  "query": "light.kitchen_old",
+  "found": true,
+  "renamed": true,
+  "current_entity_id": "light.kitchen_ceiling",
+  "history": [
+    { "timestamp": "…", "old_entity_id": "light.kitchen_old",
+      "new_entity_id": "light.kitchen_ceiling", "friendly_name": "Kitchen Ceiling" }
+  ]
+}
+```
+
+The lookup follows multi-hop rename chains (`a → b → c`) and returns
+`"found": false` when the id was never renamed.
+
+#### External access (API token)
+
+By default the web UI and API are reachable **only through Home Assistant
+Ingress** (i.e. only for logged-in HA users); the add-on's port is not exposed.
+
+To let an **external** tool read the rename log:
+
+1. Open the add-on's web UI → **Settings → External API access** and click
+   **Generate token**. The token is shown **once** — copy it now. Only a hash of
+   it is stored; it cannot be retrieved again (regenerate to get a new one).
+2. Map the add-on's port (Configuration → Network) to a host port.
+
+With a token generated:
+
+- **Ingress** traffic (the web UI) keeps working unchanged, no token needed.
+- **Direct** (non-Ingress) requests are accepted **only** for
+  `GET /api/rename_log` and **only** with a matching bearer token. Every other
+  endpoint — including token management and all renaming/write operations —
+  stays Ingress-exclusive, so an exposed port never grants write access.
+
+```bash
+curl -H "Authorization: Bearer em_…" \
+  "http://<ha-host>:<mapped-port>/api/rename_log?entity_id=light.kitchen_old"
+```
+
+Without a generated token, direct access stays closed and behaviour is
+unchanged. Generating a new token or revoking it (Settings) immediately
+invalidates the previous one.
+
 ## Safety Features
 
 1. **Dry Run Mode**: Always test with `--test` flag first

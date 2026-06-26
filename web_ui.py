@@ -6,6 +6,7 @@ Web UI für Home Assistant Entity Renamer - Add-on Version
 import asyncio
 from datetime import datetime, timezone
 import html
+import ipaddress
 import json
 import logging
 import os
@@ -16,10 +17,11 @@ import unicodedata
 import uuid
 
 import aiohttp
-from flask import Flask, jsonify, make_response, render_template, request, send_from_directory
+from flask import Flask, abort, jsonify, make_response, render_template, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from api_token_store import ApiTokenStore
 from bridge_adapters import build_bridge
 from dependency_updater import DependencyUpdater
 from device_registry import DeviceRegistry
@@ -33,6 +35,7 @@ from hierarchy_manager import normalize_name
 from lovelace_updater import LovelaceUpdater
 from naming_overrides import NamingOverrides
 from reference_checker import ReferenceChecker
+from rename_log import RenameLog
 from type_mappings import TypeMappings
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
@@ -41,10 +44,95 @@ from type_mappings import TypeMappings
 # Language-independent constant for entities without area assignment
 UNASSIGNED_AREA = "__unassigned__"
 
+
+class _CapturePeerIP:
+    """WSGI middleware recording the real TCP peer address.
+
+    Installed as the outermost layer so it sees the untouched ``REMOTE_ADDR``
+    before ProxyFix rewrites it from forwarded headers. This lets the API gate
+    tell genuine Ingress traffic (from the Supervisor network) apart from direct
+    port access, which a client cannot forge via request headers.
+    """
+
+    def __init__(self, wsgi_app: object) -> None:
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ: dict, start_response: object) -> object:
+        environ["entity_manager.peer_addr"] = environ.get("REMOTE_ADDR", "")
+        return self.wsgi_app(environ, start_response)
+
+
 app = Flask(__name__, static_folder="static", static_url_path="/static")
-# Support for Ingress proxy headers
+# Ingress proxy header support. _CapturePeerIP wraps the outside so it records
+# the real TCP peer before ProxyFix trusts forwarded headers (X-Forwarded-For).
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+app.wsgi_app = _CapturePeerIP(app.wsgi_app)
 CORS(app)
+
+# External API access is guarded by a generated token (see ApiTokenStore): it is
+# created on demand from the web UI, shown once, and stored only as a hash. When
+# a token exists the add-on's HTTP port may be exposed for external, read-only
+# access to the rename audit log:
+#   - Ingress requests (from the Supervisor network) pass through unchanged, so
+#     the web UI keeps working without any token.
+#   - Direct (non-Ingress) requests are rejected unless they target
+#     GET /api/rename_log with a valid bearer token. Every other /api/* route,
+#     including token management and the write endpoints, stays Ingress-exclusive.
+# With no token generated the gate is inactive; the port is closed by default,
+# so /api/* is only reachable via Ingress anyway.
+
+# HA Supervisor's internal Docker network (hassio). Ingress proxies add-on
+# requests from this range; direct host/LAN access originates elsewhere.
+_SUPERVISOR_NETWORK = ipaddress.ip_network("172.30.32.0/23")
+
+# /api/* paths reachable with a token over a directly-exposed port. Read-only.
+_EXTERNAL_API_PATHS = frozenset({"/api/rename_log"})
+
+
+def _is_ingress_request() -> bool:
+    """Return True when the request's real TCP peer is in the Supervisor network.
+
+    Uses the address captured before ProxyFix, so it cannot be spoofed by a
+    client setting forwarded/ingress headers on a direct connection.
+    """
+    peer = request.environ.get("entity_manager.peer_addr", "")
+    try:
+        return ipaddress.ip_address(peer) in _SUPERVISOR_NETWORK
+    except ValueError:
+        return False
+
+
+def _provided_token() -> str:
+    """Extract the bearer token from Authorization (or the X-API-Key header)."""
+    header = request.headers.get("Authorization", "")
+    if header.startswith("Bearer "):
+        return header[len("Bearer ") :].strip()
+    return request.headers.get("X-API-Key", "").strip()
+
+
+@app.before_request
+def _enforce_api_access() -> None:
+    """Gate /api/* routes when an API token is configured.
+
+    Ingress requests are trusted (HA already authenticated the user). Direct
+    requests are limited to the read-only rename-log lookup with a valid token;
+    everything else is refused.
+    """
+    store = renamer_state["api_token_store"]
+    if not store.exists():
+        return None
+    path = request.path
+    if not path.startswith("/api/"):
+        return None
+    if _is_ingress_request():
+        return None
+    # Direct (non-Ingress) access from here on.
+    if path not in _EXTERNAL_API_PATHS or request.method != "GET":
+        abort(403)
+    if not store.verify(_provided_token()):
+        abort(401)
+    return None
+
 
 # Setup logging to both console and file
 log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -73,7 +161,13 @@ renamer_state = {
     "naming_overrides": NamingOverrides(os.path.join(DATA_DIR, "naming_overrides.json")),
     "type_mappings": TypeMappings(user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json")),
     "swap_store": SwapJobStore(os.path.join(DATA_DIR, "device_swaps")),
+    "rename_log": RenameLog(os.path.join(DATA_DIR, "rename_log.jsonl")),
+    "api_token_store": ApiTokenStore(os.path.join(DATA_DIR, "api_token.json")),
 }
+
+# Share the audit log with every EntityRegistry instance so all rename paths
+# (single, batch, device cascade) get recorded centrally.
+EntityRegistry.rename_log = renamer_state["rename_log"]
 
 
 # =============================================================================
@@ -2033,6 +2127,64 @@ async def _assign_device_area_async():
     except Exception as e:
         logger.error(f"Error assigning device {device_id} to area: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rename_log", methods=["GET"])
+def rename_log_lookup():
+    """Resolve an entity_id against the rename audit log.
+
+    Query parameter ``entity_id`` (the old / vanished id). Follows the rename
+    chain forward and returns the current id plus the hop history, e.g.::
+
+        GET /api/rename_log?entity_id=light.kitchen_old
+
+        {
+          "query": "light.kitchen_old",
+          "found": true,
+          "renamed": true,
+          "current_entity_id": "light.kitchen_ceiling",
+          "history": [ {"timestamp": ..., "old_entity_id": ...,
+                        "new_entity_id": ..., "friendly_name": ...} ]
+        }
+
+    ``found`` is ``false`` when the id was never renamed (or is unknown).
+    """
+    entity_id = request.args.get("entity_id", "").strip()
+    if not entity_id:
+        return jsonify({"error": "Missing required query parameter: entity_id"}), 400
+
+    rename_log = renamer_state["rename_log"]
+    return jsonify(rename_log.search(entity_id))
+
+
+@app.route("/api/api_token", methods=["GET"])
+def api_token_status():
+    """Return whether an external API token exists (never the token itself).
+
+    Ingress-only: the access gate refuses direct (non-Ingress) requests here.
+    """
+    return jsonify(renamer_state["api_token_store"].status())
+
+
+@app.route("/api/api_token", methods=["POST"])
+def api_token_generate():
+    """Generate (or replace) the external API token and return it once.
+
+    The plaintext is shown only in this response; only its hash is stored, so it
+    cannot be retrieved again. Ingress-only.
+    """
+    store = renamer_state["api_token_store"]
+    token = store.generate()
+    result = {"token": token}
+    result.update(store.status())
+    return jsonify(result)
+
+
+@app.route("/api/api_token", methods=["DELETE"])
+def api_token_revoke():
+    """Revoke the external API token, disabling external access. Ingress-only."""
+    renamer_state["api_token_store"].revoke()
+    return jsonify(renamer_state["api_token_store"].status())
 
 
 @app.route("/api/rename_entity", methods=["POST"])

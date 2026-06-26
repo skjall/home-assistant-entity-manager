@@ -565,6 +565,59 @@
             </div>
         </div>
 
+        <!-- External API access -->
+        <div class="mapping-section" style="margin-top: 24px;">
+            <div class="section-header">
+                <h2>
+                    <i class="ri-key-2-line"></i>
+                    <span x-text="t('settings.api_access')">External API access</span>
+                </h2>
+            </div>
+            <div style="padding: 20px;">
+                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 16px;" x-text="t('settings.api_access_hint')"></p>
+
+                <div style="margin-bottom: 16px; font-size: 0.9rem; color: #374151;">
+                    <span x-show="!apiToken.configured" x-text="t('settings.api_token_status_none')"></span>
+                    <template x-if="apiToken.configured">
+                        <span>
+                            <span style="font-weight: 600;" x-text="t('settings.api_token_status_active')"></span>
+                            <span> · </span>
+                            <span x-text="t('settings.api_token_created')"></span><span>: </span>
+                            <span x-text="formatTokenDate(apiToken.created_at)"></span>
+                            <span> · </span>
+                            <span x-text="t('settings.api_token_last_used')"></span><span>: </span>
+                            <span x-text="apiToken.last_used_at ? formatTokenDate(apiToken.last_used_at) : t('settings.api_token_never')"></span>
+                        </span>
+                    </template>
+                </div>
+
+                <!-- One-time token reveal -->
+                <div x-show="newApiToken" x-cloak
+                     style="margin-bottom: 16px; padding: 12px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px;">
+                    <p style="color: #92400e; font-size: 0.85rem; margin-bottom: 8px;" x-text="t('settings.api_token_show_once')"></p>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" readonly :value="newApiToken" x-ref="tokenField"
+                               style="flex: 1; font-family: monospace; font-size: 0.85rem; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        <button class="add-btn" @click="copyApiToken()" style="background: #6b7280;">
+                            <i class="ri-file-copy-line"></i>
+                            <span x-text="tokenCopied ? t('settings.api_token_copied') : t('settings.api_token_copy')">Copy</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px;">
+                    <button class="add-btn" @click="generateApiToken()">
+                        <i class="ri-key-2-line"></i>
+                        <span x-text="apiToken.configured ? t('settings.api_token_regenerate') : t('settings.api_token_generate')">Generate token</span>
+                    </button>
+                    <button class="add-btn" x-show="apiToken.configured" @click="revokeApiToken()" style="background: #ef4444;">
+                        <i class="ri-delete-bin-line"></i>
+                        <span x-text="t('settings.api_token_revoke')">Revoke</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Add Modal -->
         <div class="modal-overlay" x-show="showAddModal" x-cloak @click.self="showAddModal = false">
             <div class="modal">
@@ -626,6 +679,9 @@
                 langVersion: 0,
                 importExportText: '',
                 importResult: null,
+                apiToken: { configured: false, created_at: null, last_used_at: null },
+                newApiToken: '',
+                tokenCopied: false,
 
                 // Translation function with reactivity
                 t(key, params) {
@@ -648,6 +704,73 @@
                         document.documentElement.lang = this.language;
                     }
                     await this.loadMappings();
+                    await this.loadApiToken();
+                },
+
+                // --- External API token management ---
+
+                async loadApiToken() {
+                    try {
+                        const response = await fetch('api/api_token');
+                        if (response.ok) {
+                            this.apiToken = await response.json();
+                        }
+                    } catch (e) {
+                        console.error('Failed to load API token status', e);
+                    }
+                },
+
+                formatTokenDate(iso) {
+                    if (!iso) return '';
+                    try {
+                        return new Date(iso).toLocaleString();
+                    } catch (e) {
+                        return iso;
+                    }
+                },
+
+                async generateApiToken() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch('api/api_token', { method: 'POST' });
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.newApiToken = data.token;
+                            this.tokenCopied = false;
+                            this.apiToken = { configured: data.configured, created_at: data.created_at, last_used_at: data.last_used_at };
+                        }
+                    } catch (e) {
+                        console.error('Failed to generate API token', e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async revokeApiToken() {
+                    if (!window.confirm(this.t('settings.api_token_revoke_confirm'))) return;
+                    this.loading = true;
+                    try {
+                        const response = await fetch('api/api_token', { method: 'DELETE' });
+                        if (response.ok) {
+                            this.apiToken = await response.json();
+                            this.newApiToken = '';
+                        }
+                    } catch (e) {
+                        console.error('Failed to revoke API token', e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async copyApiToken() {
+                    try {
+                        await navigator.clipboard.writeText(this.newApiToken);
+                        this.tokenCopied = true;
+                        setTimeout(() => { this.tokenCopied = false; }, 2000);
+                    } catch (e) {
+                        // Fallback: select the field so the user can copy manually
+                        if (this.$refs.tokenField) this.$refs.tokenField.select();
+                    }
                 },
 
                 // Switch the UI language and reload language-dependent data
