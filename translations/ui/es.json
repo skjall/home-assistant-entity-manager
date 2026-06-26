@@ -322,6 +322,20 @@
     "exported_count": "{count} asignaciones exportadas",
     "imported_count": "{count} asignaciones importadas",
     "import_partial": "{imported} importadas, {errors} errores",
-    "import_empty": "No hay asignaciones válidas para importar"
+    "import_empty": "No hay asignaciones válidas para importar",
+    "api_access": "Acceso API externo",
+    "api_access_hint": "Genera un token para que una herramienta externa pueda leer el registro de renombrados a través de un puerto asignado. El token se muestra una sola vez y se almacena únicamente como hash. Sin token, la API solo es accesible mediante Ingress.",
+    "api_token_status_none": "Ningún token configurado",
+    "api_token_status_active": "Token activo",
+    "api_token_created": "Creado",
+    "api_token_last_used": "Último uso",
+    "api_token_never": "nunca",
+    "api_token_generate": "Generar token",
+    "api_token_regenerate": "Regenerar",
+    "api_token_revoke": "Revocar",
+    "api_token_show_once": "Copia este token ahora — se muestra una sola vez y no podrá recuperarse después.",
+    "api_token_copy": "Copiar",
+    "api_token_copied": "¡Copiado!",
+    "api_token_revoke_confirm": "¿Revocar el token actual? Las herramientas externas que lo usen dejarán de funcionar."
   }
 }

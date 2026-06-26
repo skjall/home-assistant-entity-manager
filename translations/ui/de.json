@@ -302,7 +302,21 @@
     "exported_count": "{count} Zuordnungen exportiert",
     "imported_count": "{count} Zuordnungen importiert",
     "import_partial": "{imported} importiert, {errors} Fehler",
-    "import_empty": "Keine gültigen Zuordnungen zum Importieren"
+    "import_empty": "Keine gültigen Zuordnungen zum Importieren",
+    "api_access": "Externer API-Zugriff",
+    "api_access_hint": "Erzeuge einen Token, damit ein externes Tool das Umbenennungs-Log über einen freigegebenen Port lesen kann. Der Token wird nur einmal angezeigt und ausschließlich als Hash gespeichert. Ohne Token bleibt die API nur über Ingress erreichbar.",
+    "api_token_status_none": "Kein Token konfiguriert",
+    "api_token_status_active": "Token aktiv",
+    "api_token_created": "Erstellt",
+    "api_token_last_used": "Zuletzt verwendet",
+    "api_token_never": "nie",
+    "api_token_generate": "Token erzeugen",
+    "api_token_regenerate": "Neu erzeugen",
+    "api_token_revoke": "Widerrufen",
+    "api_token_show_once": "Kopiere diesen Token jetzt — er wird nur einmal angezeigt und kann später nicht erneut abgerufen werden.",
+    "api_token_copy": "Kopieren",
+    "api_token_copied": "Kopiert!",
+    "api_token_revoke_confirm": "Aktuellen Token widerrufen? Externe Tools, die ihn nutzen, funktionieren dann nicht mehr."
   },
   "type_mappings": {
     "light": "Licht",
