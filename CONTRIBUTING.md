@@ -136,6 +136,15 @@ Issues and PRs are kept tidy with a few automated rules:
 Typical flow: open an issue (→ `triage`) → assign yourself (→ `in progress`) → open a PR
 with `Closes #N` against `next-release` (→ issue `in review`) → merge closes the issue (→ `done`).
 
+### Lifecycle automation
+
+- **Dependencies:** handled by Renovate via the **Dependency Dashboard** issue — Renovate
+  PRs do **not** need a linked issue and are exempt from the issue requirement and the stale bot.
+- **Stale issues/PRs:** inactive items are labeled `stale` after 45 days and closed after
+  another 14, unless they carry `status: in progress`, `status: blocked` or `pinned`.
+- **Branches:** PR branches are deleted automatically on merge. A weekly job removes branches
+  already contained in `next-release` and reports old unmerged ones (those are never auto-deleted).
+
 ## Releasing (maintainers)
 
 1. Merge `next-release` into `main`.

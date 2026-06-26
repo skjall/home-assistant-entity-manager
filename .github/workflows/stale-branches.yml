@@ -1,0 +1,61 @@
+name: Stale branch cleanup
+
+# Auto-delete-on-merge already removes most PR branches. This catches the rest:
+# deletes branches fully contained in next-release, and only *reports* old unmerged
+# ones (never deletes work that might still be in progress).
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const repo = { owner: context.repo.owner, repo: context.repo.repo };
+            const KEEP = new Set(["main", "next-release"]);
+            const STALE_DAYS = 60;
+
+            const branches = await github.paginate(github.rest.repos.listBranches, { ...repo, per_page: 100 });
+            const deleted = [];
+            const stale = [];
+
+            for (const b of branches) {
+              if (KEEP.has(b.name) || b.protected) continue;
+              if (b.name.startsWith("renovate/") || b.name.startsWith("dependabot/")) continue;
+
+              let cmp;
+              try {
+                cmp = await github.rest.repos.compareCommitsWithBasehead({
+                  ...repo,
+                  basehead: `next-release...${b.name}`,
+                });
+              } catch (e) {
+                continue;
+              }
+
+              if (cmp.data.ahead_by === 0) {
+                // fully contained in next-release -> merged -> delete
+                await github.rest.git.deleteRef({ ...repo, ref: `heads/${b.name}` }).catch(() => {});
+                deleted.push(b.name);
+              } else {
+                const commits = cmp.data.commits;
+                const last = commits.length ? new Date(commits[commits.length - 1].commit.committer.date) : null;
+                if (last) {
+                  const days = Math.round((Date.now() - last.getTime()) / 86400000);
+                  if (days > STALE_DAYS) stale.push(`${b.name} (${days}d inactive)`);
+                }
+              }
+            }
+
+            core.notice(`Deleted merged branches: ${deleted.join(", ") || "none"}`);
+            if (stale.length) {
+              core.warning(`Stale unmerged branches (>${STALE_DAYS}d) — review manually: ${stale.join(", ")}`);
+            }

@@ -1,0 +1,37 @@
+name: Stale issues and PRs
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-stale: 45
+          days-before-close: 14
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          stale-issue-message: >
+            This issue has been inactive for 45 days and is now marked as **stale**.
+            It will be closed in 14 days if there is no further activity. Comment or
+            remove the `stale` label to keep it open.
+          stale-pr-message: >
+            This PR has been inactive for 45 days and is now marked as **stale**.
+            It will be closed in 14 days if there is no further activity.
+          close-issue-message: >
+            Closed automatically after being stale. Feel free to reopen if it is still relevant.
+          close-pr-message: >
+            Closed automatically after being stale. Feel free to reopen and rebase.
+          # Don't touch active or important work, and let Renovate manage its own PRs
+          exempt-issue-labels: "status: in progress,status: blocked,pinned,security"
+          exempt-pr-labels: "status: in progress,status: blocked,pinned,dependencies"
+          exempt-all-milestones: true
+          ascending: true
