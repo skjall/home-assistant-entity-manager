@@ -250,9 +250,12 @@ class DependencyUpdater:
 
             # SCRIPTS
             elif entity_id.startswith("script."):
-                # Prüfe ob Entity im Script verwendet wird
-                state_str = json.dumps(attributes)
-                if old_entity_id in state_str:
+                # Script state attributes don't contain the sequence, so checking
+                # them never finds entity references. Fetch the real config via REST
+                # and check there (same approach as automations below).
+                config = await self.get_script_config(entity_id)
+                if config and old_entity_id in json.dumps(config):
+                    logger.info(f"Found script {entity_id} using {old_entity_id}")
                     success = await self.update_script_entities(entity_id, old_entity_id, new_entity_id)
                     if success:
                         results["scripts"]["success"].append(entity_id)
