@@ -20,46 +20,6 @@
       ]
     },
     {
-      "matchFileNames": [
-        "requirements-test.txt"
-      ],
-      "matchPackageNames": [
-        "pytest-homeassistant-custom-component"
-      ],
-      "allowedVersions": "<0.13.46",
-      "description": "pytest-homeassistant-custom-component >=0.13.46 requires Python 3.11+"
-    },
-    {
-      "matchFileNames": [
-        "requirements-test.txt"
-      ],
-      "matchPackageNames": [
-        "pytest-asyncio"
-      ],
-      "allowedVersions": "0.20.3",
-      "description": "Pinned due to pytest-homeassistant-custom-component dependency"
-    },
-    {
-      "matchFileNames": [
-        "requirements-test.txt"
-      ],
-      "matchPackageNames": [
-        "pytest-cov"
-      ],
-      "allowedVersions": "3.0.0",
-      "description": "Pinned due to pytest-homeassistant-custom-component dependency"
-    },
-    {
-      "matchFileNames": [
-        "requirements-test.txt"
-      ],
-      "matchPackageNames": [
-        "pytest"
-      ],
-      "allowedVersions": "7.3.1",
-      "description": "Pinned due to pytest-homeassistant-custom-component dependency"
-    },
-    {
       "matchManagers": [
         "npm"
       ],
@@ -81,6 +41,24 @@
         "esbuild"
       ],
       "groupName": "Build dependencies"
+    },
+    {
+      "description": "Auto-merge low-risk updates once CI is green (requires branch protection on next-release)",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
+      "automerge": true,
+      "platformAutomerge": true
+    },
+    {
+      "description": "Never auto-merge major updates — review manually",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
     }
   ],
   "vulnerabilityAlerts": {
@@ -89,10 +67,8 @@
   "dependencyDashboard": true,
   "prConcurrentLimit": 2,
   "labels": [
-    "dependencies"
-  ],
-  "assignees": [
-    "@renovate-bot"
+    "dependencies",
+    "type: chore"
   ],
   "reviewers": [
     "Skjall"
