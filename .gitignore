@@ -52,7 +52,7 @@ htmlcov/
 # Local configuration
 config.local.json
 *.local
-
+temp/*
 # Temporary files
 *.tmp
 *.bak
