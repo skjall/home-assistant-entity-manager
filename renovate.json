@@ -43,7 +43,7 @@
       "groupName": "Build dependencies"
     },
     {
-      "description": "Auto-merge low-risk updates once CI is green (requires branch protection on main)",
+      "description": "Auto-merge low-risk updates once CI is green; no review request needed",
       "matchUpdateTypes": [
         "minor",
         "patch",
@@ -54,11 +54,27 @@
       "platformAutomerge": true
     },
     {
-      "description": "Never auto-merge major updates — review manually",
+      "description": "Major updates: never auto-merge, request review",
       "matchUpdateTypes": [
         "major"
       ],
-      "automerge": false
+      "automerge": false,
+      "reviewers": [
+        "Skjall"
+      ]
+    },
+    {
+      "description": "Frontend deps (npm) can change the rendered UI: never auto-merge, request review, gated by the visual-regression check",
+      "matchManagers": [
+        "npm"
+      ],
+      "automerge": false,
+      "addLabels": [
+        "frontend"
+      ],
+      "reviewers": [
+        "Skjall"
+      ]
     }
   ],
   "vulnerabilityAlerts": {
@@ -71,9 +87,6 @@
     "type: chore"
   ],
   "assignees": [
-    "Skjall"
-  ],
-  "reviewers": [
     "Skjall"
   ]
 }
