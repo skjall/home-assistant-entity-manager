@@ -1,0 +1,24 @@
+name: Release Please
+
+# Release-driven, automated versioning. release-please watches Conventional
+# Commits on main and maintains a "release PR" that bumps config.json's version
+# (per SemVer: fix → patch, feat → minor, feat!/BREAKING CHANGE → major) and
+# updates CHANGELOG.md. Merging that PR creates the tag v<version> and the
+# GitHub release. Replaces the old config.json-triggered Release workflow.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
