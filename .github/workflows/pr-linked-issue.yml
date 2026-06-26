@@ -1,7 +1,9 @@
 name: PR linked issue
 
-# Every PR must reference an issue (Closes/Fixes/Resolves #N). Otherwise it gets
-# a "needs issue" label and a failing check until an issue is linked.
+# Contributor PRs must reference an issue (Closes/Fixes/Resolves #N). Otherwise
+# they get a "needs issue" label and a failing check until an issue is linked.
+# Bots (Renovate/Dependabot) and maintainers (owner/members/collaborators) are
+# exempt — they don't need to file an issue for their own changes.
 
 on:
   pull_request_target:
@@ -25,6 +27,15 @@ jobs:
             // tracked centrally via the dependency dashboard.
             if (pr.user.type === "Bot" || /\[bot\]$/.test(pr.user.login) || pr.user.login === "renovate-bot") {
               core.info(`Bot PR by ${pr.user.login} — skipping linked-issue check`);
+              return;
+            }
+
+            // Maintainer PRs (repo owner, org members, collaborators) are exempt.
+            // External contributors (CONTRIBUTOR / FIRST_TIME_CONTRIBUTOR / NONE)
+            // must still link an issue.
+            const MAINTAINER = ["OWNER", "MEMBER", "COLLABORATOR"];
+            if (MAINTAINER.includes(pr.author_association)) {
+              core.info(`Maintainer PR (${pr.author_association}) by ${pr.user.login} — skipping linked-issue check`);
               return;
             }
 
