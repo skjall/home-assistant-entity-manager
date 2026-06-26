@@ -1,9 +1,6 @@
 {
   "header": {
     "title": "Gestionnaire d'entités",
-    "version_badge": "BETA",
-    "warning_banner": "VERSION BÊTA - À UTILISER AVEC PRUDENCE",
-    "warning_description": "À utiliser avec prudence ! Ce module complémentaire est en développement actif et peut encore causer des problèmes.",
     "settings": "Paramètres"
   },
   "panels": {

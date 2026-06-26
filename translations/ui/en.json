@@ -1,9 +1,6 @@
 {
   "header": {
     "title": "Entity Manager",
-    "version_badge": "BETA",
-    "warning_banner": "BETA VERSION - USE WITH CAUTION",
-    "warning_description": "Use with caution! This add-on is under active development and may still have issues.",
     "settings": "Settings"
   },
   "panels": {
