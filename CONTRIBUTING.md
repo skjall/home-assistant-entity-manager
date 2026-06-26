@@ -13,10 +13,14 @@ and the conventions we follow.
 | `main` | The single long-lived branch. Always deployable; protected (CI must pass). |
 | `feature/*`, `fix/*`, `chore/*` | Your working branches, created from `main`. |
 
-**Flow:** branch off `main` → PR into **`main`** → CI green → **squash-merge**. That's it.
+**Flow:** branch off `main` → PR into **`main`** (Conventional Commit title) → CI green →
+**enable auto-merge** → squash-merge. Auto-merge keeps the branch up to date and merges
+once CI is green, so no manual rebasing when `main` moves.
 
-**Releases** are just tags: bump `version` in `config.json` on `main`, and the `Release`
-workflow tags `v<version>` + publishes a GitHub release. No separate release branch.
+**Releases** are automated by [release-please](https://github.com/googleapis/release-please):
+it maintains a "release PR" that bumps `version` in `config.json` and updates
+`CHANGELOG.md` from the merged commits. Merging that PR tags `v<version>` and publishes the
+GitHub release. See [Versioning](#versioning) and [Releasing](#releasing-maintainers).
 
 > Open your Pull Request against **`main`**. There is no separate integration or release branch.
 
@@ -118,11 +122,13 @@ clients. Run them with `pytest`. Please add/extend tests for backend logic you c
 
 The PR template lists the full checklist. In short:
 
-1. Branch off `main` and keep it up to date.
-2. Lint passes (flake8 / black / isort) and JSON files are valid.
-3. Frontend changes include a rebuilt CSS (`npm run build:css`).
-4. Describe how you tested the change (and which integration: Z2M / Matter / ZHA).
-5. Open the PR against **`main`**.
+1. Branch off `main`.
+2. **PR title is a Conventional Commit** (`feat:`, `fix:`, `chore:` …) — it becomes the
+   squash commit and drives the version bump (see [Versioning](#versioning)). A check enforces this.
+3. Lint passes (flake8 / black / isort) and JSON files are valid.
+4. Frontend changes include a rebuilt CSS (`npm run build:css`) and pass the `visual` check.
+5. Describe how you tested the change (and which integration: Z2M / Matter / ZHA).
+6. Open the PR against **`main`** with `Closes #<issue>`, then **enable auto-merge**.
 
 ## Issue & PR process
 
@@ -134,9 +140,20 @@ Issues and PRs are kept tidy with a few automated rules:
   `status: triage` (new) → `status: in progress` (assigned) → `status: in review`
   (a PR links the issue) → `status: done` (closed).
 - **Duplicate hint** — new issues get a comment linking possibly-related existing issues.
+- **Unclear request?** If a reported issue is ambiguous, we ask the reporter **in the issue**
+  and set `status: needs info` rather than guessing — work pauses until they reply.
+- **Review routing** — Claude posts an automated review on every (human) PR. External
+  contributor PRs additionally request the maintainer's review; routine Renovate PRs don't.
+- **SemVer label** — a `semver: {major,minor,patch}` label is set automatically from the PR title.
 
 Typical flow: open an issue (→ `triage`) → assign yourself (→ `in progress`) → open a PR
 with `Closes #N` against `main` (→ issue `in review`) → merge closes the issue (→ `done`).
+
+### Where communication happens
+
+- **The issue (English)** is the durable record: clarifying questions to the reporter,
+  scope decisions, and the result (the linked PR).
+- **The PR (English)** carries the technical detail: what changed, why, how it was tested.
 
 ### Lifecycle automation
 
@@ -147,10 +164,28 @@ with `Closes #N` against `main` (→ issue `in review`) → merge closes the iss
 - **Branches:** PR branches are deleted automatically on merge. A weekly job removes branches
   already contained in `main` and reports old unmerged ones (those are never auto-deleted).
 
+## Versioning
+
+We follow [SemVer](https://semver.org/) (`MAJOR.MINOR.PATCH`) — and the bump is derived
+automatically from the Conventional Commit PR titles, so nobody decides it by hand:
+
+| PR title | Bump |
+|---|---|
+| `fix: …` | **PATCH** |
+| `feat: …` | **MINOR** |
+| `feat!: …` or a `BREAKING CHANGE:` footer | **MAJOR** |
+| `chore: / docs: / ci: / test: / refactor: / perf: / build:` | no release |
+
+A check enforces the title format and a `semver:*` label is applied automatically.
+
 ## Releasing (maintainers)
 
-1. Bump `version` in `config.json` on `main` (keeps the `-beta` suffix for now).
-2. The `Release` workflow tags `v<version>` and publishes a GitHub release automatically.
+Releases are **release-driven and automated** by release-please:
+
+1. As releasing commits land on `main`, release-please opens/updates a **release PR** that
+   bumps `version` in `config.json` and writes `CHANGELOG.md`.
+2. Merge that release PR when you want to ship — it tags `v<version>` and publishes the
+   GitHub release. That merge is the only manual step.
 
 No release branch and no back-merges — `main` is the only long-lived branch.
 

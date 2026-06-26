@@ -11,6 +11,9 @@
 - name: "status: in review"
   color: "fbca04"
   description: "A PR is open / under review"
+- name: "status: needs info"
+  color: "d4c5f9"
+  description: "Waiting on clarification from the reporter"
 - name: "status: blocked"
   color: "b60205"
   description: "Blocked by something else"
@@ -32,7 +35,21 @@
   color: "cfd3d7"
   description: "Maintenance / tooling"
 
+# --- SemVer (derived from the Conventional Commit PR title) ---
+- name: "semver: major"
+  color: "b60205"
+  description: "Breaking change (feat! / BREAKING CHANGE)"
+- name: "semver: minor"
+  color: "0e8a16"
+  description: "Backward-compatible feature (feat)"
+- name: "semver: patch"
+  color: "c2e0c6"
+  description: "Backward-compatible fix (fix)"
+
 # --- Process ---
+- name: "frontend"
+  color: "1d76db"
+  description: "Touches the web UI / frontend deps (gated by the visual check)"
 - name: "needs issue"
   color: "e99695"
   description: "PR without a linked issue"
