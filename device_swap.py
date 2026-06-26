@@ -278,6 +278,13 @@ class SwapExecutor:
         if job.get("state") in (STATE_COMPLETED, STATE_ABORTED):
             return job
 
+        # Wiederaufnahme im Log vermerken (das Log beschreibt die gesamte Migration).
+        if job.get("state") == STATE_FAILED:
+            self._log(job, "RESUME", f"Retry after failure at {job.get('failed_step')}")
+            job.pop("failed_step", None)
+        elif job.get("steps"):
+            self._log(job, "RESUME", "Resumed")
+
         handlers = {
             STATE_FREEING_OLD_NAME: self._free_old_name,
             STATE_RENAMING_NEW_DEVICE: self._rename_new_device,
