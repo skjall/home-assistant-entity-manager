@@ -354,6 +354,19 @@ class SwapExecutor:
         target = job["target_device_name"]
         await self.device_registry.rename_device(new["device_id"], target)
         self._log(job, STATE_RENAMING_NEW_DEVICE, f"New device renamed to '{target}'")
+
+        # Z2M-friendly_name angleichen (nur bei Z2M-Geräten; nicht fatal).
+        if self.bridge is not None:
+            try:
+                res = await self.bridge.rename_native(new, target)
+                if res.native_supported:
+                    if res.success:
+                        self._log(job, STATE_RENAMING_NEW_DEVICE, f"Z2M name synced: {res.detail}")
+                    else:
+                        self._log(job, STATE_RENAMING_NEW_DEVICE, f"Z2M name sync failed: {res.error}")
+            except Exception as e:  # noqa: BLE001 - native sync must not block the swap
+                self._log(job, STATE_RENAMING_NEW_DEVICE, f"Z2M name sync error: {e}")
+
         # Struktur neu laden, damit generate_new_entity_id den neuen Device-Namen kennt.
         if hasattr(self.restructurer, "load_structure"):
             await self.restructurer.load_structure(self.entity_registry.ws)

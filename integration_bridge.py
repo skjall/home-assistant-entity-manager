@@ -63,6 +63,22 @@ def extract_integrations(device_data: Dict[str, Any]) -> List[str]:
     return integrations
 
 
+def extract_z2m_ieee(device_data: Dict[str, Any]) -> Optional[str]:
+    """IEEE-Adresse eines Zigbee2MQTT-Geräts aus den identifiers.
+
+    Echte Z2M-Geräte haben einen Identifier ["mqtt", "zigbee2mqtt_0x<ieee>"]
+    (z.B. "zigbee2mqtt_0x001788010cd81c13" -> "0x001788010cd81c13"). Die Z2M-
+    Bridge selbst ("zigbee2mqtt_bridge_0x..") und andere MQTT-Geräte (z.B.
+    ["mqtt", "[301DEEE4]"]) werden bewusst NICHT erfasst.
+    """
+    for identifier in device_data.get("identifiers", []):
+        if isinstance(identifier, (list, tuple)) and len(identifier) >= 2 and identifier[0] == "mqtt":
+            value = str(identifier[1])
+            if value.startswith("zigbee2mqtt_0x"):
+                return value[len("zigbee2mqtt_") :]
+    return None
+
+
 def extract_config_entry_id(device_data: Dict[str, Any]) -> Optional[str]:
     """Liefert eine Config-Entry-ID des Geräts (für remove_config_entry).
 
@@ -88,8 +104,12 @@ class IntegrationBridgeAdapter(ABC):
     integration_key: str = "registry"
 
     @abstractmethod
-    def matches(self, integrations: List[str]) -> bool:
-        """True, wenn dieser Adapter für die gegebenen Integrationen zuständig ist."""
+    def matches(self, integrations: List[str], device_data: Optional[Dict[str, Any]] = None) -> bool:
+        """True, wenn dieser Adapter für das Gerät zuständig ist.
+
+        device_data erlaubt eine feinere Auswahl als nur über die Integration-Domain
+        (z.B. echte Z2M-Geräte vs. andere MQTT-Geräte anhand der identifiers).
+        """
 
     @abstractmethod
     async def rename_native(self, device_data: Dict[str, Any], new_name: str) -> BridgeResult:
@@ -118,7 +138,7 @@ class IntegrationBridge:
         """Bestimmt den zuständigen Adapter für ein Gerät."""
         integrations = extract_integrations(device_data)
         for adapter in self._adapters:
-            if adapter.matches(integrations):
+            if adapter.matches(integrations, device_data):
                 return adapter
         return self._adapters[-1]
 

@@ -221,6 +221,53 @@ async def init_client():
     return renamer_state["client"]
 
 
+async def _ensure_mqtt_bridge():
+    """Lazy MQTT/Z2M-Bridge-Singleton. Gibt None zurück, wenn nicht verfügbar.
+
+    Vollständig optional: Ohne MQTT-Broker, ohne paho, ohne Z2M oder bei
+    deaktivierter Option degradiert alles sauber zu None (kein Crash) - der
+    Geräte-Austausch läuft dann wie bisher über Matter/Registry.
+    """
+    if renamer_state.get("mqtt_bridge") is not None:
+        return renamer_state["mqtt_bridge"]
+    if os.getenv("ENABLE_Z2M_BRIDGE", "true").lower() != "true":
+        return None
+    if renamer_state.get("mqtt_bridge_tried"):
+        return None  # nur einmal versuchen (Connect ist teuer)
+    renamer_state["mqtt_bridge_tried"] = True
+
+    try:
+        from mqtt_credentials import get_mqtt_credentials
+
+        creds = await get_mqtt_credentials()
+        if not creds:
+            return None
+        from bridge_mqtt import MqttBridge  # importiert paho - nur hinter dem Guard
+
+        bridge = MqttBridge(
+            host=creds["host"],
+            port=creds["port"],
+            username=creds["username"],
+            password=creds["password"],
+            ssl=creds["ssl"],
+            base_topic=os.getenv("Z2M_BASE_TOPIC", "zigbee2mqtt"),
+        )
+        loop = asyncio.get_running_loop()
+        connected = await loop.run_in_executor(None, bridge.connect, 10.0)
+        if not connected:
+            logger.warning("MQTT bridge could not connect - Z2M features disabled")
+            return None
+        renamer_state["mqtt_bridge"] = bridge
+        logger.info("MQTT/Z2M bridge ready")
+        return bridge
+    except ImportError as e:
+        logger.info("paho-mqtt not available (%s) - Z2M features disabled (needs add-on rebuild)", e)
+        return None
+    except Exception as e:  # noqa: BLE001 - MQTT darf das Add-on nie blockieren
+        logger.warning("MQTT bridge init failed: %s - Z2M features disabled", e)
+        return None
+
+
 async def load_areas_and_entities():
     """Lade alle Areas und ihre Entities"""
     try:
@@ -2698,12 +2745,23 @@ def _device_entities(restructurer, device_id: str) -> list:
 @app.route("/api/bridge/status", methods=["GET"])
 def bridge_status():
     """Status der Integrations-Bridge (welche nativen Operationen möglich sind)."""
-    # MQTT/Z2M-Unterstützung wird in einer späteren Ausbaustufe ergänzt.
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        bridge = loop.run_until_complete(_ensure_mqtt_bridge())
+    except Exception as e:  # noqa: BLE001 - Status darf nie crashen
+        logger.warning("bridge_status MQTT check failed: %s", e)
+        bridge = None
+    finally:
+        loop.close()
+
+    z2m_ok = bridge is not None and getattr(bridge, "connected", False)
     return jsonify(
         {
-            "mqtt_available": False,
-            "z2m_supported": False,
+            "mqtt_available": z2m_ok,
+            "z2m_supported": z2m_ok,
             "matter_remove_supported": True,
+            "z2m_enabled": os.getenv("ENABLE_Z2M_BRIDGE", "true").lower() == "true",
         }
     )
 
@@ -2910,7 +2968,7 @@ async def _swap_execute_async(job_id):
         device_registry = DeviceRegistry(ws)
         entity_registry = EntityRegistry(ws)
         dependency_updater = DependencyUpdater(os.getenv("HA_URL"), token)
-        bridge = build_bridge(device_registry, mqtt_bridge=None)
+        bridge = build_bridge(device_registry, mqtt_bridge=await _ensure_mqtt_bridge())
         executor = SwapExecutor(
             store=store,
             device_registry=device_registry,

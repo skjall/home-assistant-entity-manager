@@ -37,7 +37,7 @@ class RegistryAdapter(IntegrationBridgeAdapter):
     def __init__(self, device_registry: DeviceRegistry):
         self.device_registry = device_registry
 
-    def matches(self, integrations: List[str]) -> bool:
+    def matches(self, integrations: List[str], device_data: Optional[Dict[str, Any]] = None) -> bool:
         # Catch-all: zuständig, wenn kein spezifischerer Adapter gegriffen hat.
         return True
 
@@ -87,7 +87,7 @@ class MatterAdapter(RegistryAdapter):
 
     integration_key = "matter"
 
-    def matches(self, integrations: List[str]) -> bool:
+    def matches(self, integrations: List[str], device_data: Optional[Dict[str, Any]] = None) -> bool:
         return "matter" in integrations
 
 

@@ -8,3 +8,4 @@ websockets>=10.0
 flask[async]>=2.3.0
 flask-cors>=4.0.0
 nest_asyncio>=1.5.0
+paho-mqtt>=2.0.0

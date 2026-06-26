@@ -1,6 +1,6 @@
 {
   "name": "Entity Manager (Beta)",
-  "version": "1.0.1-beta",
+  "version": "1.0.2-beta",
   "slug": "entity_manager",
   "description": "⚠️ BETA VERSION - USE WITH CAUTION ⚠️ Manage and standardize Home Assistant entity names",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
@@ -14,6 +14,7 @@
   "homeassistant_api": true,
   "hassio_api": true,
   "hassio_role": "manager",
+  "services": ["mqtt:need"],
   "host_network": false,
   "ports": {
     "5000/tcp": null
@@ -23,11 +24,15 @@
   },
   "options": {
     "log_level": "info",
-    "enable_disabled_entities": false
+    "enable_disabled_entities": false,
+    "enable_z2m_bridge": true,
+    "z2m_base_topic": "zigbee2mqtt"
   },
   "schema": {
     "log_level": "list(debug|info|warning|error)?",
-    "enable_disabled_entities": "bool?"
+    "enable_disabled_entities": "bool?",
+    "enable_z2m_bridge": "bool?",
+    "z2m_base_topic": "str?"
   },
   "environment": {
     "HA_URL": "http://supervisor/core",
