@@ -401,7 +401,7 @@
             </div>
             <div class="language-selector">
                 <label x-text="t('settings.system_language')">System Language:</label>
-                <select class="filter-select" x-model="language" @change="loadMappings()">
+                <select class="filter-select" x-model="language" @change="changeLanguage()">
                     <option value="en">English</option>
                     <option value="de">Deutsch</option>
                     <option value="es">Español</option>
@@ -558,9 +558,9 @@
                         <span x-text="t('settings.import')">Import</span>
                     </button>
                     <span x-show="importResult"
-                          :class="importResult.success ? 'text-green-600' : 'text-red-600'"
+                          :class="importResult?.success ? 'text-green-600' : 'text-red-600'"
                           style="display: flex; align-items: center; margin-left: auto; font-size: 0.9rem;"
-                          x-text="importResult.message"></span>
+                          x-text="importResult?.message"></span>
                 </div>
             </div>
         </div>
@@ -623,12 +623,14 @@
                 newMapping: { key: '', translation: '' },
                 loading: false,
                 translationsReady: false,
+                langVersion: 0,
                 importExportText: '',
                 importResult: null,
 
                 // Translation function with reactivity
                 t(key, params) {
-                    // Access translationsReady to make Alpine track this dependency
+                    // Access translationsReady and langVersion to make Alpine track these dependencies
+                    const _ = this.langVersion;
                     if (this.translationsReady && window.translations) {
                         return window.translations.t(key, params);
                     }
@@ -640,9 +642,23 @@
                     if (window.translations) {
                         await window.translations.init();
                         this.translationsReady = true;
+                        // Sync the selector with the actually loaded language
+                        this.language = window.translations.currentLanguage || 'en';
                         // Set HTML lang attribute dynamically
+                        document.documentElement.lang = this.language;
+                    }
+                    await this.loadMappings();
+                },
+
+                // Switch the UI language and reload language-dependent data
+                async changeLanguage() {
+                    if (window.translations) {
+                        await window.translations.switchLanguage(this.language);
+                        // Force Alpine to re-evaluate all t() bindings
+                        this.langVersion++;
                         document.documentElement.lang = window.translations.currentLanguage || 'en';
                     }
+                    // Reload type mappings for the new language
                     await this.loadMappings();
                 },
 

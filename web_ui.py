@@ -2412,6 +2412,42 @@ async def _rename_device_async():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/sync_z2m_name", methods=["POST"])
+def sync_z2m_name():
+    """Gleicht den Z2M-friendly_name eines Geräts an seinen HA-Namen an (kein HA-Rename)."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_sync_z2m_name_request_async())
+    finally:
+        loop.close()
+
+
+async def _sync_z2m_name_request_async():
+    data = request.json or {}
+    device_id = data.get("device_id")
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    token = os.getenv("HA_TOKEN")
+    ws = HomeAssistantWebSocket(_ws_url(), token)
+    await ws.connect()
+    try:
+        await renamer_state["restructurer"].load_structure(ws)
+        device = renamer_state["restructurer"].devices.get(device_id)
+        if not device:
+            return jsonify({"error": "Unknown device"}), 404
+        ha_name = device.get("name_by_user") or device.get("name", "")
+        device_registry = DeviceRegistry(ws)
+        result = await _sync_z2m_name(device_registry, device_id, ha_name)
+        if not result.get("supported"):
+            return jsonify({"success": False, "supported": False, "message": "Not a Z2M device"}), 400
+        if result.get("error"):
+            return jsonify({"success": False, "error": result["error"]}), 500
+        return jsonify({"success": True, "synced": result.get("synced"), "name": ha_name})
+    finally:
+        await ws.disconnect()
+
+
 # === New API Endpoints for Hierarchy and Type Mappings ===
 
 
@@ -2469,6 +2505,17 @@ async def _get_hierarchy_async():
                 }
             )
 
+        # Z2M-friendly_names einmal lesen (für Drift-Erkennung); leer ohne MQTT/Z2M.
+        from integration_bridge import extract_z2m_ieee
+
+        z2m_names = {}
+        try:
+            mqtt_bridge = await _ensure_mqtt_bridge()
+            if mqtt_bridge is not None:
+                z2m_names = await mqtt_bridge.get_z2m_names()
+        except Exception as e:  # noqa: BLE001 - Drift-Check darf die Hierarchie nie blockieren
+            logger.warning("Z2M name fetch failed: %s", e)
+
         # Build device lookup with base names (strip area prefix)
         device_base_names = {}
         device_area_map = {}
@@ -2499,6 +2546,11 @@ async def _get_hierarchy_async():
                     if domain and domain not in integrations:
                         integrations.append(domain)
 
+            # Z2M-Namens-Drift: Z2M-friendly_name vs. HA-Name (raw_name)
+            z2m_ieee = extract_z2m_ieee(device_data)
+            z2m_current = z2m_names.get(z2m_ieee) if z2m_ieee else None
+            z2m_drift = bool(z2m_ieee and z2m_current is not None and z2m_current != raw_name)
+
             devices.append(
                 {
                     "id": device_id,
@@ -2509,6 +2561,9 @@ async def _get_hierarchy_async():
                     "model": device_data.get("model"),
                     "integrations": integrations,  # e.g., ["homekit", "zha"]
                     "disabled_by": device_data.get("disabled_by"),
+                    "is_z2m": bool(z2m_ieee),
+                    "z2m_current_name": z2m_current,  # aktueller Z2M-friendly_name (oder None)
+                    "z2m_drift": z2m_drift,  # True, wenn Z2M-Name != HA-Name
                 }
             )
 
@@ -2719,9 +2774,9 @@ def learn_type_mapping():
         if not type_key or not translation:
             return jsonify({"error": "Invalid type_key or translation"}), 400
 
-        # Use restructurer's learn method which handles the logic
-        restructurer = renamer_state["restructurer"]
-        restructurer.learn_type_mapping(type_key, translation)
+        # Direkt über type_mappings (immer initialisiert; restructurer kann None sein,
+        # wenn die Hierarchie noch nicht geladen wurde).
+        renamer_state["type_mappings"].set_user_mapping(type_key, translation)
 
         return jsonify(
             {

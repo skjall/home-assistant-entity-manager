@@ -57,6 +57,9 @@ class MqttBridge:
         self._lock = threading.Lock()
         self._txn = 0
         self._connected = threading.Event()
+        # bridge/devices wird einmal abonniert und laufend gecacht (kein Re-Subscribe/Race)
+        self._z2m_names: Dict[str, str] = {}
+        self._z2m_names_event = threading.Event()
 
     # --- Verbindung ---------------------------------------------------------
 
@@ -86,8 +89,25 @@ class MqttBridge:
             logger.error("MQTT connection refused: %s", reason_code)
             return
         client.subscribe(f"{self.base_topic}/bridge/response/#")
+        # bridge/devices dauerhaft abonnieren (retained) und im Callback cachen
+        client.message_callback_add(f"{self.base_topic}/bridge/devices", self._on_devices)
+        client.subscribe(f"{self.base_topic}/bridge/devices")
         self._connected.set()
         logger.info("MQTT connected to %s:%s (base topic '%s')", self.host, self.port, self.base_topic)
+
+    def _on_devices(self, client, userdata, msg) -> None:
+        try:
+            devices = json.loads(msg.payload.decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return
+        names: Dict[str, str] = {}
+        for d in devices or []:
+            ieee = d.get("ieee_address")
+            fname = d.get("friendly_name")
+            if ieee and fname:
+                names[ieee] = fname
+        self._z2m_names = names
+        self._z2m_names_event.set()
 
     def _on_message(self, client, userdata, msg) -> None:
         try:
@@ -127,6 +147,21 @@ class MqttBridge:
         if not got or slot is None or slot.get("result") is None:
             return {"status": "error", "error": f"MQTT request timeout ({command})"}
         return slot["result"]
+
+    async def get_z2m_names(self, timeout: float = 8.0) -> Dict[str, str]:
+        """Liefert {ieee_address: friendly_name} aus dem laufend aktualisierten Cache.
+
+        bridge/devices wird beim Connect dauerhaft abonniert (siehe _on_devices).
+        Dieser Aufruf liest nur den Cache -> kein Re-Subscribe, kein Race. Nur falls
+        der Cache (direkt nach Connect) noch leer ist, wird kurz auf die erste
+        retained Message gewartet.
+        """
+        if not self._connected.is_set():
+            return {}
+        if not self._z2m_names:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._z2m_names_event.wait, timeout)
+        return dict(self._z2m_names)
 
     async def rename_device(self, ieee: str, new_name: str) -> Dict[str, Any]:
         """Benennt ein Z2M-Gerät um (friendly_name), ohne HAs entity_id zu ändern."""

@@ -1618,7 +1618,8 @@
                     <div class="relative">
                         <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                         <input type="text"
-                               class="edit-input w-full pl-9"
+                               class="edit-input w-full"
+                               style="padding-left:2.25rem; padding-right:2.25rem"
                                x-model="deviceFilter"
                                :placeholder="t('device.filter_placeholder') || 'Filter devices...'"
                                @click.stop>
@@ -1756,10 +1757,33 @@
                         <button @click="renameDeviceInHA($refs.deviceNameInput.value)"
                                 class="btn btn-sm"
                                 style="background: #10b981; color: white;"
-                                :disabled="renamingDevice || applyingEntityId || executing"
-                                :class="{'opacity-50 cursor-not-allowed': renamingDevice || applyingEntityId || executing}">
+                                :disabled="renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)"
+                                :class="{'opacity-50 cursor-not-allowed': renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)}"
+                                :title="isDeviceNameTaken(selectedDeviceData) ? t('device.name_conflict') : ''">
                             <i class="ri-check-line"></i>
                         </button>
+                    </div>
+                    <span x-show="isDeviceNameTaken(selectedDeviceData)" class="text-red-500 text-xs mt-1 block">
+                        <i class="ri-error-warning-line"></i> <span x-text="t('device.name_conflict')">A device with this name already exists</span>
+                    </span>
+                    <!-- Z2M-Namens-Drift: Z2M-friendly_name weicht vom HA-Namen ab -->
+                    <div x-show="selectedDeviceData?.z2m_drift" class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="text-xs text-amber-900 min-w-0">
+                                <div class="font-medium" x-text="t('device.z2m_drift_label')">Z2M name differs</div>
+                                <div class="font-mono truncate">
+                                    <span x-text="selectedDeviceData?.z2m_current_name"></span>
+                                    <i class="ri-arrow-right-line"></i>
+                                    <span class="text-amber-700" x-text="selectedDeviceData?.name"></span>
+                                </div>
+                            </div>
+                            <button @click="syncZ2mName(selectedDeviceData)"
+                                    :disabled="syncingZ2m"
+                                    class="shrink-0 text-xs px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
+                                    :class="{'opacity-50 cursor-not-allowed': syncingZ2m}">
+                                <i class="ri-check-line mr-1"></i><span x-text="t('entity.apply_rename')">Apply rename</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <!-- Filters - Separate section for better mobile scroll -->
@@ -2052,6 +2076,11 @@
                                                         class="btn btn-ghost btn-sm"
                                                         :title="t('entity.revert')">
                                                     <i class="ri-arrow-go-back-line"></i>
+                                                </button>
+                                                <button @click="learnSuffixMapping(entity)"
+                                                        class="btn btn-ghost btn-sm"
+                                                        :title="t('entity.learn_mapping')">
+                                                    <i :class="suffixMappings[(entity.base_name||'').toLowerCase().trim()] ? 'ri-star-fill text-amber-500' : 'ri-star-line'"></i>
                                                 </button>
                                             </div>
                                             <span x-show="isEntityIdTaken(entity)" class="text-red-500 text-xs">
@@ -2472,6 +2501,7 @@
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
                 renamingDevice: false,  // Loading state for device rename
+                syncingZ2m: false,  // Loading state for Z2M name sync
                 applyingEntityId: null,  // ID of entity currently being renamed
                 previewVersion: 0,  // Incremented to force Alpine reactivity on preview changes
 
@@ -2799,6 +2829,10 @@
                                 if (this.deviceNameNeedsRename(device)) {
                                     return true;
                                 }
+                                // Z2M-Namens-Drift zählt als Änderung
+                                if (device.z2m_drift) {
+                                    return true;
+                                }
                                 // Check if any entities need renaming
                                 let deviceEntities = this.hierarchy.entities.filter(e => e.device_id === device.id);
                                 if (!this.showDisabled) {
@@ -2866,6 +2900,10 @@
                         devices = devices.filter(d => {
                             // Check if device name itself needs renaming
                             if (this.deviceNameNeedsRename(d)) {
+                                return true;
+                            }
+                            // Z2M-Namens-Drift zählt als Änderung
+                            if (d.z2m_drift) {
                                 return true;
                             }
                             // Check if any entities need renaming
@@ -3088,9 +3126,11 @@
                     );
                 },
 
-                // Computed: Count of entities that need renaming
+                // Computed: Count of entities that need renaming + Z2M-Geräte mit Namens-Drift
                 get pendingChangesCount() {
-                    return this.filteredEntities.filter(e => this.entityNeedsRename(e)).length;
+                    const entityChanges = this.filteredEntities.filter(e => this.entityNeedsRename(e)).length;
+                    const z2mDrift = this.filteredDevices.filter(d => d.z2m_drift).length;
+                    return entityChanges + z2mDrift;
                 },
 
                 // Computed: Count of disabled entities in current selection (only when showDisabled is true)
@@ -3514,6 +3554,13 @@
                         // Precompute preview values for all entities (performance optimization)
                         this.precomputeEntityPreviews();
 
+                        // selectedDeviceData ist eine gespeicherte Referenz -> aus der frisch
+                        // geladenen Liste neu auflösen, damit Detail-Ansicht/Drift-Box aktuell sind
+                        if (this.selectedDevice) {
+                            const updated = this.hierarchy.devices.find(d => d.id === this.selectedDevice);
+                            if (updated) this.selectedDeviceData = updated;
+                        }
+
                     } catch (error) {
                         console.error('Error loading hierarchy:', error);
                         this.showMessage('Error loading data: ' + error.message, 'error');
@@ -3834,9 +3881,22 @@
                     return device.name !== expectedName;
                 },
 
+                // Check if the target device name is already taken by another device
+                isDeviceNameTaken(device) {
+                    if (!device) return false;
+                    const newName = this.getExpectedDeviceName(device);
+                    if (!newName || newName === device.name) return false; // No change, no conflict
+                    return this.hierarchy.devices.some(d => d.id !== device.id && d.name === newName);
+                },
+
                 deviceNeedsRename(device) {
                     // Check if device name needs rename
                     if (this.deviceNameNeedsRename(device)) {
+                        return true;
+                    }
+
+                    // Z2M-Namens-Drift zählt als Änderung (auch ohne HA-Rename)
+                    if (device.z2m_drift) {
                         return true;
                     }
 
@@ -4405,6 +4465,13 @@
                         const newId = this.getNewEntityId(entity);
                         const newName = this.getEntityFriendlyName(entity);
 
+                        // Prevent renaming to an entity ID that another entity already uses
+                        if (newId !== entity.id &&
+                            this.hierarchy.entities.some(e => e.id === newId && e.registry_id !== entity.registry_id)) {
+                            this.showMessage(this.t('entity.id_conflict'), 'error');
+                            return;
+                        }
+
                         // Check if rename is actually needed
                         const idChanged = entity.id !== newId;
                         const nameChanged = entity.original_name !== newName;
@@ -4505,6 +4572,12 @@
                         return;
                     }
 
+                    // Prevent renaming to a name that another device already uses
+                    if (this.hierarchy.devices.some(d => d.id !== this.selectedDevice && d.name === newFullName)) {
+                        this.showMessage(this.t('device.name_conflict'), 'error');
+                        return;
+                    }
+
                     this.renamingDevice = true;
                     try {
                         // Rename the device directly in HA
@@ -4552,6 +4625,33 @@
                     }
                 },
 
+                // Z2M-friendly_name an den HA-Namen angleichen (nur Z2M-Geräte)
+                async syncZ2mName(device) {
+                    if (!device || this.syncingZ2m) return;
+                    this.syncingZ2m = true;
+                    try {
+                        const response = await fetch('api/sync_z2m_name', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ device_id: device.id })
+                        });
+                        const data = await response.json();
+                        if (response.ok && data.success) {
+                            this.showMessage('Z2M-Name angeglichen', 'success');
+                            // Kurz warten, bis Z2M bridge/devices aktualisiert hat, dann neu laden
+                            // (loadHierarchy löst selectedDeviceData neu auf -> Drift-Box verschwindet)
+                            await new Promise(resolve => setTimeout(resolve, 600));
+                            await this.loadHierarchy();
+                        } else {
+                            this.showMessage('Z2M-Sync fehlgeschlagen: ' + (data.error || data.message || ''), 'error');
+                        }
+                    } catch (error) {
+                        this.showMessage('Z2M-Sync Fehler: ' + error.message, 'error');
+                    } finally {
+                        this.syncingZ2m = false;
+                    }
+                },
+
                 // Note: saveEntityOverride was removed - entity-specific overrides are no longer used
                 // Only type mappings (via suffixMappings) are supported
 
@@ -4571,18 +4671,37 @@
                     }
                 },
 
+                // Sternchen im Entity-Edit: aktuelles Suffix als feste Übersetzung merken.
+                // Schlüssel = Original-Basisname (z.B. "effect color"), Wert = eingegebener Suffix.
+                async learnSuffixMapping(entity) {
+                    const current = entity._currentSuffix !== undefined ? entity._currentSuffix : (entity.base_name || '');
+                    const translation = (current || '').trim();
+                    const typeKey = (entity.base_name || '').toLowerCase().trim();
+                    if (!typeKey || !translation) {
+                        this.showMessage(this.t('entity.learn_mapping_empty'), 'error');
+                        return;
+                    }
+                    await this.learnMapping(typeKey, translation);
+                    // Mapping lokal übernehmen, damit gleiche Entities sofort die Übersetzung nutzen
+                    this.suffixMappings[typeKey] = translation;
+                    this.invalidateEntityPreviews();
+                    this.showMessage(this.t('entity.learn_mapping_saved') + ': ' + entity.base_name + ' → ' + translation, 'success');
+                },
+
                 // Execute ALL pending changes with batch processing to avoid timeouts
                 async executeAllChanges() {
                     // Find all entities that need renaming
                     const entitiesToChange = this.filteredEntities.filter(e => this.entityNeedsRename(e));
-                    if (entitiesToChange.length === 0) {
+                    // Z2M-Geräte im aktuellen View, deren Z2M-Name vom HA-Namen abweicht
+                    const z2mDriftDevices = this.filteredDevices.filter(d => d.z2m_drift);
+                    if (entitiesToChange.length === 0 && z2mDriftDevices.length === 0) {
                         this.showMessage('No changes to apply', 'info');
                         return;
                     }
 
                     this.executing = true;
                     this.executingProgress = 0;
-                    this.executingTotal = entitiesToChange.length;
+                    this.executingTotal = entitiesToChange.length + z2mDriftDevices.length;
 
                     // Batch size - process 10 entities at a time to avoid timeouts
                     const BATCH_SIZE = 10;
@@ -4626,13 +4745,28 @@
                             this.executingProgress = Math.min(i + BATCH_SIZE, allEntities.length);
                         }
 
+                        // Z2M-Namen der driftenden Geräte nachziehen (nach den Entity-Renames)
+                        let z2mSynced = 0, z2mFailed = 0;
+                        for (const dev of z2mDriftDevices) {
+                            try {
+                                const resp = await fetch('api/sync_z2m_name', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ device_id: dev.id })
+                                });
+                                const d = await resp.json();
+                                if (resp.ok && d.success) z2mSynced++; else z2mFailed++;
+                            } catch (e) { z2mFailed++; }
+                            this.executingProgress = Math.min(this.executingProgress + 1, this.executingTotal);
+                        }
+
                         const successCount = results.success.length;
                         const failedCount = results.failed.length;
 
-                        if (failedCount > 0) {
-                            this.showMessage(`${successCount} succeeded, ${failedCount} failed`, 'error');
-                        } else if (successCount > 0) {
-                            this.showMessage(`${successCount} entities renamed successfully`, 'success');
+                        if (failedCount > 0 || z2mFailed > 0) {
+                            this.showMessage(`${successCount} succeeded, ${failedCount} failed` + (z2mFailed ? `, ${z2mFailed} Z2M failed` : ''), 'error');
+                        } else if (successCount > 0 || z2mSynced > 0) {
+                            this.showMessage(`${successCount} entities renamed` + (z2mSynced ? `, ${z2mSynced} Z2M synced` : ''), 'success');
                         }
 
                         // Wait a moment for HA to persist changes before reload
