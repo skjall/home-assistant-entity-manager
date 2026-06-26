@@ -22,11 +22,24 @@ jobs:
           script: |
             const repo = { owner: context.repo.owner, repo: context.repo.repo };
             const pr = context.payload.pull_request;
+            const LABEL = "needs issue";
+
+            // Remove a stale "needs issue" label if one is present (self-healing
+            // for PRs labelled before an exemption applied, e.g. older bot PRs).
+            const clearLabel = async () => {
+              const labels = (
+                await github.rest.issues.listLabelsOnIssue({ ...repo, issue_number: pr.number })
+              ).data.map((l) => l.name);
+              if (labels.includes(LABEL)) {
+                await github.rest.issues.removeLabel({ ...repo, issue_number: pr.number, name: LABEL }).catch(() => {});
+              }
+            };
 
             // Bot PRs (Renovate / Dependabot) don't need a linked issue — they are
             // tracked centrally via the dependency dashboard.
             if (pr.user.type === "Bot" || /\[bot\]$/.test(pr.user.login) || pr.user.login === "renovate-bot") {
               core.info(`Bot PR by ${pr.user.login} — skipping linked-issue check`);
+              await clearLabel();
               return;
             }
 
@@ -36,13 +49,13 @@ jobs:
             const MAINTAINER = ["OWNER", "MEMBER", "COLLABORATOR"];
             if (MAINTAINER.includes(pr.author_association)) {
               core.info(`Maintainer PR (${pr.author_association}) by ${pr.user.login} — skipping linked-issue check`);
+              await clearLabel();
               return;
             }
 
             const body = pr.body || "";
             const re = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i;
             const linked = re.test(body);
-            const LABEL = "needs issue";
 
             const labels = (
               await github.rest.issues.listLabelsOnIssue({ ...repo, issue_number: pr.number })

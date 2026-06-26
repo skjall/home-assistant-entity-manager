@@ -15,10 +15,12 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
-    # Run on every PR, or when someone writes "@claude" in a comment.
+    # Run on every human PR, or when a human writes "@claude" in a comment.
+    # Skip bot-initiated events (e.g. Renovate): the action refuses bot actors,
+    # and dependency bumps don't need an AI review.
     if: |
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
+      (github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot') ||
+      (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' && contains(github.event.comment.body, '@claude'))
     steps:
       - uses: actions/checkout@v6
         with:
