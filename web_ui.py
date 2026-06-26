@@ -33,6 +33,7 @@ from hierarchy_manager import normalize_name
 from lovelace_updater import LovelaceUpdater
 from naming_overrides import NamingOverrides
 from reference_checker import ReferenceChecker
+from rename_log import RenameLog
 from type_mappings import TypeMappings
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
@@ -73,7 +74,12 @@ renamer_state = {
     "naming_overrides": NamingOverrides(os.path.join(DATA_DIR, "naming_overrides.json")),
     "type_mappings": TypeMappings(user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json")),
     "swap_store": SwapJobStore(os.path.join(DATA_DIR, "device_swaps")),
+    "rename_log": RenameLog(os.path.join(DATA_DIR, "rename_log.jsonl")),
 }
+
+# Share the audit log with every EntityRegistry instance so all rename paths
+# (single, batch, device cascade) get recorded centrally.
+EntityRegistry.rename_log = renamer_state["rename_log"]
 
 
 # =============================================================================
@@ -2034,6 +2040,34 @@ async def _assign_device_area_async():
     except Exception as e:
         logger.error(f"Error assigning device {device_id} to area: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rename_log", methods=["GET"])
+def rename_log_lookup():
+    """Resolve an entity_id against the rename audit log.
+
+    Query parameter ``entity_id`` (the old / vanished id). Follows the rename
+    chain forward and returns the current id plus the hop history, e.g.::
+
+        GET /api/rename_log?entity_id=light.kitchen_old
+
+        {
+          "query": "light.kitchen_old",
+          "found": true,
+          "renamed": true,
+          "current_entity_id": "light.kitchen_ceiling",
+          "history": [ {"timestamp": ..., "old_entity_id": ...,
+                        "new_entity_id": ..., "friendly_name": ...} ]
+        }
+
+    ``found`` is ``false`` when the id was never renamed (or is unknown).
+    """
+    entity_id = request.args.get("entity_id", "").strip()
+    if not entity_id:
+        return jsonify({"error": "Missing required query parameter: entity_id"}), 400
+
+    rename_log = renamer_state["rename_log"]
+    return jsonify(rename_log.search(entity_id))
 
 
 @app.route("/api/rename_entity", methods=["POST"])

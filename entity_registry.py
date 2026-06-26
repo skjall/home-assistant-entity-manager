@@ -8,6 +8,10 @@ logger = logging.getLogger(__name__)
 
 
 class EntityRegistry:
+    # Optional shared audit log for entity_id renames. Set once by the web app
+    # at startup (see web_ui.py); stays None in contexts that don't wire it up.
+    rename_log = None
+
     def __init__(self, websocket: HomeAssistantWebSocket):
         self.ws = websocket
         self.entities: Dict[str, Dict] = {}
@@ -70,9 +74,20 @@ class EntityRegistry:
         friendly_name: Optional[str] = None,
         enable: bool = False,
     ) -> Dict[str, Any]:
-        return await self.update_entity(
+        result = await self.update_entity(
             entity_id=old_entity_id, new_entity_id=new_entity_id, name=friendly_name, enable=enable
         )
+
+        # Record the successful rename in the audit log so external consumers can
+        # resolve a vanished entity_id to its new one. Never let logging failures
+        # break the rename itself.
+        if self.rename_log is not None and new_entity_id and new_entity_id != old_entity_id:
+            try:
+                self.rename_log.record(old_entity_id, new_entity_id, friendly_name)
+            except Exception as error:  # noqa: BLE001 - audit log must not break renames
+                logger.warning("Failed to record rename in audit log: %s", error)
+
+        return result
 
     async def add_labels(self, entity_id: str, labels: List[str]) -> Dict[str, Any]:
         # Stelle sicher, dass alle Labels existieren
