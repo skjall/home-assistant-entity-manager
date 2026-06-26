@@ -38,7 +38,9 @@ jobs:
               Black 120-char line length, English log messages)
             Post concise inline comments on the specific lines that need attention.
             Skip nitpicks; only raise findings worth acting on.
+            Ignore lock files and generated/built artifacts (package-lock.json,
+            anything under static/) — review only hand-written source changes.
           # Swap to claude-opus-4-8 for deeper reviews at higher quota cost.
           claude_args: |
             --model claude-sonnet-4-6
-            --max-turns 10
+            --max-turns 25

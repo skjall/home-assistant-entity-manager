@@ -1,0 +1,55 @@
+name: Visual baselines
+
+# Manually generate (or refresh) the Playwright visual-regression baselines in
+# the CI environment, where rendering matches the `visual` check, and commit
+# them back to the branch this workflow is dispatched on.
+#
+# Run this once after introducing the visual test, and again whenever an
+# intentional UI change makes the diff fail (review the committed screenshots
+# in the resulting commit before relying on them).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies + build frontend
+        run: |
+          npm ci
+          npm run build
+          pip install -r requirements.txt
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Update snapshots
+        run: npx playwright test --update-snapshots
+
+      - name: Commit baselines
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tests/visual/__screenshots__
+          if git diff --cached --quiet; then
+            echo "No baseline changes."
+          else
+            git commit -m "test(visual): update Playwright baselines [skip ci]"
+            git push
+          fi

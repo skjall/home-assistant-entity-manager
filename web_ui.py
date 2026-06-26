@@ -59,6 +59,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+# Persistent data directory. Defaults to the add-on's /data mount; overridable
+# via DATA_DIR for local runs, tests and CI where /data is not available.
+DATA_DIR = os.getenv("DATA_DIR", "/data")
+
 # Global state
 renamer_state = {
     "client": None,
@@ -66,9 +70,9 @@ renamer_state = {
     "areas": {},
     "entities_by_area": {},
     "proposed_changes": {},
-    "naming_overrides": NamingOverrides("/data/naming_overrides.json"),
-    "type_mappings": TypeMappings(user_mappings_path="/data/user_type_mappings.json"),
-    "swap_store": SwapJobStore("/data/device_swaps"),
+    "naming_overrides": NamingOverrides(os.path.join(DATA_DIR, "naming_overrides.json")),
+    "type_mappings": TypeMappings(user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json")),
+    "swap_store": SwapJobStore(os.path.join(DATA_DIR, "device_swaps")),
 }
 
 
