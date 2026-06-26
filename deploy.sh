@@ -2,6 +2,10 @@
 # Fast deploy script for Home Assistant Entity Manager
 # Copies files directly into running container via SSH
 #
+# Usage: ./deploy.sh [git-ref]
+#   no arg   -> deploy the current working tree
+#   git-ref  -> deploy a specific branch/tag/commit, e.g. ./deploy.sh feat/foo
+#
 # Setup: Copy .env.example to .env and configure your settings
 
 set -e
@@ -38,9 +42,41 @@ if [ -z "$HA_HOST" ]; then
     exit 1
 fi
 
+# Optional first argument: a git ref (branch/tag/commit) to deploy instead of
+# the current working tree. Files come from a temporary detached worktree of
+# that ref; the locally built (gitignored) static/ assets are copied along.
+DEPLOY_REF="${1:-}"
+SOURCE_DIR="$SCRIPT_DIR"
+if [ -n "$DEPLOY_REF" ]; then
+    echo -e "[0/4] Preparing files from ref '$DEPLOY_REF'..."
+    # Resolve the ref locally; fall back to the remote-tracking ref so a bare
+    # branch name (e.g. feat/foo that only exists as origin/feat/foo) just works.
+    RESOLVED_REF="$DEPLOY_REF"
+    if ! git -C "$SCRIPT_DIR" rev-parse --verify --quiet "${DEPLOY_REF}^{commit}" >/dev/null; then
+        if git -C "$SCRIPT_DIR" rev-parse --verify --quiet "origin/${DEPLOY_REF}^{commit}" >/dev/null; then
+            RESOLVED_REF="origin/${DEPLOY_REF}"
+            echo -e "${YELLOW}Note: '$DEPLOY_REF' not local, using 'origin/$DEPLOY_REF'${NC}"
+        else
+            echo -e "${RED}ERROR: git ref '$DEPLOY_REF' not found (also tried origin/$DEPLOY_REF)${NC}"
+            exit 1
+        fi
+    fi
+    SOURCE_DIR="$(mktemp -d)"
+    cleanup() { git -C "$SCRIPT_DIR" worktree remove --force "$SOURCE_DIR" 2>/dev/null || rm -rf "$SOURCE_DIR"; }
+    trap cleanup EXIT
+    git -C "$SCRIPT_DIR" worktree add --quiet --detach "$SOURCE_DIR" "$RESOLVED_REF"
+    # static/ is gitignored (built locally) and thus absent from the ref -- bring
+    # the current build along so the deployed frontend isn't empty.
+    if [ -d "$SCRIPT_DIR/static" ]; then
+        cp -r "$SCRIPT_DIR/static" "$SOURCE_DIR/"
+    fi
+    echo -e "${GREEN}Prepared '$DEPLOY_REF' (+ current built static/)${NC}"
+fi
+
 echo -e "${YELLOW}=== Entity Manager Deploy ===${NC}"
 echo "Target: $SSH_USER@$HA_HOST:$SSH_PORT"
 echo "Container: $CONTAINER"
+echo "Source: ${DEPLOY_REF:-working tree}"
 echo ""
 
 # Check SSH connection
@@ -61,7 +97,7 @@ echo -e "${GREEN}Container running${NC}"
 
 # Deploy files
 echo -e "[3/4] Deploying files to container..."
-tar czf - \
+( cd "$SOURCE_DIR" && tar czf - \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     --exclude='.git' \
@@ -80,7 +116,7 @@ tar czf - \
     --exclude='.ruff.toml' \
     --exclude='.env' \
     --exclude='.env.example' \
-    *.py templates/ static/ translations/ 2>/dev/null | \
+    *.py templates/ static/ translations/ 2>/dev/null ) | \
     ssh -p "$SSH_PORT" "$SSH_USER@$HA_HOST" "docker exec -i $CONTAINER tar xzf - -C $APP_PATH"
 
 echo -e "${GREEN}Files deployed${NC}"
