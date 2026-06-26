@@ -1,5 +1,5 @@
 {
-  "name": "Entity Manager (Beta)",
+  "name": "Entity Manager",
   "version": "1.0.2-beta",
   "slug": "entity_manager",
   "description": "⚠️ BETA VERSION - USE WITH CAUTION ⚠️ Manage and standardize Home Assistant entity names",
