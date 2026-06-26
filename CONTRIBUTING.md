@@ -90,7 +90,22 @@ Run these before opening a PR (the CI enforces them):
 flake8 . --exclude=venv*,legacy,node_modules
 black --check --line-length 120 --target-version py312 .
 isort --check-only --profile black --line-length 120 .
+pytest
 ```
+
+Or install the **pre-commit hook**, which runs the same checks (black/isort/flake8 + pytest)
+automatically before every commit:
+
+```bash
+pip install pre-commit && pip install -r requirements-test.txt
+pre-commit install
+pre-commit run --all-files   # optional: run once over everything
+```
+
+### Tests
+
+Unit tests live in `tests/` and run offline (no Home Assistant required) — they mock the
+clients. Run them with `pytest`. Please add/extend tests for backend logic you change.
 
 - **Python:** Black (line length 120), isort (black profile), flake8. All functions need type hints and docstrings.
 - **Logs in English:** all log output (`logger.*` and job/progress logs) must be English. User-facing UI strings are localized via `translations/ui/*.json`.
@@ -106,6 +121,20 @@ The PR template lists the full checklist. In short:
 3. Frontend changes include a rebuilt CSS (`npm run build:css`).
 4. Describe how you tested the change (and which integration: Z2M / Matter / ZHA).
 5. Open the PR against **`next-release`**.
+
+## Issue & PR process
+
+Issues and PRs are kept tidy with a few automated rules:
+
+- **Every PR must reference an issue** — put `Closes #123` (or `Fixes`/`Resolves`) in the
+  description. PRs without a linked issue get a `needs issue` label and a failing check.
+- **Status labels are exclusive and automatic** — only one is ever set:
+  `status: triage` (new) → `status: in progress` (assigned) → `status: in review`
+  (a PR links the issue) → `status: done` (closed).
+- **Duplicate hint** — new issues get a comment linking possibly-related existing issues.
+
+Typical flow: open an issue (→ `triage`) → assign yourself (→ `in progress`) → open a PR
+with `Closes #N` against `next-release` (→ issue `in review`) → merge closes the issue (→ `done`).
 
 ## Releasing (maintainers)
 
