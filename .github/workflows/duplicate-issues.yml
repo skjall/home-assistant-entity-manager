@@ -1,0 +1,46 @@
+name: Duplicate issue hint
+
+# On a new issue, search for similar existing issues by title keywords and post a
+# best-effort comment linking them. Does not close anything — just a pointer.
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  similar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const repo = { owner: context.repo.owner, repo: context.repo.repo };
+            const issue = context.payload.issue;
+
+            // keywords from the title (drop short/common words)
+            const stop = new Set(["the", "and", "for", "with", "that", "this", "when", "from", "into", "does", "not"]);
+            const words = (issue.title || "")
+              .toLowerCase()
+              .replace(/[^a-z0-9 ]/g, " ")
+              .split(/\s+/)
+              .filter((w) => w.length >= 4 && !stop.has(w))
+              .slice(0, 6);
+            if (words.length === 0) return;
+
+            const q = `repo:${repo.owner}/${repo.repo} is:issue ${words.join(" ")}`;
+            const res = await github.rest.search.issuesAndPullRequests({ q, per_page: 6 });
+
+            const matches = res.data.items
+              .filter((it) => it.number !== issue.number && !it.pull_request)
+              .slice(0, 5);
+            if (matches.length === 0) return;
+
+            const list = matches.map((it) => `- #${it.number} ${it.title} (${it.state})`).join("\n");
+            await github.rest.issues.createComment({
+              ...repo,
+              issue_number: issue.number,
+              body: `🔎 Possibly related existing issues — please check for duplicates:\n\n${list}`,
+            });

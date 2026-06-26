@@ -13,10 +13,14 @@ A Home Assistant Add-on for standardizing and managing entity names according to
 - **Batch Entity Renaming**: Rename multiple entities according to a standardized pattern
 - **Logical Naming Convention**: Follows the pattern `{area}.{device_type}.{location/name}`
 - **Character Normalization**: Automatically normalizes special characters for entity IDs
-- **Dependency Tracking**: Finds and updates entity references in automations and scenes
+- **Dependency Tracking**: Finds and updates entity references in automations, scenes, scripts and dashboards
+- **Device Swap**: Replace a physical device with a new one — re-maps all references, carries over IDs/friendly names, and is crash-safe/resumable
+- **Integration Bridge**: Native rename/removal for Zigbee2MQTT (via MQTT), Matter and ZHA — keeps Z2M friendly names in sync and prevents re-population after deletion
+- **Z2M Name Drift**: Highlights devices whose Zigbee2MQTT name differs from the HA name and lets you sync them
+- **Learn Translations**: Save a suffix translation to the mapping list directly from the entity editor
 - **Label Management**: Track entity quality and processing status
 - **Web Interface**: Visualize and manage entities through an intuitive UI
-- **Safe Operations**: Dry-run mode and comprehensive validation before changes
+- **Safe Operations**: Preview and comprehensive validation before changes
 
 ## Requirements
 
@@ -34,7 +38,7 @@ A Home Assistant Add-on for standardizing and managing entity names according to
 2. Click the three dots menu → Repositories
 3. Add this repository: `https://github.com/Skjall/home-assistant-entity-manager`
 4. Click "Add"
-5. Find "Entity Manager (Beta)" in the add-on store
+5. Find "Entity Manager" in the add-on store
 6. Click on it and then click "Install"
 7. Start the add-on
 8. Click "OPEN WEB UI" to access the interface
@@ -160,7 +164,7 @@ Check the Add-on logs in Supervisor → Entity Manager → Logs
 
 ```bash
 # Build for your architecture
-docker build --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base-python:3.12" -t local/entity_manager .
+docker build --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base-python:3.14-alpine3.20" -t local/entity_manager .
 
 # Run locally for testing
 docker run --rm -it -p 5000:5000 \
@@ -171,20 +175,15 @@ docker run --rm -it -p 5000:5000 \
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Ensure tests pass and coverage is maintained
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+Contributions are welcome! Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the
+full guide. In short:
 
-### Development Guidelines
+1. Fork the repository and branch off **`next-release`** (`git checkout -b feature/amazing-feature next-release`)
+2. Make your changes; ensure `flake8` / `black` / `isort` pass
+3. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, …)
+4. Open a Pull Request **against `next-release`** (not `main`)
 
-- All code must have type hints
-- All functions must have docstrings
-- Test coverage must be maintained above 80%
-- Follow Home Assistant development guidelines
-- Use semantic commit messages
+`main` is the release branch and is only updated via `next-release`.
 
 ## License
 
