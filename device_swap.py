@@ -33,6 +33,7 @@ STATE_CONFIRMED = "CONFIRMED"
 STATE_FREEING_OLD_NAME = "FREEING_OLD_NAME"
 STATE_RENAMING_NEW_DEVICE = "RENAMING_NEW_DEVICE"
 STATE_RENAMING_ENTITIES = "RENAMING_ENTITIES"
+STATE_TRANSFERRING_SETTINGS = "TRANSFERRING_SETTINGS"
 STATE_UPDATING_DEPENDENCIES = "UPDATING_DEPENDENCIES"
 STATE_DISPOSING_OLD_DEVICE = "DISPOSING_OLD_DEVICE"
 STATE_NATIVE_REMOVE = "NATIVE_REMOVE"
@@ -45,6 +46,7 @@ EXECUTION_SEQUENCE = [
     STATE_FREEING_OLD_NAME,
     STATE_RENAMING_NEW_DEVICE,
     STATE_RENAMING_ENTITIES,
+    STATE_TRANSFERRING_SETTINGS,
     STATE_UPDATING_DEPENDENCIES,
     STATE_DISPOSING_OLD_DEVICE,
     STATE_NATIVE_REMOVE,
@@ -289,6 +291,7 @@ class SwapExecutor:
             STATE_FREEING_OLD_NAME: self._free_old_name,
             STATE_RENAMING_NEW_DEVICE: self._rename_new_device,
             STATE_RENAMING_ENTITIES: self._rename_entities,
+            STATE_TRANSFERRING_SETTINGS: self._transfer_settings,
             STATE_UPDATING_DEPENDENCIES: self._update_dependencies,
             STATE_DISPOSING_OLD_DEVICE: self._dispose_old_device,
             STATE_NATIVE_REMOVE: self._native_remove,
@@ -355,6 +358,14 @@ class SwapExecutor:
         await self.device_registry.rename_device(new["device_id"], target)
         self._log(job, STATE_RENAMING_NEW_DEVICE, f"New device renamed to '{target}'")
 
+        # Assign the new device to the old device's area, so it lands where the old
+        # one was. Entities that inherit their area from the device follow automatically.
+        old_area_id = (job.get("old_device") or {}).get("area_id")
+        if old_area_id and not job.get("area_assigned"):
+            await self.device_registry.assign_area(new["device_id"], old_area_id)
+            job["area_assigned"] = True
+            self._log(job, STATE_RENAMING_NEW_DEVICE, f"New device assigned to area '{old_area_id}'")
+
         # Z2M-friendly_name angleichen (nur bei Z2M-Geräten; nicht fatal).
         if self.bridge is not None:
             try:
@@ -419,6 +430,54 @@ class SwapExecutor:
             return None
         basename = cur[len(old_dev_name) :].strip()
         return f"{target_name} {basename}".strip() if basename else target_name
+
+    async def _transfer_settings(self, job: Dict[str, Any]) -> None:
+        """Copy the old entities' user settings onto the matching new entities.
+
+        Transferred (only where Home Assistant supports it): icon, device_class
+        ("display as"), entity_category, entity area override and the user-set
+        hidden/disabled flags. The entity area is copied verbatim - ``None`` means
+        "use the device area", which now points at the old device's area (assigned in
+        RENAMING_NEW_DEVICE). Pairing uses the full auto-mapping, with the user's
+        confirmed in-use mapping taking precedence. Pro-entity idempotent (Resume).
+        """
+        props_by_old = job.get("old_entity_props") or {}
+        if not props_by_old:
+            return  # nothing captured (e.g. job created before this feature)
+
+        # Pairing old -> new: start from the full auto-mapping, let confirmed pairs win.
+        pairing = dict(job.get("property_pairs") or {})
+        for pair in job.get("entity_mapping", []):
+            pairing[pair["old_entity_id"]] = pair["new_entity_id_current"]
+
+        renamed = job.get("new_renamed", {})
+        done = job.setdefault("settings_transferred", {})
+        for old_id, new_current in pairing.items():
+            if new_current in done:
+                continue  # idempotent (Resume)
+            props = props_by_old.get(old_id)
+            if not props:
+                done[new_current] = None
+                continue
+
+            final_id = renamed.get(new_current, new_current)
+            kwargs: Dict[str, Any] = {"area_id": props.get("area_id")}
+            if props.get("icon"):
+                kwargs["icon"] = props["icon"]
+            if props.get("device_class"):
+                kwargs["device_class"] = props["device_class"]
+            if props.get("entity_category"):
+                kwargs["entity_category"] = props["entity_category"]
+            # Only replicate user-level hide/disable; never touch integration-forced state.
+            if props.get("hidden_by") == "user":
+                kwargs["hidden_by"] = "user"
+            if props.get("disabled_by") == "user":
+                kwargs["disabled_by"] = "user"
+
+            await self.entity_registry.update_entity(final_id, **kwargs)
+            done[new_current] = final_id
+            self._log(job, STATE_TRANSFERRING_SETTINGS, f"Transferred settings {old_id} -> {final_id}")
+            self._persist(job)
 
     async def _update_dependencies(self, job: Dict[str, Any]) -> None:
         """Referenzen umbiegen: ursprüngliche alte ID -> finale neue ID (pro Paar idempotent)."""

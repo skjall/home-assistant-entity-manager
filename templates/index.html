@@ -2342,23 +2342,28 @@
                         <div class="space-y-2">
                             <template x-for="row in swap.mapping" :key="row.old_entity_id">
                                 <div class="rounded-lg border border-gray-200 p-3 transition hover:bg-gray-50" :class="!row.new_entity_id ? 'opacity-60' : ''">
-                                    <div class="flex items-center gap-3">
-                                        <div class="flex-1 min-w-0">
-                                            <p class="font-mono text-xs text-gray-700 truncate" :title="row.old_entity_id" x-text="row.old_entity_id"></p>
-                                            <div class="flex items-center gap-1.5 mt-1.5">
-                                                <span x-show="row.device_class" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium" x-text="row.device_class"></span>
-                                            </div>
-                                        </div>
-                                        <div class="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0"><i class="ri-arrow-right-line text-blue-500"></i></div>
-                                        <div class="flex-1 min-w-0">
-                                            <select @change="row.new_entity_id = $event.target.value" class="area-select w-full">
-                                                <option value="" :selected="!row.new_entity_id">— nicht übertragen —</option>
-                                                <template x-for="opt in swapMappingOptions(row)" :key="opt">
-                                                    <option :value="opt" :selected="opt === row.new_entity_id" x-text="opt"></option>
-                                                </template>
-                                            </select>
-                                        </div>
+                                    <!-- Alt: eigenes Feld, volle Breite, umbrechend statt abgeschnitten -->
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Alt</span>
+                                        <span x-show="row.device_class" class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium" x-text="row.device_class"></span>
                                     </div>
+                                    <div class="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 font-mono text-xs break-all leading-snug" :title="row.old_entity_id">
+                                        <span class="text-gray-400" x-text="row.old_entity_id.split('.')[0] + '.'"></span><span class="text-gray-800 font-medium" x-text="row.old_entity_id.split('.').slice(1).join('.')"></span>
+                                    </div>
+                                    <!-- Pfeil zentriert zwischen den beiden gleich breiten Feldern -->
+                                    <div class="flex justify-center text-gray-300 my-1">
+                                        <i class="ri-arrow-down-line text-sm"></i>
+                                    </div>
+                                    <!-- Neu: gleiches Feld-Layout (identisches Padding -> Text fluchtet mit Alt) -->
+                                    <div class="mb-1">
+                                        <span class="text-[10px] font-semibold uppercase tracking-wide text-blue-400">Neu</span>
+                                    </div>
+                                    <select @change="row.new_entity_id = $event.target.value" class="area-select w-full font-mono">
+                                        <option value="" :selected="!row.new_entity_id">— nicht übertragen —</option>
+                                        <template x-for="opt in swapMappingOptions(row)" :key="opt">
+                                            <option :value="opt" :selected="opt === row.new_entity_id" x-text="opt"></option>
+                                        </template>
+                                    </select>
                                 </div>
                             </template>
                         </div>
@@ -2366,7 +2371,7 @@
 
                     <!-- Step 3: Vorschau + Disposition -->
                     <div x-show="swap.step === 3">
-                        <p class="text-sm text-gray-600 mb-3">Das neue Gerät erhält den Namen <strong class="text-gray-900" x-text="swap.job?.target_device_name"></strong>. Folgende Referenzen werden umgebogen:</p>
+                        <p class="text-sm text-gray-600 mb-3">Das neue Gerät erhält den Namen <strong class="text-gray-900" x-text="swap.job?.target_device_name"></strong> und den Bereich des alten Geräts. Einstellungen der Entitäten (Icon, „Anzeigen als", Sichtbarkeit, Aktivierung, Bereich) werden – soweit unterstützt – mit übernommen. Folgende Referenzen werden umgebogen:</p>
                         <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto mb-5">
                             <template x-for="p in swapActivePairs()" :key="p.old_entity_id">
                                 <div class="flex items-center gap-2 px-3 py-2 text-xs font-mono">

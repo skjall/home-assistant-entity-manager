@@ -1,13 +1,7 @@
 """Tests for the device swap engine: mapping, prefix swap, friendly names, executor flow."""
 
 import device_swap
-from device_swap import (
-    SwapExecutor,
-    SwapJobStore,
-    _common_prefix_tokens,
-    _entity_name,
-    propose_mapping,
-)
+from device_swap import SwapExecutor, SwapJobStore, _common_prefix_tokens, _entity_name, propose_mapping
 
 # --------------------------------------------------------------------------- #
 # Pure helpers: prefix / suffix
@@ -112,12 +106,22 @@ class _DR(_Rec):
     async def rename_device(self, dev, name):
         self.calls.append(("dev", dev, name))
 
+    async def assign_area(self, dev, area_id):
+        self.calls.append(("area", dev, area_id))
+
 
 class _ER(_Rec):
     ws = object()
 
+    def __init__(self):
+        super().__init__()
+        self.updates = []
+
     async def rename_entity(self, old, new, friendly=None):
         self.calls.append((old, new))
+
+    async def update_entity(self, entity_id, **kwargs):
+        self.updates.append((entity_id, kwargs))
 
 
 class _DU(_Rec):
@@ -227,6 +231,88 @@ def test_executor_idempotent_resume(tmp_path):
     ex = SwapExecutor(store, _DR(), _ER(), _DU(), _Bridge(), _RS(), states_by_id={}, timestamp="t2")
     again = asyncio.run(ex.run(out))
     assert again["state"] == device_swap.STATE_COMPLETED
+
+
+# --------------------------------------------------------------------------- #
+# Area assignment + entity settings transfer
+# --------------------------------------------------------------------------- #
+
+
+def test_executor_assigns_old_area_to_new_device(tmp_path):
+    job = _job()
+    job["old_device"]["area_id"] = "bathroom"
+    dr = _DR()
+    store = SwapJobStore(str(tmp_path))
+    ex = SwapExecutor(store, dr, _ER(), _DU(), _Bridge(), _RS(), states_by_id={}, timestamp="t1")
+    import asyncio
+
+    asyncio.run(ex.run(job))
+    assert ("area", "new", "bathroom") in dr.calls
+
+
+def _job_with_settings():
+    job = _job()
+    job["property_pairs"] = {
+        "binary_sensor.kuche_fenster_zustand": "binary_sensor.kuche_fenster_ikea_zustand",
+        "sensor.kuche_fenster_batterie": "sensor.kuche_fenster_ikea_batterie",
+    }
+    job["old_entity_props"] = {
+        "binary_sensor.kuche_fenster_zustand": {
+            "icon": "mdi:window",
+            "area_id": "bathroom",
+            "hidden_by": "user",
+            "disabled_by": None,
+            "entity_category": None,
+            "device_class": "window",
+        },
+        "sensor.kuche_fenster_batterie": {
+            "icon": None,
+            "area_id": None,
+            "hidden_by": None,
+            "disabled_by": "user",
+            "entity_category": "diagnostic",
+            "device_class": None,
+        },
+    }
+    return job
+
+
+def test_executor_transfers_settings_to_final_ids(tmp_path):
+    store = SwapJobStore(str(tmp_path))
+    er = _ER()
+    ex = SwapExecutor(store, _DR(), er, _DU(), _Bridge(), _RS(), states_by_id={}, timestamp="t1")
+    import asyncio
+
+    asyncio.run(ex.run(_job_with_settings()))
+    updates = dict(er.updates)
+
+    # binary_sensor: full copy incl. user-hidden, keyed by the final (suffix) id
+    assert updates["binary_sensor.kuche_fenster_zustand"] == {
+        "area_id": "bathroom",
+        "icon": "mdi:window",
+        "device_class": "window",
+        "hidden_by": "user",
+    }
+    # sensor: area None (use device area), user-disabled + category; no icon/device_class
+    assert updates["sensor.kuche_fenster_batterie"] == {
+        "area_id": None,
+        "entity_category": "diagnostic",
+        "disabled_by": "user",
+    }
+
+
+def test_executor_settings_transfer_idempotent(tmp_path):
+    store = SwapJobStore(str(tmp_path))
+    job = _job_with_settings()
+    ex = SwapExecutor(store, _DR(), _ER(), _DU(), _Bridge(), _RS(), states_by_id={}, timestamp="t1")
+    import asyncio
+
+    out = asyncio.run(ex.run(job))
+    er2 = _ER()
+    ex2 = SwapExecutor(store, _DR(), er2, _DU(), _Bridge(), _RS(), states_by_id={}, timestamp="t2")
+    asyncio.run(ex2.run(out))
+    # already transferred on the first run -> second run does not re-update
+    assert er2.updates == []
 
 
 # --------------------------------------------------------------------------- #

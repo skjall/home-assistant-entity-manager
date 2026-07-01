@@ -6,6 +6,11 @@ from label_registry import LabelRegistry
 
 logger = logging.getLogger(__name__)
 
+# Sentinel to distinguish "caller did not pass this field" from "caller explicitly
+# passed None" (which is a meaningful value for area_id/hidden_by/etc. - it clears
+# the override / restores the default).
+_UNSET = object()
+
 
 class EntityRegistry:
     # Optional shared audit log for entity_id renames. Set once by the web app
@@ -38,7 +43,20 @@ class EntityRegistry:
         labels: Optional[List[str]] = None,
         disabled_by: Optional[str] = None,
         enable: bool = False,
+        icon: Any = _UNSET,
+        area_id: Any = _UNSET,
+        hidden_by: Any = _UNSET,
+        entity_category: Any = _UNSET,
+        device_class: Any = _UNSET,
     ) -> Dict[str, Any]:
+        """Update an entity registry entry.
+
+        Home Assistant's ``config/entity_registry/update`` command accepts the user
+        overrides icon, area_id, hidden_by, entity_category and device_class in
+        addition to name/new_entity_id/labels/disabled_by. For the override fields a
+        sentinel (``_UNSET``) is used so that an explicit ``None`` (which clears the
+        override / restores the default) can be told apart from "leave untouched".
+        """
         message = {"type": "config/entity_registry/update", "entity_id": entity_id}
 
         if new_entity_id:
@@ -52,6 +70,16 @@ class EntityRegistry:
             message["disabled_by"] = None
         elif disabled_by is not None:
             message["disabled_by"] = disabled_by
+        if icon is not _UNSET:
+            message["icon"] = icon
+        if area_id is not _UNSET:
+            message["area_id"] = area_id
+        if hidden_by is not _UNSET:
+            message["hidden_by"] = hidden_by
+        if entity_category is not _UNSET:
+            message["entity_category"] = entity_category
+        if device_class is not _UNSET:
+            message["device_class"] = device_class
 
         # Log the message we're sending for debugging
         logger.info(f"Sending entity update message: {message}")
@@ -64,6 +92,26 @@ class EntityRegistry:
 
         if not response.get("success"):
             raise Exception(f"Failed to update entity {entity_id}: {response}")
+
+        return response.get("result", {})
+
+    async def get_entity(self, entity_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch the extended registry entry for a single entity.
+
+        Unlike ``config/entity_registry/list`` (partial entries), the ``get`` command
+        returns the full entry including the user ``device_class`` override, which is
+        needed when copying an entity's settings during a device swap. Returns None if
+        the entity is unknown.
+        """
+        msg_id = await self.ws._send_message({"type": "config/entity_registry/get", "entity_id": entity_id})
+
+        response = await self.ws._receive_message()
+        while response.get("id") != msg_id:
+            response = await self.ws._receive_message()
+
+        if not response.get("success"):
+            logger.warning(f"Could not get entity {entity_id}: {response}")
+            return None
 
         return response.get("result", {})
 

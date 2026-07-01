@@ -2981,6 +2981,7 @@ def _device_snapshot(restructurer, device_id: str) -> dict:
     return {
         "device_id": device_id,
         "name": d.get("name_by_user") or d.get("name") or "",
+        "area_id": d.get("area_id"),
         "integrations": extract_integrations(d),
         "config_entries": d.get("config_entries", []),
         "identifiers": d.get("identifiers", []),
@@ -2990,6 +2991,30 @@ def _device_snapshot(restructurer, device_id: str) -> dict:
 def _device_entities(restructurer, device_id: str) -> list:
     """Alle Entity-Registry-Einträge eines Geräts."""
     return [e for e in restructurer.entities.values() if e.get("device_id") == device_id]
+
+
+async def _capture_entity_props(entry: dict, entity_registry) -> dict:
+    """Snapshot the user-configurable overrides of a single entity for a swap.
+
+    icon / area_id / hidden_by / disabled_by / entity_category come from the registry
+    list entry; device_class ("display as") is only in the extended entry, so it is
+    fetched via get_entity. Returns a plain dict that is persisted with the swap job.
+    """
+    props = {
+        "icon": entry.get("icon"),
+        "area_id": entry.get("area_id"),
+        "hidden_by": entry.get("hidden_by"),
+        "disabled_by": entry.get("disabled_by"),
+        "entity_category": entry.get("entity_category"),
+        "device_class": None,
+    }
+    try:
+        extended = await entity_registry.get_entity(entry["entity_id"])
+        if extended:
+            props["device_class"] = extended.get("device_class")
+    except Exception as error:  # noqa: BLE001 - a missing device_class must not block the swap
+        logger.warning("Could not read device_class for %s: %s", entry.get("entity_id"), error)
+    return props
 
 
 @app.route("/api/bridge/status", methods=["GET"])
@@ -3096,11 +3121,20 @@ async def _swap_propose_async():
     client = await init_client()
     states = await client.get_states()
     dashboard_refs = set()
+    old_entity_props = {}
     ws = HomeAssistantWebSocket(_ws_url(), os.getenv("HA_TOKEN"))
     await ws.connect()
     try:
         await renamer_state["restructurer"].load_structure(ws)
         dashboard_refs = await LovelaceUpdater(ws).get_referenced_entity_ids()
+        # Snapshot the old entities' settings while nothing has been renamed yet.
+        # Captured here (ws open) so the device_class override, which the registry
+        # list omits, can be fetched via get_entity. Persisted in the job so the
+        # transfer survives crashes/resume regardless of later renames.
+        if old_id in renamer_state["restructurer"].devices:
+            old_entity_registry = EntityRegistry(ws)
+            for entry in _device_entities(renamer_state["restructurer"], old_id):
+                old_entity_props[entry["entity_id"]] = await _capture_entity_props(entry, old_entity_registry)
     finally:
         await ws.disconnect()
 
@@ -3124,6 +3158,11 @@ async def _swap_propose_async():
     proposal["old_total"] = len(old_ents)
     proposal["old_in_use"] = len([e for e in old_ents if e.get("entity_id") in referenced])
 
+    # Vollständiges Pairing (alle Entities, nicht nur in-use) für die Settings-
+    # Übertragung. Die vom Nutzer bestätigten in-use-Paare überschreiben das später.
+    full = propose_mapping(old_ents, new_ents, states_by_id, in_use_ids=None)
+    property_pairs = {p["old_entity_id"]: p["new_entity_id"] for p in full["pairs"]}
+
     old_snap = _device_snapshot(restructurer, old_id)
     new_snap = _device_snapshot(restructurer, new_id)
 
@@ -3141,6 +3180,9 @@ async def _swap_propose_async():
         # ALLE alten Entities (müssen freigemacht werden) und ALLE neuen (werden umbenannt)
         "old_device_entities": sorted(e["entity_id"] for e in old_ents),
         "new_device_entities": sorted(e["entity_id"] for e in new_ents),
+        # Settings-Übertragung alt -> neu (Bereich des Geräts + Entity-Overrides).
+        "property_pairs": property_pairs,
+        "old_entity_props": old_entity_props,
         "proposal": proposal,
         "entity_mapping": [],
         "steps": {},
