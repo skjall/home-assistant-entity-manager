@@ -3716,10 +3716,8 @@
 
                 // Get new entity ID
                 getNewEntityId(entity) {
-                    const domain = entity.id.split('.')[0];
-                    const friendlyName = this.getEntityFriendlyName(entity);
-                    const normalized = this.normalizeName(friendlyName);
-                    return `${domain}.${normalized}`;
+                    // Backend-computed slug is the single source of truth (see fetchNormalized).
+                    return entity._previewId || entity.id;
                 },
 
                 // Live preview versions - use _editValue for real-time updates
@@ -3747,22 +3745,35 @@
                 },
 
                 getNewEntityIdLive(entity) {
-                    const domain = entity.id.split('.')[0];
-                    const friendlyName = this.getEntityFriendlyNameLive(entity);
-                    const normalized = this.normalizeName(friendlyName);
-                    return `${domain}.${normalized}`;
+                    // Backend-computed slug is the single source of truth (see fetchNormalized).
+                    return entity._previewId || entity.id;
                 },
 
-                // Normalize name for entity ID
-                normalizeName(name) {
-                    if (!name) return '';
-                    const replacements = {'ä': 'a', 'ö': 'o', 'ü': 'u', 'ß': 'ss', 'Ä': 'a', 'Ö': 'o', 'Ü': 'u'};
-                    let normalized = name.toLowerCase();
-                    for (const [from, to] of Object.entries(replacements)) {
-                        normalized = normalized.split(from).join(to);
+                // Normalize display names to entity-ID slugs via the backend.
+                // The backend (normalize_name / slugify) is the single source of truth for
+                // the naming convention -- the frontend must NOT reimplement the slug rules,
+                // otherwise the two drift apart (e.g. accented characters get stripped here).
+                async fetchNormalized(names) {
+                    if (!names.length) return [];
+                    try {
+                        const resp = await fetch('api/normalize', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ names })
+                        });
+                        if (!resp.ok) throw new Error('normalize HTTP ' + resp.status);
+                        const data = await resp.json();
+                        return Array.isArray(data.normalized) ? data.normalized : names.map(() => '');
+                    } catch (e) {
+                        console.error('normalize failed', e);
+                        return names.map(() => '');
                     }
-                    normalized = normalized.replace(/[^a-z0-9]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-                    return normalized;
+                },
+
+                // Build the entity ID from a domain and a backend-provided slug.
+                composeEntityId(entity, slug) {
+                    const domain = entity.id.split('.')[0];
+                    return slug ? `${domain}.${slug}` : entity.id;
                 },
 
                 // Check if entity needs rename (uses entity's own device/area context)
@@ -3815,24 +3826,33 @@
 
                 // Get new entity ID using entity's own context
                 getNewEntityIdForEntity(entity) {
-                    const domain = entity.id.split('.')[0];
-                    const friendlyName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
-                    const normalized = this.normalizeName(friendlyName);
-                    return `${domain}.${normalized}`;
+                    // Backend-computed slug is the single source of truth (see fetchNormalized).
+                    return entity._previewId || entity.id;
                 },
 
                 // Precompute preview values for all entities (called once after loading)
                 precomputeEntityPreviews() {
                     if (!this.hierarchy?.entities) return;
 
+                    const pending = [];
                     for (const entity of this.hierarchy.entities) {
                         // Skip if already computed (e.g. from user edit) or just renamed
                         if (entity._previewName || entity._justRenamed) continue;
 
-                        // Compute and cache preview values
+                        // Friendly-name composition stays client-side; only the slug comes
+                        // from the backend (source of truth).
                         entity._previewName = this.getEntityFriendlyNameForEntity(entity);
-                        entity._previewId = this.getNewEntityIdForEntity(entity);
+                        pending.push(entity);
                     }
+                    if (!pending.length) return;
+
+                    this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
+                        pending.forEach((entity, i) => {
+                            entity._previewId = this.composeEntityId(entity, slugs[i]);
+                        });
+                        // Force Alpine to re-evaluate dependent expressions
+                        this.previewVersion++;
+                    });
                 },
 
                 // Invalidate cached previews (call after rename to refresh conflict detection)
@@ -4183,10 +4203,20 @@
                     }
 
                     const friendlyName = parts.filter(p => p).join(' ');
-                    const entityId = entity.id.split('.')[0] + '.' + this.normalizeName(friendlyName);
-
                     entity._previewName = friendlyName;
-                    entity._previewId = entityId;
+
+                    // Slug comes from the backend (source of truth), debounced so we don't
+                    // fire a request on every keystroke. The friendly-name preview updates
+                    // instantly; the ID follows a moment later.
+                    if (!this._normTimers) this._normTimers = {};
+                    const key = entity.registry_id || entity.id;
+                    clearTimeout(this._normTimers[key]);
+                    this._normTimers[key] = setTimeout(() => {
+                        this.fetchNormalized([friendlyName]).then(slugs => {
+                            entity._previewId = this.composeEntityId(entity, slugs[0]);
+                            this.previewVersion++;
+                        });
+                    }, 200);
 
                     // Force Alpine to re-evaluate dependent expressions
                     this.previewVersion++;
@@ -4461,9 +4491,12 @@
                     if (!entity) return;
 
                     try {
-                        // Calculate new names using base_name and type mappings
-                        const newId = this.getNewEntityId(entity);
-                        const newName = this.getEntityFriendlyName(entity);
+                        // Friendly name reflects the (possibly just-typed) suffix preview;
+                        // the slug comes fresh from the backend (source of truth) to avoid a
+                        // debounce race with the live preview.
+                        const newName = entity._previewName || this.getEntityFriendlyName(entity);
+                        const [slug] = await this.fetchNormalized([newName]);
+                        const newId = this.composeEntityId(entity, slug);
 
                         // Prevent renaming to an entity ID that another entity already uses
                         if (newId !== entity.id &&

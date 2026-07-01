@@ -760,6 +760,28 @@ async def _get_areas_async():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/normalize", methods=["POST"])
+def normalize_names():
+    """Normalize display names to entity-ID slugs.
+
+    The backend is the single source of truth for the naming convention, so the
+    frontend must call this instead of reimplementing the slug rules (otherwise
+    the two drift apart -- e.g. accented characters get stripped client-side).
+
+    Body: ``{"names": ["Foo Bar", ...]}`` -> ``{"normalized": ["foo_bar", ...]}``
+    """
+    data = request.json
+    if not isinstance(data, dict) or not isinstance(data.get("names"), list):
+        return jsonify({"error": "'names' must be a list"}), 400
+
+    names = data["names"]
+    if len(names) > 5000:
+        return jsonify({"error": "Too many names"}), 400
+
+    normalized = [normalize_name(n) if isinstance(n, str) else "" for n in names]
+    return jsonify({"normalized": normalized})
+
+
 @app.route("/api/preview", methods=["POST"])
 def preview_changes():
     """Zeige Vorschau der Änderungen für ausgewählte Area/Domain"""
