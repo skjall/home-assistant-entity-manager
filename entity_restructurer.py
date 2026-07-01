@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from ha_client import HomeAssistantClient
+from hierarchy_manager import normalize_name
 from naming_overrides import NamingOverrides
 
 # Import new modules - optional for backward compatibility
@@ -112,33 +113,12 @@ class EntityRestructurer:
         }
 
     def normalize_name(self, name: str) -> str:
-        """Normalize names for entity IDs (HA standard)"""
-        if not name:
-            return ""
+        """Normalize names for entity IDs (HA standard).
 
-        # Replace umlauts according to HA standard
-        replacements = {
-            "ä": "a",
-            "ö": "o",
-            "ü": "u",
-            "ß": "ss",
-            "Ä": "a",
-            "Ö": "o",
-            "Ü": "u",
-        }
-
-        normalized = name.lower()
-        for old, new in replacements.items():
-            normalized = normalized.replace(old, new)
-
-        # Only alphanumeric and underscores
-        import re
-
-        normalized = re.sub(r"[^a-z0-9]+", "_", normalized)
-        normalized = re.sub(r"_+", "_", normalized)
-        normalized = normalized.strip("_")
-
-        return normalized
+        Delegates to :func:`hierarchy_manager.normalize_name` so the whole
+        code base shares a single normalization implementation.
+        """
+        return normalize_name(name)
 
     async def load_structure(self, ws_client=None):
         """

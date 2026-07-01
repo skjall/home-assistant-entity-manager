@@ -13,8 +13,9 @@ Changes at higher levels automatically cascade to all descendants.
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
-import re
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from slugify import slugify
 
 logger = logging.getLogger(__name__)
 
@@ -23,40 +24,30 @@ def normalize_name(name: str) -> str:
     """
     Normalize names for entity IDs (Home Assistant standard).
 
-    Converts to lowercase, replaces umlauts, removes special characters.
+    Transliterates non-ASCII characters (diacritics, umlauts, etc.) to their
+    closest ASCII equivalents, lowercases the result and joins tokens with
+    underscores. This mirrors how Home Assistant itself derives entity IDs,
+    which relies on ``python-slugify`` (see ``homeassistant.util.slugify``),
+    so accented characters like ``á``, ``é`` or ``ł`` are transliterated
+    instead of being stripped.
+
+    Examples:
+        normalize_name("Zażółć gęślą jaźń") -> "zazolc_gesla_jazn"
+        normalize_name("Wohnzimmer Büro") -> "wohnzimmer_buro"
 
     Args:
         name: The name to normalize
 
     Returns:
-        Normalized string suitable for entity IDs
+        Normalized string suitable for entity IDs. Returns an empty string if
+        the input is empty or contains no usable characters.
     """
     if not name:
         return ""
 
-    # Replace German umlauts according to HA standard
-    replacements = {
-        "ä": "a",
-        "ö": "o",
-        "ü": "u",
-        "ß": "ss",
-        "Ä": "a",
-        "Ö": "o",
-        "Ü": "u",
-    }
-
-    normalized = name.lower()
-    for old, new in replacements.items():
-        normalized = normalized.replace(old, new)
-
-    # Replace special characters with underscores
-    normalized = re.sub(r"[^a-z0-9]+", "_", normalized)
-    # Remove duplicate underscores
-    normalized = re.sub(r"_+", "_", normalized)
-    # Remove leading/trailing underscores
-    normalized = normalized.strip("_")
-
-    return normalized
+    # ``slugify`` lowercases, transliterates via unidecode, replaces every run
+    # of unsupported characters with the separator and trims/collapses them.
+    return slugify(name, separator="_")
 
 
 def strip_prefix(full_name: str, prefix: str) -> str:
