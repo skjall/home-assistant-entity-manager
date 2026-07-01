@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.1.0...v1.2.0) (2026-07-01)
+
+
+### Features
+
+* use slugify for full non-ASCII entity name normalization ([#78](https://github.com/skjall/home-assistant-entity-manager/issues/78)) ([ca3c802](https://github.com/skjall/home-assistant-entity-manager/commit/ca3c8026b6fcdfa57c7608d8f5e093e2237dda8d)), closes [#58](https://github.com/skjall/home-assistant-entity-manager/issues/58)
+
 ## [1.1.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.0.3...v1.1.0) (2026-06-26)
 
 
