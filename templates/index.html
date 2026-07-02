@@ -2127,13 +2127,11 @@
                     </button>
                     <button @click="executeAllChanges()"
                             x-show="pendingChangesCount > 0"
-                            :disabled="executing || applyingEntityId || renamingDevice"
+                            :disabled="applyingEntityId || renamingDevice"
                             class="btn btn-success"
-                            :class="{'opacity-50 cursor-not-allowed': executing || applyingEntityId || renamingDevice}">
-                        <i class="ri-check-double-line mr-2" x-show="!executing"></i>
-                        <i class="ri-loader-4-line animate-spin mr-2" x-show="executing"></i>
-                        <span x-show="!executing" x-text="t('action_bar.apply_all')">Apply All Changes</span>
-                        <span x-show="executing" x-text="executingTotal > 0 ? `${executingProgress}/${executingTotal}` : t('action_bar.applying')"></span>
+                            :class="{'opacity-50 cursor-not-allowed': applyingEntityId || renamingDevice}">
+                        <i class="ri-check-double-line mr-2"></i>
+                        <span x-text="t('action_bar.apply_all')">Apply All Changes</span>
                     </button>
                 </div>
             </div>
@@ -2151,6 +2149,76 @@
                 <button @click="message = ''" class="ml-4 opacity-70 hover:opacity-100">
                     <i class="ri-close-line"></i>
                 </button>
+            </div>
+        </div>
+
+        <!-- Background Job Progress Panel -->
+        <div x-cloak
+             x-show="jobPanel.show"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-xl shadow-xl max-w-lg w-full"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100">
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                             :class="isJobTerminal(jobPanel.job) ? (jobFailed(jobPanel.job) ? 'bg-red-100' : 'bg-green-100') : 'bg-blue-100'">
+                            <i class="text-xl"
+                               :class="!isJobTerminal(jobPanel.job) ? 'ri-loader-4-line animate-spin text-blue-600' : (jobFailed(jobPanel.job) ? 'ri-error-warning-line text-red-600' : 'ri-check-line text-green-600')"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold" x-text="jobPanel.titleKey ? t(jobPanel.titleKey) : t('jobs.working')"></h3>
+                    </div>
+
+                    <!-- Progress bar (shown while a total is known) -->
+                    <template x-if="jobPanel.job && jobPanel.job.progress && jobPanel.job.progress.total > 0">
+                        <div class="mb-3">
+                            <div class="flex justify-between text-sm text-gray-500 mb-1">
+                                <span x-text="`${jobPanel.job.progress.done}/${jobPanel.job.progress.total}`"></span>
+                                <span x-text="`${jobProgressPercent()}%`"></span>
+                            </div>
+                            <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div class="h-full bg-blue-600 transition-all duration-300"
+                                     :style="`width: ${jobProgressPercent()}%`"></div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Current item / final message -->
+                    <p class="text-sm text-gray-600 mb-3 truncate"
+                       x-text="isJobTerminal(jobPanel.job) ? (jobFailed(jobPanel.job) ? (jobPanel.job.error || t('jobs.failed')) : ((jobPanel.job.result && jobPanel.job.result.message) || t('jobs.completed'))) : (jobPanel.job && jobPanel.job.progress && jobPanel.job.progress.current) || t('jobs.working')"></p>
+
+                    <!-- Collapsible, height-limited log tail -->
+                    <template x-if="jobPanel.job && jobPanel.job.log && jobPanel.job.log.length">
+                        <div class="mb-2">
+                            <button @click="jobPanel.showLog = !jobPanel.showLog"
+                                    class="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
+                                <i :class="jobPanel.showLog ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
+                                <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
+                            </button>
+                            <div x-show="jobPanel.showLog"
+                                 class="mt-2 max-h-40 overflow-y-auto text-xs font-mono bg-gray-50 rounded p-2 border border-gray-200">
+                                <template x-for="(entry, i) in jobPanel.job.log.slice(-100)" :key="i">
+                                    <div class="text-gray-600 truncate">
+                                        <span class="text-gray-400" x-text="entry.step"></span>
+                                        <span x-text="' ' + entry.message"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="flex justify-end mt-4">
+                        <button @click="closeJobPanel()"
+                                :disabled="!isJobTerminal(jobPanel.job)"
+                                class="btn"
+                                :class="isJobTerminal(jobPanel.job) ? 'btn-primary' : 'btn-ghost opacity-50 cursor-not-allowed'"
+                                x-text="isJobTerminal(jobPanel.job) ? t('jobs.close') : t('jobs.running')"></button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2412,6 +2480,19 @@
                             <p class="text-base font-semibold text-gray-900" x-text="swap.busy ? 'Austausch läuft…' : swap.job?.state==='COMPLETED' ? 'Austausch abgeschlossen' : swap.job?.state==='FAILED' ? 'Austausch fehlgeschlagen' : ''"></p>
                             <p x-show="!swap.busy && swap.job?.state==='FAILED'" class="text-sm text-gray-500 mt-1">Fehlgeschlagen bei Schritt <span class="font-medium" x-text="swap.job?.failed_step"></span>. „Erneut versuchen" setzt fort.</p>
                         </div>
+                        <!-- Live entity-rename progress while the swap runs -->
+                        <template x-if="swap.busy && swap.job?.progress && swap.job.progress.total > 0">
+                            <div class="mb-3">
+                                <div class="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span x-text="`${swap.job.progress.done}/${swap.job.progress.total}`"></span>
+                                    <span x-text="`${Math.min(100, Math.round(swap.job.progress.done / swap.job.progress.total * 100))}%`"></span>
+                                </div>
+                                <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div class="h-full bg-blue-600 transition-all duration-300"
+                                         :style="`width: ${Math.min(100, Math.round(swap.job.progress.done / swap.job.progress.total * 100))}%`"></div>
+                                </div>
+                            </div>
+                        </template>
                         <!-- Natives Entfernen scheiterte (Teilerfolg) -->
                         <div x-show="swap.job?.native_remove_warning" class="rounded-lg border border-amber-200 bg-amber-50 p-3 mb-3">
                             <div class="flex items-start gap-2">
@@ -2479,11 +2560,20 @@
             return {
                 // State
                 loading: false,
-                executing: false,
-                executingProgress: 0,
-                executingTotal: 0,
                 message: '',
                 messageType: 'success',
+
+                // Generic background-job progress panel (rename/execute/enable/swap)
+                jobPanel: {
+                    show: false,
+                    kind: null,       // 'rename_device' | 'execute' | 'enable_all' | 'swap'
+                    titleKey: '',     // translation key, rendered reactively via t()
+                    pollUrl: null,
+                    job: null,
+                    showLog: false,   // log tail is collapsed by default
+                    timer: null,
+                    onDone: null,
+                },
 
                 // Hierarchy data
                 hierarchy: {
@@ -2528,6 +2618,7 @@
                     step: 1,            // 1=Geräte, 2=Mapping, 3=Vorschau, 4=Ausführung
                     loading: false,
                     busy: false,
+                    timer: null,        // polling handle while the swap executes
                     devices: [],
                     resumeJobs: [],
                     oldId: '',
@@ -2637,6 +2728,7 @@
                 },
 
                 closeSwap() {
+                    this.stopSwapPolling();
                     this.swap.show = false;
                 },
 
@@ -2715,20 +2807,43 @@
                             body: JSON.stringify({ entity_mapping: pairs, old_device_disposition: this.swap.disposition })
                         });
                         const cj = await c.json();
-                        if (!c.ok) throw new Error(cj.error || 'Bestätigung fehlgeschlagen');
+                        if (!c.ok) throw new Error(cj.error || 'Confirmation failed');
                         this.swap.step = 4;
+                        // Execute now returns 202 immediately; poll api/swap/<id> for progress.
                         const e = await fetch(`api/swap/${this.swap.job.job_id}/execute`, { method: 'POST' });
                         const ej = await e.json();
-                        if (!e.ok) throw new Error(ej.error || 'Ausführung fehlgeschlagen');
+                        if (!e.ok) throw new Error(ej.error || 'Execution failed');
                         this.swap.job = ej;
-                        if (ej.state === 'COMPLETED') {
-                            this.showMessage('Geräte-Austausch abgeschlossen', 'success');
-                        }
+                        this.startSwapPolling();
                     } catch (e) {
                         this.swap.error = e.message;
-                    } finally {
                         this.swap.busy = false;
                     }
+                },
+
+                startSwapPolling() {
+                    this.stopSwapPolling();
+                    this.swap.busy = true;
+                    this.swap.timer = setInterval(() => this.pollSwap(), 1000);
+                },
+
+                async pollSwap() {
+                    if (!this.swap.job) return;
+                    try {
+                        const j = await fetch(`api/swap/${this.swap.job.job_id}`).then(r => r.json());
+                        if (!j || j.error) return;  // transient; keep polling
+                        this.swap.job = j;
+                        if (['COMPLETED', 'ABORTED', 'FAILED'].includes(j.state)) {
+                            this.stopSwapPolling();
+                            if (j.state === 'COMPLETED') this.showMessage('Device swap completed', 'success');
+                            else if (j.state === 'FAILED') this.showMessage('Device swap failed', 'error');
+                        }
+                    } catch (e) { /* keep polling */ }
+                },
+
+                stopSwapPolling() {
+                    if (this.swap.timer) { clearInterval(this.swap.timer); this.swap.timer = null; }
+                    this.swap.busy = false;
                 },
 
                 async swapResume(jobId) {
@@ -2760,17 +2875,16 @@
                         } else if (j.state === 'COMPLETED' || j.state === 'ABORTED') {
                             this.swap.step = 4;
                         } else {
-                            // mitten in der Ausführung oder FAILED -> fortsetzen
+                            // mid-execution or FAILED -> resume (202 + poll)
                             this.swap.step = 4;
-                            this.swap.busy = true;
                             const e = await fetch(`api/swap/${jobId}/execute`, { method: 'POST' });
                             const ej = await e.json();
-                            if (!e.ok) throw new Error(ej.error || 'Fortsetzen fehlgeschlagen');
+                            if (!e.ok) throw new Error(ej.error || 'Resume failed');
                             this.swap.job = ej;
+                            this.startSwapPolling();
                         }
                     } catch (e) {
                         this.swap.error = e.message;
-                    } finally {
                         this.swap.busy = false;
                     }
                 },
@@ -3143,42 +3257,38 @@
                 async enableAllDisabled() {
                     const disabledEntities = this.filteredEntities.filter(e => e.disabled_by);
                     if (disabledEntities.length === 0) return;
+                    const ids = disabledEntities.map(e => e.id);
 
-                    this.executing = true;
-                    this.executingProgress = 0;
-                    this.executingTotal = disabledEntities.length;
-                    let successCount = 0;
-                    let failedCount = 0;
-
-                    for (let i = 0; i < disabledEntities.length; i++) {
-                        const entity = disabledEntities[i];
-                        try {
-                            const response = await fetch('api/enable_entity', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({ entity_id: entity.id })
-                            });
-                            const data = await response.json();
-                            if (data.success) {
-                                entity.disabled_by = null;
-                                successCount++;
-                            } else {
-                                failedCount++;
-                            }
-                        } catch (error) {
-                            failedCount++;
+                    try {
+                        // Enqueue enabling the whole batch as one background job.
+                        const response = await fetch('api/enable_all', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ entity_ids: ids })
+                        });
+                        const job = await response.json();
+                        if (!response.ok || !job.job_id) {
+                            throw new Error(job.error || 'Failed to start enable');
                         }
-                        this.executingProgress = i + 1;
+                        this.startJob('api/jobs/' + job.job_id, job, {
+                            kind: 'enable_all',
+                            titleKey: 'jobs.enabling',
+                            onDone: (finished) => this.onEnableAllDone(finished)
+                        });
+                    } catch (error) {
+                        this.showMessage('Error: ' + error.message, 'error');
                     }
+                },
 
-                    this.executing = false;
-                    this.executingProgress = 0;
-                    this.executingTotal = 0;
-                    if (failedCount > 0) {
-                        this.showMessage(`${successCount} enabled, ${failedCount} failed`, 'error');
-                    } else {
-                        this.showMessage(`${successCount} entities enabled`, 'success');
+                async onEnableAllDone(job) {
+                    if (!this.jobFailed(job)) {
+                        const r = job.result || {};
+                        const successCount = (r.enabled || []).length;
+                        const failedCount = (r.failed || []).length;
+                        if (failedCount > 0) this.showMessage(`${successCount} enabled, ${failedCount} failed`, 'error', true);
+                        else this.showMessage(`${successCount} entities enabled`, 'success', true);
                     }
+                    await this.loadHierarchy();
                 },
 
                 // Initialize
@@ -3197,6 +3307,11 @@
                             this.translationsReady = true;
                         }
                     }
+
+                    // Re-attach to a background job still running from before a reload,
+                    // before (and independently of) the hierarchy load, so the progress
+                    // modal reappears immediately even while data is still loading.
+                    this.reconnectJobs();
 
                     // Load hierarchy
                     await this.loadHierarchy();
@@ -4559,6 +4674,127 @@
                 },
 
                 // Rename device directly in HA
+                // === Generic background-job progress panel ===
+                // Long-running operations (device rename, batch apply, enable-all,
+                // swap) run as a server-side job. The frontend starts the job,
+                // opens this panel and polls until the job reaches a terminal
+                // state, then runs the kind-specific onDone handler.
+                startJob(pollUrl, job, { kind = null, titleKey = '', onDone = null } = {}) {
+                    this.stopJobPolling();
+                    this.jobPanel.pollUrl = pollUrl;
+                    this.jobPanel.job = job;
+                    this.jobPanel.kind = kind;
+                    this.jobPanel.titleKey = titleKey;
+                    this.jobPanel.onDone = onDone;
+                    this.jobPanel.showLog = false;
+                    this.jobPanel.show = true;
+                    if (this.isJobTerminal(job)) {
+                        this.finishJob();
+                    } else {
+                        this.jobPanel.timer = setInterval(() => this.pollJob(), 1000);
+                    }
+                },
+
+                async pollJob() {
+                    if (!this.jobPanel.pollUrl) return;
+                    try {
+                        const r = await fetch(this.jobPanel.pollUrl);
+                        if (!r.ok) return;  // transient (e.g. brief write race); keep polling
+                        const job = await r.json();
+                        this.jobPanel.job = job;
+                        if (this.isJobTerminal(job)) this.finishJob();
+                    } catch (e) {
+                        // transient network error; keep polling
+                    }
+                },
+
+                async finishJob() {
+                    this.stopJobPolling();
+                    const finished = this.jobPanel.job;
+                    const cb = this.jobPanel.onDone;
+                    // Success (job not hard-failed): close the panel immediately; the
+                    // onDone handler surfaces a self-dismissing toast and refreshes in
+                    // the background. Hard failure: keep the panel open so the error
+                    // stays visible (no toast — the panel already shows it).
+                    if (finished && !this.jobFailed(finished)) this.closeJobPanel();
+                    if (cb) await cb(finished);
+                },
+
+                stopJobPolling() {
+                    if (this.jobPanel.timer) { clearInterval(this.jobPanel.timer); this.jobPanel.timer = null; }
+                },
+
+                closeJobPanel() {
+                    this.stopJobPolling();
+                    this.jobPanel.show = false;
+                    this.jobPanel.job = null;
+                    this.jobPanel.pollUrl = null;
+                    this.jobPanel.onDone = null;
+                },
+
+                isJobTerminal(job) {
+                    // Generic jobs use lowercase states; swap jobs reuse this panel
+                    // via api/swap/<id> and use uppercase state names.
+                    return !!job && ['completed', 'failed', 'COMPLETED', 'FAILED', 'ABORTED'].includes(job.state);
+                },
+
+                jobFailed(job) {
+                    return !!job && ['failed', 'FAILED'].includes(job.state);
+                },
+
+                jobProgressPercent() {
+                    const p = this.jobPanel.job && this.jobPanel.job.progress;
+                    if (!p || !p.total) return 0;
+                    return Math.min(100, Math.round((p.done / p.total) * 100));
+                },
+
+                // True while a blocking background job is running (its panel is open
+                // and not yet terminal). Action buttons disable on this.
+                get executing() {
+                    return this.jobPanel.show && !this.isJobTerminal(this.jobPanel.job);
+                },
+
+                // On page load, re-attach to a still-running generic job (survives reload).
+                async reconnectJobs() {
+                    try {
+                        const data = await fetch('api/jobs').then(r => r.json()).catch(() => ({ jobs: [] }));
+                        const running = (data.jobs || []).find(j => !this.isJobTerminal(j));
+                        if (!running) return;
+                        const meta = this.jobKindMeta(running.type);
+                        this.startJob('api/jobs/' + running.job_id, running, {
+                            kind: running.type, titleKey: meta.titleKey, onDone: meta.onDone
+                        });
+                    } catch (e) { /* ignore */ }
+                },
+
+                // Reconstruct a reconnected job's title + completion handler from its type.
+                jobKindMeta(type) {
+                    if (type === 'rename_device') {
+                        return { titleKey: 'jobs.rename_device', onDone: (job) => this.onRenameDeviceDone(job) };
+                    }
+                    if (type === 'execute' || type === 'execute_direct') {
+                        return { titleKey: 'jobs.applying', onDone: (job) => this.onExecuteDone(job) };
+                    }
+                    if (type === 'enable_all') {
+                        return { titleKey: 'jobs.enabling', onDone: (job) => this.onEnableAllDone(job) };
+                    }
+                    return { titleKey: 'jobs.working', onDone: null };
+                },
+
+                async onRenameDeviceDone(job, deviceId = null) {
+                    if (!this.jobFailed(job)) {
+                        const r = job.result || {};
+                        this.showMessage(r.message || 'Device renamed', (r.entities_failed > 0) ? 'error' : 'success', true);
+                    }
+                    this.devicePreviewBaseName = null;
+                    await this.loadHierarchy();
+                    const id = deviceId || this.selectedDevice;
+                    if (id) {
+                        const updated = this.hierarchy.devices.find(d => d.id === id);
+                        if (updated) this.selectedDeviceData = updated;
+                    }
+                },
+
                 async renameDeviceInHA(newBaseName) {
                     if (!this.selectedDevice || this.isVirtualDevice(this.selectedDevice) || !newBaseName || this.renamingDevice) return;
 
@@ -4580,7 +4816,7 @@
 
                     this.renamingDevice = true;
                     try {
-                        // Rename the device directly in HA
+                        // Enqueue the rename as a background job (returns 202 + job).
                         const response = await fetch('api/rename_device', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -4589,35 +4825,20 @@
                                 new_name: newFullName
                             })
                         });
-
-                        const data = await response.json();
-                        if (data.success) {
-                            this.devicePreviewBaseName = null;  // Clear preview after successful rename
-
-                            // Show success message with entity count
-                            const entityCount = data.entities_updated || 0;
-                            const depCount = data.dependencies_updated || 0;
-                            let msg = `Device renamed to "${newFullName}"`;
-                            if (entityCount > 0) msg += ` (${entityCount} entities`;
-                            if (depCount > 0) msg += `, ${depCount} dependencies`;
-                            if (entityCount > 0) msg += ')';
-                            this.showMessage(msg, 'success');
-
-                            // Wait for HA to persist changes, then reload
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                            const deviceId = this.selectedDevice;  // Keep device ID before reload
-                            await this.loadHierarchy();
-
-                            // Re-select the device from the new hierarchy data
-                            if (deviceId) {
-                                const updatedDevice = this.hierarchy.devices.find(d => d.id === deviceId);
-                                if (updatedDevice) {
-                                    this.selectedDeviceData = updatedDevice;
-                                }
-                            }
-                        } else {
-                            throw new Error(data.error || 'Failed to rename device');
+                        const job = await response.json();
+                        if (response.status === 409) {
+                            this.showMessage(job.error || 'A rename for this device is already in progress', 'error');
+                            return;
                         }
+                        if (!response.ok || !job.job_id) {
+                            throw new Error(job.error || 'Failed to start device rename');
+                        }
+                        const deviceId = this.selectedDevice;  // keep before any reload
+                        this.startJob('api/jobs/' + job.job_id, job, {
+                            kind: 'rename_device',
+                            titleKey: 'jobs.rename_device',
+                            onDone: (finished) => this.onRenameDeviceDone(finished, deviceId)
+                        });
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     } finally {
@@ -4692,105 +4913,98 @@
                 async executeAllChanges() {
                     // Find all entities that need renaming
                     const entitiesToChange = this.filteredEntities.filter(e => this.entityNeedsRename(e));
-                    // Z2M-Geräte im aktuellen View, deren Z2M-Name vom HA-Namen abweicht
+                    // Z2M devices in the current view whose Z2M name drifted from the HA name
                     const z2mDriftDevices = this.filteredDevices.filter(d => d.z2m_drift);
                     if (entitiesToChange.length === 0 && z2mDriftDevices.length === 0) {
                         this.showMessage('No changes to apply', 'info');
                         return;
                     }
 
-                    this.executing = true;
-                    this.executingProgress = 0;
-                    this.executingTotal = entitiesToChange.length + z2mDriftDevices.length;
+                    // Build the payload with entity details
+                    const allEntities = entitiesToChange.map(e => ({
+                        old_id: e.id,
+                        new_id: e._previewId || this.getNewEntityIdForEntity(e),
+                        new_name: e._previewName || this.getEntityFriendlyNameForEntity(e),
+                        registry_id: e.registry_id
+                    }));
+                    // Capture drift device ids so the completion handler can sync them after.
+                    const driftDevices = z2mDriftDevices.map(d => d.id);
 
-                    // Batch size - process 10 entities at a time to avoid timeouts
-                    const BATCH_SIZE = 10;
-                    const results = { success: [], failed: [], skipped: [] };
+                    // Only Z2M drift to fix, no entity renames: run it directly (fast).
+                    if (allEntities.length === 0) {
+                        const z = await this.syncZ2mDrift(driftDevices);
+                        if (z.failed > 0) this.showMessage(`${z.failed} Z2M failed`, 'error');
+                        else if (z.synced > 0) this.showMessage(`${z.synced} Z2M synced`, 'success');
+                        await this.loadHierarchy();
+                        return;
+                    }
 
                     try {
-                        // Build the payload with entity details
-                        const allEntities = entitiesToChange.map(e => ({
-                            old_id: e.id,
-                            new_id: e._previewId || this.getNewEntityIdForEntity(e),
-                            new_name: e._previewName || this.getEntityFriendlyNameForEntity(e),
-                            registry_id: e.registry_id
-                        }));
-
-                        // Process in batches
-                        for (let i = 0; i < allEntities.length; i += BATCH_SIZE) {
-                            const batch = allEntities.slice(i, i + BATCH_SIZE);
-
-                            try {
-                                const response = await fetch('api/execute_direct', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({ entities: batch })
-                                });
-
-                                if (!response.ok) {
-                                    // Server error - mark all in batch as failed
-                                    batch.forEach(e => results.failed.push({ entity_id: e.old_id, error: `HTTP ${response.status}` }));
-                                } else {
-                                    const data = await response.json();
-                                    results.success.push(...(data.success || []));
-                                    results.failed.push(...(data.failed || []));
-                                    results.skipped.push(...(data.skipped || []));
-                                }
-                            } catch (batchError) {
-                                // Network error - mark all in batch as failed
-                                batch.forEach(e => results.failed.push({ entity_id: e.old_id, error: batchError.message }));
-                            }
-
-                            // Update progress
-                            this.executingProgress = Math.min(i + BATCH_SIZE, allEntities.length);
+                        // Enqueue the whole batch as one background job.
+                        const response = await fetch('api/execute_direct', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ entities: allEntities })
+                        });
+                        const job = await response.json();
+                        if (!response.ok || !job.job_id) {
+                            throw new Error(job.error || 'Failed to start apply');
                         }
-
-                        // Z2M-Namen der driftenden Geräte nachziehen (nach den Entity-Renames)
-                        let z2mSynced = 0, z2mFailed = 0;
-                        for (const dev of z2mDriftDevices) {
-                            try {
-                                const resp = await fetch('api/sync_z2m_name', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({ device_id: dev.id })
-                                });
-                                const d = await resp.json();
-                                if (resp.ok && d.success) z2mSynced++; else z2mFailed++;
-                            } catch (e) { z2mFailed++; }
-                            this.executingProgress = Math.min(this.executingProgress + 1, this.executingTotal);
-                        }
-
-                        const successCount = results.success.length;
-                        const failedCount = results.failed.length;
-
-                        if (failedCount > 0 || z2mFailed > 0) {
-                            this.showMessage(`${successCount} succeeded, ${failedCount} failed` + (z2mFailed ? `, ${z2mFailed} Z2M failed` : ''), 'error');
-                        } else if (successCount > 0 || z2mSynced > 0) {
-                            this.showMessage(`${successCount} entities renamed` + (z2mSynced ? `, ${z2mSynced} Z2M synced` : ''), 'success');
-                        }
-
-                        // Wait a moment for HA to persist changes before reload
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-
-                        // Reload to show updated state
-                        await this.loadHierarchy();
+                        this.startJob('api/jobs/' + job.job_id, job, {
+                            kind: 'execute_direct',
+                            titleKey: 'jobs.applying',
+                            onDone: (finished) => this.onExecuteDone(finished, driftDevices)
+                        });
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
-                    } finally {
-                        this.executing = false;
-                        this.executingProgress = 0;
-                        this.executingTotal = 0;
                     }
                 },
 
+                async onExecuteDone(job, driftDevices = []) {
+                    if (!this.jobFailed(job)) {
+                        const r = job.result || {};
+                        const successCount = (r.success || []).length;
+                        const failedCount = (r.failed || []).length;
+                        // Sync drifting Z2M names after the entity renames.
+                        const z = await this.syncZ2mDrift(driftDevices);
+                        if (failedCount > 0 || z.failed > 0) {
+                            this.showMessage(`${successCount} succeeded, ${failedCount} failed` + (z.failed ? `, ${z.failed} Z2M failed` : ''), 'error', true);
+                        } else if (successCount > 0 || z.synced > 0) {
+                            this.showMessage(`${successCount} entities renamed` + (z.synced ? `, ${z.synced} Z2M synced` : ''), 'success', true);
+                        }
+                    }
+                    await this.loadHierarchy();
+                },
+
+                async syncZ2mDrift(deviceIds) {
+                    let synced = 0, failed = 0;
+                    for (const id of deviceIds || []) {
+                        try {
+                            const resp = await fetch('api/sync_z2m_name', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({ device_id: id })
+                            });
+                            const d = await resp.json();
+                            if (resp.ok && d.success) synced++; else failed++;
+                        } catch (e) { failed++; }
+                    }
+                    return { synced, failed };
+                },
+
                 // Show message
-                showMessage(msg, type = 'success') {
-                    // Only show error/warning messages, not success
-                    if (type === 'success' || type === 'info') return;
+                showMessage(msg, type = 'success', force = false) {
+                    // Success/info are normally suppressed (only errors/warnings surface);
+                    // force=true lets deliberate confirmations (e.g. a finished job) show.
+                    if ((type === 'success' || type === 'info') && !force) return;
 
                     this.message = msg;
                     this.messageType = type;
-                    // Errors must be manually dismissed - no auto-close
+                    // Errors stay until manually dismissed; success/info auto-dismiss.
+                    clearTimeout(this._msgTimer);
+                    if (type !== 'error') {
+                        this._msgTimer = setTimeout(() => { this.message = ''; }, 4000);
+                    }
                 }
             };
         }

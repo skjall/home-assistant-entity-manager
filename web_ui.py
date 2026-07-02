@@ -32,6 +32,7 @@ from entity_restructurer import EntityRestructurer
 from ha_client import HomeAssistantClient
 from ha_websocket import HomeAssistantWebSocket
 from hierarchy_manager import normalize_name
+from jobs import TERMINAL_STATES, JobStore, JobWorker, new_job
 from lovelace_updater import LovelaceUpdater
 from naming_overrides import NamingOverrides
 from reference_checker import ReferenceChecker
@@ -163,7 +164,13 @@ renamer_state = {
     "swap_store": SwapJobStore(os.path.join(DATA_DIR, "device_swaps")),
     "rename_log": RenameLog(os.path.join(DATA_DIR, "rename_log.jsonl")),
     "api_token_store": ApiTokenStore(os.path.join(DATA_DIR, "api_token.json")),
+    # Generic background-job infrastructure for long-running operations. Jobs run
+    # serially on a single worker thread; requests keep serving concurrently
+    # (load_structure rebuilds the restructurer by reassignment and handlers work
+    # on snapshots, so no cross-thread lock is needed).
+    "job_store": JobStore(os.path.join(DATA_DIR, "jobs"), terminal_states=TERMINAL_STATES),
 }
+renamer_state["worker"] = JobWorker(renamer_state["job_store"])
 
 # Share the audit log with every EntityRegistry instance so all rename paths
 # (single, batch, device cascade) get recorded centrally.
@@ -1324,24 +1331,33 @@ async def _execute_changes_async():
 
 @app.route("/api/execute_direct", methods=["POST"])
 def execute_direct():
-    """Execute entity renames directly without preview (for hierarchy UI)"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(_execute_direct_async())
-    finally:
-        loop.close()
+    """Enqueue a batch entity rename as a background job and return the job.
 
-
-async def _execute_direct_async():
-    """Async implementation of execute_direct"""
-    data = request.json
+    Applying many renames can exceed the Ingress timeout, so the whole batch is
+    handed to the worker and the frontend polls the returned job. The entities
+    payload is read here in the request thread (no request context in the worker).
+    """
+    data = request.json or {}
     entities = data.get("entities", [])
-
     if not entities:
-        return jsonify({"error": "Keine Entities ausgewählt"}), 400
+        return jsonify({"error": "No entities selected"}), 400
 
-    # Execute renaming
+    job = new_job("execute_direct", {"entities": entities}, job_id=uuid.uuid4().hex)
+    renamer_state["job_store"].save(job)
+    renamer_state["worker"].enqueue(job)
+    return jsonify(job), 202
+
+
+async def execute_direct_handler(job, ctx):
+    """Apply a batch of entity renames, reporting progress per entity.
+
+    Runs inside the worker (which holds the registry lock). Renames each entity
+    (id + friendly name), enables disabled ones when configured, and rewrites
+    references in automations/scenes/scripts. Returns the same result shape the
+    endpoint used to return so the UI summary is unchanged.
+    """
+    entities = job["payload"]["entities"]
+
     base_url = os.getenv("HA_URL")
     token = os.getenv("HA_TOKEN")
     ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
@@ -1365,13 +1381,17 @@ async def _execute_direct_async():
         cached_states = await dependency_updater.get_states()
         logger.info(f"Cached {len(cached_states)} states")
 
-        for entity_data in entities:
+        total = len(entities)
+        ctx.progress(0, total)
+
+        for index, entity_data in enumerate(entities):
             old_id = entity_data.get("old_id")
             new_id = entity_data.get("new_id")
             friendly_name = entity_data.get("new_name")
 
             if not old_id or not new_id:
                 results["failed"].append({"entity_id": old_id, "error": "Missing old_id or new_id"})
+                ctx.progress(index + 1, total, current=old_id or "")
                 continue
 
             try:
@@ -1383,7 +1403,8 @@ async def _execute_direct_async():
                 id_unchanged = old_id == new_id
                 name_unchanged = friendly_name == current_name
                 if id_unchanged and name_unchanged:
-                    results["skipped"].append({"entity_id": old_id, "reason": "Keine Änderung nötig"})
+                    results["skipped"].append({"entity_id": old_id, "reason": "No change needed"})
+                    ctx.progress(index + 1, total, current=old_id)
                     continue
 
                 # Log what's changing
@@ -1418,14 +1439,18 @@ async def _execute_direct_async():
                     {
                         "old_id": old_id,
                         "new_id": new_id,
-                        "message": f"Entity erfolgreich umbenannt: {old_id} -> {new_id}",
+                        "message": f"Entity renamed successfully: {old_id} -> {new_id}",
                     }
                 )
                 logger.info(f"Successfully renamed: {old_id} -> {new_id}")
+                ctx.log("RENAME", f"{old_id} -> {new_id}")
 
             except Exception as e:
                 logger.error(f"Error renaming entity {old_id}: {e}")
                 results["failed"].append({"entity_id": old_id, "error": str(e)})
+                ctx.log("ERROR", f"{old_id}: {e}")
+
+            ctx.progress(index + 1, total, current=old_id)
 
     finally:
         await ws.disconnect()
@@ -1433,7 +1458,11 @@ async def _execute_direct_async():
     # Invalidate broken references cache after changes
     invalidate_reference_checker_cache()
 
-    return jsonify(results)
+    results["message"] = f"{len(results['success'])} entities renamed"
+    return results
+
+
+renamer_state["worker"].register("execute_direct", execute_direct_handler)
 
 
 @app.route("/api/stats")
@@ -2034,6 +2063,60 @@ async def _enable_entity_async():
         return jsonify({"error": error_msg}), 500
 
 
+@app.route("/api/enable_all", methods=["POST"])
+def enable_all():
+    """Enqueue enabling a batch of disabled entities as a background job.
+
+    Enabling many entities one WS call at a time can exceed the Ingress timeout,
+    so the batch runs in the worker and the frontend polls the returned job.
+    """
+    data = request.json or {}
+    entity_ids = [eid for eid in (sanitize_entity_id(x) for x in data.get("entity_ids", [])) if eid]
+    if not entity_ids:
+        return jsonify({"error": "No entities selected"}), 400
+
+    job = new_job("enable_all", {"entity_ids": entity_ids}, job_id=uuid.uuid4().hex)
+    renamer_state["job_store"].save(job)
+    renamer_state["worker"].enqueue(job)
+    return jsonify(job), 202
+
+
+async def enable_all_handler(job, ctx):
+    """Enable a batch of disabled entities, reporting progress per entity."""
+    entity_ids = job["payload"]["entity_ids"]
+
+    base_url = os.getenv("HA_URL")
+    token = os.getenv("HA_TOKEN")
+    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
+
+    enabled = []
+    failed = []
+    ws = HomeAssistantWebSocket(ws_url, token)
+    await ws.connect()
+    try:
+        entity_registry = EntityRegistry(ws)
+        total = len(entity_ids)
+        ctx.progress(0, total)
+        for index, entity_id in enumerate(entity_ids):
+            try:
+                await entity_registry.update_entity(entity_id=entity_id, enable=True)
+                enabled.append(entity_id)
+                logger.info(f"Enabled entity: {entity_id}")
+                ctx.log("ENABLE", entity_id)
+            except Exception as e:
+                logger.error(f"Error enabling entity {entity_id}: {e}")
+                failed.append({"entity_id": entity_id, "error": str(e)})
+                ctx.log("ERROR", f"{entity_id}: {e}")
+            ctx.progress(index + 1, total, current=entity_id)
+    finally:
+        await ws.disconnect()
+
+    return {"enabled": enabled, "failed": failed, "message": f"{len(enabled)} entities enabled"}
+
+
+renamer_state["worker"].register("enable_all", enable_all_handler)
+
+
 @app.route("/api/enable_device", methods=["POST"])
 def enable_device():
     """Enable a disabled device"""
@@ -2352,21 +2435,12 @@ async def _delete_entity_async():
 
 @app.route("/api/rename_device", methods=["POST"])
 def rename_device():
-    """Benennt ein Gerät in Home Assistant um und aktualisiert Entity-Namen"""
-    # Create new event loop for this request
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(_rename_device_async())
-    finally:
-        loop.close()
+    """Enqueue a device rename as a background job and return the job.
 
-
-async def _rename_device_async():
-    """Async implementation of rename_device.
-
-    When renaming a device, also updates all entity friendly names that belong
-    to this device by replacing the old device name with the new one.
+    Renaming a device cascades to all its entities, which can take long enough to
+    exceed the Ingress/proxy timeout. Input is validated and sanitized here in the
+    request thread (the worker thread has no request context); the work itself
+    runs in the background worker and the frontend polls the returned job.
     """
     data = request.json
     is_valid, error = validate_json_input(data, ["device_id", "new_name"])
@@ -2382,189 +2456,215 @@ async def _rename_device_async():
     if not new_name:
         return jsonify({"error": "Invalid device name"}), 400
 
+    # Do not rename the same device twice concurrently.
+    for existing in renamer_state["job_store"].list_unfinished():
+        if existing.get("type") == "rename_device" and existing.get("payload", {}).get("device_id") == device_id:
+            return (
+                jsonify({"error": "A rename for this device is already in progress", "job_id": existing["job_id"]}),
+                409,
+            )
+
+    job = new_job("rename_device", {"device_id": device_id, "new_name": new_name}, job_id=uuid.uuid4().hex)
+    renamer_state["job_store"].save(job)
+    renamer_state["worker"].enqueue(job)
+    return jsonify(job), 202
+
+
+async def rename_device_handler(job, ctx):
+    """Rename a device and cascade the rename to all of its entities.
+
+    Renames the device, aligns the Z2M friendly name, then for every entity of
+    the device rebuilds its friendly name and entity id and rewrites references
+    in automations/scenes/scripts. Progress is reported per entity so the UI can
+    show a live bar. Runs inside the worker, which already holds the registry
+    lock, so it must not acquire it again.
+    """
+    payload = job["payload"]
+    device_id = payload["device_id"]
+    new_name = payload["new_name"]
+
+    base_url = os.getenv("HA_URL")
+    token = os.getenv("HA_TOKEN")
+    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
+
+    ws = HomeAssistantWebSocket(ws_url, token)
+    await ws.connect()
+
     try:
-        # Erstelle WebSocket Verbindung
-        base_url = os.getenv("HA_URL")
-        token = os.getenv("HA_TOKEN")
-        ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
+        # Ensure restructurer is loaded
+        if renamer_state["restructurer"] is None:
+            renamer_state["restructurer"] = EntityRestructurer()
+        await renamer_state["restructurer"].load_structure(ws)
 
-        ws = HomeAssistantWebSocket(ws_url, token)
-        await ws.connect()
+        # Get old device name before renaming
+        old_device_name = None
+        if device_id in renamer_state["restructurer"].devices:
+            device = renamer_state["restructurer"].devices[device_id]
+            old_device_name = device.get("name_by_user") or device.get("name")
 
-        try:
-            # Ensure restructurer is loaded
-            if renamer_state["restructurer"] is None:
-                renamer_state["restructurer"] = EntityRestructurer()
-            await renamer_state["restructurer"].load_structure(ws)
+        device_registry = DeviceRegistry(ws)
+        success = await device_registry.rename_device(device_id, new_name)
 
-            # Get old device name before renaming
-            old_device_name = None
-            if device_id in renamer_state["restructurer"].devices:
-                device = renamer_state["restructurer"].devices[device_id]
-                old_device_name = device.get("name_by_user") or device.get("name")
+        if not success:
+            raise RuntimeError("Failed to rename device in Home Assistant")
 
-            device_registry = DeviceRegistry(ws)
-            success = await device_registry.rename_device(device_id, new_name)
+        # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
+        z2m_sync = await _sync_z2m_name(device_registry, device_id, new_name)
 
-            if not success:
-                return (
-                    jsonify({"error": "Fehler beim Umbenennen des Geräts in Home Assistant"}),
-                    500,
+        # Update entities: rename ID + friendly name + update dependencies
+        entities_updated = 0
+        entities_failed = 0
+        entities_skipped = 0
+        dependencies_updated = 0
+
+        logger.info("=== Starting entity rename after device rename ===")
+        logger.info(f"Device ID: {device_id}")
+        logger.info(f"Old device name: {old_device_name}")
+        logger.info(f"New device name: {new_name}")
+
+        entity_registry = EntityRegistry(ws)
+
+        # Initialize dependency updater
+        dependency_updater = DependencyUpdater(base_url, token)
+        cached_states = await dependency_updater.get_states()
+
+        # Get area name for this device
+        device_info = renamer_state["restructurer"].devices.get(device_id, {})
+        area_id = device_info.get("area_id")
+        area_name = ""
+        if area_id and area_id in renamer_state["restructurer"].areas:
+            area_name = renamer_state["restructurer"].areas[area_id].get("name", "")
+
+        logger.info(f"Area ID: {area_id}, Area name: {area_name}")
+
+        # Get the device base_name (without area prefix)
+        device_base_name = _strip_prefix(new_name, area_name) if area_name else new_name
+
+        # Build old device display name for stripping from entity names
+        old_device_base = (
+            _strip_prefix(old_device_name, area_name) if (old_device_name and area_name) else old_device_name
+        )
+        old_device_display = f"{area_name} {old_device_base}" if area_name else old_device_base
+
+        # Count entities for this device
+        device_entities = [
+            eid for eid, einfo in renamer_state["restructurer"].entities.items() if einfo.get("device_id") == device_id
+        ]
+        total = len(device_entities)
+        logger.info(f"Found {total} entities for device {device_id}")
+        ctx.progress(0, total)
+        processed = 0
+
+        # Find all entities belonging to this device
+        for old_entity_id, entity_info in list(renamer_state["restructurer"].entities.items()):
+            if entity_info.get("device_id") != device_id:
+                continue
+
+            # Get current entity name
+            original_name = entity_info.get("name") or entity_info.get("original_name") or ""
+            logger.info(f"Processing entity {old_entity_id}: original_name='{original_name}'")
+
+            if not original_name:
+                logger.info("  Skipping - no original_name")
+                entities_skipped += 1
+                processed += 1
+                ctx.progress(processed, total, current=old_entity_id)
+                continue
+
+            # Compute entity base_name (suffix) by stripping area and device prefixes
+            entity_suffix = original_name
+            if old_device_display:
+                entity_suffix = _strip_prefix(entity_suffix, old_device_display)
+            if entity_suffix == original_name and old_device_base:
+                entity_suffix = _strip_prefix(entity_suffix, old_device_base)
+            if entity_suffix == original_name and area_name:
+                entity_suffix = _strip_prefix(entity_suffix, area_name)
+
+            # Build new friendly name: Area + Device Base + Entity Suffix
+            parts = []
+            if area_name:
+                parts.append(area_name)
+            parts.append(device_base_name)
+            if entity_suffix and entity_suffix != original_name:
+                parts.append(entity_suffix)
+
+            new_friendly_name = " ".join(parts)
+
+            # Build new entity ID
+            domain = old_entity_id.split(".")[0]
+            new_entity_id = f"{domain}.{normalize_name(new_friendly_name)}"
+
+            logger.info(f"  {old_entity_id} -> {new_entity_id} ('{new_friendly_name}')")
+
+            # Skip if nothing would change
+            if new_entity_id == old_entity_id and new_friendly_name == original_name:
+                logger.info("  Skipping - no changes needed")
+                entities_skipped += 1
+                processed += 1
+                ctx.progress(processed, total, current=old_entity_id)
+                continue
+
+            try:
+                # Rename entity (ID + friendly name)
+                id_changed = new_entity_id != old_entity_id
+                await entity_registry.rename_entity(
+                    old_entity_id, new_entity_id if id_changed else None, new_friendly_name
                 )
+                entities_updated += 1
+                logger.info("  SUCCESS: Renamed entity")
+                ctx.log("RENAME", f"{old_entity_id} -> {new_entity_id}")
 
-            # Z2M-friendly_name an den neuen Namen angleichen (nur Z2M-Geräte, nicht fatal)
-            z2m_sync = await _sync_z2m_name(device_registry, device_id, new_name)
-
-            # Update entities: rename ID + friendly name + update dependencies
-            entities_updated = 0
-            entities_failed = 0
-            entities_skipped = 0
-            dependencies_updated = 0
-
-            logger.info("=== Starting entity rename after device rename ===")
-            logger.info(f"Device ID: {device_id}")
-            logger.info(f"Old device name: {old_device_name}")
-            logger.info(f"New device name: {new_name}")
-
-            entity_registry = EntityRegistry(ws)
-
-            # Initialize dependency updater
-            base_url = os.getenv("HA_URL")
-            token = os.getenv("HA_TOKEN")
-            dependency_updater = DependencyUpdater(base_url, token)
-            cached_states = await dependency_updater.get_states()
-
-            # Get area name for this device
-            device_info = renamer_state["restructurer"].devices.get(device_id, {})
-            area_id = device_info.get("area_id")
-            area_name = ""
-            if area_id and area_id in renamer_state["restructurer"].areas:
-                area_name = renamer_state["restructurer"].areas[area_id].get("name", "")
-
-            logger.info(f"Area ID: {area_id}, Area name: {area_name}")
-
-            # Get the device base_name (without area prefix)
-            device_base_name = _strip_prefix(new_name, area_name) if area_name else new_name
-
-            # Build old device display name for stripping from entity names
-            old_device_base = (
-                _strip_prefix(old_device_name, area_name) if (old_device_name and area_name) else old_device_name
-            )
-            old_device_display = f"{area_name} {old_device_base}" if area_name else old_device_base
-
-            # Count entities for this device
-            device_entities = [
-                eid
-                for eid, einfo in renamer_state["restructurer"].entities.items()
-                if einfo.get("device_id") == device_id
-            ]
-            logger.info(f"Found {len(device_entities)} entities for device {device_id}")
-
-            # Find all entities belonging to this device
-            for old_entity_id, entity_info in list(renamer_state["restructurer"].entities.items()):
-                if entity_info.get("device_id") != device_id:
-                    continue
-
-                # Get current entity name
-                original_name = entity_info.get("name") or entity_info.get("original_name") or ""
-                logger.info(f"Processing entity {old_entity_id}: original_name='{original_name}'")
-
-                if not original_name:
-                    logger.info("  Skipping - no original_name")
-                    entities_skipped += 1
-                    continue
-
-                # Compute entity base_name (suffix) by stripping area and device prefixes
-                entity_suffix = original_name
-                if old_device_display:
-                    entity_suffix = _strip_prefix(entity_suffix, old_device_display)
-                if entity_suffix == original_name and old_device_base:
-                    entity_suffix = _strip_prefix(entity_suffix, old_device_base)
-                if entity_suffix == original_name and area_name:
-                    entity_suffix = _strip_prefix(entity_suffix, area_name)
-
-                # Build new friendly name: Area + Device Base + Entity Suffix
-                parts = []
-                if area_name:
-                    parts.append(area_name)
-                parts.append(device_base_name)
-                if entity_suffix and entity_suffix != original_name:
-                    parts.append(entity_suffix)
-
-                new_friendly_name = " ".join(parts)
-
-                # Build new entity ID
-                domain = old_entity_id.split(".")[0]
-                new_entity_id = f"{domain}.{normalize_name(new_friendly_name)}"
-
-                logger.info(f"  {old_entity_id} -> {new_entity_id} ('{new_friendly_name}')")
-
-                # Skip if nothing would change
-                if new_entity_id == old_entity_id and new_friendly_name == original_name:
-                    logger.info("  Skipping - no changes needed")
-                    entities_skipped += 1
-                    continue
-
-                try:
-                    # Rename entity (ID + friendly name)
-                    id_changed = new_entity_id != old_entity_id
-                    await entity_registry.rename_entity(
-                        old_entity_id, new_entity_id if id_changed else None, new_friendly_name
+                # Update dependencies if ID changed
+                if id_changed:
+                    dep_results = await dependency_updater.update_all_dependencies(
+                        old_entity_id, new_entity_id, cached_states
                     )
-                    entities_updated += 1
-                    logger.info("  SUCCESS: Renamed entity")
+                    dep_count = dep_results.get("total_success", 0)
+                    dependencies_updated += dep_count
+                    if dep_count > 0:
+                        logger.info(f"  Updated {dep_count} dependencies")
 
-                    # Update dependencies if ID changed
-                    if id_changed:
-                        dep_results = await dependency_updater.update_all_dependencies(
-                            old_entity_id, new_entity_id, cached_states
-                        )
-                        dep_count = dep_results.get("total_success", 0)
-                        dependencies_updated += dep_count
-                        if dep_count > 0:
-                            logger.info(f"  Updated {dep_count} dependencies")
+            except Exception as e:
+                entities_failed += 1
+                logger.error(f"  FAILED: {e}")
+                ctx.log("ERROR", f"{old_entity_id}: {e}")
 
-                except Exception as e:
-                    entities_failed += 1
-                    logger.error(f"  FAILED: {e}")
+            processed += 1
+            ctx.progress(processed, total, current=old_entity_id)
 
-            # Reload structure to reflect changes
-            await renamer_state["restructurer"].load_structure(ws)
+        # Reload structure to reflect changes
+        await renamer_state["restructurer"].load_structure(ws)
 
-            logger.info("=== Entity rename complete ===")
-            logger.info(
-                f"Updated: {entities_updated}, Failed: {entities_failed}, Skipped: {entities_skipped}, Dependencies: {dependencies_updated}"
-            )
+        logger.info("=== Entity rename complete ===")
+        logger.info(
+            f"Updated: {entities_updated}, Failed: {entities_failed}, "
+            f"Skipped: {entities_skipped}, Dependencies: {dependencies_updated}"
+        )
 
-            message = f"Gerät erfolgreich umbenannt zu: {new_name}"
-            if entities_updated > 0:
-                message += f" ({entities_updated} Entities"
-                if dependencies_updated > 0:
-                    message += f", {dependencies_updated} Dependencies"
-                message += " aktualisiert)"
-            if entities_failed > 0:
-                message += f" ({entities_failed} fehlgeschlagen)"
+        message = f"Device renamed to: {new_name}"
+        if entities_updated > 0:
+            message += f" ({entities_updated} entities"
+            if dependencies_updated > 0:
+                message += f", {dependencies_updated} dependencies"
+            message += " updated)"
+        if entities_failed > 0:
+            message += f" ({entities_failed} failed)"
 
-            return jsonify(
-                {
-                    "success": True,
-                    "message": message,
-                    "entities_updated": entities_updated,
-                    "entities_failed": entities_failed,
-                    "dependencies_updated": dependencies_updated,
-                    "z2m_synced": z2m_sync.get("synced"),
-                    "z2m_failed": (
-                        z2m_sync.get("error") if z2m_sync.get("supported") and not z2m_sync.get("synced") else None
-                    ),
-                }
-            )
+        return {
+            "success": True,
+            "message": message,
+            "entities_updated": entities_updated,
+            "entities_failed": entities_failed,
+            "dependencies_updated": dependencies_updated,
+            "z2m_synced": z2m_sync.get("synced"),
+            "z2m_failed": (z2m_sync.get("error") if z2m_sync.get("supported") and not z2m_sync.get("synced") else None),
+        }
 
-        finally:
-            await ws.disconnect()
+    finally:
+        await ws.disconnect()
 
-    except Exception as e:
-        logger.error(f"Fehler beim Umbenennen des Geräts: {e}")
-        return jsonify({"error": str(e)}), 500
+
+renamer_state["worker"].register("rename_device", rename_device_handler)
 
 
 @app.route("/api/sync_z2m_name", methods=["POST"])
@@ -3057,6 +3157,26 @@ async def _swap_devices_async():
     return jsonify({"devices": devices})
 
 
+@app.route("/api/jobs", methods=["GET"])
+def jobs_unfinished():
+    """List unfinished background jobs (for reconnect after a reload).
+
+    Read-only: this must not take the registry lock so it stays responsive
+    while a long-running job holds the lock. Atomic writes guarantee readers
+    see a complete old-or-new job file.
+    """
+    return jsonify({"jobs": renamer_state["job_store"].list_unfinished()})
+
+
+@app.route("/api/jobs/<job_id>", methods=["GET"])
+def job_get(job_id):
+    """Return the current state of a background job (for polling)."""
+    job = renamer_state["job_store"].load(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify(job)
+
+
 @app.route("/api/swap/jobs", methods=["GET"])
 def swap_jobs():
     """Nicht abgeschlossene Swap-Jobs (für Resume)."""
@@ -3191,22 +3311,38 @@ def swap_confirm(job_id):
 
 @app.route("/api/swap/<job_id>/execute", methods=["POST"])
 def swap_execute(job_id):
-    """Führt den Job aus bzw. setzt ihn fort (idempotent)."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(_swap_execute_async(job_id))
-    finally:
-        loop.close()
+    """Enqueue swap execution/continuation as a background job (idempotent).
 
-
-async def _swap_execute_async(job_id):
+    The swap keeps its own persisted state machine and resume flow in swap_store;
+    the worker just runs it under the shared registry lock. The frontend polls
+    api/swap/<job_id> for progress. Returns the swap job so the UI can start
+    polling immediately.
+    """
     store = renamer_state["swap_store"]
     job = store.load(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
     if job["state"] in (device_swap.STATE_PROPOSED, device_swap.STATE_ABORTED, device_swap.STATE_COMPLETED):
         return jsonify({"error": f"Job not runnable in state {job['state']}"}), 409
+
+    generic = new_job("swap", {"swap_job_id": job_id}, job_id=uuid.uuid4().hex)
+    renamer_state["job_store"].save(generic)
+    renamer_state["worker"].enqueue(generic)
+    return jsonify(job), 202
+
+
+async def swap_execute_handler(job, ctx):
+    """Run/continue a device swap inside the worker.
+
+    Loads the swap job from swap_store and drives its SwapExecutor state machine.
+    The executor persists progress per step/entity in swap_store (which the UI
+    polls); this generic wrapper job only records that the run happened.
+    """
+    swap_job_id = job["payload"]["swap_job_id"]
+    store = renamer_state["swap_store"]
+    swap_job = store.load(swap_job_id)
+    if not swap_job:
+        raise RuntimeError(f"Swap job {swap_job_id} not found")
 
     client = await init_client()
     states = await client.get_states()
@@ -3230,11 +3366,14 @@ async def _swap_execute_async(job_id):
             timestamp=_iso_now(),
             lovelace_updater=LovelaceUpdater(ws),
         )
-        job = await executor.run(job)
+        swap_job = await executor.run(swap_job)
     finally:
         await ws.disconnect()
 
-    return jsonify(job)
+    return {"swap_job_id": swap_job_id, "final_state": swap_job.get("state")}
+
+
+renamer_state["worker"].register("swap", swap_execute_handler)
 
 
 @app.route("/api/swap/<job_id>/abort", methods=["POST"])
@@ -3258,6 +3397,11 @@ if __name__ == "__main__":
     # In Add-on mode, use port 5000 for Ingress
     port = int(os.getenv("WEB_UI_PORT", 5000))
     print(f"\nStarting Web UI on port {port}\n")
+
+    # Fail any generic jobs left running by a previous process, then start the
+    # background worker before serving requests.
+    renamer_state["worker"].reconcile_on_start()
+    renamer_state["worker"].start()
 
     # Run without debug in production
     app.run(debug=False, host="0.0.0.0", port=port)
