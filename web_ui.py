@@ -3281,16 +3281,25 @@ if __name__ == "__main__":
     port = int(os.getenv("WEB_UI_PORT", 5000))
 
     # Serve via Waitress (production-grade WSGI server) instead of the Werkzeug
-    # development server. All Flask views are synchronous and each spins up its
-    # own asyncio event loop per request, so Waitress' threaded model is a clean
-    # drop-in. Set WEB_UI_DEV_SERVER=1 to fall back to the Werkzeug dev server
-    # (e.g. for local debugging with the reloader).
+    # development server, which prints a production warning on every launch.
+    #
+    # Default to a SINGLE worker thread: the previous Werkzeug dev server ran
+    # with threaded=False, i.e. requests were handled serially. A lot of shared
+    # global state (renamer_state, the singleton client/MQTT init, and the
+    # read-modify-write JSON stores like NamingOverrides/SwapJobStore/RenameLog/
+    # ApiTokenStore) has no locking and is only safe under that serial model.
+    # threads=1 preserves that behaviour exactly while getting us off the dev
+    # server. Raising WEB_UI_THREADS is only safe once those write paths are made
+    # thread-safe.
+    #
+    # Set WEB_UI_DEV_SERVER=1 to fall back to the Werkzeug dev server (e.g. for
+    # local debugging with the reloader).
     if os.getenv("WEB_UI_DEV_SERVER") == "1":
         print(f"\nStarting Web UI (Werkzeug dev server) on port {port}\n")
         app.run(debug=False, host="0.0.0.0", port=port)
     else:
         from waitress import serve
 
-        threads = int(os.getenv("WEB_UI_THREADS", 8))
-        print(f"\nStarting Web UI (Waitress, {threads} threads) on port {port}\n")
+        threads = int(os.getenv("WEB_UI_THREADS", 1))
+        print(f"\nStarting Web UI (Waitress, {threads} thread(s)) on port {port}\n")
         serve(app, host="0.0.0.0", port=port, threads=threads)
