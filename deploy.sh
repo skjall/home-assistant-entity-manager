@@ -80,7 +80,7 @@ echo "Source: ${DEPLOY_REF:-working tree}"
 echo ""
 
 # Check SSH connection
-echo -e "[1/4] Testing SSH connection..."
+echo -e "[1/5] Testing SSH connection..."
 if ! ssh -q -p "$SSH_PORT" "$SSH_USER@$HA_HOST" "exit" 2>/dev/null; then
     echo -e "${RED}ERROR: Cannot connect to $HA_HOST${NC}"
     exit 1
@@ -88,7 +88,7 @@ fi
 echo -e "${GREEN}SSH OK${NC}"
 
 # Check container is running
-echo -e "[2/4] Checking container..."
+echo -e "[2/5] Checking container..."
 if ! ssh -p "$SSH_PORT" "$SSH_USER@$HA_HOST" "docker ps -q -f name=$CONTAINER" | grep -q .; then
     echo -e "${RED}ERROR: Container $CONTAINER is not running${NC}"
     exit 1
@@ -96,7 +96,7 @@ fi
 echo -e "${GREEN}Container running${NC}"
 
 # Deploy files
-echo -e "[3/4] Deploying files to container..."
+echo -e "[3/5] Deploying files to container..."
 ( cd "$SOURCE_DIR" && tar czf - \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
@@ -116,13 +116,28 @@ echo -e "[3/4] Deploying files to container..."
     --exclude='.ruff.toml' \
     --exclude='.env' \
     --exclude='.env.example' \
-    *.py templates/ static/ translations/ 2>/dev/null ) | \
+    *.py requirements.txt templates/ static/ translations/ 2>/dev/null ) | \
     ssh -p "$SSH_PORT" "$SSH_USER@$HA_HOST" "docker exec -i $CONTAINER tar xzf - -C $APP_PATH"
 
 echo -e "${GREEN}Files deployed${NC}"
 
+# Ensure Python dependencies are present in the container.
+# deploy.sh is a volatile, test-only deploy into the running container's
+# writable layer (gone on a Supervisor recreate). The base image only has the
+# deps from the last add-on build, so a freshly added requirement (e.g. a new
+# pip package in requirements.txt) would be missing and the app would crash on
+# import. Installing here makes the deployed code actually runnable for testing;
+# the durable install still comes from an add-on rebuild off main.
+echo -e "[4/5] Ensuring dependencies (pip install -r requirements.txt)..."
+if ! ssh -p "$SSH_PORT" "$SSH_USER@$HA_HOST" \
+    "docker exec $CONTAINER pip install --root-user-action=ignore -r $APP_PATH/requirements.txt"; then
+    echo -e "${RED}ERROR: dependency installation failed -- aborting before restart${NC}"
+    exit 1
+fi
+echo -e "${GREEN}Dependencies ready${NC}"
+
 # Restart container
-echo -e "[4/4] Restarting container..."
+echo -e "[5/5] Restarting container..."
 ssh -p "$SSH_PORT" "$SSH_USER@$HA_HOST" "docker restart $CONTAINER"
 
 echo ""
