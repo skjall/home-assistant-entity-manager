@@ -3,7 +3,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.14-alpine3.20
 # Build the frontend on the native build platform. Running npm/node under QEMU
 # emulation (e.g. for aarch64 on an amd64 runner) crashes with SIGILL (exit 132),
 # so we build it once natively and copy the arch-independent assets into the image.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
 WORKDIR /build
 COPY package.json package-lock.json postcss.config.js ./
 COPY src/ ./src/
