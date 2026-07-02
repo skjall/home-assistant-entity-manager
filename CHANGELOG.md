@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.1.0...v1.2.0) (2026-07-02)
+
+
+### Features
+
+* track long-running operations as async background jobs ([#84](https://github.com/skjall/home-assistant-entity-manager/issues/84)) ([19efa09](https://github.com/skjall/home-assistant-entity-manager/commit/19efa09c47770a4200053bdcd3c803ae690f25d8))
+* use slugify for full non-ASCII entity name normalization ([#78](https://github.com/skjall/home-assistant-entity-manager/issues/78)) ([ca3c802](https://github.com/skjall/home-assistant-entity-manager/commit/ca3c8026b6fcdfa57c7608d8f5e093e2237dda8d)), closes [#58](https://github.com/skjall/home-assistant-entity-manager/issues/58)
+
 ## [1.1.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.0.3...v1.1.0) (2026-06-26)
 
 
