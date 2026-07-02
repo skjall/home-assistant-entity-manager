@@ -334,5 +334,17 @@
     "api_token_copy": "Copier",
     "api_token_copied": "Copié !",
     "api_token_revoke_confirm": "Révoquer le jeton actuel ? Les outils externes qui l'utilisent cesseront de fonctionner."
+  },
+  "jobs": {
+    "rename_device": "Renommage de l'appareil",
+    "applying": "Application des modifications",
+    "enabling": "Activation des entités",
+    "working": "Traitement",
+    "running": "En cours…",
+    "completed": "Terminé",
+    "failed": "Échec",
+    "close": "Fermer",
+    "show_log": "Afficher le journal",
+    "hide_log": "Masquer le journal"
   }
 }

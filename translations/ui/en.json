@@ -334,5 +334,17 @@
     "update": "Update",
     "remote": "Remote",
     "plant": "Plant"
+  },
+  "jobs": {
+    "rename_device": "Renaming device",
+    "applying": "Applying changes",
+    "enabling": "Enabling entities",
+    "working": "Working",
+    "running": "Running…",
+    "completed": "Completed",
+    "failed": "Failed",
+    "close": "Close",
+    "show_log": "Show log",
+    "hide_log": "Hide log"
   }
 }

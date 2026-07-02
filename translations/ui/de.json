@@ -334,5 +334,17 @@
     "update": "Aktualisierung",
     "remote": "Fernbedienung",
     "plant": "Pflanze"
+  },
+  "jobs": {
+    "rename_device": "Gerät wird umbenannt",
+    "applying": "Änderungen werden angewendet",
+    "enabling": "Entitäten werden aktiviert",
+    "working": "Wird ausgeführt",
+    "running": "Läuft…",
+    "completed": "Abgeschlossen",
+    "failed": "Fehlgeschlagen",
+    "close": "Schließen",
+    "show_log": "Log anzeigen",
+    "hide_log": "Log ausblenden"
   }
 }

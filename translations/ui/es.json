@@ -334,5 +334,17 @@
     "api_token_copy": "Copiar",
     "api_token_copied": "¡Copiado!",
     "api_token_revoke_confirm": "¿Revocar el token actual? Las herramientas externas que lo usen dejarán de funcionar."
+  },
+  "jobs": {
+    "rename_device": "Renombrando dispositivo",
+    "applying": "Aplicando cambios",
+    "enabling": "Activando entidades",
+    "working": "Procesando",
+    "running": "En curso…",
+    "completed": "Completado",
+    "failed": "Fallido",
+    "close": "Cerrar",
+    "show_log": "Mostrar registro",
+    "hide_log": "Ocultar registro"
   }
 }

@@ -16,11 +16,10 @@ Dieses Modul enthält die Persistenz (SwapJobStore), den Mapping-Vorschlag
 injiziert; dieses Modul kennt keine Flask-/Request-Details.
 """
 
-import json
 import logging
-import os
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from jobs import JobStore
 
 logger = logging.getLogger(__name__)
 
@@ -60,61 +59,21 @@ DISPOSITION_DELETE = "delete"
 # --------------------------------------------------------------------------- #
 
 
-class SwapJobStore:
-    """Persistiert Swap-Jobs als einzelne JSON-Dateien unter /data/device_swaps."""
+class SwapJobStore(JobStore):
+    """Persists swap jobs as JSON files under /data/device_swaps.
 
-    def __init__(self, storage_dir: str = "/data/device_swaps"):
-        self.storage_dir = Path(storage_dir)
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
+    Reuses the generic :class:`jobs.JobStore` (atomic writes, save/load/list)
+    and only pins the swap-specific terminal states and schema version, so the
+    swap schema, executor and resume flow stay unchanged.
+    """
 
-    def _path(self, job_id: str) -> Path:
-        # job_id ist ein uuid4-hex; defensiv nur den Basename verwenden.
-        safe = os.path.basename(job_id)
-        return self.storage_dir / f"{safe}.json"
-
-    def save(self, job: Dict[str, Any]) -> None:
-        """Schreibt einen Job atomar (temp-Datei + os.replace)."""
-        job["version"] = SCHEMA_VERSION
-        path = self._path(job["job_id"])
-        tmp = path.with_suffix(".json.tmp")
-        try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(job, f, indent=2, ensure_ascii=False)
-            os.replace(tmp, path)
-        except Exception as e:
-            logger.error(f"Failed to save swap job {job.get('job_id')}: {e}")
-            raise
-
-    def load(self, job_id: str) -> Optional[Dict[str, Any]]:
-        path = self._path(job_id)
-        if not path.exists():
-            return None
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            logger.error(f"Failed to load swap job {job_id}: {e}")
-            return None
-
-    def list_jobs(self) -> List[Dict[str, Any]]:
-        jobs = []
-        for path in sorted(self.storage_dir.glob("*.json")):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    jobs.append(json.load(f))
-            except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"Skipping unreadable swap job {path.name}: {e}")
-        return jobs
-
-    def list_unfinished(self) -> List[Dict[str, Any]]:
-        """Alle Jobs, die noch fortgesetzt werden können (für Resume-UI)."""
-        terminal = {STATE_COMPLETED, STATE_ABORTED}
-        return [j for j in self.list_jobs() if j.get("state") not in terminal]
-
-    def delete(self, job_id: str) -> None:
-        path = self._path(job_id)
-        if path.exists():
-            path.unlink()
+    def __init__(self, storage_dir: str = "/data/device_swaps") -> None:
+        """Create the swap store with swap terminal states and schema version."""
+        super().__init__(
+            storage_dir,
+            terminal_states={STATE_COMPLETED, STATE_ABORTED},
+            schema_version=SCHEMA_VERSION,
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -387,7 +346,12 @@ class SwapExecutor:
         # Entity-Bezeichnung (Suffix des Friendly-Namens) bleibt erhalten.
         old_dev_name = (job.get("new_device") or {}).get("name", "")
         target_name = job.get("target_device_name", "")
-        for current in job.get("new_device_entities", []):
+        new_entities = job.get("new_device_entities", [])
+        total = len(new_entities)
+        # Surface entity-rename progress on the job so the UI can show a bar while
+        # polling; this is the long phase of the swap.
+        job["progress"] = {"done": len(renamed), "total": total, "current": ""}
+        for current in new_entities:
             if current in renamed:
                 continue  # idempotent (Resume)
             suffix = _entity_name(current, new_prefix)  # object_id ohne neuen Device-Präfix
@@ -403,6 +367,7 @@ class SwapExecutor:
                     msg += f" ('{new_friendly}')"
                 self._log(job, STATE_RENAMING_ENTITIES, msg)
             renamed[current] = target
+            job["progress"] = {"done": len(renamed), "total": total, "current": current}
             self._persist(job)
 
     def _swap_friendly(self, entity_id: str, old_dev_name: str, target_name: str) -> Optional[str]:
