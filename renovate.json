@@ -6,6 +6,9 @@
   "baseBranchPatterns": [
     "main"
   ],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "deps",
+  "semanticCommitScope": null,
   "constraints": {
     "python": "3.14"
   },

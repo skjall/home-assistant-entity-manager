@@ -20,7 +20,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           # Allowed types — only feat/fix produce a release (minor/patch);
-          # the rest are changelog-visible but non-releasing.
+          # the rest are changelog-visible but non-releasing. `deps` is what
+          # Renovate emits (see renovate.json) and release-please renders it as
+          # a "Dependencies" changelog section by default.
           types: |
             feat
             fix
@@ -31,3 +33,4 @@ jobs:
             refactor
             perf
             build
+            deps
