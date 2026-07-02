@@ -767,6 +767,28 @@ async def _get_areas_async():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/normalize", methods=["POST"])
+def normalize_names():
+    """Normalize display names to entity-ID slugs.
+
+    The backend is the single source of truth for the naming convention, so the
+    frontend must call this instead of reimplementing the slug rules (otherwise
+    the two drift apart -- e.g. accented characters get stripped client-side).
+
+    Body: ``{"names": ["Foo Bar", ...]}`` -> ``{"normalized": ["foo_bar", ...]}``
+    """
+    data = request.json
+    if not isinstance(data, dict) or not isinstance(data.get("names"), list):
+        return jsonify({"error": "'names' must be a list"}), 400
+
+    names = data["names"]
+    if len(names) > 5000:
+        return jsonify({"error": "Too many names"}), 400
+
+    normalized = [normalize_name(n) if isinstance(n, str) else "" for n in names]
+    return jsonify({"normalized": normalized})
+
+
 @app.route("/api/preview", methods=["POST"])
 def preview_changes():
     """Zeige Vorschau der Änderungen für ausgewählte Area/Domain"""
@@ -3394,12 +3416,36 @@ if __name__ == "__main__":
 
     # In Add-on mode, use port 5000 for Ingress
     port = int(os.getenv("WEB_UI_PORT", 5000))
-    print(f"\nStarting Web UI on port {port}\n")
 
     # Fail any generic jobs left running by a previous process, then start the
     # background worker before serving requests.
     renamer_state["worker"].reconcile_on_start()
     renamer_state["worker"].start()
 
-    # Run without debug in production
-    app.run(debug=False, host="0.0.0.0", port=port)
+    # Serve via Waitress (production-grade WSGI server) instead of the Werkzeug
+    # development server, which prints a production warning on every launch.
+    #
+    # Default to a SINGLE worker thread: the previous Werkzeug dev server ran
+    # with threaded=False, i.e. requests were handled serially. A lot of shared
+    # global state (renamer_state, the singleton client/MQTT init, and the
+    # read-modify-write JSON stores like NamingOverrides/SwapJobStore/RenameLog/
+    # ApiTokenStore) has no locking and is only safe under that serial model.
+    # threads=1 preserves that behaviour exactly while getting us off the dev
+    # server. Raising WEB_UI_THREADS is only safe once those write paths are made
+    # thread-safe.
+    #
+    # Note: the background JobWorker runs on its own thread regardless of this
+    # setting, so long-running jobs already execute off the request path; the
+    # generic JobStore uses atomic writes so poll requests read a consistent file.
+    #
+    # Set WEB_UI_DEV_SERVER=1 to fall back to the Werkzeug dev server (e.g. for
+    # local debugging with the reloader).
+    if os.getenv("WEB_UI_DEV_SERVER") == "1":
+        print(f"\nStarting Web UI (Werkzeug dev server) on port {port}\n")
+        app.run(debug=False, host="0.0.0.0", port=port)
+    else:
+        from waitress import serve
+
+        threads = int(os.getenv("WEB_UI_THREADS", 1))
+        print(f"\nStarting Web UI (Waitress, {threads} thread(s)) on port {port}\n")
+        serve(app, host="0.0.0.0", port=port, threads=threads)
