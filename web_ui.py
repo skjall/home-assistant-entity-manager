@@ -165,9 +165,9 @@ renamer_state = {
     "rename_log": RenameLog(os.path.join(DATA_DIR, "rename_log.jsonl")),
     "api_token_store": ApiTokenStore(os.path.join(DATA_DIR, "api_token.json")),
     # Generic background-job infrastructure for long-running operations. Jobs run
-    # serially on a single worker thread; requests keep serving concurrently
-    # (load_structure rebuilds the restructurer by reassignment and handlers work
-    # on snapshots, so no cross-thread lock is needed).
+    # serially on a single worker thread, off the request path (load_structure
+    # rebuilds the restructurer by reassignment and handlers work on snapshots,
+    # so no cross-thread lock is needed).
     "job_store": JobStore(os.path.join(DATA_DIR, "jobs"), terminal_states=TERMINAL_STATES),
 }
 renamer_state["worker"] = JobWorker(renamer_state["job_store"])
@@ -1351,7 +1351,7 @@ def execute_direct():
 async def execute_direct_handler(job, ctx):
     """Apply a batch of entity renames, reporting progress per entity.
 
-    Runs inside the worker (which holds the registry lock). Renames each entity
+    Runs inside the worker (serial, off the request path). Renames each entity
     (id + friendly name), enables disabled ones when configured, and rewrites
     references in automations/scenes/scripts. Returns the same result shape the
     endpoint used to return so the UI summary is unchanged.
@@ -2476,8 +2476,7 @@ async def rename_device_handler(job, ctx):
     Renames the device, aligns the Z2M friendly name, then for every entity of
     the device rebuilds its friendly name and entity id and rewrites references
     in automations/scenes/scripts. Progress is reported per entity so the UI can
-    show a live bar. Runs inside the worker, which already holds the registry
-    lock, so it must not acquire it again.
+    show a live bar. Runs inside the worker (serial, off the request path).
     """
     payload = job["payload"]
     device_id = payload["device_id"]
@@ -3161,9 +3160,8 @@ async def _swap_devices_async():
 def jobs_unfinished():
     """List unfinished background jobs (for reconnect after a reload).
 
-    Read-only: this must not take the registry lock so it stays responsive
-    while a long-running job holds the lock. Atomic writes guarantee readers
-    see a complete old-or-new job file.
+    Read-only and cheap, so it stays responsive while a long-running job is in
+    flight. Atomic writes guarantee readers see a complete old-or-new job file.
     """
     return jsonify({"jobs": renamer_state["job_store"].list_unfinished()})
 
@@ -3314,7 +3312,7 @@ def swap_execute(job_id):
     """Enqueue swap execution/continuation as a background job (idempotent).
 
     The swap keeps its own persisted state machine and resume flow in swap_store;
-    the worker just runs it under the shared registry lock. The frontend polls
+    the worker just runs it serially, off the request path. The frontend polls
     api/swap/<job_id> for progress. Returns the swap job so the UI can start
     polling immediately.
     """

@@ -15,8 +15,8 @@ a tracked background job instead:
 * :class:`JobContext` is handed to a job handler so it can report progress and
   log lines that get persisted (throttled) as the job runs.
 * :class:`JobWorker` is a single, long-lived worker thread that runs queued jobs
-  serially on one asyncio loop, guarded by a shared registry lock so registry
-  mutations never overlap with concurrent request handlers.
+  serially on one asyncio loop, off the request path, so registry-mutating work
+  never overlaps and enqueue/poll requests stay fast.
 
 The module knows nothing about Flask, Home Assistant or the concrete handlers;
 those are injected. ``device_swap.SwapJobStore`` is a thin subclass of
@@ -212,8 +212,8 @@ class JobWorker:
     A ``queue.Queue`` of job ids feeds one daemon thread which owns a single,
     long-lived asyncio loop. Serial execution is intentional: the jobs share
     ``restructurer`` state and mutate the same Home Assistant registry, so only
-    one runs at a time. Requests keep serving concurrently (the dev server is
-    threaded); ``load_structure`` rebuilds the restructurer by reassignment and
+    one runs at a time. The work runs on this dedicated thread, off the request
+    path; ``load_structure`` rebuilds the restructurer by reassignment and
     handlers iterate over snapshots, so a concurrent read does not need a lock.
 
     Handlers are registered per job ``type`` and are plain coroutines

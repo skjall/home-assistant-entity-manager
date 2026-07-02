@@ -4760,6 +4760,23 @@
                         const data = await fetch('api/jobs').then(r => r.json()).catch(() => ({ jobs: [] }));
                         const running = (data.jobs || []).find(j => !this.isJobTerminal(j));
                         if (!running) return;
+                        // A device swap runs via a generic wrapper job, but its progress
+                        // and modal live in swap_store (api/swap/<id>). Re-attach to the
+                        // real swap modal and poll it, instead of the empty generic panel.
+                        // Do NOT call swapResume(): the swap is already executing, so we
+                        // only watch it (re-triggering execute would enqueue a duplicate).
+                        if (running.type === 'swap') {
+                            const swapId = running.payload && running.payload.swap_job_id;
+                            if (!swapId) return;
+                            const j = await fetch('api/swap/' + swapId).then(r => r.json()).catch(() => null);
+                            if (j && !j.error) {
+                                this.swap.job = j;
+                                this.swap.show = true;
+                                this.swap.step = 4;
+                                this.startSwapPolling();
+                            }
+                            return;
+                        }
                         const meta = this.jobKindMeta(running.type);
                         this.startJob('api/jobs/' + running.job_id, running, {
                             kind: running.type, titleKey: meta.titleKey, onDone: meta.onDone
