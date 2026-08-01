@@ -144,7 +144,7 @@ class EntityRestructurer:
             indexed[entry_id] = normalized
         return indexed
 
-    async def load_structure(self, ws_client=None):
+    async def load_structure(self, ws_client: Optional[Any] = None) -> None:
         """
         Load the complete structure from Home Assistant via WebSocket.
 
@@ -259,7 +259,7 @@ class EntityRestructurer:
 
         return "sensor"  # Default
 
-    def build_naming_context(self, entity_id: str, state_info: Dict) -> Dict[str, str]:
+    def build_naming_context(self, entity_id: str, state_info: Dict[str, Any]) -> Dict[str, str]:
         """Build the complete template context for an entity."""
         domain, _, object_id = entity_id.partition(".")
         entity_reg = self.entities.get(entity_id, {})
@@ -325,9 +325,9 @@ class EntityRestructurer:
     def _base_entity_name(
         self,
         entity_id: str,
-        registry: Dict,
-        state: Dict,
-        override: Optional[Dict],
+        registry: Dict[str, Any],
+        state: Dict[str, Any],
+        override: Optional[Dict[str, Any]],
         device_class: str,
         prefixes: Tuple[str, ...],
     ) -> str:
@@ -387,7 +387,7 @@ class EntityRestructurer:
             }
         return self.naming_templates.render("device_name", context)
 
-    def generate_new_entity_id(self, entity_id: str, state_info: Dict) -> Tuple[str, str]:
+    def generate_new_entity_id(self, entity_id: str, state_info: Dict[str, Any]) -> Tuple[str, str]:
         """Generate an entity ID and entity-registry name from active templates."""
         domain = entity_id.split(".", 1)[0]
         context = self.build_naming_context(entity_id, state_info)

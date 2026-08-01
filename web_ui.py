@@ -12,7 +12,7 @@ import logging
 import os
 import re
 import time
-from typing import Optional
+from typing import Any, Optional
 import unicodedata
 import uuid
 
@@ -2905,7 +2905,7 @@ async def _get_hierarchy_async():
 
 
 @app.route("/api/naming_templates", methods=["GET", "PUT"])
-def naming_templates_config():
+def naming_templates_config() -> Any:
     """Read or update the active naming templates."""
     manager = renamer_state["naming_templates"]
     if request.method == "GET":
@@ -2929,7 +2929,7 @@ def naming_templates_config():
 
 
 @app.route("/api/naming_templates/preview", methods=["POST"])
-def preview_naming_templates():
+def preview_naming_templates() -> Any:
     """Render a sample context without persisting template changes."""
     data = request.json
     if not isinstance(data, dict):
