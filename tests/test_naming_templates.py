@@ -1,5 +1,7 @@
 """Tests for configurable naming templates."""
 
+import json
+
 import pytest
 
 from naming_templates import NamingTemplateError, NamingTemplates
@@ -36,12 +38,12 @@ def test_entity_manager_is_default(manager):
     assert manager.render("entity_id", context, normalize=True) == "living_room_thermostat_temperature"
 
 
-def test_home_assistant_preset_omits_area(manager):
+def test_home_assistant_preset_matches_recreated_entity_ids(manager):
     manager.apply_preset("home_assistant")
     context = sample_context()
     assert manager.render("device_name", context) == "Thermostat"
     assert manager.render("entity_name", context) == "Temperature"
-    assert manager.render("entity_id", context, normalize=True) == "thermostat_temperature"
+    assert manager.render("entity_id", context, normalize=True) == "living_room_thermostat_temperature"
 
 
 def test_custom_template_supports_extended_context(manager):
@@ -103,3 +105,28 @@ def test_configuration_persists(manager):
     reloaded = NamingTemplates(str(manager.storage_path))
     assert reloaded.get_config()["preset"] == "home_assistant"
     assert reloaded.get_templates()["entity_name"] == "{entity}"
+
+
+def test_v1_home_assistant_preset_is_migrated(tmp_path):
+    storage_path = tmp_path / "naming_templates.json"
+    storage_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "preset": "home_assistant",
+                "templates": {
+                    "device_name": "{device}",
+                    "entity_name": "{entity}",
+                    "entity_id": "{device} {entity}",
+                },
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    migrated = NamingTemplates(str(storage_path))
+
+    assert migrated.get_config()["preset"] == "home_assistant"
+    assert migrated.get_templates()["entity_id"] == "{area} {device} {entity}"
+    assert json.loads(storage_path.read_text(encoding="utf-8"))["version"] == 2

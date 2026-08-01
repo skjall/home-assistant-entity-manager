@@ -12,7 +12,7 @@ from hierarchy_manager import normalize_name
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_TEMPLATE_LENGTH = 255
 
 ALLOWED_FIELDS = frozenset(
@@ -47,9 +47,15 @@ PRESETS = {
         "templates": {
             "device_name": "{device}",
             "entity_name": "{entity}",
-            "entity_id": "{device} {entity}",
+            "entity_id": "{area} {device} {entity}",
         },
     },
+}
+
+_V1_HOME_ASSISTANT_TEMPLATES = {
+    "device_name": "{device}",
+    "entity_name": "{entity}",
+    "entity_id": "{device} {entity}",
 }
 
 DEFAULT_PRESET = "entity_manager"
@@ -103,9 +109,24 @@ class NamingTemplates:
                 data = json.load(file)
             templates = data.get("templates", {})
             self.validate_templates(templates)
+            migrated = False
+            if (
+                data.get("version", 1) < 2
+                and data.get("preset") == "home_assistant"
+                and templates == _V1_HOME_ASSISTANT_TEMPLATES
+            ):
+                data.setdefault("history", []).insert(0, deepcopy(templates))
+                data["templates"] = deepcopy(PRESETS["home_assistant"]["templates"])
+                templates = data["templates"]
+                migrated = True
             data["version"] = SCHEMA_VERSION
             data.setdefault("preset", self.matching_preset(templates) or "custom")
             data.setdefault("history", [])
+            if migrated:
+                temporary_path = self.storage_path.with_suffix(self.storage_path.suffix + ".tmp")
+                with temporary_path.open("w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=2, ensure_ascii=False)
+                temporary_path.replace(self.storage_path)
             return data
         except (OSError, json.JSONDecodeError, NamingTemplateError) as error:
             logger.error("Failed to load naming templates: %s", error)

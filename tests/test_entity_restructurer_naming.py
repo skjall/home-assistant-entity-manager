@@ -66,7 +66,7 @@ def test_home_assistant_generation_uses_registry_context(tmp_path):
     entity_id, entity_name = restructurer.generate_new_entity_id(
         "sensor.old_temperature", {"attributes": {"device_class": "temperature"}}
     )
-    assert entity_id == "sensor.thermostat_temperature"
+    assert entity_id == "sensor.living_room_thermostat_temperature"
     assert entity_name == "Temperature"
     assert restructurer.generate_device_name("device-1") == "Thermostat"
 
@@ -99,15 +99,15 @@ def test_home_assistant_generation_preserves_native_entity_names(tmp_path):
     }
 
     assert restructurer.generate_new_entity_id("event.button_bl_2", {}) == (
-        "event.thermostat_button_bl",
+        "event.living_room_thermostat_button_bl",
         "Button BL",
     )
     assert restructurer.generate_new_entity_id("event.button_br_2", {}) == (
-        "event.thermostat_button_br",
+        "event.living_room_thermostat_button_br",
         "Button BR",
     )
     assert restructurer.generate_new_entity_id("button.thermostat_reboot", {}) == (
-        "button.thermostat_restart",
+        "button.living_room_thermostat_restart",
         "Restart",
     )
 
@@ -123,7 +123,7 @@ def test_original_name_wins_over_existing_registry_name(tmp_path):
     )
 
     assert restructurer.generate_new_entity_id("sensor.old_temperature", {}) == (
-        "sensor.thermostat_temperature",
+        "sensor.living_room_thermostat_temperature",
         "Temperature",
     )
 
@@ -135,7 +135,7 @@ def test_composed_state_name_is_reduced_to_native_entity_name(tmp_path):
     assert restructurer.generate_new_entity_id(
         "sensor.old_temperature",
         {"attributes": {"friendly_name": "Living room Thermostat Temperature"}},
-    ) == ("sensor.thermostat_temperature", "Temperature")
+    ) == ("sensor.living_room_thermostat_temperature", "Temperature")
 
 
 def test_floor_and_metadata_are_available(tmp_path):
@@ -231,7 +231,28 @@ def test_home_assistant_primary_entity_uses_only_device_name(tmp_path):
     assert restructurer.generate_new_entity_id(
         "switch.thermostat_switch",
         {"attributes": {"friendly_name": "Thermostat"}},
-    ) == ("switch.thermostat", "")
+    ) == ("switch.living_room_thermostat", "")
+
+
+def test_home_assistant_recreated_ids_match_area_device_entity_example(tmp_path):
+    restructurer = make_restructurer(tmp_path)
+    restructurer.naming_templates.apply_preset("home_assistant")
+    restructurer.areas["hallway"] = {"area_id": "hallway", "name": "Chodba"}
+    restructurer.devices["device-1"].update({"name": "Vstupní dveře", "area_id": "hallway"})
+    restructurer.entities = {
+        "sensor.vstupni_dvere_battery": {
+            "id": "registry-battery",
+            "entity_id": "sensor.vstupni_dvere_battery",
+            "device_id": "device-1",
+            "original_name": "Battery",
+            "has_entity_name": True,
+        }
+    }
+
+    assert restructurer.generate_new_entity_id("sensor.vstupni_dvere_battery", {}) == (
+        "sensor.chodba_vstupni_dvere_battery",
+        "Battery",
+    )
 
 
 def test_home_assistant_device_less_entity_uses_only_entity_name(tmp_path):
