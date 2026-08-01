@@ -2792,8 +2792,6 @@ async def _get_hierarchy_async():
             if candidate_device_id and candidate_device_id not in first_entity_by_device:
                 first_entity_by_device[candidate_device_id] = candidate_id
 
-        device_base_names = {}
-        device_area_map = {}
         devices = []
         for device_id, device_data in restructurer.devices.items():
             raw_name = device_data.get("name_by_user") or device_data.get("name", "")
@@ -2814,9 +2812,6 @@ async def _get_hierarchy_async():
                 if area_id and area_id in area_names:
                     base_name = _strip_prefix(raw_name, area_names[area_id])
                 suggested_name = raw_name
-
-            device_base_names[device_id] = base_name
-            device_area_map[device_id] = area_id
 
             # Extract integration(s) from identifiers
             # identifiers is like [["homekit_controller", "xxx"], ["zha", "yyy"]]
@@ -2865,63 +2860,8 @@ async def _get_hierarchy_async():
             # Get original friendly name
             original_name = entity_data.get("name") or entity_data.get("original_name") or ""
 
-            # Debug logging for specific entities
-            if "wallbox" in entity_id.lower():
-                logger.info(
-                    f"DEBUG {entity_id}: name={entity_data.get('name')!r}, original_name={entity_data.get('original_name')!r}, computed={original_name!r}"
-                )
-
-            # Strip device+area prefix from entity name
-            # e.g., "Büro Raumluftsensor Kohlendioxid" -> "Kohlendioxid"
             entity_context = restructurer.build_naming_context(entity_id, entity_data)
-            entity_context["entity"] = ""
-            parsed_base_name = restructurer.naming_templates.extract_field(
-                "entity_name", original_name, "entity", entity_context
-            )
-            base_name = parsed_base_name or original_name
-            if not parsed_base_name and device_id and device_id in device_base_names:
-                # Build full device display name (area + device base)
-                dev_area_id = device_area_map.get(device_id)
-                dev_base = device_base_names[device_id]
-                if dev_area_id and dev_area_id in area_names:
-                    device_display = f"{area_names[dev_area_id]} {dev_base}"
-                else:
-                    device_display = dev_base
-                base_name = _strip_prefix(original_name, device_display)
-                # Also try just device base name
-                if base_name == original_name:
-                    base_name = _strip_prefix(original_name, dev_base)
-            elif not parsed_base_name and area_id and area_id in area_names:
-                base_name = _strip_prefix(original_name, area_names[area_id])
-
-            # Fallback: If base_name is still empty or equals domain, try extracting from entity_id
-            domain = entity_id.split(".")[0] if "." in entity_id else ""
-            if not base_name or base_name.lower() == domain:
-                # Try to extract suffix from entity_id
-                # e.g., sensor.tiefgarage_wallbox_angebotene_leistung -> angebotene_leistung
-                entity_slug = entity_id.split(".")[-1] if "." in entity_id else entity_id
-                # Build expected prefix from device/area
-                expected_prefix = ""
-                if device_id and device_id in device_base_names:
-                    dev_area_id = device_area_map.get(device_id)
-                    dev_base = device_base_names[device_id]
-                    if dev_area_id and dev_area_id in area_names:
-                        expected_prefix = f"{area_names[dev_area_id]}_{dev_base}".lower().replace(" ", "_")
-                    else:
-                        expected_prefix = dev_base.lower().replace(" ", "_")
-                elif area_id and area_id in area_names:
-                    expected_prefix = area_names[area_id].lower().replace(" ", "_")
-
-                if expected_prefix and entity_slug.startswith(expected_prefix + "_"):
-                    suffix_slug = entity_slug[len(expected_prefix) + 1 :]
-                    # Convert slug to human-readable: replace underscores with spaces, title case
-                    base_name = suffix_slug.replace("_", " ").title()
-
-            # Debug logging for wallbox entities
-            if "wallbox" in entity_id.lower():
-                logger.info(
-                    f"DEBUG {entity_id}: base_name={base_name!r}, device_id={device_id}, has_device={device_id in device_base_names if device_id else False}"
-                )
+            base_name = entity_context["entity"]
 
             suggested_entity_id, suggested_entity_name = restructurer.generate_new_entity_id(entity_id, entity_data)
 
@@ -2979,7 +2919,7 @@ def naming_templates_config():
         if preset and preset != "custom" and "templates" not in data:
             config = manager.apply_preset(preset)
         else:
-            config = manager.set_templates(data.get("templates", {}), preset=preset)
+            config = manager.set_templates(data.get("templates", {}))
         return jsonify(config)
     except NamingTemplateError as error:
         return jsonify({"error": str(error)}), 400

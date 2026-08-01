@@ -4015,15 +4015,14 @@
                         .replace(/^[\s_\-–—|/·.,]+|[\s_\-–—|/·.,]+$/g, '');
                 },
 
-                deviceNamingContext(device, baseName = null) {
-                    const area = this.hierarchy.areas.find(a => a.id === device?.area_id);
+                baseNamingContext(area, device) {
                     const floor = this.hierarchy.floors.find(f => f.id === area?.floor_id);
                     return {
                         floor: floor?.name || '',
                         floor_id: floor?.id || '',
                         area: area?.name || '',
                         area_id: area?.id || '',
-                        device: baseName !== null ? baseName : (device?.base_name || ''),
+                        device: device?.base_name || '',
                         device_id: device?.id || '',
                         entity: '',
                         entity_id: '',
@@ -4032,6 +4031,14 @@
                         manufacturer: device?.manufacturer || '',
                         model: device?.model || '',
                         integration: device?.integrations?.[0] || ''
+                    };
+                },
+
+                deviceNamingContext(device, baseName = null) {
+                    const area = this.hierarchy.areas.find(a => a.id === device?.area_id);
+                    return {
+                        ...this.baseNamingContext(area, device),
+                        device: baseName !== null ? baseName : (device?.base_name || '')
                     };
                 },
 
@@ -4044,23 +4051,15 @@
                     const device = entity?.device_id
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
-                    const areaId = device?.area_id || entity?.area_id;
+                    const areaId = entity?.area_id || device?.area_id;
                     const area = this.hierarchy.areas.find(a => a.id === areaId);
-                    const floor = this.hierarchy.floors.find(f => f.id === area?.floor_id);
                     const domain = entity?.id?.split('.')[0] || '';
                     return {
-                        floor: floor?.name || '',
-                        floor_id: floor?.id || '',
-                        area: area?.name || '',
-                        area_id: area?.id || '',
-                        device: device?.base_name || '',
-                        device_id: device?.id || '',
+                        ...this.baseNamingContext(area, device),
                         entity: suffix !== null ? suffix : this.getEntitySuffix(entity),
                         entity_id: entity?.id?.split('.').pop() || '',
                         domain,
                         device_class: entity?.device_class || '',
-                        manufacturer: device?.manufacturer || '',
-                        model: device?.model || '',
                         integration: entity?.platform || device?.integrations?.[0] || ''
                     };
                 },

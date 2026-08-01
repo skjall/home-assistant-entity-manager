@@ -107,6 +107,15 @@ def test_configuration_persists(manager):
     assert reloaded.get_templates()["entity_name"] == "{entity}"
 
 
+def test_modified_preset_is_saved_as_custom(manager):
+    templates = manager.apply_preset("home_assistant")["templates"]
+    templates["entity_name"] = "{entity} ({domain})"
+
+    config = manager.set_templates(templates)
+
+    assert config["preset"] == "custom"
+
+
 def test_v1_home_assistant_preset_is_migrated(tmp_path):
     storage_path = tmp_path / "naming_templates.json"
     storage_path.write_text(

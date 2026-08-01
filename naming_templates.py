@@ -109,35 +109,41 @@ class NamingTemplates:
                 data = json.load(file)
             templates = data.get("templates", {})
             self.validate_templates(templates)
-            migrated = False
-            if (
-                data.get("version", 1) < 2
-                and data.get("preset") == "home_assistant"
-                and templates == _V1_HOME_ASSISTANT_TEMPLATES
-            ):
-                data.setdefault("history", []).insert(0, deepcopy(templates))
-                data["templates"] = deepcopy(PRESETS["home_assistant"]["templates"])
-                templates = data["templates"]
-                migrated = True
+            migrated = self._migrate(data)
+            templates = data["templates"]
             data["version"] = SCHEMA_VERSION
             data.setdefault("preset", self.matching_preset(templates) or "custom")
             data.setdefault("history", [])
             if migrated:
-                temporary_path = self.storage_path.with_suffix(self.storage_path.suffix + ".tmp")
-                with temporary_path.open("w", encoding="utf-8") as file:
-                    json.dump(data, file, indent=2, ensure_ascii=False)
-                temporary_path.replace(self.storage_path)
+                self._write_data(data)
             return data
         except (OSError, json.JSONDecodeError, NamingTemplateError) as error:
             logger.error("Failed to load naming templates: %s", error)
             return self._default_data()
 
-    def _save_data(self) -> None:
-        """Atomically persist the current configuration."""
+    @staticmethod
+    def _migrate(data: Dict[str, Any]) -> bool:
+        """Apply migrations to stored preset configurations."""
+        if not (
+            data.get("version", 1) < 2
+            and data.get("preset") == "home_assistant"
+            and data.get("templates") == _V1_HOME_ASSISTANT_TEMPLATES
+        ):
+            return False
+        data.setdefault("history", []).insert(0, deepcopy(data["templates"]))
+        data["templates"] = deepcopy(PRESETS["home_assistant"]["templates"])
+        return True
+
+    def _write_data(self, data: Mapping[str, Any]) -> None:
+        """Atomically write template data."""
         temporary_path = self.storage_path.with_suffix(self.storage_path.suffix + ".tmp")
         with temporary_path.open("w", encoding="utf-8") as file:
-            json.dump(self.data, file, indent=2, ensure_ascii=False)
+            json.dump(data, file, indent=2, ensure_ascii=False)
         temporary_path.replace(self.storage_path)
+
+    def _save_data(self) -> None:
+        """Atomically persist the current configuration."""
+        self._write_data(self.data)
 
     @staticmethod
     def validate_template(template: str) -> None:
@@ -194,8 +200,8 @@ class NamingTemplates:
             "allowed_fields": sorted(ALLOWED_FIELDS),
         }
 
-    def set_templates(self, templates: Mapping[str, str], preset: Optional[str] = None) -> Dict[str, Any]:
-        """Validate and save a custom or preset template set."""
+    def set_templates(self, templates: Mapping[str, str]) -> Dict[str, Any]:
+        """Validate and save templates, detecting whether they match a preset."""
         clean_templates = {key: value.strip() for key, value in templates.items()}
         self.validate_templates(clean_templates)
         previous = self.get_templates()
@@ -204,11 +210,10 @@ class NamingTemplates:
             if previous not in history:
                 history.insert(0, previous)
             del history[5:]
-        matched = self.matching_preset(clean_templates)
         self.data.update(
             {
                 "version": SCHEMA_VERSION,
-                "preset": matched or (preset if preset in PRESETS else "custom"),
+                "preset": self.matching_preset(clean_templates) or "custom",
                 "templates": clean_templates,
             }
         )
@@ -219,7 +224,7 @@ class NamingTemplates:
         """Apply and persist a named preset."""
         if preset not in PRESETS:
             raise NamingTemplateError(f"Unknown preset: {preset}")
-        return self.set_templates(PRESETS[preset]["templates"], preset=preset)
+        return self.set_templates(PRESETS[preset]["templates"])
 
     def render(self, template_key: str, context: Mapping[str, Any], normalize: bool = False) -> str:
         """Render one active template with a safe, flat context."""
