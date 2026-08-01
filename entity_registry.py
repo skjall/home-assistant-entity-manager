@@ -43,7 +43,7 @@ class EntityRegistry:
 
         if new_entity_id:
             message["new_entity_id"] = new_entity_id
-        if name:
+        if name is not None:
             message["name"] = name
         if labels is not None:
             message["labels"] = labels

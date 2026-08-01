@@ -52,6 +52,47 @@ def test_job_get_and_list(client):
     assert c.get("/api/jobs/does-not-exist").status_code == 404
     listing = c.get("/api/jobs").get_json()["jobs"]
     assert [j["job_id"] for j in listing] == [jid]
+
+
+def test_device_rename_uses_active_naming_templates() -> None:
+    """Device renames use the shared generator and retain entity-specific names."""
+
+    class FakeRestructurer:
+        """Provide the naming operations used by the device rename helpers."""
+
+        entities = {
+            "sensor.kitchen_sofa_energy": {"device_id": "device-1"},
+            "sensor.kitchen_sofa_voltage": {"device_id": "device-1"},
+            "sensor.unrelated": {"device_id": "device-2"},
+        }
+
+        def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
+            """Return the entity-specific part captured before the device rename."""
+            return {"entity": state["attributes"]["native_name"]}
+
+        def generate_new_entity_id(
+            self,
+            entity_id: str,
+            state: dict,
+            entity_name: str | None = None,
+        ) -> tuple[str, str]:
+            """Model a custom active template using the preserved entity name."""
+            suffix = (entity_name or "").lower().replace(" ", "_")
+            return f"sensor.ground_floor_sofa1_{suffix}", entity_name or ""
+
+    states = [
+        {"entity_id": "sensor.kitchen_sofa_energy", "attributes": {"native_name": "Energy"}},
+        {"entity_id": "sensor.kitchen_sofa_voltage", "attributes": {"native_name": "Voltage"}},
+    ]
+    restructurer = FakeRestructurer()
+    names = web_ui._capture_device_entity_names(restructurer, "device-1", states)
+
+    assert web_ui._plan_device_entity_changes(restructurer, "device-1", states, names) == [
+        ("sensor.kitchen_sofa_energy", "sensor.ground_floor_sofa1_energy", "Energy"),
+        ("sensor.kitchen_sofa_voltage", "sensor.ground_floor_sofa1_voltage", "Voltage"),
+    ]
+
+
 def test_init_client_recreates_missing_restructurer(monkeypatch) -> None:
     """A worker can restore the restructurer when the REST client already exists."""
     client = object()

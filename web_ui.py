@@ -2483,6 +2483,42 @@ def rename_device():
     return jsonify(job), 202
 
 
+def _capture_device_entity_names(
+    restructurer: EntityRestructurer,
+    device_id: str,
+    states: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Capture entity-specific names before changing their device name."""
+    states_by_id = {state["entity_id"]: state for state in states}
+    return {
+        entity_id: restructurer.build_naming_context(entity_id, states_by_id.get(entity_id, {}))["entity"]
+        for entity_id, entity_info in restructurer.entities.items()
+        if entity_info.get("device_id") == device_id
+    }
+
+
+def _plan_device_entity_changes(
+    restructurer: EntityRestructurer,
+    device_id: str,
+    states: list[dict[str, Any]],
+    entity_names: dict[str, str],
+) -> list[tuple[str, str, str]]:
+    """Generate entity changes for a renamed device with the active templates."""
+    states_by_id = {state["entity_id"]: state for state in states}
+    return [
+        (
+            entity_id,
+            *restructurer.generate_new_entity_id(
+                entity_id,
+                states_by_id.get(entity_id, {}),
+                entity_names.get(entity_id),
+            ),
+        )
+        for entity_id, entity_info in restructurer.entities.items()
+        if entity_info.get("device_id") == device_id
+    ]
+
+
 async def rename_device_handler(job, ctx):
     """Rename a device and cascade the rename to all of its entities.
 
@@ -2507,11 +2543,13 @@ async def rename_device_handler(job, ctx):
         await init_client()
         await renamer_state["restructurer"].load_structure(ws)
 
-        # Get old device name before renaming
-        old_device_name = None
-        if device_id in renamer_state["restructurer"].devices:
-            device = renamer_state["restructurer"].devices[device_id]
-            old_device_name = device.get("name_by_user") or device.get("name")
+        dependency_updater = DependencyUpdater(base_url, token)
+        cached_states = await dependency_updater.get_states()
+        entity_names = _capture_device_entity_names(
+            renamer_state["restructurer"],
+            device_id,
+            cached_states,
+        )
 
         device_registry = DeviceRegistry(ws)
         success = await device_registry.rename_device(device_id, new_name)
@@ -2522,6 +2560,10 @@ async def rename_device_handler(job, ctx):
         # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
         z2m_sync = await _sync_z2m_name(device_registry, device_id, new_name)
 
+        # The shared generator needs the updated device registry entry to render
+        # the active entity ID and entity-name templates correctly.
+        await renamer_state["restructurer"].load_structure(ws)
+
         # Update entities: rename ID + friendly name + update dependencies
         entities_updated = 0
         entities_failed = 0
@@ -2530,85 +2572,27 @@ async def rename_device_handler(job, ctx):
 
         logger.info("=== Starting entity rename after device rename ===")
         logger.info(f"Device ID: {device_id}")
-        logger.info(f"Old device name: {old_device_name}")
         logger.info(f"New device name: {new_name}")
 
         entity_registry = EntityRegistry(ws)
 
-        # Initialize dependency updater
-        dependency_updater = DependencyUpdater(base_url, token)
-        cached_states = await dependency_updater.get_states()
-
-        # Get area name for this device
-        device_info = renamer_state["restructurer"].devices.get(device_id, {})
-        area_id = device_info.get("area_id")
-        area_name = ""
-        if area_id and area_id in renamer_state["restructurer"].areas:
-            area_name = renamer_state["restructurer"].areas[area_id].get("name", "")
-
-        logger.info(f"Area ID: {area_id}, Area name: {area_name}")
-
-        # Get the device base_name (without area prefix)
-        device_base_name = _strip_prefix(new_name, area_name) if area_name else new_name
-
-        # Build old device display name for stripping from entity names
-        old_device_base = (
-            _strip_prefix(old_device_name, area_name) if (old_device_name and area_name) else old_device_name
+        entity_changes = _plan_device_entity_changes(
+            renamer_state["restructurer"],
+            device_id,
+            cached_states,
+            entity_names,
         )
-        old_device_display = f"{area_name} {old_device_base}" if area_name else old_device_base
-
-        # Count entities for this device
-        device_entities = [
-            eid for eid, einfo in renamer_state["restructurer"].entities.items() if einfo.get("device_id") == device_id
-        ]
-        total = len(device_entities)
+        total = len(entity_changes)
         logger.info(f"Found {total} entities for device {device_id}")
         ctx.progress(0, total)
         processed = 0
 
-        # Find all entities belonging to this device
-        for old_entity_id, entity_info in list(renamer_state["restructurer"].entities.items()):
-            if entity_info.get("device_id") != device_id:
-                continue
-
-            # Get current entity name
-            original_name = entity_info.get("name") or entity_info.get("original_name") or ""
-            logger.info(f"Processing entity {old_entity_id}: original_name='{original_name}'")
-
-            if not original_name:
-                logger.info("  Skipping - no original_name")
-                entities_skipped += 1
-                processed += 1
-                ctx.progress(processed, total, current=old_entity_id)
-                continue
-
-            # Compute entity base_name (suffix) by stripping area and device prefixes
-            entity_suffix = original_name
-            if old_device_display:
-                entity_suffix = _strip_prefix(entity_suffix, old_device_display)
-            if entity_suffix == original_name and old_device_base:
-                entity_suffix = _strip_prefix(entity_suffix, old_device_base)
-            if entity_suffix == original_name and area_name:
-                entity_suffix = _strip_prefix(entity_suffix, area_name)
-
-            # Build new friendly name: Area + Device Base + Entity Suffix
-            parts = []
-            if area_name:
-                parts.append(area_name)
-            parts.append(device_base_name)
-            if entity_suffix and entity_suffix != original_name:
-                parts.append(entity_suffix)
-
-            new_friendly_name = " ".join(parts)
-
-            # Build new entity ID
-            domain = old_entity_id.split(".")[0]
-            new_entity_id = f"{domain}.{normalize_name(new_friendly_name)}"
-
+        for old_entity_id, new_entity_id, new_friendly_name in entity_changes:
             logger.info(f"  {old_entity_id} -> {new_entity_id} ('{new_friendly_name}')")
 
             # Skip if nothing would change
-            if new_entity_id == old_entity_id and new_friendly_name == original_name:
+            current_name = renamer_state["restructurer"].entities[old_entity_id].get("name") or ""
+            if new_entity_id == old_entity_id and new_friendly_name == current_name:
                 logger.info("  Skipping - no changes needed")
                 entities_skipped += 1
                 processed += 1
