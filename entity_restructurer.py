@@ -319,11 +319,8 @@ class EntityRestructurer:
             or entity_reg.get("original_device_class")
             or ""
         )
-        entity_type = self.get_entity_type(entity_id, device_class)
         registry_id = entity_reg.get("id", "")
         entity_override = self.naming_overrides.get_entity_override(registry_id) if registry_id else None
-        entity_name = entity_override.get("name") if entity_override else None
-        entity_name = entity_name or entity_type.replace("_", " ").title()
 
         integration = entity_reg.get("platform") or ""
         if not integration and self.type_mappings:
@@ -337,7 +334,7 @@ class EntityRestructurer:
             "area_id": area_id,
             "device": "",
             "device_id": device_id,
-            "entity": entity_name,
+            "entity": "",
             "entity_id": object_id,
             "domain": domain,
             "device_class": device_class,
@@ -355,6 +352,52 @@ class EntityRestructurer:
             device_name = object_id
 
         partial_context["device"] = device_name
+
+        # `{entity}` is the entity's own HA-provided name, not a translated
+        # domain or device-class label.  `original_name` is what integrations
+        # supply for has_entity_name entities (for example "Button BL",
+        # "Battery", or "Restart").  Replacing it with "Event", "Sensor", or
+        # "Button" loses information and can make several entities collide on
+        # the same target entity_id.
+        entity_name = next(
+            (
+                name
+                for name in (
+                    entity_override.get("name") if entity_override else None,
+                    entity_reg.get("original_name"),
+                    entity_reg.get("name"),
+                    state_info.get("original_name"),
+                    state_info.get("name"),
+                )
+                if name
+            ),
+            None,
+        )
+
+        # REST state data only exposes the composed friendly name.  Use it as a
+        # final HA-name fallback and remove a known device/area prefix so the
+        # templates do not add that hierarchy twice.
+        if entity_name is None:
+            entity_name = state_info.get("attributes", {}).get("friendly_name")
+            for prefix in (
+                raw_device_name,
+                partial_context["area"],
+                device_name,
+            ):
+                if not prefix or entity_name is None:
+                    continue
+                if entity_name.lower() == prefix.lower():
+                    entity_name = ""
+                elif entity_name.lower().startswith(prefix.lower() + " "):
+                    entity_name = entity_name[len(prefix) :].strip()
+
+        # Older integrations may provide neither registry name. Preserve the
+        # previous type-based behavior only as the last resort.
+        if entity_name is None:
+            entity_type = self.get_entity_type(entity_id, device_class)
+            entity_name = entity_type.replace("_", " ").title()
+
+        partial_context["entity"] = entity_name
         return {key: str(value or "") for key, value in partial_context.items()}
 
     def generate_device_name(self, device_id: str) -> str:
