@@ -5,6 +5,8 @@ These verify that the request thread validates, sanitizes and enqueues the job
 touching Home Assistant. The worker is not started, so enqueued jobs stay queued.
 """
 
+import asyncio
+
 import pytest
 
 from jobs import TERMINAL_STATES, JobStore, JobWorker
@@ -50,3 +52,11 @@ def test_job_get_and_list(client):
     assert c.get("/api/jobs/does-not-exist").status_code == 404
     listing = c.get("/api/jobs").get_json()["jobs"]
     assert [j["job_id"] for j in listing] == [jid]
+def test_init_client_recreates_missing_restructurer(monkeypatch) -> None:
+    """A worker can restore the restructurer when the REST client already exists."""
+    client = object()
+    monkeypatch.setitem(web_ui.renamer_state, "client", client)
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", None)
+
+    assert asyncio.run(web_ui.init_client()) is client
+    assert web_ui.renamer_state["restructurer"].client is client

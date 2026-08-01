@@ -311,7 +311,7 @@ def validate_json_input(data: dict, required_fields: list = None) -> tuple:
     return True, None
 
 
-async def init_client():
+async def init_client() -> HomeAssistantClient:
     """Initialize the Home Assistant client and restructurer."""
     if not renamer_state["client"]:
         # In Add-on mode, use Supervisor API
@@ -319,6 +319,8 @@ async def init_client():
         token = os.getenv("HA_TOKEN", os.getenv("SUPERVISOR_TOKEN"))
         logger.info(f"Connecting to Home Assistant at {base_url}")
         renamer_state["client"] = HomeAssistantClient(base_url, token)
+
+    if renamer_state["restructurer"] is None:
         renamer_state["restructurer"] = EntityRestructurer(
             renamer_state["client"],
             renamer_state["naming_overrides"],
@@ -2502,8 +2504,7 @@ async def rename_device_handler(job, ctx):
 
     try:
         # Ensure restructurer is loaded
-        if renamer_state["restructurer"] is None:
-            renamer_state["restructurer"] = EntityRestructurer()
+        await init_client()
         await renamer_state["restructurer"].load_structure(ws)
 
         # Get old device name before renaming
