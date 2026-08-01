@@ -76,6 +76,20 @@ Examples:
 - `living_room.sensor.temperature` - Living room temperature sensor
 - `kitchen.switch.outlet_1` - Kitchen power outlet switch 1
 
+### Naming templates
+
+The Settings page provides two presetsâ€”**Entity Manager** and **Home Assistant**â€”and fully custom templates for
+device names, entity registry names, and entity IDs. The Entity Manager preset remains the default, so upgrading does
+not propose a different naming scheme unless you choose one.
+
+Templates can use the following Home Assistant context:
+
+`{floor}`, `{floor_id}`, `{area}`, `{area_id}`, `{device}`, `{device_id}`, `{entity}`, `{entity_id}`, `{domain}`,
+`{device_class}`, `{manufacturer}`, `{model}`, and `{integration}`.
+
+The entity-ID template is normalized with the same Home Assistant-compatible slug rules used elsewhere by the add-on;
+the entity domain is added automatically. Open Settings to preview a template with sample data before saving it.
+
 ## Configuration
 
 ### Naming Overrides
