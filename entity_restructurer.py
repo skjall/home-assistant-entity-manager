@@ -154,7 +154,15 @@ class EntityRestructurer:
 
             if response.get("success"):
                 floors_data = response.get("result", [])
-                self.floors = {floor["floor_id"]: floor for floor in floors_data}
+                self.floors = {}
+                for floor in floors_data:
+                    floor_id = floor.get("floor_id") or floor.get("id")
+                    if not floor_id:
+                        logger.warning("Ignoring floor registry entry without an id: %s", floor)
+                        continue
+                    normalized_floor = dict(floor)
+                    normalized_floor.setdefault("floor_id", floor_id)
+                    self.floors[floor_id] = normalized_floor
                 logger.info(f"Loaded {len(self.floors)} floors via WebSocket")
             else:
                 logger.warning(f"Failed to load floors: {response}")
@@ -174,7 +182,15 @@ class EntityRestructurer:
 
             if response.get("success"):
                 areas_data = response.get("result", [])
-                self.areas = {area["area_id"]: area for area in areas_data}
+                self.areas = {}
+                for area in areas_data:
+                    area_id = area.get("area_id") or area.get("id")
+                    if not area_id:
+                        logger.warning("Ignoring area registry entry without an id: %s", area)
+                        continue
+                    normalized_area = dict(area)
+                    normalized_area.setdefault("area_id", area_id)
+                    self.areas[area_id] = normalized_area
                 logger.info(f"Loaded {len(self.areas)} areas via WebSocket")
             else:
                 logger.error(f"Failed to load areas: {response}")
@@ -308,7 +324,9 @@ class EntityRestructurer:
         device_id = entity_reg.get("device_id") or ""
         device = self.devices.get(device_id, {}) if device_id else {}
 
-        area_id = device.get("area_id") or entity_reg.get("area_id") or ""
+        # An entity-level area is an explicit override of its device's area in
+        # Home Assistant, so it must take precedence.
+        area_id = entity_reg.get("area_id") or device.get("area_id") or ""
         area = self.areas.get(area_id, {}) if area_id else {}
         floor_id = area.get("floor_id") or ""
         floor = self.floors.get(floor_id, {}) if floor_id else {}
@@ -348,9 +366,6 @@ class EntityRestructurer:
             for prefix in (partial_context["floor"], partial_context["area"]):
                 if prefix and device_name.lower().startswith(prefix.lower() + " "):
                     device_name = device_name[len(prefix) :].strip()
-        if not device_name and not device:
-            device_name = object_id
-
         partial_context["device"] = device_name
 
         # `{entity}` is the entity's own HA-provided name, not a translated

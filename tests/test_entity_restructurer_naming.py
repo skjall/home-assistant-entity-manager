@@ -1,5 +1,7 @@
 """Tests for applying naming templates to Home Assistant registry data."""
 
+import pytest
+
 from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
 from naming_templates import NamingTemplates
@@ -151,3 +153,101 @@ def test_floor_and_metadata_are_available(tmp_path):
     assert entity_id == "sensor.ground_matter_thermostat_temperature"
     assert entity_name == "Living room Temperature (T1000)"
     assert restructurer.generate_device_name("device-1") == "Ground floor Acme Thermostat"
+
+
+def test_entity_area_override_wins_over_device_area(tmp_path):
+    restructurer = make_restructurer(tmp_path)
+    restructurer.areas["office"] = {
+        "area_id": "office",
+        "name": "Office",
+        "floor_id": "ground",
+    }
+    restructurer.entities["sensor.old_temperature"]["area_id"] = "office"
+
+    context = restructurer.build_naming_context("sensor.old_temperature", {})
+
+    assert context["area_id"] == "office"
+    assert context["area"] == "Office"
+
+
+class FakeRegistryWebSocket:
+    def __init__(self):
+        self._next_id = 0
+        self._responses = []
+
+    async def _send_message(self, message):
+        self._next_id += 1
+        results = {
+            "config/floor_registry/list": [
+                {"id": "ground", "name": "Ground floor"},
+            ],
+            "config/area_registry/list": [
+                {"id": "living", "name": "Living room", "floor_id": "ground"},
+            ],
+            "config/device_registry/list": [
+                {"id": "device-1", "name": "Thermostat", "area_id": "living"},
+            ],
+            "config/entity_registry/list": [
+                {
+                    "id": "registry-1",
+                    "entity_id": "sensor.thermostat_temperature",
+                    "device_id": "device-1",
+                    "original_name": "Temperature",
+                }
+            ],
+        }
+        self._responses.append({"id": self._next_id, "success": True, "result": results[message["type"]]})
+        return self._next_id
+
+    async def _receive_message(self):
+        return self._responses.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_current_ha_registry_ids_load_area_and_floor_names(tmp_path):
+    restructurer = make_restructurer(tmp_path)
+
+    await restructurer.load_structure(FakeRegistryWebSocket())
+
+    context = restructurer.build_naming_context("sensor.thermostat_temperature", {})
+    assert context["area"] == "Living room"
+    assert context["floor"] == "Ground floor"
+
+
+def test_home_assistant_primary_entity_uses_only_device_name(tmp_path):
+    restructurer = make_restructurer(tmp_path)
+    restructurer.naming_templates.apply_preset("home_assistant")
+    restructurer.entities = {
+        "switch.thermostat_switch": {
+            "id": "registry-main",
+            "entity_id": "switch.thermostat_switch",
+            "device_id": "device-1",
+            "platform": "matter",
+            "original_name": None,
+            "has_entity_name": True,
+        }
+    }
+
+    assert restructurer.generate_new_entity_id(
+        "switch.thermostat_switch",
+        {"attributes": {"friendly_name": "Thermostat"}},
+    ) == ("switch.thermostat", "")
+
+
+def test_home_assistant_device_less_entity_uses_only_entity_name(tmp_path):
+    restructurer = make_restructurer(tmp_path)
+    restructurer.naming_templates.apply_preset("home_assistant")
+    restructurer.entities = {
+        "binary_sensor.everyone": {
+            "id": "registry-everyone",
+            "entity_id": "binary_sensor.everyone",
+            "device_id": None,
+            "original_name": "Everyone is home",
+            "has_entity_name": True,
+        }
+    }
+
+    assert restructurer.generate_new_entity_id("binary_sensor.everyone", {}) == (
+        "binary_sensor.everyone_is_home",
+        "Everyone is home",
+    )

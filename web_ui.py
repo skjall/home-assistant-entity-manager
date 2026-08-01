@@ -476,12 +476,13 @@ async def load_areas_and_entities():
             entity_reg = renamer_state["restructurer"].entities.get(entity_id, {})
             if entity_reg:
                 device_id = entity_reg.get("device_id")
-                if device_id and device_id in renamer_state["restructurer"].devices:
+                # A direct entity assignment overrides its device's area.
+                if entity_reg.get("area_id") and entity_reg["area_id"] in areas_dict:
+                    area_name = areas_dict[entity_reg["area_id"]]
+                elif device_id and device_id in renamer_state["restructurer"].devices:
                     device = renamer_state["restructurer"].devices[device_id]
                     if device.get("area_id") and device["area_id"] in areas_dict:
                         area_name = areas_dict[device["area_id"]]
-                elif entity_reg.get("area_id") and entity_reg["area_id"] in areas_dict:
-                    area_name = areas_dict[entity_reg["area_id"]]
 
             # 2. From Entity Attributes (some entities have area_id or device_id)
             if area_name == UNASSIGNED_AREA:
@@ -2858,7 +2859,8 @@ async def _get_hierarchy_async():
             override = renamer_state["naming_overrides"].get_entity_override(registry_id)
             device_class = entity_data.get("device_class") or entity_data.get("original_device_class")
             device_id = entity_data.get("device_id")
-            area_id = entity_data.get("area_id")
+            device_data = restructurer.devices.get(device_id, {}) if device_id else {}
+            area_id = entity_data.get("area_id") or device_data.get("area_id")
 
             # Get original friendly name
             original_name = entity_data.get("name") or entity_data.get("original_name") or ""
