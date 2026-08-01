@@ -176,6 +176,27 @@ def test_device_class_is_last_resort_when_ha_provides_no_name(restructurer):
     assert context["entity"] == "Temperature"
 
 
+def test_existing_object_id_preserves_suffix_without_native_name(restructurer):
+    """Legacy entities retain their distinct object-ID suffixes."""
+    entity_id = "sensor.living_room_controller_energy_consumed"
+    restructurer.entities = {
+        entity_id: {
+            "id": "registry-energy",
+            "entity_id": entity_id,
+            "device_id": "device-1",
+            "original_name": None,
+            "name": None,
+        }
+    }
+
+    context = restructurer.build_naming_context(
+        entity_id,
+        {"attributes": {"friendly_name": "Living room Controller"}},
+    )
+
+    assert context["entity"] == "Energy Consumed"
+
+
 def test_custom_templates_can_use_floor_and_metadata(restructurer):
     restructurer.naming_templates.set_templates(
         {

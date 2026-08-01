@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from ha_client import HomeAssistantClient
+from hierarchy_manager import normalize_name
 from naming_overrides import NamingOverrides
 from naming_templates import NamingTemplates
 
@@ -350,7 +351,21 @@ class EntityRestructurer:
                     name = ""
                 elif name.lower().startswith(prefix.lower() + " "):
                     name = name[len(prefix) :].strip()
-            return name
+            if name:
+                return name
+
+            # Integrations without native entity names may expose only the
+            # device name. Preserve their existing object-ID suffix.
+            object_id = entity_id.partition(".")[2]
+            for prefix in filter(None, prefixes):
+                normalized_prefix = normalize_name(prefix)
+                if object_id == normalized_prefix:
+                    object_id = ""
+                elif normalized_prefix and object_id.startswith(normalized_prefix + "_"):
+                    object_id = object_id[len(normalized_prefix) + 1 :]
+            if object_id and not registry.get("has_entity_name"):
+                return object_id.replace("_", " ").title()
+            return ""
 
         entity_type = self.get_entity_type(entity_id, device_class)
         return entity_type.replace("_", " ").title()
@@ -387,10 +402,17 @@ class EntityRestructurer:
             }
         return self.naming_templates.render("device_name", context)
 
-    def generate_new_entity_id(self, entity_id: str, state_info: Dict[str, Any]) -> Tuple[str, str]:
+    def generate_new_entity_id(
+        self,
+        entity_id: str,
+        state_info: Dict[str, Any],
+        entity_name: Optional[str] = None,
+    ) -> Tuple[str, str]:
         """Generate an entity ID and entity-registry name from active templates."""
         domain = entity_id.split(".", 1)[0]
         context = self.build_naming_context(entity_id, state_info)
+        if entity_name is not None:
+            context["entity"] = entity_name
         object_id = self.naming_templates.render("entity_id", context, normalize=True)
         entity_name = self.naming_templates.render("entity_name", context)
         if not object_id:
