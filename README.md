@@ -78,7 +78,7 @@ Examples:
 
 ### Naming templates
 
-The Settings page provides two presetsâ€”**Entity Manager** and **Home Assistant**â€”and fully custom templates for
+The Settings page provides two presets `Entity Manager` and `Home Assistant` and fully custom templates for
 device names, entity registry names, and entity IDs. The Entity Manager preset remains the default, so upgrading does
 not propose a different naming scheme unless you choose one.
 
