@@ -17,7 +17,13 @@ jobs:
     # CLAUDE_CODE_OAUTH_TOKEN is empty and the job can only fail. Review those
     # by commenting "@claude" on the PR instead — `issue_comment` runs in this
     # repository's context and does receive the secret.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    #
+    # Skip bot-initiated PRs (e.g. Renovate) for the same reason claude-review.yml
+    # does: the action refuses non-human actors, and dependency bumps don't need
+    # an AI review.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.type != 'Bot'
 
     runs-on: ubuntu-latest
     permissions:
