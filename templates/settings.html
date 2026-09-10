@@ -410,6 +410,69 @@
             </div>
         </div>
 
+        <!-- Naming templates -->
+        <div class="mapping-section" style="margin-bottom: 24px;">
+            <div class="section-header">
+                <h2>
+                    <i class="ri-braces-line"></i>
+                    <span x-text="t('settings.naming_templates')">Naming templates</span>
+                </h2>
+            </div>
+            <div style="padding: 20px;">
+                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 16px;"
+                   x-text="t('settings.naming_templates_hint')"></p>
+
+                <div class="form-group">
+                    <label x-text="t('settings.naming_preset')">Preset</label>
+                    <select class="filter-select" style="width: 100%;" x-ref="namingPresetSelect"
+                            x-model="namingPreset" @change="selectNamingPreset()">
+                        <option value="entity_manager">Entity Manager</option>
+                        <option value="home_assistant">Home Assistant</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label x-text="t('settings.device_name_template')">Device name template</label>
+                    <input class="edit-input" style="width: 100%;" x-model="namingTemplates.device_name"
+                           @input.debounce.400ms="previewNamingTemplates()">
+                </div>
+                <div class="form-group">
+                    <label x-text="t('settings.entity_name_template')">Entity name template</label>
+                    <input class="edit-input" style="width: 100%;" x-model="namingTemplates.entity_name"
+                           @input.debounce.400ms="previewNamingTemplates()">
+                </div>
+                <div class="form-group">
+                    <label x-text="t('settings.entity_id_template')">Entity ID template</label>
+                    <input class="edit-input" style="width: 100%;" x-model="namingTemplates.entity_id"
+                           @input.debounce.400ms="previewNamingTemplates()">
+                </div>
+
+                <p style="font-size: 0.85rem; color: #6b7280; margin: 12px 0 6px;"
+                   x-text="t('settings.available_placeholders')"></p>
+                <code style="display: block; white-space: normal; line-height: 1.8; color: #374151;"
+                      x-text="namingFields.map(field => '{' + field + '}').join('  ')"></code>
+
+                <div style="margin-top: 16px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <strong x-text="t('settings.naming_preview')">Example preview</strong>
+                    <div style="margin-top: 8px; font-size: 0.9rem;">
+                        <div><span x-text="t('settings.device_name_template')"></span>: <code x-text="namingPreview.device_name || '—'"></code></div>
+                        <div><span x-text="t('settings.entity_name_template')"></span>: <code x-text="namingPreview.entity_name || '—'"></code></div>
+                        <div><span x-text="t('settings.entity_id_template')"></span>: <code x-text="namingPreview.entity_id || '—'"></code></div>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px;">
+                    <button class="add-btn" @click="saveNamingTemplates()">
+                        <i class="ri-save-line"></i>
+                        <span x-text="t('settings.save_templates')">Save templates</span>
+                    </button>
+                    <span x-show="namingMessage" :style="namingError ? 'color:#dc2626' : 'color:#16a34a'"
+                          x-text="namingMessage"></span>
+                </div>
+            </div>
+        </div>
+
         <!-- Main Section -->
         <div class="mapping-section">
             <div class="section-header">
@@ -682,6 +745,13 @@
                 apiToken: { configured: false, created_at: null, last_used_at: null },
                 newApiToken: '',
                 tokenCopied: false,
+                namingPreset: 'entity_manager',
+                namingPresets: {},
+                namingTemplates: { device_name: '', entity_name: '', entity_id: '' },
+                namingFields: [],
+                namingPreview: {},
+                namingMessage: '',
+                namingError: false,
 
                 // Translation function with reactivity
                 t(key, params) {
@@ -705,6 +775,83 @@
                     }
                     await this.loadMappings();
                     await this.loadApiToken();
+                    await this.loadNamingTemplates();
+                },
+
+                async loadNamingTemplates() {
+                    try {
+                        const response = await fetch('api/naming_templates');
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Failed to load naming templates');
+                        this.namingPresets = data.presets || {};
+                        this.namingTemplates = {...data.templates};
+                        this.namingFields = data.allowed_fields || [];
+                        this.namingPreset = data.preset || 'custom';
+                        if (this.$refs.namingPresetSelect) {
+                            this.$refs.namingPresetSelect.value = this.namingPreset;
+                        }
+                        await this.previewNamingTemplates();
+                    } catch (error) {
+                        this.namingError = true;
+                        this.namingMessage = error.message;
+                    }
+                },
+
+                selectNamingPreset() {
+                    const preset = this.namingPresets[this.namingPreset];
+                    if (preset?.templates) {
+                        this.namingTemplates = {...preset.templates};
+                    }
+                    this.previewNamingTemplates();
+                },
+
+                async previewNamingTemplates() {
+                    const context = {
+                        floor: 'Ground floor', floor_id: 'ground_floor',
+                        area: 'Living room', area_id: 'living_room',
+                        device: 'Thermostat', device_id: 'device_123',
+                        entity: 'Temperature', entity_id: 'thermostat_temperature',
+                        domain: 'sensor', device_class: 'temperature',
+                        manufacturer: 'Acme', model: 'T1000', integration: 'matter'
+                    };
+                    try {
+                        const response = await fetch('api/naming_templates/preview', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ templates: this.namingTemplates, context })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Invalid templates');
+                        this.namingPreview = data.rendered || {};
+                        this.namingMessage = '';
+                        this.namingError = false;
+                    } catch (error) {
+                        this.namingPreview = {};
+                        this.namingMessage = error.message;
+                        this.namingError = true;
+                    }
+                },
+
+                async saveNamingTemplates() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch('api/naming_templates', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ preset: this.namingPreset, templates: this.namingTemplates })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Failed to save templates');
+                        this.namingPreset = data.preset || 'custom';
+                        this.namingTemplates = {...data.templates};
+                        this.namingMessage = this.t('settings.templates_saved');
+                        this.namingError = false;
+                    } catch (error) {
+                        this.namingMessage = error.message;
+                        this.namingError = true;
+                    } finally {
+                        this.loading = false;
+                    }
                 },
 
                 // --- External API token management ---

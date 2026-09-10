@@ -12,7 +12,7 @@ import logging
 import os
 import re
 import time
-from typing import Optional
+from typing import Any, Optional
 import unicodedata
 import uuid
 
@@ -35,6 +35,7 @@ from hierarchy_manager import normalize_name
 from jobs import TERMINAL_STATES, JobStore, JobWorker, new_job
 from lovelace_updater import LovelaceUpdater
 from naming_overrides import NamingOverrides
+from naming_templates import NamingTemplateError, NamingTemplates
 from reference_checker import ReferenceChecker
 from rename_log import RenameLog
 from type_mappings import TypeMappings
@@ -160,6 +161,7 @@ renamer_state = {
     "entities_by_area": {},
     "proposed_changes": {},
     "naming_overrides": NamingOverrides(os.path.join(DATA_DIR, "naming_overrides.json")),
+    "naming_templates": NamingTemplates(os.path.join(DATA_DIR, "naming_templates.json")),
     "type_mappings": TypeMappings(user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json")),
     "swap_store": SwapJobStore(os.path.join(DATA_DIR, "device_swaps")),
     "rename_log": RenameLog(os.path.join(DATA_DIR, "rename_log.jsonl")),
@@ -309,7 +311,7 @@ def validate_json_input(data: dict, required_fields: list = None) -> tuple:
     return True, None
 
 
-async def init_client():
+async def init_client() -> HomeAssistantClient:
     """Initialize the Home Assistant client and restructurer."""
     if not renamer_state["client"]:
         # In Add-on mode, use Supervisor API
@@ -317,10 +319,13 @@ async def init_client():
         token = os.getenv("HA_TOKEN", os.getenv("SUPERVISOR_TOKEN"))
         logger.info(f"Connecting to Home Assistant at {base_url}")
         renamer_state["client"] = HomeAssistantClient(base_url, token)
+
+    if renamer_state["restructurer"] is None:
         renamer_state["restructurer"] = EntityRestructurer(
             renamer_state["client"],
             renamer_state["naming_overrides"],
             type_mappings=renamer_state["type_mappings"],
+            naming_templates=renamer_state["naming_templates"],
         )
     return renamer_state["client"]
 
@@ -473,12 +478,13 @@ async def load_areas_and_entities():
             entity_reg = renamer_state["restructurer"].entities.get(entity_id, {})
             if entity_reg:
                 device_id = entity_reg.get("device_id")
-                if device_id and device_id in renamer_state["restructurer"].devices:
+                # A direct entity assignment overrides its device's area.
+                if entity_reg.get("area_id") and entity_reg["area_id"] in areas_dict:
+                    area_name = areas_dict[entity_reg["area_id"]]
+                elif device_id and device_id in renamer_state["restructurer"].devices:
                     device = renamer_state["restructurer"].devices[device_id]
                     if device.get("area_id") and device["area_id"] in areas_dict:
                         area_name = areas_dict[device["area_id"]]
-                elif entity_reg.get("area_id") and entity_reg["area_id"] in areas_dict:
-                    area_name = areas_dict[entity_reg["area_id"]]
 
             # 2. From Entity Attributes (some entities have area_id or device_id)
             if area_name == UNASSIGNED_AREA:
@@ -918,7 +924,9 @@ async def _preview_changes_async():
                 renamer_state["naming_overrides"].get_entity_override(registry_id) if registry_id else None
             )
 
-            current_friendly_name = current_info.get("friendly_name", old_id)
+            current_friendly_name = (
+                entity_reg.get("name") or entity_reg.get("original_name") or current_info.get("friendly_name", old_id)
+            )
 
             # Extract current basename from friendly_name by removing device name prefix
             current_basename = None
@@ -949,27 +957,10 @@ async def _preview_changes_async():
             # Gruppiere nach Device
             device_key = device_id or "no_device"
             if device_key not in devices_map:
-                # Device naming logic:
-                # - Device with area: suggested_name = "{area} {device_name}" (if not already prefixed)
-                # - Device without area: suggested_name = current device name (no change)
                 device_suggested_name = None
                 if device_info:
-                    current_device_name = device_info["name"]
                     has_real_area = area_name != UNASSIGNED_AREA
-
-                    if has_real_area:
-                        # Check if device name already starts with area name
-                        area_normalized = area_name.lower()
-                        device_normalized = current_device_name.lower()
-                        if device_normalized.startswith(area_normalized):
-                            # Already has area prefix, keep as is
-                            device_suggested_name = current_device_name
-                        else:
-                            # Add area prefix
-                            device_suggested_name = f"{area_name} {current_device_name}"
-                    else:
-                        # No area, keep device name as is
-                        device_suggested_name = current_device_name
+                    device_suggested_name = renamer_state["restructurer"].generate_device_name(device_id)
 
                 devices_map[device_key] = {
                     "device_info": device_info,
@@ -1234,8 +1225,8 @@ async def _execute_changes_async():
                     logger.info(f"Processing entity: {old_id} -> {new_id}, friendly_name: {friendly_name}")
 
                 # Check if entity ID or friendly name needs to be changed
-                current_states = next((s for s in states if s["entity_id"] == old_id), {})
-                current_friendly_name = current_states.get("attributes", {}).get("friendly_name", "")
+                entity_reg = renamer_state["restructurer"].entities.get(old_id, {})
+                current_friendly_name = entity_reg.get("name") or entity_reg.get("original_name") or ""
 
                 needs_id_change = old_id != new_id
                 needs_friendly_name_change = current_friendly_name != friendly_name
@@ -2492,6 +2483,42 @@ def rename_device():
     return jsonify(job), 202
 
 
+def _capture_device_entity_names(
+    restructurer: EntityRestructurer,
+    device_id: str,
+    states: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Capture entity-specific names before changing their device name."""
+    states_by_id = {state["entity_id"]: state for state in states}
+    return {
+        entity_id: restructurer.build_naming_context(entity_id, states_by_id.get(entity_id, {}))["entity"]
+        for entity_id, entity_info in restructurer.entities.items()
+        if entity_info.get("device_id") == device_id
+    }
+
+
+def _plan_device_entity_changes(
+    restructurer: EntityRestructurer,
+    device_id: str,
+    states: list[dict[str, Any]],
+    entity_names: dict[str, str],
+) -> list[tuple[str, str, str]]:
+    """Generate entity changes for a renamed device with the active templates."""
+    states_by_id = {state["entity_id"]: state for state in states}
+    return [
+        (
+            entity_id,
+            *restructurer.generate_new_entity_id(
+                entity_id,
+                states_by_id.get(entity_id, {}),
+                entity_names.get(entity_id),
+            ),
+        )
+        for entity_id, entity_info in restructurer.entities.items()
+        if entity_info.get("device_id") == device_id
+    ]
+
+
 async def rename_device_handler(job, ctx):
     """Rename a device and cascade the rename to all of its entities.
 
@@ -2513,15 +2540,16 @@ async def rename_device_handler(job, ctx):
 
     try:
         # Ensure restructurer is loaded
-        if renamer_state["restructurer"] is None:
-            renamer_state["restructurer"] = EntityRestructurer()
+        await init_client()
         await renamer_state["restructurer"].load_structure(ws)
 
-        # Get old device name before renaming
-        old_device_name = None
-        if device_id in renamer_state["restructurer"].devices:
-            device = renamer_state["restructurer"].devices[device_id]
-            old_device_name = device.get("name_by_user") or device.get("name")
+        dependency_updater = DependencyUpdater(base_url, token)
+        cached_states = await dependency_updater.get_states()
+        entity_names = _capture_device_entity_names(
+            renamer_state["restructurer"],
+            device_id,
+            cached_states,
+        )
 
         device_registry = DeviceRegistry(ws)
         success = await device_registry.rename_device(device_id, new_name)
@@ -2532,6 +2560,10 @@ async def rename_device_handler(job, ctx):
         # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
         z2m_sync = await _sync_z2m_name(device_registry, device_id, new_name)
 
+        # The shared generator needs the updated device registry entry to render
+        # the active entity ID and entity-name templates correctly.
+        await renamer_state["restructurer"].load_structure(ws)
+
         # Update entities: rename ID + friendly name + update dependencies
         entities_updated = 0
         entities_failed = 0
@@ -2540,85 +2572,27 @@ async def rename_device_handler(job, ctx):
 
         logger.info("=== Starting entity rename after device rename ===")
         logger.info(f"Device ID: {device_id}")
-        logger.info(f"Old device name: {old_device_name}")
         logger.info(f"New device name: {new_name}")
 
         entity_registry = EntityRegistry(ws)
 
-        # Initialize dependency updater
-        dependency_updater = DependencyUpdater(base_url, token)
-        cached_states = await dependency_updater.get_states()
-
-        # Get area name for this device
-        device_info = renamer_state["restructurer"].devices.get(device_id, {})
-        area_id = device_info.get("area_id")
-        area_name = ""
-        if area_id and area_id in renamer_state["restructurer"].areas:
-            area_name = renamer_state["restructurer"].areas[area_id].get("name", "")
-
-        logger.info(f"Area ID: {area_id}, Area name: {area_name}")
-
-        # Get the device base_name (without area prefix)
-        device_base_name = _strip_prefix(new_name, area_name) if area_name else new_name
-
-        # Build old device display name for stripping from entity names
-        old_device_base = (
-            _strip_prefix(old_device_name, area_name) if (old_device_name and area_name) else old_device_name
+        entity_changes = _plan_device_entity_changes(
+            renamer_state["restructurer"],
+            device_id,
+            cached_states,
+            entity_names,
         )
-        old_device_display = f"{area_name} {old_device_base}" if area_name else old_device_base
-
-        # Count entities for this device
-        device_entities = [
-            eid for eid, einfo in renamer_state["restructurer"].entities.items() if einfo.get("device_id") == device_id
-        ]
-        total = len(device_entities)
+        total = len(entity_changes)
         logger.info(f"Found {total} entities for device {device_id}")
         ctx.progress(0, total)
         processed = 0
 
-        # Find all entities belonging to this device
-        for old_entity_id, entity_info in list(renamer_state["restructurer"].entities.items()):
-            if entity_info.get("device_id") != device_id:
-                continue
-
-            # Get current entity name
-            original_name = entity_info.get("name") or entity_info.get("original_name") or ""
-            logger.info(f"Processing entity {old_entity_id}: original_name='{original_name}'")
-
-            if not original_name:
-                logger.info("  Skipping - no original_name")
-                entities_skipped += 1
-                processed += 1
-                ctx.progress(processed, total, current=old_entity_id)
-                continue
-
-            # Compute entity base_name (suffix) by stripping area and device prefixes
-            entity_suffix = original_name
-            if old_device_display:
-                entity_suffix = _strip_prefix(entity_suffix, old_device_display)
-            if entity_suffix == original_name and old_device_base:
-                entity_suffix = _strip_prefix(entity_suffix, old_device_base)
-            if entity_suffix == original_name and area_name:
-                entity_suffix = _strip_prefix(entity_suffix, area_name)
-
-            # Build new friendly name: Area + Device Base + Entity Suffix
-            parts = []
-            if area_name:
-                parts.append(area_name)
-            parts.append(device_base_name)
-            if entity_suffix and entity_suffix != original_name:
-                parts.append(entity_suffix)
-
-            new_friendly_name = " ".join(parts)
-
-            # Build new entity ID
-            domain = old_entity_id.split(".")[0]
-            new_entity_id = f"{domain}.{normalize_name(new_friendly_name)}"
-
+        for old_entity_id, new_entity_id, new_friendly_name in entity_changes:
             logger.info(f"  {old_entity_id} -> {new_entity_id} ('{new_friendly_name}')")
 
             # Skip if nothing would change
-            if new_entity_id == old_entity_id and new_friendly_name == original_name:
+            current_name = renamer_state["restructurer"].entities[old_entity_id].get("name") or ""
+            if new_entity_id == old_entity_id and new_friendly_name == current_name:
                 logger.info("  Skipping - no changes needed")
                 entities_skipped += 1
                 processed += 1
@@ -2772,12 +2746,16 @@ async def _get_hierarchy_async():
             area_names[area_id] = area_data.get("name", "")
 
         # Build hierarchy response
+        floors = [
+            {"id": floor_id, "name": floor_data.get("name", "")} for floor_id, floor_data in restructurer.floors.items()
+        ]
         areas = []
         for area_id, area_data in restructurer.areas.items():
             areas.append(
                 {
                     "id": area_id,
                     "name": area_data.get("name", ""),
+                    "floor_id": area_data.get("floor_id"),
                 }
             )
 
@@ -2793,8 +2771,12 @@ async def _get_hierarchy_async():
             logger.warning("Z2M name fetch failed: %s", e)
 
         # Build device lookup with base names (strip area prefix)
-        device_base_names = {}
-        device_area_map = {}
+        first_entity_by_device = {}
+        for candidate_id, candidate in restructurer.entities.items():
+            candidate_device_id = candidate.get("device_id")
+            if candidate_device_id and candidate_device_id not in first_entity_by_device:
+                first_entity_by_device[candidate_device_id] = candidate_id
+
         devices = []
         for device_id, device_data in restructurer.devices.items():
             raw_name = device_data.get("name_by_user") or device_data.get("name", "")
@@ -2802,12 +2784,19 @@ async def _get_hierarchy_async():
 
             # Strip area prefix from device name
             # e.g., "Büro Homepod" with area "Büro" -> "Homepod"
-            base_name = raw_name
-            if area_id and area_id in area_names:
-                base_name = _strip_prefix(raw_name, area_names[area_id])
-
-            device_base_names[device_id] = base_name
-            device_area_map[device_id] = area_id
+            representative_entity_id = first_entity_by_device.get(device_id)
+            if representative_entity_id:
+                naming_context = restructurer.build_naming_context(
+                    representative_entity_id,
+                    restructurer.entities[representative_entity_id],
+                )
+                base_name = naming_context["device"]
+                suggested_name = restructurer.naming_templates.render("device_name", naming_context)
+            else:
+                base_name = raw_name
+                if area_id and area_id in area_names:
+                    base_name = _strip_prefix(raw_name, area_names[area_id])
+                suggested_name = raw_name
 
             # Extract integration(s) from identifiers
             # identifiers is like [["homekit_controller", "xxx"], ["zha", "yyy"]]
@@ -2832,6 +2821,7 @@ async def _get_hierarchy_async():
                     "id": device_id,
                     "name": raw_name,  # Original HA name
                     "base_name": base_name,  # Stripped base name for display
+                    "suggested_name": suggested_name,
                     "area_id": area_id,
                     "manufacturer": device_data.get("manufacturer"),
                     "model": device_data.get("model"),
@@ -2849,63 +2839,16 @@ async def _get_hierarchy_async():
             override = renamer_state["naming_overrides"].get_entity_override(registry_id)
             device_class = entity_data.get("device_class") or entity_data.get("original_device_class")
             device_id = entity_data.get("device_id")
-            area_id = entity_data.get("area_id")
+            device_data = restructurer.devices.get(device_id, {}) if device_id else {}
+            area_id = entity_data.get("area_id") or device_data.get("area_id")
 
             # Get original friendly name
             original_name = entity_data.get("name") or entity_data.get("original_name") or ""
 
-            # Debug logging for specific entities
-            if "wallbox" in entity_id.lower():
-                logger.info(
-                    f"DEBUG {entity_id}: name={entity_data.get('name')!r}, original_name={entity_data.get('original_name')!r}, computed={original_name!r}"
-                )
+            entity_context = restructurer.build_naming_context(entity_id, entity_data)
+            base_name = entity_context["entity"]
 
-            # Strip device+area prefix from entity name
-            # e.g., "Büro Raumluftsensor Kohlendioxid" -> "Kohlendioxid"
-            base_name = original_name
-            if device_id and device_id in device_base_names:
-                # Build full device display name (area + device base)
-                dev_area_id = device_area_map.get(device_id)
-                dev_base = device_base_names[device_id]
-                if dev_area_id and dev_area_id in area_names:
-                    device_display = f"{area_names[dev_area_id]} {dev_base}"
-                else:
-                    device_display = dev_base
-                base_name = _strip_prefix(original_name, device_display)
-                # Also try just device base name
-                if base_name == original_name:
-                    base_name = _strip_prefix(original_name, dev_base)
-            elif area_id and area_id in area_names:
-                base_name = _strip_prefix(original_name, area_names[area_id])
-
-            # Fallback: If base_name is still empty or equals domain, try extracting from entity_id
-            domain = entity_id.split(".")[0] if "." in entity_id else ""
-            if not base_name or base_name.lower() == domain:
-                # Try to extract suffix from entity_id
-                # e.g., sensor.tiefgarage_wallbox_angebotene_leistung -> angebotene_leistung
-                entity_slug = entity_id.split(".")[-1] if "." in entity_id else entity_id
-                # Build expected prefix from device/area
-                expected_prefix = ""
-                if device_id and device_id in device_base_names:
-                    dev_area_id = device_area_map.get(device_id)
-                    dev_base = device_base_names[device_id]
-                    if dev_area_id and dev_area_id in area_names:
-                        expected_prefix = f"{area_names[dev_area_id]}_{dev_base}".lower().replace(" ", "_")
-                    else:
-                        expected_prefix = dev_base.lower().replace(" ", "_")
-                elif area_id and area_id in area_names:
-                    expected_prefix = area_names[area_id].lower().replace(" ", "_")
-
-                if expected_prefix and entity_slug.startswith(expected_prefix + "_"):
-                    suffix_slug = entity_slug[len(expected_prefix) + 1 :]
-                    # Convert slug to human-readable: replace underscores with spaces, title case
-                    base_name = suffix_slug.replace("_", " ").title()
-
-            # Debug logging for wallbox entities
-            if "wallbox" in entity_id.lower():
-                logger.info(
-                    f"DEBUG {entity_id}: base_name={base_name!r}, device_id={device_id}, has_device={device_id in device_base_names if device_id else False}"
-                )
+            suggested_entity_id, suggested_entity_name = restructurer.generate_new_entity_id(entity_id, entity_data)
 
             entities.append(
                 {
@@ -2916,6 +2859,8 @@ async def _get_hierarchy_async():
                     "device_class": device_class,
                     "original_name": original_name,  # Original HA friendly name
                     "base_name": base_name,  # Stripped base name for editing
+                    "suggested_name": suggested_entity_name,
+                    "suggested_entity_id": suggested_entity_id,
                     "override_name": override.get("name") if override else None,
                     "has_override": override is not None,
                     "disabled_by": entity_data.get("disabled_by"),
@@ -2927,6 +2872,7 @@ async def _get_hierarchy_async():
 
         return jsonify(
             {
+                "floors": floors,
                 "areas": areas,
                 "devices": devices,
                 "entities": entities,
@@ -2941,6 +2887,55 @@ async def _get_hierarchy_async():
     except Exception as e:
         logger.error(f"Error getting hierarchy: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/naming_templates", methods=["GET", "PUT"])
+def naming_templates_config() -> Any:
+    """Read or update the active naming templates."""
+    manager = renamer_state["naming_templates"]
+    if request.method == "GET":
+        return jsonify(manager.get_config())
+
+    data = request.json
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON input"}), 400
+    try:
+        preset = data.get("preset")
+        if preset and preset != "custom" and "templates" not in data:
+            config = manager.apply_preset(preset)
+        else:
+            config = manager.set_templates(data.get("templates", {}))
+        return jsonify(config)
+    except NamingTemplateError as error:
+        return jsonify({"error": str(error)}), 400
+    except OSError as error:
+        logger.error("Failed to save naming templates: %s", error)
+        return jsonify({"error": "Failed to save naming templates"}), 500
+
+
+@app.route("/api/naming_templates/preview", methods=["POST"])
+def preview_naming_templates() -> Any:
+    """Render a sample context without persisting template changes."""
+    data = request.json
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON input"}), 400
+    templates = data.get("templates", {})
+    context = data.get("context", {})
+    manager = renamer_state["naming_templates"]
+    try:
+        manager.validate_templates(templates)
+        values = {field: str(context.get(field) or "") for field in manager.get_config()["allowed_fields"]}
+        rendered = {}
+        for key, template in templates.items():
+            rendered[key] = manager.render_template(template, values, normalize=key == "entity_id")
+        domain = values.get("domain") or "sensor"
+        # Mirror generate_new_entity_id: never emit a bare "<domain>." when the
+        # template renders empty, or the caller would send it as a rename.
+        object_id = rendered["entity_id"] or values.get("entity_id") or ""
+        rendered["entity_id"] = f"{domain}.{object_id}" if object_id else ""
+        return jsonify({"rendered": rendered})
+    except (NamingTemplateError, KeyError, ValueError) as error:
+        return jsonify({"error": str(error)}), 400
 
 
 @app.route("/api/type_mappings")

@@ -1,6 +1,6 @@
 [flake8]
 max-line-length = 120
-exclude = venv*,legacy,.git,__pycache__,build,dist
+exclude = .venv,venv*,legacy,.git,__pycache__,build,dist
 # E203 is incompatible with Black (whitespace before ':')
 # C901 is complexity warning
 # E501 is line length

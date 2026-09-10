@@ -2577,10 +2577,12 @@
 
                 // Hierarchy data
                 hierarchy: {
+                    floors: [],
                     areas: [],
                     devices: [],
                     entities: []
                 },
+                namingConfig: { preset: 'entity_manager', templates: {} },
 
                 // Selection state
                 selectedArea: null,
@@ -3631,13 +3633,15 @@
                     this.loading = true;
                     try {
                         // Load hierarchy and suffix mappings in parallel
-                        const [hierarchyResponse, mappingsResponse] = await Promise.all([
+                        const [hierarchyResponse, mappingsResponse, namingResponse] = await Promise.all([
                             fetch('api/hierarchy'),
-                            fetch('api/type_mappings')
+                            fetch('api/type_mappings'),
+                            fetch('api/naming_templates')
                         ]);
 
                         const data = await hierarchyResponse.json();
                         const mappingsData = await mappingsResponse.json();
+                        const namingData = await namingResponse.json();
 
                         if (data.error) {
                             throw new Error(data.error);
@@ -3658,7 +3662,9 @@
                         // Use Object.assign to trigger a single reactivity update
                         Object.assign(this, {
                             suffixMappings: newSuffixMappings,
+                            namingConfig: namingData,
                             hierarchy: {
+                                floors: data.floors || [],
                                 areas: data.areas || [],
                                 devices: data.devices || [],
                                 entities: (data.entities || []).map(e => ({...e, selected: false, _editing: false, _remember: false, _applying: false}))
@@ -3785,6 +3791,7 @@
                 // Get device display name (full name with area prefix)
                 getDeviceDisplayName(device) {
                     if (!device) return '';
+                    if (device.suggested_name) return device.suggested_name;
                     const area = this.selectedAreaData;
                     const areaName = area?.name || '';
                     const deviceBaseName = device.base_name;
@@ -3910,6 +3917,9 @@
 
                 // Get friendly name using entity's own device/area (not selected)
                 getEntityFriendlyNameForEntity(entity) {
+                    if (entity.suggested_name && entity._currentSuffix === undefined) {
+                        return entity.suggested_name;
+                    }
                     const parts = [];
 
                     // Find entity's device
@@ -3956,7 +3966,11 @@
 
                         // Friendly-name composition stays client-side; only the slug comes
                         // from the backend (source of truth).
-                        entity._previewName = this.getEntityFriendlyNameForEntity(entity);
+                        entity._previewName = entity.suggested_name || this.getEntityFriendlyNameForEntity(entity);
+                        if (entity.suggested_entity_id) {
+                            entity._previewId = entity.suggested_entity_id;
+                            continue;
+                        }
                         pending.push(entity);
                     }
                     if (!pending.length) return;
@@ -3992,21 +4006,85 @@
                     return this.hierarchy.entities.some(e => e.id === newId && e.registry_id !== entity.registry_id);
                 },
 
+                renderNamingTemplate(template, context) {
+                    if (!template) return '';
+                    return template
+                        .replace(/\{([a-z_]+)\}/g, (_, key) => context[key] || '')
+                        .replace(/\s+/g, ' ')
+                        .replace(/(?:\s*[-–—|/·]\s*){2,}/g, ' - ')
+                        .replace(/^[\s_\-–—|/·.,]+|[\s_\-–—|/·.,]+$/g, '');
+                },
+
+                baseNamingContext(area, device) {
+                    const floor = this.hierarchy.floors.find(f => f.id === area?.floor_id);
+                    return {
+                        floor: floor?.name || '',
+                        floor_id: floor?.id || '',
+                        area: area?.name || '',
+                        area_id: area?.id || '',
+                        device: device?.base_name || '',
+                        device_id: device?.id || '',
+                        entity: '',
+                        entity_id: '',
+                        domain: '',
+                        device_class: '',
+                        manufacturer: device?.manufacturer || '',
+                        model: device?.model || '',
+                        integration: device?.integrations?.[0] || ''
+                    };
+                },
+
+                deviceNamingContext(device, baseName = null) {
+                    const area = this.hierarchy.areas.find(a => a.id === device?.area_id);
+                    return {
+                        ...this.baseNamingContext(area, device),
+                        device: baseName !== null ? baseName : (device?.base_name || '')
+                    };
+                },
+
+                renderDeviceName(device, baseName = null) {
+                    const template = this.namingConfig?.templates?.device_name || '{area} {device}';
+                    return this.renderNamingTemplate(template, this.deviceNamingContext(device, baseName));
+                },
+
+                entityNamingContext(entity, suffix = null) {
+                    const device = entity?.device_id
+                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        : null;
+                    const areaId = entity?.area_id || device?.area_id;
+                    const area = this.hierarchy.areas.find(a => a.id === areaId);
+                    const domain = entity?.id?.split('.')[0] || '';
+                    return {
+                        ...this.baseNamingContext(area, device),
+                        entity: suffix !== null ? suffix : this.getEntitySuffix(entity),
+                        entity_id: entity?.id?.split('.').pop() || '',
+                        domain,
+                        device_class: entity?.device_class || '',
+                        integration: entity?.platform || device?.integrations?.[0] || ''
+                    };
+                },
+
+                async previewEntityNaming(entity, suffix = null) {
+                    const response = await fetch('api/naming_templates/preview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            templates: this.namingConfig.templates,
+                            context: this.entityNamingContext(entity, suffix)
+                        })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'Failed to preview naming templates');
+                    return data.rendered;
+                },
+
                 // Check if device needs rename
-                // Get the expected full device name (area + base_name)
                 getExpectedDeviceName(device) {
                     if (!device) return '';
-                    const area = this.hierarchy.areas.find(a => a.id === device.area_id);
-                    const areaName = area ? (area.name) : '';
-                    // Use preview value if editing, otherwise use device.base_name
                     const deviceBase = (device.id === this.selectedDevice && this.devicePreviewBaseName !== null)
                         ? this.devicePreviewBaseName
                         : device.base_name;
-
-                    if (areaName && deviceBase) {
-                        return `${areaName} ${deviceBase}`;
-                    }
-                    return deviceBase || device.name;
+                    return this.renderDeviceName(device, deviceBase) || device.name;
                 },
 
                 // Check if device name itself needs to change
@@ -4297,28 +4375,11 @@
                 // Update live preview while typing
                 updateEntityPreview(entity, suffix) {
                     entity._currentSuffix = suffix;
-
-                    const parts = [];
-
-                    // Area
-                    const area = this.selectedAreaData;
-                    if (area) {
-                        parts.push(area.name);
-                    }
-
-                    // Device
-                    const device = this.selectedDeviceData;
-                    if (device && !this.isVirtualDevice(this.selectedDevice)) {
-                        parts.push(device.base_name);
-                    }
-
-                    // Entity suffix
-                    if (suffix) {
-                        parts.push(suffix);
-                    }
-
-                    const friendlyName = parts.filter(p => p).join(' ');
-                    entity._previewName = friendlyName;
+                    const context = this.entityNamingContext(entity, suffix);
+                    entity._previewName = this.renderNamingTemplate(
+                        this.namingConfig.templates.entity_name,
+                        context
+                    );
 
                     // Slug comes from the backend (source of truth), debounced so we don't
                     // fire a request on every keystroke. The friendly-name preview updates
@@ -4327,8 +4388,9 @@
                     const key = entity.registry_id || entity.id;
                     clearTimeout(this._normTimers[key]);
                     this._normTimers[key] = setTimeout(() => {
-                        this.fetchNormalized([friendlyName]).then(slugs => {
-                            entity._previewId = this.composeEntityId(entity, slugs[0]);
+                        this.previewEntityNaming(entity, suffix).then(rendered => {
+                            entity._previewName = rendered.entity_name;
+                            entity._previewId = rendered.entity_id;
                             this.previewVersion++;
                         });
                     }, 200);
@@ -4609,9 +4671,12 @@
                         // Friendly name reflects the (possibly just-typed) suffix preview;
                         // the slug comes fresh from the backend (source of truth) to avoid a
                         // debounce race with the live preview.
-                        const newName = entity._previewName || this.getEntityFriendlyName(entity);
-                        const [slug] = await this.fetchNormalized([newName]);
-                        const newId = this.composeEntityId(entity, slug);
+                        const rendered = await this.previewEntityNaming(
+                            entity,
+                            entity._currentSuffix !== undefined ? entity._currentSuffix : null
+                        );
+                        const newName = rendered.entity_name;
+                        const newId = rendered.entity_id;
 
                         // Prevent renaming to an entity ID that another entity already uses
                         if (newId !== entity.id &&
@@ -4848,10 +4913,7 @@
                 async renameDeviceInHA(newBaseName) {
                     if (!this.selectedDevice || this.isVirtualDevice(this.selectedDevice) || !newBaseName || this.renamingDevice) return;
 
-                    // Build full device name with area prefix
-                    const area = this.hierarchy.areas.find(a => a.id === this.selectedDeviceData?.area_id);
-                    const areaName = area?.name || '';
-                    const newFullName = areaName ? `${areaName} ${newBaseName}` : newBaseName;
+                    const newFullName = this.renderDeviceName(this.selectedDeviceData, newBaseName);
 
                     if (this.selectedDeviceData.name === newFullName) {
                         this.showMessage('Device name already correct', 'info');
