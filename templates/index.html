@@ -3285,14 +3285,6 @@
                 },
 
                 async onEnableAllDone(job) {
-                    if (!this.jobFailed(job)) {
-                        const r = job.result || {};
-                        const successCount = (r.enabled || []).length;
-                        const failedCount = (r.failed || []).length;
-                        // No toast on partial failure: the panel stays open and its
-                        // log names the entities that failed.
-                        if (failedCount === 0) this.showMessage(`${successCount} entities enabled`, 'success', true);
-                    }
                     await this.loadHierarchy();
                 },
 
@@ -4913,12 +4905,6 @@
                 },
 
                 async onRenameDeviceDone(job, deviceId = null) {
-                    if (!this.jobFailed(job)) {
-                        const r = job.result || {};
-                        // No toast on partial failure: the panel stays open and its
-                        // log names the entities that failed.
-                        if (!(r.entities_failed > 0)) this.showMessage(r.message || 'Device renamed', 'success', true);
-                    }
                     this.devicePreviewBaseName = null;
                     await this.loadHierarchy();
                     const id = deviceId || this.selectedDevice;
@@ -5092,21 +5078,10 @@
 
                 async onExecuteDone(job, driftDevices = []) {
                     if (!this.jobFailed(job)) {
-                        const r = job.result || {};
-                        const successCount = (r.success || []).length;
-                        const failedCount = (r.failed || []).length;
                         // Sync drifting Z2M names after the entity renames.
                         const z = await this.syncZ2mDrift(driftDevices);
-                        // On entity failures the panel stays open and its log names
-                        // them, so no toast. The Z2M sync runs after the job ended and
-                        // is not in job.result, so it still needs one.
-                        if (failedCount > 0) {
-                            if (z.failed > 0) this.showMessage(`${z.failed} Z2M failed`, 'error', true);
-                        } else if (z.failed > 0) {
-                            this.showMessage(`${successCount} entities renamed, ${z.failed} Z2M failed`, 'error', true);
-                        } else if (successCount > 0 || z.synced > 0) {
-                            this.showMessage(`${successCount} entities renamed` + (z.synced ? `, ${z.synced} Z2M synced` : ''), 'success', true);
-                        }
+                        if (z.failed > 0) this.showMessage(`${z.failed} Z2M failed`, 'error', true);
+                        else if (z.synced > 0) this.showMessage(`${z.synced} Z2M synced`, 'success', true);
                     }
                     await this.loadHierarchy();
                 },
