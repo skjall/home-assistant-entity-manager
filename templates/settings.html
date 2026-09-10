@@ -682,7 +682,9 @@
         </div>
 
         <!-- Add Modal -->
-        <div class="modal-overlay" x-show="showAddModal" x-cloak @click.self="showAddModal = false">
+        <!-- Dismissed only via its buttons: a stray backdrop click must not
+             discard content the user is still reading or copying. -->
+        <div class="modal-overlay" x-show="showAddModal" x-cloak>
             <div class="modal">
                 <h3>
                     <i class="ri-add-circle-line"></i>
