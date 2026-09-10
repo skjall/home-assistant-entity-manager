@@ -107,6 +107,8 @@ class NamingTemplates:
         try:
             with self.storage_path.open("r", encoding="utf-8") as file:
                 data = json.load(file)
+            if not isinstance(data, dict):
+                raise NamingTemplateError("Stored naming templates must be an object")
             templates = data.get("templates", {})
             self.validate_templates(templates)
             migrated = self._migrate(data)
@@ -202,8 +204,10 @@ class NamingTemplates:
 
     def set_templates(self, templates: Mapping[str, str]) -> Dict[str, Any]:
         """Validate and save templates, detecting whether they match a preset."""
+        # Validate before stripping: a non-string value would otherwise raise
+        # AttributeError instead of NamingTemplateError, surfacing as a 500.
+        self.validate_templates(templates)
         clean_templates = {key: value.strip() for key, value in templates.items()}
-        self.validate_templates(clean_templates)
         previous = self.get_templates()
         if previous != clean_templates:
             history = self.data.setdefault("history", [])

@@ -2929,7 +2929,10 @@ def preview_naming_templates() -> Any:
         for key, template in templates.items():
             rendered[key] = manager.render_template(template, values, normalize=key == "entity_id")
         domain = values.get("domain") or "sensor"
-        rendered["entity_id"] = f"{domain}.{rendered['entity_id']}"
+        # Mirror generate_new_entity_id: never emit a bare "<domain>." when the
+        # template renders empty, or the caller would send it as a rename.
+        object_id = rendered["entity_id"] or values.get("entity_id") or ""
+        rendered["entity_id"] = f"{domain}.{object_id}" if object_id else ""
         return jsonify({"rendered": rendered})
     except (NamingTemplateError, KeyError, ValueError) as error:
         return jsonify({"error": str(error)}), 400

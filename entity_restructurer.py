@@ -285,7 +285,7 @@ class EntityRestructurer:
         if not integration and self.type_mappings:
             integration = self.type_mappings.detect_integration(entity_id) or ""
 
-        raw_device_name = device.get("name_by_user") or device.get("name") or device.get("model", "")
+        raw_device_name = device.get("name_by_user") or device.get("name") or device.get("model") or ""
         partial_context = {
             "floor": floor.get("name", ""),
             "floor_id": floor_id,
@@ -310,16 +310,36 @@ class EntityRestructurer:
             entity_override,
             device_class,
             (raw_device_name, partial_context["area"], device_name),
+            partial_context,
         )
         return {key: str(value or "") for key, value in partial_context.items()}
 
     def _base_device_name(self, name: str, context: Dict[str, str]) -> str:
         """Remove hierarchy previously added by a known device template."""
+        name = name or ""
         extracted = self.naming_templates.extract_field("device_name", name, "device", context)
         if extracted:
             return extracted
         for prefix in (context["floor"], context["area"]):
             if prefix and name.lower().startswith(prefix.lower() + " "):
+                name = name[len(prefix) :].strip()
+        return name
+
+    def _strip_applied_entity_name(
+        self,
+        name: str,
+        prefixes: Tuple[str, ...],
+        context: Optional[Dict[str, str]],
+    ) -> str:
+        """Remove hierarchy previously added by a known entity-name template."""
+        if context is not None:
+            extracted = self.naming_templates.extract_field("entity_name", name, "entity", context)
+            if extracted:
+                return extracted
+        for prefix in filter(None, prefixes):
+            if name.lower() == prefix.lower():
+                return ""
+            if name.lower().startswith(prefix.lower() + " "):
                 name = name[len(prefix) :].strip()
         return name
 
@@ -331,18 +351,29 @@ class EntityRestructurer:
         override: Optional[Dict[str, Any]],
         device_class: str,
         prefixes: Tuple[str, ...],
+        context: Optional[Dict[str, str]] = None,
     ) -> str:
         """Return the entity-specific name supplied by Home Assistant."""
-        candidates = (
+        native = (
             override.get("name") if override else None,
             registry.get("original_name"),
-            registry.get("name"),
             state.get("original_name"),
-            state.get("name"),
         )
-        name = next((candidate for candidate in candidates if candidate), None)
+        name = next((candidate for candidate in native if candidate), None)
         if name is not None:
             return name
+
+        # ``name`` fields may hold a name this add-on wrote on a previous run.
+        # Unwind the entity template before reusing them, otherwise each run
+        # prepends the hierarchy again and the name grows without bound.
+        applied = next(
+            (candidate for candidate in (registry.get("name"), state.get("name")) if candidate),
+            None,
+        )
+        if applied is not None:
+            base = self._strip_applied_entity_name(applied, prefixes, context)
+            if base:
+                return base
 
         name = state.get("attributes", {}).get("friendly_name")
         if name is not None:
@@ -384,7 +415,7 @@ class EntityRestructurer:
             area = self.areas.get(area_id, {}) if area_id else {}
             floor_id = area.get("floor_id") or ""
             floor = self.floors.get(floor_id, {}) if floor_id else {}
-            raw_name = device.get("name_by_user") or device.get("name") or device.get("model", "")
+            raw_name = device.get("name_by_user") or device.get("name") or device.get("model") or ""
             context = {
                 "floor": floor.get("name", ""),
                 "floor_id": floor_id,
