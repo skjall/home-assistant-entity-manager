@@ -55,9 +55,7 @@ def test_device_without_any_name_does_not_raise(restructurer):
     """name_by_user, name and model may all be null."""
     restructurer.devices["device-1"].update({"name": None, "name_by_user": None, "model": None})
 
-    context = restructurer.build_naming_context(
-        "media_player.homepod", restructurer.entities["media_player.homepod"]
-    )
+    context = restructurer.build_naming_context("media_player.homepod", restructurer.entities["media_player.homepod"])
 
     assert context["device"] == ""
 
