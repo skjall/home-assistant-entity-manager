@@ -2166,9 +2166,9 @@
                 <div class="p-6">
                     <div class="flex items-center gap-3 mb-4">
                         <div class="w-10 h-10 rounded-full flex items-center justify-center"
-                             :class="isJobTerminal(jobPanel.job) ? (jobFailed(jobPanel.job) ? 'bg-red-100' : 'bg-green-100') : 'bg-blue-100'">
+                             :class="isJobTerminal(jobPanel.job) ? (jobUnsuccessful(jobPanel.job) ? 'bg-red-100' : 'bg-green-100') : 'bg-blue-100'">
                             <i class="text-xl"
-                               :class="!isJobTerminal(jobPanel.job) ? 'ri-loader-4-line animate-spin text-blue-600' : (jobFailed(jobPanel.job) ? 'ri-error-warning-line text-red-600' : 'ri-check-line text-green-600')"></i>
+                               :class="!isJobTerminal(jobPanel.job) ? 'ri-loader-4-line animate-spin text-blue-600' : (jobUnsuccessful(jobPanel.job) ? 'ri-error-warning-line text-red-600' : 'ri-check-line text-green-600')"></i>
                         </div>
                         <h3 class="text-lg font-semibold" x-text="jobPanel.titleKey ? t(jobPanel.titleKey) : t('jobs.working')"></h3>
                     </div>
@@ -2223,6 +2223,8 @@
         </div>
 
         <!-- Delete Confirmation Modal -->
+        <!-- Dismissed only via its buttons: a stray backdrop click must not
+             discard content the user is still reading or copying. -->
         <div x-cloak
              x-show="deleteModal.show"
              x-transition:enter="transition ease-out duration-200"
@@ -2231,8 +2233,7 @@
              x-transition:leave="transition ease-in duration-150"
              x-transition:leave-start="opacity-100"
              x-transition:leave-end="opacity-0"
-             class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-             @click.self="deleteModal.show = false">
+             class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
@@ -2264,13 +2265,14 @@
             </div>
         </div>
         <!-- Device Swap Wizard -->
+        <!-- Dismissed only via its buttons: a stray backdrop click must not
+             discard content the user is still reading or copying. -->
         <div x-cloak
              x-show="swap.show"
              x-transition:enter="transition ease-out duration-200"
              x-transition:enter-start="opacity-0"
              x-transition:enter-end="opacity-100"
-             class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-             @click.self="closeSwap()">
+             class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div class="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
@@ -3287,8 +3289,9 @@
                         const r = job.result || {};
                         const successCount = (r.enabled || []).length;
                         const failedCount = (r.failed || []).length;
-                        if (failedCount > 0) this.showMessage(`${successCount} enabled, ${failedCount} failed`, 'error', true);
-                        else this.showMessage(`${successCount} entities enabled`, 'success', true);
+                        // No toast on partial failure: the panel stays open and its
+                        // log names the entities that failed.
+                        if (failedCount === 0) this.showMessage(`${successCount} entities enabled`, 'success', true);
                     }
                     await this.loadHierarchy();
                 },
@@ -4814,7 +4817,13 @@
                     // onDone handler surfaces a self-dismissing toast and refreshes in
                     // the background. Hard failure: keep the panel open so the error
                     // stays visible (no toast — the panel already shows it).
-                    if (finished && !this.jobFailed(finished)) this.closeJobPanel();
+                    //
+                    // A job can also finish as 'completed' while individual targets
+                    // failed. The per-target reasons exist only in the panel's log, so
+                    // treat that like a hard failure: keep the panel open and expand
+                    // the log, rather than replacing it with a self-dismissing toast.
+                    if (finished && this.jobPartiallyFailed(finished)) this.jobPanel.showLog = true;
+                    if (finished && !this.jobFailed(finished) && !this.jobPartiallyFailed(finished)) this.closeJobPanel();
                     if (cb) await cb(finished);
                 },
 
@@ -4838,6 +4847,20 @@
 
                 jobFailed(job) {
                     return !!job && ['failed', 'FAILED'].includes(job.state);
+                },
+
+                // A job that finished as 'completed' but could not process every
+                // target. Handlers report this in one of two shapes: a count
+                // (device rename) or a list (enable-all, execute).
+                jobPartiallyFailed(job) {
+                    const result = (job && job.result) || {};
+                    return (result.entities_failed || 0) > 0 || (result.failed || []).length > 0;
+                },
+
+                // Anything the user needs to look at: a hard failure or a job that
+                // finished while some targets did not.
+                jobUnsuccessful(job) {
+                    return this.jobFailed(job) || this.jobPartiallyFailed(job);
                 },
 
                 jobProgressPercent() {
@@ -4899,7 +4922,9 @@
                 async onRenameDeviceDone(job, deviceId = null) {
                     if (!this.jobFailed(job)) {
                         const r = job.result || {};
-                        this.showMessage(r.message || 'Device renamed', (r.entities_failed > 0) ? 'error' : 'success', true);
+                        // No toast on partial failure: the panel stays open and its
+                        // log names the entities that failed.
+                        if (!(r.entities_failed > 0)) this.showMessage(r.message || 'Device renamed', 'success', true);
                     }
                     this.devicePreviewBaseName = null;
                     await this.loadHierarchy();
@@ -5079,8 +5104,13 @@
                         const failedCount = (r.failed || []).length;
                         // Sync drifting Z2M names after the entity renames.
                         const z = await this.syncZ2mDrift(driftDevices);
-                        if (failedCount > 0 || z.failed > 0) {
-                            this.showMessage(`${successCount} succeeded, ${failedCount} failed` + (z.failed ? `, ${z.failed} Z2M failed` : ''), 'error', true);
+                        // On entity failures the panel stays open and its log names
+                        // them, so no toast. The Z2M sync runs after the job ended and
+                        // is not in job.result, so it still needs one.
+                        if (failedCount > 0) {
+                            if (z.failed > 0) this.showMessage(`${z.failed} Z2M failed`, 'error', true);
+                        } else if (z.failed > 0) {
+                            this.showMessage(`${successCount} entities renamed, ${z.failed} Z2M failed`, 'error', true);
                         } else if (successCount > 0 || z.synced > 0) {
                             this.showMessage(`${successCount} entities renamed` + (z.synced ? `, ${z.synced} Z2M synced` : ''), 'success', true);
                         }
