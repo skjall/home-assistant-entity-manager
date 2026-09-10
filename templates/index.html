@@ -4813,17 +4813,10 @@
                     this.stopJobPolling();
                     const finished = this.jobPanel.job;
                     const cb = this.jobPanel.onDone;
-                    // Success (job not hard-failed): close the panel immediately; the
-                    // onDone handler surfaces a self-dismissing toast and refreshes in
-                    // the background. Hard failure: keep the panel open so the error
-                    // stays visible (no toast — the panel already shows it).
-                    //
-                    // A job can also finish as 'completed' while individual targets
-                    // failed. The per-target reasons exist only in the panel's log, so
-                    // treat that like a hard failure: keep the panel open and expand
-                    // the log, rather than replacing it with a self-dismissing toast.
-                    if (finished && this.jobPartiallyFailed(finished)) this.jobPanel.showLog = true;
-                    if (finished && !this.jobFailed(finished) && !this.jobPartiallyFailed(finished)) this.closeJobPanel();
+                    // The panel is dismissed by the user, never on its own: its log is
+                    // the only place the per-target outcome exists. Expand that log
+                    // when something went wrong, so the failures need no extra click.
+                    if (finished && this.jobUnsuccessful(finished)) this.jobPanel.showLog = true;
                     if (cb) await cb(finished);
                 },
 
