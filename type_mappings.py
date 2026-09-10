@@ -239,6 +239,39 @@ class TypeMappings:
         if not type_key:
             return ""
 
+        resolved = self.find_translation(type_key, language, integration, domain)
+        if resolved is not None:
+            return resolved
+
+        # 5. Fallback: capitalize the key
+        return type_key.replace("_", " ").title()
+
+    def find_translation(
+        self,
+        type_key: str,
+        language: str = "en",
+        integration: Optional[str] = None,
+        domain: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Resolve steps 1-4 of ``get_translation``, or ``None`` when nothing matches.
+
+        Callers that must distinguish a real translation from the capitalized
+        fallback use this: a name Home Assistant already supplies is worth
+        keeping when no mapping exists for it.
+
+        Args:
+            type_key: The type key to translate (e.g., "battery", "linkquality")
+            language: Target language code (e.g., "de", "en")
+            integration: Optional integration name (e.g., "zigbee2mqtt")
+            domain: Optional domain fallback (e.g., "sensor")
+
+        Returns:
+            The mapped string, or None if no mapping covers ``type_key``
+        """
+        if not type_key:
+            return None
+
         type_key_lower = type_key.lower()
 
         # 1. Check user mappings (highest priority)
@@ -265,8 +298,7 @@ class TypeMappings:
                 lang_mapping = device_class_mappings[domain_lower]
                 return lang_mapping.get(language, lang_mapping.get("en", domain.title()))
 
-        # 5. Fallback: capitalize the key
-        return type_key.replace("_", " ").title()
+        return None
 
     def set_user_mapping(self, type_key: str, translation: str) -> None:
         """
