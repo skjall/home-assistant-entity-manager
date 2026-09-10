@@ -343,6 +343,21 @@ class EntityRestructurer:
                 name = name[len(prefix) :].strip()
         return name
 
+    def _translate_entity_name(self, name: str, entity_id: str) -> str:
+        """
+        Apply a configured type mapping to a name Home Assistant supplied.
+
+        Integrations name their entities in English ("Linkquality", "Power-on
+        behavior"). The type mappings — including everything the user taught via
+        ``/api/learn_mapping`` — are keyed by exactly that name, so the lookup
+        happens here. A name no mapping covers is kept as it is.
+        """
+        if not self.type_mappings:
+            return name
+        integration = self.type_mappings.detect_integration(entity_id)
+        # No domain fallback: it would replace a specific name with "Sensor".
+        return self.type_mappings.find_translation(name, self.language, integration) or name
+
     def _base_entity_name(
         self,
         entity_id: str,
@@ -354,14 +369,14 @@ class EntityRestructurer:
         context: Optional[Dict[str, str]] = None,
     ) -> str:
         """Return the entity-specific name supplied by Home Assistant."""
-        native = (
-            override.get("name") if override else None,
-            registry.get("original_name"),
-            state.get("original_name"),
-        )
+        override_name = override.get("name") if override else None
+        if override_name:
+            return override_name
+
+        native = (registry.get("original_name"), state.get("original_name"))
         name = next((candidate for candidate in native if candidate), None)
         if name is not None:
-            return name
+            return self._translate_entity_name(name, entity_id)
 
         # ``name`` fields may hold a name this add-on wrote on a previous run.
         # Unwind the entity template before reusing them, otherwise each run
@@ -373,7 +388,7 @@ class EntityRestructurer:
         if applied is not None:
             base = self._strip_applied_entity_name(applied, prefixes, context)
             if base:
-                return base
+                return self._translate_entity_name(base, entity_id)
 
         name = state.get("attributes", {}).get("friendly_name")
         if name is not None:

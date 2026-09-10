@@ -18,6 +18,11 @@ class FakeTypeMappings:
     def get_translation(type_key, language, integration, domain):
         return (type_key or domain).replace("_", " ").title()
 
+    @staticmethod
+    def find_translation(type_key, language="en", integration=None, domain=None):
+        """No mapping covers anything here; names pass through untouched."""
+        return None
+
 
 @pytest.fixture
 def restructurer(tmp_path):
