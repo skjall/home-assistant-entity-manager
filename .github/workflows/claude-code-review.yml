@@ -12,11 +12,12 @@ on:
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Skip PRs from forks: GitHub withholds repository secrets and refuses
+    # `id-token: write` for `pull_request` events raised from a fork, so
+    # CLAUDE_CODE_OAUTH_TOKEN is empty and the job can only fail. Review those
+    # by commenting "@claude" on the PR instead — `issue_comment` runs in this
+    # repository's context and does receive the secret.
+    if: github.event.pull_request.head.repo.full_name == github.repository
 
     runs-on: ubuntu-latest
     permissions:
