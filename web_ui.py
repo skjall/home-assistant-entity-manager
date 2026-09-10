@@ -1148,19 +1148,35 @@ async def _execute_changes_async():
                     # Don't automatically rename all device entities when only device is selected
                     await renamer_state["restructurer"].load_structure(ws)
 
+                    device_states = {state["entity_id"]: state for state in states}
+                    device_renames = {
+                        entity_id: (new_entity_id, friendly_name)
+                        for entity_id, new_entity_id, friendly_name in renamer_state[
+                            "restructurer"
+                        ].deduplicate_entity_ids(
+                            [
+                                (
+                                    entity_id,
+                                    *renamer_state["restructurer"].generate_new_entity_id(
+                                        entity_id, device_states[entity_id]
+                                    ),
+                                )
+                                for entity_id in device_entities
+                                if entity_id in selected_entities and entity_id in device_states
+                            ]
+                        )
+                    }
+
                     for entity_id in device_entities:
                         # Skip entities that weren't explicitly selected
                         if entity_id not in selected_entities:
                             logger.info(f"Skipping entity {entity_id} - not explicitly selected")
                             continue
 
-                        # Hole Entity Info aus states
-                        entity_state = next((s for s in states if s["entity_id"] == entity_id), None)
-                        if entity_state:
-                            # Generiere neuen Namen basierend auf aktuellem Device Namen
-                            new_entity_id, new_friendly_name = renamer_state["restructurer"].generate_new_entity_id(
-                                entity_id, entity_state
-                            )
+                        if entity_id not in device_renames:
+                            logger.info(f"Skipping entity {entity_id} - no current state")
+                            continue
+                        new_entity_id, new_friendly_name = device_renames[entity_id]
 
                         if entity_id != new_entity_id:
                             try:
@@ -1207,19 +1223,25 @@ async def _execute_changes_async():
                 logger.error(f"Fehler beim Device {device_id}: {e}")
                 results["device_failed"].append({"device_id": device_id, "error": str(e)})
 
+        # Recalculate as one batch so overrides are applied and no two entities
+        # are sent to the same ID, which Home Assistant would refuse.
+        states_by_id = {state["entity_id"]: state for state in states}
+        recalculated = {
+            entity_id: (new_entity_id, friendly_name)
+            for entity_id, new_entity_id, friendly_name in renamer_state["restructurer"].deduplicate_entity_ids(
+                [
+                    (old_id, *renamer_state["restructurer"].generate_new_entity_id(old_id, states_by_id[old_id]))
+                    for old_id in selected_mapping
+                    if old_id in states_by_id
+                ]
+            )
+        }
+
         # Verarbeite einzelne Entities
         for old_id, (new_id, friendly_name) in selected_mapping.items():
             try:
-                # Recalculate the entity name to ensure overrides are applied
-                current_state = next((s for s in states if s["entity_id"] == old_id), {})
-                if current_state:
-                    # Use restructurer to get the current naming with overrides
-                    recalculated_new_id, recalculated_friendly_name = renamer_state[
-                        "restructurer"
-                    ].generate_new_entity_id(old_id, current_state)
-                    # Use the recalculated names instead of the preview mapping
-                    new_id = recalculated_new_id
-                    friendly_name = recalculated_friendly_name
+                if old_id in recalculated:
+                    new_id, friendly_name = recalculated[old_id]
                     logger.info(f"Recalculated entity: {old_id} -> {new_id}, friendly_name: {friendly_name}")
                 else:
                     logger.info(f"Processing entity: {old_id} -> {new_id}, friendly_name: {friendly_name}")
@@ -2834,6 +2856,18 @@ async def _get_hierarchy_async():
                 }
             )
 
+        # Resolve the suggestions as one batch: two entities of a device often
+        # render the same ID, and a suggestion that collides cannot be applied.
+        suggestions = {
+            entity_id: (new_entity_id, suggested_name)
+            for entity_id, new_entity_id, suggested_name in restructurer.deduplicate_entity_ids(
+                [
+                    (entity_id, *restructurer.generate_new_entity_id(entity_id, entity_data))
+                    for entity_id, entity_data in restructurer.entities.items()
+                ]
+            )
+        }
+
         entities = []
         for entity_id, entity_data in restructurer.entities.items():
             registry_id = entity_data.get("id", "")
@@ -2849,7 +2883,7 @@ async def _get_hierarchy_async():
             entity_context = restructurer.build_naming_context(entity_id, entity_data)
             base_name = entity_context["entity"]
 
-            suggested_entity_id, suggested_entity_name = restructurer.generate_new_entity_id(entity_id, entity_data)
+            suggested_entity_id, suggested_entity_name = suggestions[entity_id]
 
             entities.append(
                 {
