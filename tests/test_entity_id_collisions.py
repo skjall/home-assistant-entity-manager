@@ -63,6 +63,21 @@ def test_id_held_by_an_untouched_entity_is_avoided(restructurer):
     assert result[0][1] == "sensor.unrelated_energie_2_2"
 
 
+def test_friendly_name_carries_the_number(restructurer):
+    """A numbered ID needs a numbered name, or the rename is proposed forever."""
+    result = restructurer.deduplicate_entity_ids(
+        [
+            ("sensor.plug_energy", "sensor.wohnzimmer_steckdose_energie", "Wohnzimmer Steckdose Energie"),
+            ("sensor.plug_energy_2", "sensor.wohnzimmer_steckdose_energie", "Wohnzimmer Steckdose Energie"),
+        ]
+    )
+
+    assert [name for _, _, name in result] == [
+        "Wohnzimmer Steckdose Energie",
+        "Wohnzimmer Steckdose Energie 2",
+    ]
+
+
 def test_order_and_friendly_names_are_preserved(restructurer):
     """Only the IDs change; order and friendly names stay as they were."""
     proposals = [

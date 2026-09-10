@@ -497,7 +497,7 @@ class EntityRestructurer:
         for entity_id, new_entity_id, _ in proposals:
             by_target[new_entity_id].append(entity_id)
 
-        assigned: Dict[str, str] = {}
+        assigned: Dict[str, Tuple[str, int]] = {}
         for target, holders in by_target.items():
             domain, _, object_id = target.partition(".")
             # Whoever already owns the target keeps it; the rest follow in a
@@ -510,14 +510,19 @@ class EntityRestructurer:
                     suffix += 1
                     candidate = f"{domain}.{object_id}_{suffix}"
                 taken.add(candidate)
-                assigned[entity_id] = candidate
+                assigned[entity_id] = (candidate, suffix)
                 if candidate != target:
                     logger.info("Entity ID %s already taken, using %s for %s", target, candidate, entity_id)
 
-        return [
-            (entity_id, assigned.get(entity_id, new_entity_id), friendly_name)
-            for entity_id, new_entity_id, friendly_name in proposals
-        ]
+        resolved = []
+        for entity_id, new_entity_id, friendly_name in proposals:
+            candidate, suffix = assigned.get(entity_id, (new_entity_id, 1))
+            # The friendly name carries the number too, so it matches the ID and
+            # tells the two entities apart in the UI.
+            if suffix > 1 and friendly_name:
+                friendly_name = f"{friendly_name} {suffix}"
+            resolved.append((entity_id, candidate, friendly_name))
+        return resolved
 
     async def analyze_entities(
         self,

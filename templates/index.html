@@ -4366,9 +4366,18 @@
                 toggleEntityExpand(entity) {
                     entity._expanded = !entity._expanded;
                     if (entity._expanded && entity._currentSuffix === undefined) {
-                        // Initialize preview with shared suffix logic (same as collapsed view)
                         const initialSuffix = this.getEntitySuffix(entity);
-                        this.updateEntityPreview(entity, initialSuffix);
+                        if (entity.suggested_entity_id) {
+                            // Seed from what the hierarchy already resolved. Rendering the
+                            // template here instead would miss the collision numbering the
+                            // backend applies and flag a rename that is not needed.
+                            entity._currentSuffix = initialSuffix;
+                            entity._previewName = entity.suggested_name;
+                            entity._previewId = entity.suggested_entity_id;
+                            this.previewVersion++;
+                        } else {
+                            this.updateEntityPreview(entity, initialSuffix);
+                        }
                     }
                 },
 

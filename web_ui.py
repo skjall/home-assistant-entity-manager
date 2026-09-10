@@ -2968,6 +2968,21 @@ def preview_naming_templates() -> Any:
         # template renders empty, or the caller would send it as a rename.
         object_id = rendered["entity_id"] or values.get("entity_id") or ""
         rendered["entity_id"] = f"{domain}.{object_id}" if object_id else ""
+
+        # Previewing a real entity: number the result away from IDs other
+        # entities hold, the way a batched rename does, so what the preview
+        # offers can actually be applied.
+        restructurer = renamer_state.get("restructurer")
+        current_entity_id = f"{domain}.{values.get('entity_id')}" if values.get("entity_id") else ""
+        if object_id and restructurer and current_entity_id in restructurer.entities:
+            taken = set(restructurer.entities) - {current_entity_id}
+            suffix = 1
+            while rendered["entity_id"] in taken:
+                suffix += 1
+                rendered["entity_id"] = f"{domain}.{object_id}_{suffix}"
+            if suffix > 1 and rendered.get("entity_name"):
+                rendered["entity_name"] = f"{rendered['entity_name']} {suffix}"
+
         return jsonify({"rendered": rendered})
     except (NamingTemplateError, KeyError, ValueError) as error:
         return jsonify({"error": str(error)}), 400
