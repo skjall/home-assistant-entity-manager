@@ -15,6 +15,18 @@
             display: none !important;
         }
 
+        /* Single-line text whose ellipsis sits at the start, keeping the end
+           visible. Entity IDs run from coarse to specific, so the tail is what
+           tells two of them apart. */
+        .truncate-start {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            direction: rtl;
+            text-align: left;
+            unicode-bidi: plaintext;
+        }
+
         /* Reset body margin and prevent overflow */
         html, body {
             margin: 0;
@@ -2200,9 +2212,9 @@
                                 <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
                             </button>
                             <div x-show="jobPanel.showLog"
-                                 class="mt-2 max-h-40 overflow-y-auto text-xs font-mono bg-gray-50 rounded p-2 border border-gray-200">
+                                 class="mt-2 max-h-64 overflow-y-auto text-xs font-mono bg-gray-50 rounded p-2 border border-gray-200">
                                 <template x-for="(entry, i) in jobPanel.job.log.slice(-100)" :key="i">
-                                    <div class="text-gray-600 truncate">
+                                    <div class="text-gray-600 break-all">
                                         <span class="text-gray-400" x-text="entry.step"></span>
                                         <span x-text="' ' + entry.message"></span>
                                     </div>
@@ -2273,10 +2285,16 @@
              x-transition:enter-start="opacity-0"
              x-transition:enter-end="opacity-100"
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+            <div class="relative bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh]"
+                 :class="(swap.oldOpen || swap.newOpen) ? 'overflow-visible' : 'overflow-y-auto'"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100">
+
+                <div x-show="swap.loading" x-cloak
+                     class="absolute inset-0 z-50 rounded-xl bg-white flex items-center justify-center gap-2 text-gray-500">
+                    <i class="ri-loader-4-line animate-spin text-lg"></i> Lade Geräte…
+                </div>
 
                 <!-- HEADER -->
                 <div class="flex items-start gap-3 px-6 py-4 border-b border-gray-100">
@@ -2315,17 +2333,13 @@
                 </div>
 
                 <!-- BODY -->
-                <div class="px-6 py-5">
+                <div class="px-6 py-5 min-h-[16rem]">
                     <div x-show="swap.error" class="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
                         <i class="ri-error-warning-line mt-0.5 shrink-0"></i><span x-text="swap.error"></span>
                     </div>
 
                     <!-- Step 1: Geräte wählen -->
                     <div x-show="swap.step === 1">
-                        <div x-show="swap.loading" class="flex items-center gap-2 text-gray-500 py-6 justify-center">
-                            <i class="ri-loader-4-line animate-spin text-lg"></i> Lade Geräte…
-                        </div>
-
                         <div x-show="swap.resumeJobs.length" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5">
                             <p class="flex items-center gap-2 text-sm font-semibold text-amber-800 mb-3"><i class="ri-history-line"></i> Offene Austausch-Vorgänge</p>
                             <template x-for="j in swap.resumeJobs" :key="j.job_id">
@@ -2348,7 +2362,7 @@
 
                         <!-- Altes Gerät (durchsuchbar, Liste inline im Fluss) -->
                         <label class="block text-sm font-medium text-gray-700 mb-1.5">Altes Gerät <span class="text-gray-400 font-normal">(wird ersetzt)</span></label>
-                        <div class="mb-4" @click.away="swapCloseList('old')" @keydown.escape.stop="swapCloseList('old')">
+                        <div class="mb-4 relative" @click.away="swapCloseList('old')" @keydown.escape.stop="swapCloseList('old')">
                             <div class="relative">
                                 <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input type="text" x-model="swap.oldSearch" placeholder="Gerät suchen…" autocomplete="off"
@@ -2356,12 +2370,12 @@
                                        @focus="swap.oldOpen=true; swap.newOpen=false" @click="swap.oldOpen=true" @input="swap.oldOpen=true; swap.oldId=''">
                                 <i x-show="swap.oldId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
-                            <div x-show="swap.oldOpen" class="mt-1 border border-gray-200 rounded-lg bg-white max-h-60 overflow-y-auto divide-y divide-gray-100">
+                            <div x-show="swap.oldOpen" class="absolute left-0 right-0 top-full z-50 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg max-h-60 overflow-y-auto divide-y divide-gray-100">
                                 <template x-for="d in swapFilteredDevices(swap.oldSearch, 'old')" :key="d.device_id">
                                     <button type="button" @click="swapPickDevice('old', d)"
                                             class="flex items-center justify-between w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none cursor-pointer text-sm"
                                             :class="d.device_id===swap.oldId?'bg-blue-100 font-medium':''">
-                                        <span class="truncate"><span class="text-gray-400" x-show="d.area" x-text="d.area+' / '"></span><span x-text="d.name"></span></span>
+                                        <span class="truncate min-w-0"><span class="text-gray-400" x-show="d.area" x-text="d.area+' / '"></span><span x-text="d.name"></span></span>
                                         <span class="text-xs text-gray-400 shrink-0 ml-2" x-text="d.entity_count+' E.'"></span>
                                     </button>
                                 </template>
@@ -2372,7 +2386,7 @@
 
                         <!-- Neues Gerät -->
                         <label class="block text-sm font-medium text-gray-700 mb-1.5">Neues Gerät</label>
-                        <div class="mb-2" @click.away="swapCloseList('new')" @keydown.escape.stop="swapCloseList('new')">
+                        <div class="mb-2 relative" @click.away="swapCloseList('new')" @keydown.escape.stop="swapCloseList('new')">
                             <div class="relative">
                                 <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input type="text" x-model="swap.newSearch" placeholder="Gerät suchen…" autocomplete="off"
@@ -2380,12 +2394,12 @@
                                        @focus="swap.newOpen=true; swap.oldOpen=false" @click="swap.newOpen=true" @input="swap.newOpen=true; swap.newId=''">
                                 <i x-show="swap.newId" class="ri-checkbox-circle-fill absolute right-3 top-1/2 -translate-y-1/2 text-green-500"></i>
                             </div>
-                            <div x-show="swap.newOpen" class="mt-1 border border-gray-200 rounded-lg bg-white max-h-60 overflow-y-auto divide-y divide-gray-100">
+                            <div x-show="swap.newOpen" class="absolute left-0 right-0 top-full z-50 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg max-h-60 overflow-y-auto divide-y divide-gray-100">
                                 <template x-for="d in swapFilteredDevices(swap.newSearch, 'new')" :key="d.device_id">
                                     <button type="button" @click="swapPickDevice('new', d)"
                                             class="flex items-center justify-between w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none cursor-pointer text-sm"
                                             :class="d.device_id===swap.newId?'bg-blue-100 font-medium':''">
-                                        <span class="truncate"><span class="text-gray-400" x-show="d.area" x-text="d.area+' / '"></span><span x-text="d.name"></span></span>
+                                        <span class="truncate min-w-0"><span class="text-gray-400" x-show="d.area" x-text="d.area+' / '"></span><span x-text="d.name"></span></span>
                                         <span class="text-xs text-gray-400 shrink-0 ml-2" x-text="d.entity_count+' E.'"></span>
                                     </button>
                                 </template>
@@ -2409,14 +2423,16 @@
                         <div x-show="!swap.mapping.length" class="text-sm text-gray-500 bg-gray-50 rounded-lg p-4 text-center">
                             Keine der Entities des alten Geräts wird referenziert — es muss nichts umgebogen werden. Du kannst direkt weiter.
                         </div>
-                        <div class="space-y-2">
+                        <div class="space-y-2 min-h-[14rem] max-h-[22rem] overflow-y-auto pr-1">
                             <template x-for="row in swap.mapping" :key="row.old_entity_id">
-                                <div class="rounded-lg border border-gray-200 p-3 transition hover:bg-gray-50" :class="!row.new_entity_id ? 'opacity-60' : ''">
-                                    <div class="flex items-center gap-3">
+                                <div class="rounded-lg border border-gray-200 transition hover:bg-gray-50" :class="!row.new_entity_id ? 'opacity-60' : ''">
+                                    <div class="flex items-center gap-3 p-3">
                                         <div class="flex-1 min-w-0">
-                                            <p class="font-mono text-xs text-gray-700 truncate" :title="row.old_entity_id" x-text="row.old_entity_id"></p>
-                                            <div class="flex items-center gap-1.5 mt-1.5">
+                                            <p class="font-mono text-xs text-gray-700 truncate-start" x-text="row.old_entity_id"></p>
+                                            <div class="flex items-center gap-1.5 mt-1.5" x-show="row.device_class || swapDomainChanges(row)">
                                                 <span x-show="row.device_class" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium" x-text="row.device_class"></span>
+                                                <span x-show="swapDomainChanges(row)" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium"
+                                                      x-text="_swapDomain(row.old_entity_id) + ' → ' + _swapDomain(row.new_entity_id)"></span>
                                             </div>
                                         </div>
                                         <div class="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0"><i class="ri-arrow-right-line text-blue-500"></i></div>
@@ -2428,6 +2444,17 @@
                                                 </template>
                                             </select>
                                         </div>
+                                        <button type="button" class="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                                                :title="swap.expandedRow === row.old_entity_id ? 'Details schließen' : 'Vollständige IDs zeigen'"
+                                                @click="swap.expandedRow = swap.expandedRow === row.old_entity_id ? null : row.old_entity_id">
+                                            <i :class="swap.expandedRow === row.old_entity_id ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'"></i>
+                                        </button>
+                                    </div>
+                                    <div x-show="swap.expandedRow === row.old_entity_id" x-cloak
+                                         class="px-3 pb-3 pt-1 border-t border-gray-100 space-y-1.5 text-xs">
+                                        <p class="break-all"><span class="text-gray-400">alt </span><span class="font-mono text-gray-700" x-text="row.old_entity_id"></span></p>
+                                        <p class="break-all" x-show="row.new_entity_id"><span class="text-gray-400">neu </span><span class="font-mono text-blue-600" x-text="row.new_entity_id"></span></p>
+                                        <p class="text-gray-400" x-show="!row.new_entity_id">Wird nicht übertragen.</p>
                                     </div>
                                 </div>
                             </template>
@@ -2440,9 +2467,9 @@
                         <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto mb-5">
                             <template x-for="p in swapActivePairs()" :key="p.old_entity_id">
                                 <div class="flex items-center gap-2 px-3 py-2 text-xs font-mono">
-                                    <span class="text-gray-600 truncate flex-1" x-text="p.old_entity_id"></span>
+                                    <span class="text-gray-600 truncate-start flex-1 min-w-0" x-text="p.old_entity_id"></span>
                                     <i class="ri-arrow-right-line text-gray-400 shrink-0"></i>
-                                    <span class="text-blue-600 truncate flex-1" x-text="p.new_entity_id"></span>
+                                    <span class="text-blue-600 truncate-start flex-1 min-w-0" x-text="p.new_entity_id"></span>
                                 </div>
                             </template>
                         </div>
@@ -2636,6 +2663,7 @@
                     newEntityOptions: [],
                     disposition: 'keep',
                     allTypes: false,
+                    expandedRow: null,  // old_entity_id der aufgeklappten Zeile
                     error: '',
                     _lastCount: 0,
                     steps: [
@@ -2683,6 +2711,10 @@
                 },
                 // Auswahlmöglichkeiten je Mapping-Zeile: standardmäßig nur Entities des
                 // GLEICHEN Typs (Domain) wie die alte Entity; mit "alle Typen" überschreibbar.
+                swapDomainChanges(row) {
+                    return !!row.new_entity_id && this._swapDomain(row.old_entity_id) !== this._swapDomain(row.new_entity_id);
+                },
+
                 swapMappingOptions(row) {
                     if (this.swap.allTypes) return this.swap.newEntityOptions;
                     const dom = this._swapDomain(row.old_entity_id);
@@ -2736,6 +2768,19 @@
                     this.swap.show = false;
                 },
 
+                // Read a swap API response. A non-JSON body — an ingress error page,
+                // for instance — becomes a readable message instead of a parser error.
+                async _swapJson(response, fallback) {
+                    const body = await response.text();
+                    let data = null;
+                    try { data = JSON.parse(body); } catch (error) { data = null; }
+                    if (!data) throw new Error(`${fallback} (HTTP ${response.status})`);
+                    if (!response.ok || data.error) {
+                        throw new Error(data.error || `${fallback} (HTTP ${response.status})`);
+                    }
+                    return data;
+                },
+
                 async swapPropose() {
                     if (!this.swap.oldId || !this.swap.newId || this.swap.oldId === this.swap.newId) {
                         this.swap.error = 'Bitte zwei verschiedene Geräte wählen.';
@@ -2749,8 +2794,7 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ old_device_id: this.swap.oldId, new_device_id: this.swap.newId })
                         });
-                        const job = await r.json();
-                        if (!r.ok) throw new Error(job.error || 'Vorschlag fehlgeschlagen');
+                        const job = await this._swapJson(r, 'Vorschlag fehlgeschlagen');
                         this._initMappingFromJob(job);
                         this.swap.step = 2;
                     } catch (e) {
@@ -2810,13 +2854,11 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ entity_mapping: pairs, old_device_disposition: this.swap.disposition })
                         });
-                        const cj = await c.json();
-                        if (!c.ok) throw new Error(cj.error || 'Confirmation failed');
+                        await this._swapJson(c, 'Confirmation failed');
                         this.swap.step = 4;
                         // Execute now returns 202 immediately; poll api/swap/<id> for progress.
                         const e = await fetch(`api/swap/${this.swap.job.job_id}/execute`, { method: 'POST' });
-                        const ej = await e.json();
-                        if (!e.ok) throw new Error(ej.error || 'Execution failed');
+                        const ej = await this._swapJson(e, 'Execution failed');
                         this.swap.job = ej;
                         this.startSwapPolling();
                     } catch (e) {
@@ -2834,8 +2876,8 @@
                 async pollSwap() {
                     if (!this.swap.job) return;
                     try {
-                        const j = await fetch(`api/swap/${this.swap.job.job_id}`).then(r => r.json());
-                        if (!j || j.error) return;  // transient; keep polling
+                        const j = await this._swapJson(
+                            await fetch(`api/swap/${this.swap.job.job_id}`), 'Statusabfrage fehlgeschlagen');
                         this.swap.job = j;
                         if (['COMPLETED', 'ABORTED', 'FAILED'].includes(j.state)) {
                             this.stopSwapPolling();
@@ -2854,8 +2896,8 @@
                     this.swap.error = '';
                     this.swap.show = true;
                     try {
-                        const j = await fetch(`api/swap/${jobId}`).then(r => r.json());
-                        if (j.error) throw new Error(j.error);
+                        const j = await this._swapJson(
+                            await fetch(`api/swap/${jobId}`), 'Vorgang konnte nicht geladen werden');
                         this.swap.job = j;
                         this.swap.disposition = j.old_device_disposition || 'keep';
                         this.swap.oldId = j.old_device?.device_id || '';
@@ -2882,8 +2924,7 @@
                             // mid-execution or FAILED -> resume (202 + poll)
                             this.swap.step = 4;
                             const e = await fetch(`api/swap/${jobId}/execute`, { method: 'POST' });
-                            const ej = await e.json();
-                            if (!e.ok) throw new Error(ej.error || 'Resume failed');
+                            const ej = await this._swapJson(e, 'Resume failed');
                             this.swap.job = ej;
                             this.startSwapPolling();
                         }
