@@ -43,8 +43,10 @@ class EntityRegistry:
 
         if new_entity_id:
             message["new_entity_id"] = new_entity_id
-        if name:
-            message["name"] = name
+        if name is not None:
+            # Home Assistant clears a name override on ``null``; an empty
+            # string would be stored verbatim and keep shadowing original_name.
+            message["name"] = name or None
         if labels is not None:
             message["labels"] = labels
         if enable:

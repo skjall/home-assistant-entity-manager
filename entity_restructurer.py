@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ha_client import HomeAssistantClient
 from hierarchy_manager import normalize_name
 from naming_overrides import NamingOverrides
+from naming_templates import NamingTemplates
 
 # Import new modules - optional for backward compatibility
 try:
@@ -49,6 +50,7 @@ class EntityRestructurer:
         client: HomeAssistantClient,
         naming_overrides: Optional[NamingOverrides] = None,
         type_mappings: Optional[Any] = None,
+        naming_templates: Optional[NamingTemplates] = None,
         language: str = "en",
     ):
         """
@@ -58,13 +60,16 @@ class EntityRestructurer:
             client: Home Assistant REST API client
             naming_overrides: Optional override storage for custom names
             type_mappings: Optional TypeMappings instance for translations
+            naming_templates: Optional naming-template configuration
             language: Language code for translations (default: "en")
         """
         self.client = client
         self.devices = {}
         self.areas = {}
+        self.floors = {}
         self.entities = {}
         self.naming_overrides = naming_overrides or NamingOverrides()
+        self.naming_templates = naming_templates or NamingTemplates()
         self.language = language
 
         # Initialize type mappings for translations
@@ -81,8 +86,7 @@ class EntityRestructurer:
         else:
             self.hierarchy_manager = None
 
-        # Legacy entity type mappings - used as fallback
-        # These are now primarily handled by TypeMappings
+        # Built-in entity type mappings used when TypeMappings is unavailable.
         self.entity_types = {
             "light": "light",
             "switch": "switch",
@@ -112,19 +116,41 @@ class EntityRestructurer:
             "media_player": "media_player",
         }
 
-    def normalize_name(self, name: str) -> str:
-        """Normalize names for entity IDs (HA standard).
+    @staticmethod
+    async def _list_registry(ws_client: Any, registry: str) -> List[Dict[str, Any]]:
+        """Return all entries from a Home Assistant registry."""
+        message_id = await ws_client._send_message({"type": f"config/{registry}_registry/list"})
+        response = await ws_client._receive_message()
+        while response.get("id") != message_id:
+            response = await ws_client._receive_message()
+        if not response.get("success"):
+            raise RuntimeError(f"Failed to load {registry} registry: {response}")
+        return response.get("result", [])
 
-        Delegates to :func:`hierarchy_manager.normalize_name` so the whole
-        code base shares a single normalization implementation.
-        """
-        return normalize_name(name)
+    @staticmethod
+    def _index_registry(
+        entries: List[Dict[str, Any]],
+        primary_key: str,
+        fallback_key: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Index registry entries and normalize a renamed identifier field."""
+        indexed = {}
+        for entry in entries:
+            entry_id = entry.get(primary_key) or (entry.get(fallback_key) if fallback_key else None)
+            if not entry_id:
+                logger.warning("Ignoring registry entry without %s: %s", primary_key, entry)
+                continue
+            normalized = dict(entry)
+            normalized.setdefault(primary_key, entry_id)
+            indexed[entry_id] = normalized
+        return indexed
 
-    async def load_structure(self, ws_client=None):
+    async def load_structure(self, ws_client: Optional[Any] = None) -> None:
         """
         Load the complete structure from Home Assistant via WebSocket.
 
         Populates:
+        - self.floors: Dict of floor_id -> floor data
         - self.areas: Dict of area_id -> area data
         - self.devices: Dict of device_id -> device data
         - self.entities: Dict of entity_id -> entity data
@@ -134,72 +160,31 @@ class EntityRestructurer:
         if not ws_client:
             logger.warning("No WebSocket client available, using limited mode")
             self.areas = {}
+            self.floors = {}
             self.devices = {}
             self.entities = {}
             return
 
-        try:
-            # Load areas via WebSocket
-            logger.info("Loading areas via WebSocket...")
-            msg_id = await ws_client._send_message({"type": "config/area_registry/list"})
-            response = await ws_client._receive_message()
-            while response.get("id") != msg_id:
-                response = await ws_client._receive_message()
+        registry_specs = (
+            ("floors", "floor", "floor_id", "id", logging.WARNING),
+            ("areas", "area", "area_id", "id", logging.ERROR),
+            ("devices", "device", "id", None, logging.ERROR),
+            ("entities", "entity", "entity_id", None, logging.ERROR),
+        )
+        for attribute, registry, key, fallback_key, error_level in registry_specs:
+            try:
+                entries = await self._list_registry(ws_client, registry)
+                indexed = self._index_registry(entries, key, fallback_key)
+                setattr(self, attribute, indexed)
+                logger.info("Loaded %d %s registry entries", len(indexed), registry)
+            except Exception as error:
+                # Floors do not exist on older Home Assistant versions.
+                logger.log(error_level, "Failed to load %s registry: %s", registry, error)
+                setattr(self, attribute, {})
 
-            if response.get("success"):
-                areas_data = response.get("result", [])
-                self.areas = {area["area_id"]: area for area in areas_data}
-                logger.info(f"Loaded {len(self.areas)} areas via WebSocket")
-            else:
-                logger.error(f"Failed to load areas: {response}")
-
-        except Exception as e:
-            logger.error(f"Error loading areas via WebSocket: {e}")
-
-        try:
-            # Load devices via WebSocket
-            logger.info("Loading devices via WebSocket...")
-            msg_id = await ws_client._send_message({"type": "config/device_registry/list"})
-            response = await ws_client._receive_message()
-            while response.get("id") != msg_id:
-                response = await ws_client._receive_message()
-
-            if response.get("success"):
-                devices_data = response.get("result", [])
-                self.devices = {device["id"]: device for device in devices_data}
-                logger.info(f"Loaded {len(self.devices)} devices via WebSocket")
-            else:
-                logger.error(f"Failed to load devices: {response}")
-
-        except Exception as e:
-            logger.error(f"Error loading devices via WebSocket: {e}")
-
-        # Load entity registry directly
-        try:
-            logger.info("Loading entity registry...")
-
-            msg_id = await ws_client._send_message({"type": "config/entity_registry/list"})
-
-            response = await ws_client._receive_message()
-            while response.get("id") != msg_id:
-                response = await ws_client._receive_message()
-
-            if response.get("success"):
-                entities = response.get("result", [])
-                self.entities = {e["entity_id"]: e for e in entities}
-                logger.info(f"Loaded {len(self.entities)} entities from registry")
-
-                # Count maintained labels
-                maintained_count = sum(1 for e in self.entities.values() if "maintained" in e.get("labels", []))
-                if maintained_count > 0:
-                    logger.info(f"Found {maintained_count} entities with maintained label")
-            else:
-                logger.error(f"Failed to load entity registry: {response}")
-                self.entities = {}
-
-        except Exception as e:
-            logger.error(f"Failed to load entity registry: {e}")
-            self.entities = {}
+        maintained_count = sum(1 for entity in self.entities.values() if "maintained" in entity.get("labels", []))
+        if maintained_count:
+            logger.info("Found %d entities with maintained label", maintained_count)
 
         # Populate hierarchy manager for cascade updates
         if self.hierarchy_manager:
@@ -230,7 +215,7 @@ class EntityRestructurer:
         Determine entity type based on domain and device class.
 
         Uses TypeMappings for translations if available, otherwise falls back
-        to legacy entity_types dict.
+        to the built-in entity type mappings.
 
         Args:
             entity_id: The entity ID
@@ -258,7 +243,7 @@ class EntityRestructurer:
                 domain=domain,
             )
 
-        # Fallback to legacy behavior
+        # Fall back to built-in mappings.
         if domain in ["light", "switch", "climate", "cover", "media_player"]:
             return self.entity_types.get(domain, domain)
 
@@ -275,134 +260,195 @@ class EntityRestructurer:
 
         return "sensor"  # Default
 
-    def generate_new_entity_id(self, entity_id: str, state_info: Dict) -> Tuple[str, str]:
-        """
-        Generiere neue Entity ID basierend auf:
-        1. Area of the device or entity
-        2. Device Name
-        3. Entity Type
-        """
-        domain = entity_id.split(".")[0]
-
-        # Hole Entity Registry Info
+    def build_naming_context(self, entity_id: str, state_info: Dict[str, Any]) -> Dict[str, str]:
+        """Build the complete template context for an entity."""
+        domain, _, object_id = entity_id.partition(".")
         entity_reg = self.entities.get(entity_id, {})
-        device_id = entity_reg.get("device_id")
+        device_id = entity_reg.get("device_id") or ""
+        device = self.devices.get(device_id, {}) if device_id else {}
 
-        # Determine area
-        room = None
-        room_display = None  # For friendly name with area override
-        device = None
+        area_id = entity_reg.get("area_id") or device.get("area_id") or ""
+        area = self.areas.get(area_id, {}) if area_id else {}
+        floor_id = area.get("floor_id") or ""
+        floor = self.floors.get(floor_id, {}) if floor_id else {}
 
-        if device_id and device_id in self.devices:
-            device_info = self.devices[device_id]
-            device = device_info
-
-            # Area from device
-            if device_info.get("area_id"):
-                area_id = device_info["area_id"]
-                area = self.areas.get(area_id)
-                if area:
-                    room = self.normalize_name(area.get("name", ""))
-                    room_display = area.get("name", "")
-
-        # If no area from device, try directly from entity
-        if not room and entity_reg.get("area_id"):
-            area_id = entity_reg["area_id"]
-            area = self.areas.get(area_id)
-            if area:
-                room = self.normalize_name(area.get("name", ""))
-                room_display = area.get("name", "")
-
-        # If still no area, leave it empty
-        # (We don't try to guess from entity ID as that's unreliable and language-specific)
-
-        # Determine device name (from HA API directly)
-        device_name = ""
-        if device:
-            device_name = device.get("name_by_user") or device.get("name") or device.get("model", "")
-            device_name = self.normalize_name(device_name)
-        else:
-            # No device found - use entity name parts as fallback
-            entity_parts = entity_id.split(".")[-1].split("_")
-            # Use all parts as we don't want to make language-specific assumptions
-            if entity_parts:
-                device_name = "_".join(entity_parts)
-
-        # Determine entity type
-        device_class = state_info.get("attributes", {}).get("device_class")
-        entity_type = self.get_entity_type(entity_id, device_class)
-
-        # Check for entity override
-        registry_id = entity_reg.get("id", "")  # The immutable UUID
+        device_class = (
+            state_info.get("attributes", {}).get("device_class")
+            or entity_reg.get("device_class")
+            or entity_reg.get("original_device_class")
+            or ""
+        )
+        registry_id = entity_reg.get("id", "")
         entity_override = self.naming_overrides.get_entity_override(registry_id) if registry_id else None
 
-        # If override exists, use it as basis for entity type
-        if entity_override and entity_override.get("name"):
-            # Override is the "nice" name (e.g. "Ceiling Light")
-            # Normalize for entity ID
-            entity_type = self.normalize_name(entity_override["name"])
+        integration = entity_reg.get("platform") or ""
+        if not integration and self.type_mappings:
+            integration = self.type_mappings.detect_integration(entity_id) or ""
 
-        # Baue neue Entity ID
-        parts = []
+        raw_device_name = device.get("name_by_user") or device.get("name") or device.get("model") or ""
+        partial_context = {
+            "floor": floor.get("name", ""),
+            "floor_id": floor_id,
+            "area": area.get("name", ""),
+            "area_id": area_id,
+            "device": "",
+            "device_id": device_id,
+            "entity": "",
+            "entity_id": object_id,
+            "domain": domain,
+            "device_class": device_class,
+            "manufacturer": device.get("manufacturer", ""),
+            "model": device.get("model", ""),
+            "integration": integration,
+        }
+        device_name = self._base_device_name(raw_device_name, partial_context)
+        partial_context["device"] = device_name
+        partial_context["entity"] = self._base_entity_name(
+            entity_id,
+            entity_reg,
+            state_info,
+            entity_override,
+            device_class,
+            (raw_device_name, partial_context["area"], device_name),
+            partial_context,
+        )
+        return {key: str(value or "") for key, value in partial_context.items()}
 
-        # Check if device_name already starts with room
-        if room and device_name:
-            # Normalize both for comparison
-            room_normalized = room.lower()
-            device_name_normalized = device_name.lower()
+    def _base_device_name(self, name: str, context: Dict[str, str]) -> str:
+        """Remove hierarchy previously added by a known device template."""
+        name = name or ""
+        extracted = self.naming_templates.extract_field("device_name", name, "device", context)
+        if extracted:
+            return extracted
+        for prefix in (context["floor"], context["area"]):
+            if prefix and name.lower().startswith(prefix.lower() + " "):
+                name = name[len(prefix) :].strip()
+        return name
 
-            # If device_name does NOT start with area, add area
-            if not device_name_normalized.startswith(room_normalized):
-                parts.append(room)
-            parts.append(device_name)
-        elif room:
-            parts.append(room)
-        elif device_name:
-            parts.append(device_name)
+    def _strip_applied_entity_name(
+        self,
+        name: str,
+        prefixes: Tuple[str, ...],
+        context: Optional[Dict[str, str]],
+    ) -> str:
+        """Remove hierarchy previously added by a known entity-name template."""
+        if context is not None:
+            extracted = self.naming_templates.extract_field("entity_name", name, "entity", context)
+            if extracted:
+                return extracted
+        for prefix in filter(None, prefixes):
+            if name.lower() == prefix.lower():
+                return ""
+            if name.lower().startswith(prefix.lower() + " "):
+                name = name[len(prefix) :].strip()
+        return name
 
-        parts.append(entity_type)
+    def _base_entity_name(
+        self,
+        entity_id: str,
+        registry: Dict[str, Any],
+        state: Dict[str, Any],
+        override: Optional[Dict[str, Any]],
+        device_class: str,
+        prefixes: Tuple[str, ...],
+        context: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """Return the entity-specific name supplied by Home Assistant."""
+        native = (
+            override.get("name") if override else None,
+            registry.get("original_name"),
+            state.get("original_name"),
+        )
+        name = next((candidate for candidate in native if candidate), None)
+        if name is not None:
+            return name
 
-        new_entity_id = f"{domain}.{'_'.join(parts)}"
+        # ``name`` fields may hold a name this add-on wrote on a previous run.
+        # Unwind the entity template before reusing them, otherwise each run
+        # prepends the hierarchy again and the name grows without bound.
+        applied = next(
+            (candidate for candidate in (registry.get("name"), state.get("name")) if candidate),
+            None,
+        )
+        if applied is not None:
+            base = self._strip_applied_entity_name(applied, prefixes, context)
+            if base:
+                return base
 
-        # Friendly Name
-        friendly_parts = []
+        name = state.get("attributes", {}).get("friendly_name")
+        if name is not None:
+            for prefix in filter(None, prefixes):
+                if name.lower() == prefix.lower():
+                    name = ""
+                elif name.lower().startswith(prefix.lower() + " "):
+                    name = name[len(prefix) :].strip()
+            if name:
+                return name
 
-        # Get device name for friendly name (from HA API directly)
-        device_friendly_name = None
-        if device:
-            device_friendly_name = device.get("name_by_user") or device.get("name")
+            # Integrations without native entity names may expose only the
+            # device name. Preserve their existing object-ID suffix.
+            object_id = entity_id.partition(".")[2]
+            for prefix in filter(None, prefixes):
+                normalized_prefix = normalize_name(prefix)
+                if object_id == normalized_prefix:
+                    object_id = ""
+                elif normalized_prefix and object_id.startswith(normalized_prefix + "_"):
+                    object_id = object_id[len(normalized_prefix) + 1 :]
+            if object_id and not registry.get("has_entity_name"):
+                return object_id.replace("_", " ").title()
+            return ""
 
-        # Check if device name already starts with room
-        if room and device_friendly_name:
-            # Use room_display if available
-            if not room_display:
-                room_display = room.title()
+        entity_type = self.get_entity_type(entity_id, device_class)
+        return entity_type.replace("_", " ").title()
 
-            # If device name doesn't start with area, add area
-            if not device_friendly_name.lower().startswith(room_display.lower()):
-                friendly_parts.append(room_display)
-            friendly_parts.append(device_friendly_name)
-        elif room:
-            # Use room_display if available
-            if not room_display:
-                room_display = room
-            friendly_parts.append(room_display.title())
-        elif device_friendly_name:
-            friendly_parts.append(device_friendly_name)
-
-        # Entity type for friendly name
-        if entity_override and entity_override.get("name"):
-            # Use the override directly (already formatted nicely)
-            friendly_entity_type = entity_override["name"]
+    def generate_device_name(self, device_id: str) -> str:
+        """Generate a configured device name using its first entity for context."""
+        entity_id = next(
+            (entity_id for entity_id, entity in self.entities.items() if entity.get("device_id") == device_id),
+            "",
+        )
+        if entity_id:
+            context = self.build_naming_context(entity_id, self.entities.get(entity_id, {}))
         else:
-            # Convert generated type to nice name
-            friendly_entity_type = entity_type.replace("_", " ").title()
+            device = self.devices.get(device_id, {})
+            area_id = device.get("area_id") or ""
+            area = self.areas.get(area_id, {}) if area_id else {}
+            floor_id = area.get("floor_id") or ""
+            floor = self.floors.get(floor_id, {}) if floor_id else {}
+            raw_name = device.get("name_by_user") or device.get("name") or device.get("model") or ""
+            context = {
+                "floor": floor.get("name", ""),
+                "floor_id": floor_id,
+                "area": area.get("name", ""),
+                "area_id": area_id,
+                "device": raw_name,
+                "device_id": device_id,
+                "entity": "",
+                "entity_id": "",
+                "domain": "",
+                "device_class": "",
+                "manufacturer": device.get("manufacturer", ""),
+                "model": device.get("model", ""),
+                "integration": "",
+            }
+        return self.naming_templates.render("device_name", context)
 
-        friendly_parts.append(friendly_entity_type)
-
-        friendly_name = " ".join(friendly_parts)
-
-        return new_entity_id, friendly_name
+    def generate_new_entity_id(
+        self,
+        entity_id: str,
+        state_info: Dict[str, Any],
+        entity_name: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Generate an entity ID and entity-registry name from active templates."""
+        domain = entity_id.split(".", 1)[0]
+        context = self.build_naming_context(entity_id, state_info)
+        if entity_name is not None:
+            context["entity"] = entity_name
+        object_id = self.naming_templates.render("entity_id", context, normalize=True)
+        entity_name = self.naming_templates.render("entity_name", context)
+        if not object_id:
+            object_id = entity_id.split(".", 1)[-1]
+        return f"{domain}.{object_id}", entity_name
 
     def calculate_new_entity_name(self, entity_id: str, force_recalculate: bool = False) -> Tuple[str, str]:
         """
