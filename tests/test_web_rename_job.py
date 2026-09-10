@@ -80,6 +80,13 @@ def test_device_rename_uses_active_naming_templates() -> None:
             suffix = (entity_name or "").lower().replace(" ", "_")
             return f"sensor.ground_floor_sofa1_{suffix}", entity_name or ""
 
+        def deduplicate_entity_ids(
+            self,
+            proposals: list[tuple[str, str, str]],
+        ) -> list[tuple[str, str, str]]:
+            """These targets are distinct, so hand them back untouched."""
+            return list(proposals)
+
     states = [
         {"entity_id": "sensor.kitchen_sofa_energy", "attributes": {"native_name": "Energy"}},
         {"entity_id": "sensor.kitchen_sofa_voltage", "attributes": {"native_name": "Voltage"}},

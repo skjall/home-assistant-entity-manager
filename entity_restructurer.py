@@ -12,8 +12,9 @@ Integrates with:
 - TypeMappings: For multilingual entity type translations
 """
 
+from collections import defaultdict
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ha_client import HomeAssistantClient
 from hierarchy_manager import normalize_name
@@ -467,6 +468,57 @@ class EntityRestructurer:
 
         return new_id, friendly_name
 
+    def deduplicate_entity_ids(
+        self,
+        proposals: Sequence[Tuple[str, str, str]],
+    ) -> List[Tuple[str, str, str]]:
+        """
+        Give every proposal an entity ID no other entity holds.
+
+        Several entities of one device often carry the same name from their
+        integration — a plug with two energy counters, say — so the template
+        renders one ID for all of them. Home Assistant refuses every rename
+        after the first, and the proposal returns unchanged on the next run.
+
+        Duplicates are numbered the way Home Assistant numbers them. An entity
+        that already holds the plain ID keeps it, and the order follows the
+        current entity IDs, so the numbering is the same on every run.
+
+        Args:
+            proposals: (entity_id, new_entity_id, friendly_name) triples
+
+        Returns:
+            The same triples in the same order, with unique new entity IDs
+        """
+        renaming = {entity_id for entity_id, _, _ in proposals}
+        taken = set(self.entities) - renaming
+
+        by_target: Dict[str, List[str]] = defaultdict(list)
+        for entity_id, new_entity_id, _ in proposals:
+            by_target[new_entity_id].append(entity_id)
+
+        assigned: Dict[str, str] = {}
+        for target, holders in by_target.items():
+            domain, _, object_id = target.partition(".")
+            # Whoever already owns the target keeps it; the rest follow in a
+            # stable order rather than in dictionary order.
+            ordered = sorted(holders, key=lambda entity_id: (entity_id != target, entity_id))
+            for entity_id in ordered:
+                candidate = target
+                suffix = 1
+                while candidate in taken:
+                    suffix += 1
+                    candidate = f"{domain}.{object_id}_{suffix}"
+                taken.add(candidate)
+                assigned[entity_id] = candidate
+                if candidate != target:
+                    logger.info("Entity ID %s already taken, using %s for %s", target, candidate, entity_id)
+
+        return [
+            (entity_id, assigned.get(entity_id, new_entity_id), friendly_name)
+            for entity_id, new_entity_id, friendly_name in proposals
+        ]
+
     async def analyze_entities(
         self,
         states: List[Dict],
@@ -476,7 +528,7 @@ class EntityRestructurer:
         """Analyze all entities and create mapping"""
         # Structure should already be loaded - don't load again!
 
-        mapping = {}
+        proposals: List[Tuple[str, str, str]] = []
         skipped_count = 0
 
         for state in states:
@@ -495,13 +547,17 @@ class EntityRestructurer:
 
             new_entity_id, friendly_name = self.generate_new_entity_id(entity_id, state)
 
-            # ALWAYS include in mapping, even if nothing changes
+            # ALWAYS include, even if nothing changes
             # The maintained label decides whether it's skipped
-            mapping[entity_id] = (new_entity_id, friendly_name)
-            logger.info(f"Would process: {entity_id} -> {new_entity_id}")
+            proposals.append((entity_id, new_entity_id, friendly_name))
 
         if skipped_count > 0:
             logger.info(f"Skipped {skipped_count} entities with maintained label")
+
+        mapping = {}
+        for entity_id, new_entity_id, friendly_name in self.deduplicate_entity_ids(proposals):
+            mapping[entity_id] = (new_entity_id, friendly_name)
+            logger.info(f"Would process: {entity_id} -> {new_entity_id}")
 
         return mapping
 

@@ -2505,7 +2505,7 @@ def _plan_device_entity_changes(
 ) -> list[tuple[str, str, str]]:
     """Generate entity changes for a renamed device with the active templates."""
     states_by_id = {state["entity_id"]: state for state in states}
-    return [
+    changes = [
         (
             entity_id,
             *restructurer.generate_new_entity_id(
@@ -2517,6 +2517,7 @@ def _plan_device_entity_changes(
         for entity_id, entity_info in restructurer.entities.items()
         if entity_info.get("device_id") == device_id
     ]
+    return restructurer.deduplicate_entity_ids(changes)
 
 
 async def rename_device_handler(job, ctx):
