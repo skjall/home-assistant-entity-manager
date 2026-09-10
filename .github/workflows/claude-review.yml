@@ -18,8 +18,14 @@ jobs:
     # Run on every human PR, or when a human writes "@claude" in a comment.
     # Skip bot-initiated events (e.g. Renovate): the action refuses bot actors,
     # and dependency bumps don't need an AI review.
+    #
+    # Skip PRs from forks: GitHub withholds repository secrets and refuses
+    # `id-token: write` for `pull_request` events raised from a fork, so
+    # CLAUDE_CODE_OAUTH_TOKEN is empty and the job can only fail. Review those
+    # by commenting "@claude" on the PR instead — `issue_comment` runs in this
+    # repository's context and does receive the secret.
     if: |
-      (github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot' && github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' && contains(github.event.comment.body, '@claude'))
     steps:
       - uses: actions/checkout@v7
