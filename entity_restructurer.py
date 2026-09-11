@@ -457,7 +457,15 @@ class EntityRestructurer:
 
         override_name = override.get("name") if override else None
         if override_name:
-            return plain(override_name, "override")
+            # An exception is the user's own wording and stays as typed — unless
+            # it is a bare type key such as "cover", which older versions stored
+            # and which the built-in defaults know how to say.
+            value = override_name
+            if self.type_mappings and canon(override_name) in self.type_mappings.system_mappings.get(
+                "device_class", {}
+            ):
+                value = self.type_mappings.get_translation(canon(override_name), self.language)
+            return plain(value, "override")
 
         native = (registry.get("original_name"), state.get("original_name"))
         name = next((candidate for candidate in native if candidate), None)

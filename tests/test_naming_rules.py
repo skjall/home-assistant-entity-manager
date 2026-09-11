@@ -178,6 +178,25 @@ def test_unmapped_name_reports_original(restructurer):
     assert resolution["won_by"] == "original"
 
 
+def test_override_that_is_a_bare_type_key_uses_the_builtin_wording(restructurer):
+    """Older versions stored keys like "cover" as exceptions; those still read as words."""
+    restructurer.naming_overrides.set_entity_override("reg-1", "cover")
+
+    restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["won_by"] == "override"
+    assert resolution["value"] == "Abdeckung"
+
+
+def test_override_wording_is_kept_verbatim(restructurer):
+    restructurer.naming_overrides.set_entity_override("reg-1", "Effect speed")
+
+    restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+
+    assert restructurer.last_resolutions["number.x_effect_speed"]["value"] == "Effect speed"
+
+
 def test_language_follows_rules_store(restructurer):
     assert restructurer.language == "de"
     restructurer.type_mappings.rules.set_language("en")
