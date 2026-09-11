@@ -75,6 +75,20 @@ _PROTECTED: Dict[str, str] = {
         "DSP",
         "USV",
         "UPS",
+        "HTTP",
+        "HTTPS",
+        "DMZ",
+        "BSSID",
+        "PPFD",
+        "HCHO",
+        "VLAN",
+        "WAN",
+        "NAS",
+        "SSD",
+        "HDD",
+        "PoE",
+        "IoT",
+        "SoC",
     )
 }
 _SLUG = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)+$")
@@ -82,18 +96,22 @@ _TRIM = ".,;:()[]"
 
 
 def _protected(token: str) -> str:
-    """Return the fixed spelling for ``token`` (punctuation kept), or ""."""
+    """Return the fixed spelling for ``token`` (punctuation kept), or "".
+
+    Only an all-lower or all-upper token is rewritten ("led", "LED"); a
+    mixed spelling such as "Mac" was chosen on purpose and stays.
+    """
     core = token.strip(_TRIM)
     fixed = _PROTECTED.get(core.upper())
-    if fixed is None:
+    if fixed is None or core == fixed or not (core.islower() or core.isupper()):
         return ""
     return token.replace(core, fixed, 1)
 
 
-def _shouting(core: str) -> bool:
-    """All capitals over four or more letters is shouting, not an acronym."""
-    letters = core.replace("-", "")
-    return len(letters) >= 4 and letters.isalpha() and letters.isupper()
+def _shouting(name: str) -> bool:
+    """A whole name in capitals ("FIRMWARE", "POWER-ON BEHAVIOR") is shouting, not an acronym."""
+    letters = "".join(char for char in name if char.isalpha())
+    return len(letters) >= 6 and letters.isupper() and not _PROTECTED.get(name.strip(_TRIM).upper())
 
 
 def _keep_as_is(core: str) -> bool:
@@ -102,21 +120,19 @@ def _keep_as_is(core: str) -> bool:
     # integration chose deliberately.
     if any(char.isdigit() for char in core):
         return True
-    if _shouting(core):
-        return False
     if sum(1 for char in core if char.isupper()) >= 2:
         return True
     return bool(core) and core[0].islower() and core[1:] != core[1:].lower()
 
 
-def _case_token(token: str, first: bool, mode: str) -> str:
+def _case_token(token: str, first: bool, mode: str, shouting: bool = False) -> str:
     fixed = _protected(token)
     if fixed:
         return fixed
     core = token.strip(_TRIM)
-    if not core or _keep_as_is(core):
+    if not core or (_keep_as_is(core) and not shouting):
         return token
-    if mode == CASE_SENTENCE or _shouting(core):
+    if mode == CASE_SENTENCE or shouting:
         parts = token.lower().split("-")
         if first:
             parts[0] = parts[0][:1].upper() + parts[0][1:]
@@ -138,4 +154,5 @@ def normalize_display(name: str, mode: str = DEFAULT_CASE) -> str:
     if mode == CASE_OFF:
         return name
     tokens = name.split()
-    return " ".join(_case_token(token, index == 0, mode) for index, token in enumerate(tokens))
+    shouting = _shouting(name)
+    return " ".join(_case_token(token, index == 0, mode, shouting) for index, token in enumerate(tokens))
