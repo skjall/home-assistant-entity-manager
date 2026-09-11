@@ -88,8 +88,8 @@
     "source_legacy_parse": "dérivé",
     "source_device_class": "Classe d’appareil",
     "explain_override": "« {value} » est une exception pour cette entité seulement.",
-    "explain_rule_user": "« {value} » vient de votre règle « {key} ». Original : « {original} ».",
-    "explain_rule_system": "« {value} » vient d’une règle intégrée. Original : « {original} ».",
+    "explain_rule_user": "L’intégration l’appelle « {original} ». Votre règle « {key} » en fait « {value} ».",
+    "explain_rule_system": "L’intégration l’appelle « {original} ». La traduction intégrée est « {value} ».",
     "explain_legacy": "« {value} » a été dérivé de l’ancien nom ; l’intégration n’en fournit aucun.",
     "explain_device_class": "« {value} » vient de la classe d’appareil ; l’intégration ne fournit pas de nom.",
     "explain_original": "« {value} » est le nom de l’intégration, inchangé. Aucune règle ne s’applique."

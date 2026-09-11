@@ -88,8 +88,8 @@
     "source_legacy_parse": "derived",
     "source_device_class": "Device class",
     "explain_override": "“{value}” is an exception for this entity only.",
-    "explain_rule_user": "“{value}” comes from your rule “{key}”. Original: “{original}”.",
-    "explain_rule_system": "“{value}” comes from a built-in rule. Original: “{original}”.",
+    "explain_rule_user": "The integration calls it “{original}”. Your rule “{key}” turns that into “{value}”.",
+    "explain_rule_system": "The integration calls it “{original}”. The built-in translation for that is “{value}”.",
     "explain_legacy": "“{value}” was derived from the previous name; the integration supplies none.",
     "explain_device_class": "“{value}” comes from the device class; the integration supplies no name.",
     "explain_original": "“{value}” is the integration’s name, unchanged. No rule applies."

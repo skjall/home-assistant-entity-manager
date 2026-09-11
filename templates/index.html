@@ -4131,7 +4131,7 @@
                     const _ = this.translationsReady;
                     const r = entity?.resolution;
                     if (!r) return '';
-                    const original = entity.original_name || '';
+                    const original = r.input || entity.original_name || '';
                     const value = r.value || '';
                     const key = r.matched_on?.value || '';
                     switch (r.won_by) {

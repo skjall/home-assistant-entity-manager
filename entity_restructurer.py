@@ -427,6 +427,7 @@ class EntityRestructurer:
             {"value": humanize_supplied_name(name), "won_by": won_by, "rule_id": None, "matched_on": None}
         )
         winner = dict(candidates[0])
+        winner["input"] = name
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
 
@@ -469,6 +470,7 @@ class EntityRestructurer:
                 "won_by": won_by,
                 "rule_id": None,
                 "matched_on": None,
+                "input": value,
                 "candidates": [{"won_by": won_by, "value": value}],
             }
 

@@ -88,8 +88,8 @@
     "source_legacy_parse": "abgeleitet",
     "source_device_class": "Geräteklasse",
     "explain_override": "„{value}“ ist eine Ausnahme nur für diese Entität.",
-    "explain_rule_user": "„{value}“ kommt aus deiner Regel „{key}“. Original: „{original}“.",
-    "explain_rule_system": "„{value}“ kommt aus einer mitgelieferten Regel. Original: „{original}“.",
+    "explain_rule_user": "Die Integration nennt es „{original}“. Deine Regel „{key}“ macht daraus „{value}“.",
+    "explain_rule_system": "Die Integration nennt es „{original}“. Die mitgelieferte Übersetzung dafür ist „{value}“.",
     "explain_legacy": "„{value}“ wurde aus dem bisherigen Namen abgeleitet; die Integration liefert keinen eigenen.",
     "explain_device_class": "„{value}“ kommt aus der Geräteklasse; die Integration liefert keinen Namen.",
     "explain_original": "„{value}“ ist der Name der Integration, unverändert. Keine Regel greift."
