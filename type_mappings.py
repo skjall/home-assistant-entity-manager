@@ -20,6 +20,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from naming_canon import canon
+
 logger = logging.getLogger(__name__)
 
 # Default system mappings embedded in code
@@ -156,19 +158,28 @@ class TypeMappings:
         self,
         system_mappings_path: Optional[str] = None,
         user_mappings_path: str = "/data/user_type_mappings.json",
+        rules: Optional[Any] = None,
     ):
         """
         Initialize the type mappings manager.
 
         Args:
             system_mappings_path: Path to system mappings JSON (optional, uses embedded defaults)
-            user_mappings_path: Path to user mappings JSON
+            user_mappings_path: Path to user mappings JSON (legacy store)
+            rules: NamingRules store; when given, user mappings are a view on
+                its rules for the active language and the legacy file is not used
         """
         self.system_mappings_path = Path(system_mappings_path) if system_mappings_path else None
         self.user_mappings_path = Path(user_mappings_path)
+        self.rules = rules
 
         self.system_mappings = self._load_system_mappings()
         self.user_mappings = self._load_user_mappings()
+
+    def _refresh_user_view(self) -> None:
+        """Rebuild the flat user-mapping view from the rules store."""
+        if self.rules is not None:
+            self.user_mappings = self.rules.legacy_user_mappings()
 
     def _load_system_mappings(self) -> Dict[str, Any]:
         """Load system mappings from file or use embedded defaults."""
@@ -185,7 +196,9 @@ class TypeMappings:
         return DEFAULT_SYSTEM_MAPPINGS
 
     def _load_user_mappings(self) -> Dict[str, str]:
-        """Load user mappings from file."""
+        """Load user mappings from the rules store, or from the legacy file."""
+        if self.rules is not None:
+            return self.rules.legacy_user_mappings()
         if self.user_mappings_path.exists():
             try:
                 with open(self.user_mappings_path, "r", encoding="utf-8") as f:
@@ -197,7 +210,9 @@ class TypeMappings:
         return {}
 
     def _save_user_mappings(self) -> None:
-        """Save user mappings to file."""
+        """Save user mappings to file (legacy store only)."""
+        if self.rules is not None:
+            return
         try:
             # Ensure directory exists
             self.user_mappings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -272,11 +287,15 @@ class TypeMappings:
         if not type_key:
             return None
 
-        type_key_lower = type_key.lower()
+        # 1. User rules (highest priority), integration-specific before global
+        if self.rules is not None:
+            rule = self.rules.find("name", type_key, integration, language)
+            if rule is not None:
+                return rule["targets"][language]
+        elif type_key.lower() in self.user_mappings:
+            return self.user_mappings[type_key.lower()]
 
-        # 1. Check user mappings (highest priority)
-        if type_key_lower in self.user_mappings:
-            return self.user_mappings[type_key_lower]
+        type_key_lower = canon(type_key)
 
         # 2. Check integration-specific defaults
         if integration:
@@ -308,6 +327,10 @@ class TypeMappings:
             type_key: The type key (e.g., "battery")
             translation: The user's preferred translation (e.g., "Batterieladung")
         """
+        if self.rules is not None:
+            self.rules.upsert("name", type_key, None, self.rules.language, translation)
+            self._refresh_user_view()
+            return
         type_key_lower = type_key.lower()
         self.user_mappings[type_key_lower] = translation
         self._save_user_mappings()
@@ -323,6 +346,11 @@ class TypeMappings:
         Returns:
             True if removed, False if not found
         """
+        if self.rules is not None:
+            rule = self.rules.find("name", type_key, None, self.rules.language)
+            removed = bool(rule) and self.rules.delete(rule["id"])
+            self._refresh_user_view()
+            return removed
         type_key_lower = type_key.lower()
         if type_key_lower in self.user_mappings:
             del self.user_mappings[type_key_lower]
@@ -333,10 +361,14 @@ class TypeMappings:
 
     def get_user_mapping(self, type_key: str) -> Optional[str]:
         """Get user mapping for a type key if it exists."""
+        if self.rules is not None:
+            rule = self.rules.find("name", type_key, None, self.rules.language)
+            return rule["targets"][self.rules.language] if rule else None
         return self.user_mappings.get(type_key.lower())
 
     def get_all_user_mappings(self) -> Dict[str, str]:
         """Get all user mappings."""
+        self._refresh_user_view()
         return self.user_mappings.copy()
 
     def get_all_known_types(self, language: str = "en") -> List[Dict[str, Any]]:
@@ -354,6 +386,7 @@ class TypeMappings:
         Returns:
             List of type info dicts
         """
+        self._refresh_user_view()
         all_types = []
         seen_keys = set()
 

@@ -34,11 +34,13 @@ from ha_websocket import HomeAssistantWebSocket
 from hierarchy_manager import normalize_name
 from jobs import TERMINAL_STATES, JobStore, JobWorker, new_job
 from lovelace_updater import LovelaceUpdater
+from naming_canon import canon
 from naming_overrides import NamingOverrides
+from naming_rules import NamingRuleError, NamingRules
 from naming_templates import NamingTemplateError, NamingTemplates
 from reference_checker import ReferenceChecker
 from rename_log import RenameLog
-from type_mappings import TypeMappings
+from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
 # load_dotenv()
@@ -154,15 +156,26 @@ logger.setLevel(logging.DEBUG)
 DATA_DIR = os.getenv("DATA_DIR", "/data")
 
 # Global state
+# Type rules replace the flat user mappings; the legacy file is migrated once
+# and kept as a backup next to a report of what was merged.
+naming_rules_store = NamingRules(
+    os.path.join(DATA_DIR, "naming_rules.json"),
+    legacy_path=os.path.join(DATA_DIR, "user_type_mappings.json"),
+    device_class_keys=DEFAULT_SYSTEM_MAPPINGS["device_class"].keys(),
+)
+
 renamer_state = {
     "client": None,
+    "naming_rules": naming_rules_store,
     "restructurer": None,
     "areas": {},
     "entities_by_area": {},
     "proposed_changes": {},
     "naming_overrides": NamingOverrides(os.path.join(DATA_DIR, "naming_overrides.json")),
     "naming_templates": NamingTemplates(os.path.join(DATA_DIR, "naming_templates.json")),
-    "type_mappings": TypeMappings(user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json")),
+    "type_mappings": TypeMappings(
+        user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json"), rules=naming_rules_store
+    ),
     "swap_store": SwapJobStore(os.path.join(DATA_DIR, "device_swaps")),
     "rename_log": RenameLog(os.path.join(DATA_DIR, "rename_log.jsonl")),
     "api_token_store": ApiTokenStore(os.path.join(DATA_DIR, "api_token.json")),
@@ -2868,10 +2881,13 @@ async def _get_hierarchy_async():
             )
         }
 
+        type_counts = _type_key_counts(restructurer)
+
         entities = []
         for entity_id, entity_data in restructurer.entities.items():
             registry_id = entity_data.get("id", "")
             override = renamer_state["naming_overrides"].get_entity_override(registry_id)
+            type_key = _entity_type_key(entity_data)
             device_class = entity_data.get("device_class") or entity_data.get("original_device_class")
             device_id = entity_data.get("device_id")
             device_data = restructurer.devices.get(device_id, {}) if device_id else {}
@@ -2902,6 +2918,13 @@ async def _get_hierarchy_async():
                     "labels": entity_data.get("labels", []),
                     "platform": entity_data.get("platform"),  # Integration that provides this entity
                     "is_orphan": entity_id in orphan_entities,  # Entity restored but not provided by integration
+                    "translation_key": entity_data.get("translation_key"),
+                    "unique_id": entity_data.get("unique_id"),
+                    # Where the entity part of the name came from, for the UI to explain.
+                    "resolution": restructurer.last_resolutions.get(entity_id),
+                    "type_key": type_key,
+                    "type_count": type_counts.get(type_key, 0) if type_key else 0,
+                    "name_owner": "unknown",
                 }
             )
 
@@ -3111,6 +3134,234 @@ def learn_type_mapping():
     except Exception as e:
         logger.error(f"Error learning type mapping: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+def _entity_type_key(entity_data: dict) -> str:
+    """The key that groups entities of one type: translation_key, else the canonical supplied name."""
+    translation_key = entity_data.get("translation_key")
+    if translation_key:
+        return f"tk:{translation_key}"
+    native = canon(entity_data.get("original_name") or "")
+    return f"name:{native}" if native else ""
+
+
+def _type_key_counts(restructurer) -> dict:
+    counts: dict = {}
+    for entity_data in restructurer.entities.values():
+        key = _entity_type_key(entity_data)
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _rule_affected_counts(restructurer, rules) -> dict:
+    """How many loaded entities each rule currently applies to."""
+    if restructurer is None:
+        return {}
+    language = rules.language
+    counts = {rule["id"]: 0 for rule in rules.rules}
+    for entity_data in restructurer.entities.values():
+        integration = entity_data.get("platform") or None
+        native = entity_data.get("original_name") or ""
+        rule = rules.find("translation_key", entity_data.get("translation_key"), integration, language) or rules.find(
+            "name", native, integration, language
+        )
+        if rule:
+            counts[rule["id"]] = counts.get(rule["id"], 0) + 1
+    return counts
+
+
+def _rule_payload(rule: dict, affected: dict) -> dict:
+    return {**rule, "affected": affected.get(rule["id"], 0)}
+
+
+@app.route("/api/naming/settings", methods=["GET", "PUT"])
+def naming_settings():
+    """Language the type rules are applied in."""
+    rules = renamer_state["naming_rules"]
+    if request.method == "PUT":
+        data = request.json if isinstance(request.json, dict) else {}
+        language = sanitize_string(data.get("language", ""), max_length=8)
+        if not language:
+            return jsonify({"error": "language required"}), 400
+        rules.set_language(language)
+        renamer_state["type_mappings"]._refresh_user_view()
+    return jsonify({"language": rules.language})
+
+
+@app.route("/api/naming/rules", methods=["GET", "POST"])
+def naming_rules_collection():
+    """List type rules with their reach, or create one."""
+    rules = renamer_state["naming_rules"]
+    if request.method == "POST":
+        data = request.json if isinstance(request.json, dict) else {}
+        match = data.get("match") or {}
+        targets = data.get("targets") or {}
+        language = rules.language
+        target = targets.get(language) or data.get("value")
+        if not target:
+            return jsonify({"error": f"target for language {language} required"}), 400
+        try:
+            rule = rules.upsert(
+                sanitize_string(match.get("kind", "name"), max_length=32),
+                sanitize_string(match.get("value", ""), max_length=128),
+                sanitize_string(match.get("integration") or "", max_length=64) or None,
+                language,
+                sanitize_string(target),
+                source="user",
+            )
+        except NamingRuleError as error:
+            return jsonify({"error": str(error)}), 400
+        renamer_state["type_mappings"]._refresh_user_view()
+        affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
+        return jsonify({"rule": _rule_payload(rule, affected)})
+
+    affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
+    language = request.args.get("lang") or rules.language
+    system = []
+    for entry in renamer_state["type_mappings"].get_all_known_types(language):
+        if entry.get("system_default"):
+            system.append({"key": entry["key"], "value": entry["system_default"], "source": entry.get("source")})
+    return jsonify(
+        {
+            "language": rules.language,
+            "rules": [_rule_payload(rule, affected) for rule in rules.rules],
+            "system": system,
+        }
+    )
+
+
+@app.route("/api/naming/rules/<rule_id>", methods=["PUT", "DELETE"])
+def naming_rule_item(rule_id):
+    rules = renamer_state["naming_rules"]
+    rule_id = sanitize_string(rule_id, max_length=32)
+    if request.method == "DELETE":
+        if not rules.delete(rule_id):
+            return jsonify({"error": "unknown rule"}), 404
+        renamer_state["type_mappings"]._refresh_user_view()
+        return jsonify({"success": True})
+    data = request.json if isinstance(request.json, dict) else {}
+    try:
+        integration = ...
+        if "integration" in data:
+            integration = sanitize_string(data.get("integration") or "", max_length=64) or None
+        rule = rules.update(rule_id, targets=data.get("targets"), integration=integration)
+    except NamingRuleError as error:
+        return jsonify({"error": str(error)}), 400
+    renamer_state["type_mappings"]._refresh_user_view()
+    affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
+    return jsonify({"rule": _rule_payload(rule, affected)})
+
+
+@app.route("/api/naming/learn", methods=["POST"])
+def naming_learn():
+    """Turn a corrected type into a rule; the server decides the key."""
+    data = request.json
+    is_valid, error = validate_json_input(data, ["entity_id", "value"])
+    if not is_valid:
+        return jsonify({"error": error}), 400
+    entity_id = sanitize_string(data.get("entity_id"), max_length=255)
+    value = sanitize_string(data.get("value"))
+    scope = data.get("scope") or "global"
+    restructurer = renamer_state.get("restructurer")
+    entity = restructurer.entities.get(entity_id) if restructurer else None
+    if not entity:
+        return jsonify({"error": "unknown entity"}), 404
+    if not value:
+        return jsonify({"error": "value required"}), 400
+    integration = (entity.get("platform") or None) if scope == "integration" else None
+    if entity.get("translation_key"):
+        kind, key = "translation_key", entity["translation_key"]
+    else:
+        kind, key = "name", entity.get("original_name") or ""
+    if not key:
+        return jsonify({"error": "entity has no name to derive a rule from"}), 400
+    rules = renamer_state["naming_rules"]
+    try:
+        rule = rules.upsert(kind, key, integration, rules.language, value, source="learned", learned_from=entity_id)
+    except NamingRuleError as error:
+        return jsonify({"error": str(error)}), 400
+    renamer_state["type_mappings"]._refresh_user_view()
+    affected = _rule_affected_counts(restructurer, rules)
+    return jsonify({"rule": _rule_payload(rule, affected)})
+
+
+@app.route("/api/naming/originals")
+def naming_originals():
+    """Distinct supplied names, for picking a rule key instead of typing one."""
+    restructurer = renamer_state.get("restructurer")
+    query = canon(request.args.get("q", ""))
+    seen: dict = {}
+    for entity_data in restructurer.entities.values() if restructurer else []:
+        native = entity_data.get("original_name") or ""
+        key = canon(native)
+        if not key or (query and query not in key):
+            continue
+        item = seen.setdefault(
+            key,
+            {
+                "key": key,
+                "example": native,
+                "translation_key": entity_data.get("translation_key"),
+                "count": 0,
+                "integrations": set(),
+            },
+        )
+        item["count"] += 1
+        if entity_data.get("platform"):
+            item["integrations"].add(entity_data["platform"])
+    items = sorted(seen.values(), key=lambda item: (-item["count"], item["key"]))[:50]
+    for item in items:
+        item["integrations"] = sorted(item["integrations"])
+    return jsonify({"originals": items})
+
+
+@app.route("/api/naming/migration", methods=["GET"])
+def naming_migration():
+    return jsonify({"report": renamer_state["naming_rules"].migration_report})
+
+
+@app.route("/api/naming/migration/resolve", methods=["POST"])
+def naming_migration_resolve():
+    data = request.json
+    is_valid, error = validate_json_input(data, ["rule_id", "value"])
+    if not is_valid:
+        return jsonify({"error": error}), 400
+    rules = renamer_state["naming_rules"]
+    try:
+        rule = rules.choose_alternative(sanitize_string(data["rule_id"], max_length=32), sanitize_string(data["value"]))
+    except NamingRuleError as error:
+        return jsonify({"error": str(error)}), 400
+    renamer_state["type_mappings"]._refresh_user_view()
+    return jsonify({"rule": rule})
+
+
+@app.route("/api/naming/preview", methods=["POST"])
+def naming_preview():
+    """Render one entity's name and ID with an optional replacement type, server-side."""
+    data = request.json
+    is_valid, error = validate_json_input(data, ["entity_id"])
+    if not is_valid:
+        return jsonify({"error": error}), 400
+    entity_id = sanitize_string(data.get("entity_id"), max_length=255)
+    type_value = data.get("type_value")
+    restructurer = renamer_state.get("restructurer")
+    entity = restructurer.entities.get(entity_id) if restructurer else None
+    if not entity:
+        return jsonify({"error": "unknown entity"}), 404
+    entity_name = sanitize_string(type_value) if isinstance(type_value, str) else None
+    new_entity_id, new_name = restructurer.generate_new_entity_id(entity_id, entity, entity_name)
+    resolution = restructurer.last_resolutions.get(entity_id)
+    # Number away from IDs other entities hold, as a batched rename would.
+    domain, _, object_id = new_entity_id.partition(".")
+    taken = set(restructurer.entities) - {entity_id}
+    suffix = 1
+    while new_entity_id in taken and object_id:
+        suffix += 1
+        new_entity_id = f"{domain}.{object_id}_{suffix}"
+    if suffix > 1 and new_name:
+        new_name = f"{new_name} {suffix}"
+    return jsonify({"rendered": {"entity_name": new_name, "entity_id": new_entity_id}, "resolution": resolution})
 
 
 @app.route("/settings")

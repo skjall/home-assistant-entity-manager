@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ha_client import HomeAssistantClient
 from hierarchy_manager import normalize_name
+from naming_canon import canon
 from naming_overrides import NamingOverrides
 from naming_templates import NamingTemplates
 
@@ -71,7 +72,10 @@ class EntityRestructurer:
         self.entities = {}
         self.naming_overrides = naming_overrides or NamingOverrides()
         self.naming_templates = naming_templates or NamingTemplates()
-        self.language = language
+        self._language = language
+        # How the entity part of each name was decided, keyed by entity_id.
+        # Filled by build_naming_context; read by the hierarchy endpoint.
+        self.last_resolutions: Dict[str, Dict[str, Any]] = {}
 
         # Initialize type mappings for translations
         if type_mappings:
@@ -116,6 +120,15 @@ class EntityRestructurer:
             "cover": "cover",
             "media_player": "media_player",
         }
+
+    @property
+    def language(self) -> str:
+        rules = getattr(self.type_mappings, "rules", None)
+        return rules.language if rules is not None else self._language
+
+    @language.setter
+    def language(self, value: str) -> None:
+        self._language = value
 
     @staticmethod
     async def _list_registry(ws_client: Any, registry: str) -> List[Dict[str, Any]]:
@@ -344,20 +357,65 @@ class EntityRestructurer:
                 name = name[len(prefix) :].strip()
         return name
 
-    def _translate_entity_name(self, name: str, entity_id: str) -> str:
+    def _resolve_supplied_name(
+        self, name: str, entity_id: str, registry: Dict[str, Any], won_by: str = "original"
+    ) -> Dict[str, Any]:
         """
-        Apply a configured type mapping to a name Home Assistant supplied.
+        Decide what a name Home Assistant supplied is called in the user's language.
 
-        Integrations name their entities in English ("Linkquality", "Power-on
-        behavior"). The type mappings — including everything the user taught via
-        ``/api/learn_mapping`` — are keyed by exactly that name, so the lookup
-        happens here. A name no mapping covers is kept as it is.
+        Rules win over the supplied name: first a rule on the integration's
+        ``translation_key``, then one on the canonical form of the name, then
+        the built-in defaults. A name no rule covers is kept as it is.
         """
-        if not self.type_mappings:
-            return name
-        integration = self.type_mappings.detect_integration(entity_id)
-        # No domain fallback: it would replace a specific name with "Sensor".
-        return self.type_mappings.find_translation(name, self.language, integration) or name
+        candidates: List[Dict[str, Any]] = []
+        integration = registry.get("platform") or None
+        if self.type_mappings:
+            rules = getattr(self.type_mappings, "rules", None)
+            language = self.language
+            if rules is not None:
+                translation_key = registry.get("translation_key")
+                rule = rules.find("translation_key", translation_key, integration, language)
+                if rule:
+                    candidates.append(
+                        {
+                            "value": rule["targets"][language],
+                            "won_by": "rule:user",
+                            "rule_id": rule["id"],
+                            "matched_on": dict(rule["match"]),
+                        }
+                    )
+                rule = rules.find("name", name, integration, language)
+                if rule:
+                    candidates.append(
+                        {
+                            "value": rule["targets"][language],
+                            "won_by": "rule:user",
+                            "rule_id": rule["id"],
+                            "matched_on": dict(rule["match"]),
+                        }
+                    )
+            detected = integration or self.type_mappings.detect_integration(entity_id)
+            # No domain fallback: it would replace a specific name with "Sensor".
+            system = self.type_mappings.find_translation(name, language, detected)
+            if system and not any(
+                candidate["value"] == system and candidate["won_by"] == "rule:user" for candidate in candidates
+            ):
+                candidates.append(
+                    {
+                        "value": system,
+                        "won_by": "rule:system",
+                        "rule_id": None,
+                        "matched_on": {"kind": "name", "value": canon(name), "integration": detected},
+                    }
+                )
+        candidates.append({"value": name, "won_by": won_by, "rule_id": None, "matched_on": None})
+        winner = dict(candidates[0])
+        winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
+        return winner
+
+    def _translate_entity_name(self, name: str, entity_id: str, registry: Optional[Dict[str, Any]] = None) -> str:
+        """Return the user's wording for a supplied name (see _resolve_supplied_name)."""
+        return self._resolve_supplied_name(name, entity_id, registry or {})["value"]
 
     def _base_entity_name(
         self,
@@ -370,14 +428,41 @@ class EntityRestructurer:
         context: Optional[Dict[str, str]] = None,
     ) -> str:
         """Return the entity-specific name supplied by Home Assistant."""
+        resolution = self._resolve_base_entity_name(
+            entity_id, registry, state, override, device_class, prefixes, context
+        )
+        self.last_resolutions[entity_id] = resolution
+        return resolution["value"]
+
+    def _resolve_base_entity_name(
+        self,
+        entity_id: str,
+        registry: Dict[str, Any],
+        state: Dict[str, Any],
+        override: Optional[Dict[str, Any]],
+        device_class: str,
+        prefixes: Tuple[str, ...],
+        context: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """Like _base_entity_name, but says where the value came from."""
+
+        def plain(value: str, won_by: str) -> Dict[str, Any]:
+            return {
+                "value": value,
+                "won_by": won_by,
+                "rule_id": None,
+                "matched_on": None,
+                "candidates": [{"won_by": won_by, "value": value}],
+            }
+
         override_name = override.get("name") if override else None
         if override_name:
-            return override_name
+            return plain(override_name, "override")
 
         native = (registry.get("original_name"), state.get("original_name"))
         name = next((candidate for candidate in native if candidate), None)
         if name is not None:
-            return self._translate_entity_name(name, entity_id)
+            return self._resolve_supplied_name(name, entity_id, registry)
 
         # ``name`` fields may hold a name this add-on wrote on a previous run.
         # Unwind the entity template before reusing them, otherwise each run
@@ -389,7 +474,7 @@ class EntityRestructurer:
         if applied is not None:
             base = self._strip_applied_entity_name(applied, prefixes, context)
             if base:
-                return self._translate_entity_name(base, entity_id)
+                return self._resolve_supplied_name(base, entity_id, registry, won_by="legacy_parse")
 
         name = state.get("attributes", {}).get("friendly_name")
         if name is not None:
@@ -399,7 +484,7 @@ class EntityRestructurer:
                 elif name.lower().startswith(prefix.lower() + " "):
                     name = name[len(prefix) :].strip()
             if name:
-                return name
+                return plain(name, "original")
 
             # Integrations without native entity names may expose only the
             # device name. Preserve their existing object-ID suffix.
@@ -411,11 +496,11 @@ class EntityRestructurer:
                 elif normalized_prefix and object_id.startswith(normalized_prefix + "_"):
                     object_id = object_id[len(normalized_prefix) + 1 :]
             if object_id and not registry.get("has_entity_name"):
-                return object_id.replace("_", " ").title()
-            return ""
+                return plain(object_id.replace("_", " ").title(), "fallback")
+            return plain("", "fallback")
 
         entity_type = self.get_entity_type(entity_id, device_class)
-        return entity_type.replace("_", " ").title()
+        return plain(entity_type.replace("_", " ").title(), "device_class" if device_class else "fallback")
 
     def generate_device_name(self, device_id: str) -> str:
         """Generate a configured device name using its first entity for context."""
