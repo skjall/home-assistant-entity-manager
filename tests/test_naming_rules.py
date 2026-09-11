@@ -244,6 +244,7 @@ def test_rule_on_slug_style_original_still_wins(restructurer):
         ("Battery LOW", "first_word", "Battery LOW"),
         ("BATTERY LOW", "first_word", "Battery low"),
         ("BSSID", "first_word", "BSSID"),
+        ("02:84:ED:CF:49:CB", "sentence", "02:84:ED:CF:49:CB"),
         ("Wohnzimmer HCHO", "sentence", "Wohnzimmer HCHO"),
         ("Allow Inter-DMZ HTTPS", "first_word", "Allow Inter-DMZ HTTPS"),
         ("Mac", "first_word", "Mac"),

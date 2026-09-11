@@ -110,6 +110,8 @@ def _protected(token: str) -> str:
 
 def _shouting(name: str) -> bool:
     """A whole name in capitals ("FIRMWARE", "POWER-ON BEHAVIOR") is shouting, not an acronym."""
+    if any(char.isdigit() for char in name):
+        return False  # hex strings, MAC addresses, serials
     letters = "".join(char for char in name if char.isalpha())
     return len(letters) >= 6 and letters.isupper() and not _PROTECTED.get(name.strip(_TRIM).upper())
 
