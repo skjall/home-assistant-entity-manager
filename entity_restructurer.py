@@ -14,6 +14,7 @@ Integrates with:
 
 from collections import defaultdict
 import logging
+import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ha_client import HomeAssistantClient
@@ -34,6 +35,20 @@ except ImportError:
     TypeMappings = None
 
 logger = logging.getLogger(__name__)
+
+
+_SLUG_NAME = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)+$")
+
+
+def humanize_supplied_name(name: str) -> str:
+    """Show a slug-style name such as ``nacht_rot`` as the words it stands for.
+
+    Some integrations (zigbee2mqtt scenes, for example) supply object-id style
+    names. Those read as "Nacht Rot" in a friendly name, not as "nacht_rot".
+    """
+    if _SLUG_NAME.match(name):
+        return name.replace("_", " ").title()
+    return name
 
 
 class EntityRestructurer:
@@ -408,7 +423,9 @@ class EntityRestructurer:
                         "matched_on": {"kind": "name", "value": canon(name), "integration": detected},
                     }
                 )
-        candidates.append({"value": name, "won_by": won_by, "rule_id": None, "matched_on": None})
+        candidates.append(
+            {"value": humanize_supplied_name(name), "won_by": won_by, "rule_id": None, "matched_on": None}
+        )
         winner = dict(candidates[0])
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner

@@ -213,3 +213,23 @@ def test_legacy_mapping_api_still_works_through_rules(tmp_path):
     assert mappings.get_all_user_mappings() == {"gradient_scene": "Verlaufsszene"}
     assert mappings.remove_user_mapping("GRADIENT SCENE") is True
     assert mappings.get_all_user_mappings() == {}
+
+
+def test_slug_style_original_name_reads_as_words(restructurer):
+    """zigbee2mqtt scenes supply names like "nacht_rot"; the friendly name says "Nacht Rot"."""
+    restructurer.entities["number.x_effect_speed"]["original_name"] = "nacht_rot"
+
+    restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["value"] == "Nacht Rot"
+    assert resolution["won_by"] == "original"
+
+
+def test_rule_on_slug_style_original_still_wins(restructurer):
+    restructurer.type_mappings.rules.upsert("name", "nacht_rot", None, "de", "Nachtlicht rot")
+    restructurer.entities["number.x_effect_speed"]["original_name"] = "nacht_rot"
+
+    restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+
+    assert restructurer.last_resolutions["number.x_effect_speed"]["value"] == "Nachtlicht rot"
