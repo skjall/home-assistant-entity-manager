@@ -831,8 +831,26 @@
                         document.documentElement.lang = this.language;
                     }
                     await this.loadMappings();
+                    await this.syncRuleLanguage();
                     await this.loadApiToken();
                     await this.loadNamingTemplates();
+                },
+
+                // Rules are applied in one language; align it with the UI language
+                // the first time the page is opened after a migration.
+                async syncRuleLanguage() {
+                    try {
+                        const current = (await (await fetch('api/naming/settings')).json()).language;
+                        if (current === this.language) return;
+                        await fetch('api/naming/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ language: this.language })
+                        });
+                        await this.loadMappings();
+                    } catch (e) {
+                        console.error('Failed to sync rule language', e);
+                    }
                 },
 
                 async loadNamingTemplates() {

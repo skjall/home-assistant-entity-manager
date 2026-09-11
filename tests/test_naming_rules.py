@@ -95,6 +95,20 @@ def test_upsert_updates_instead_of_duplicating(tmp_path):
     assert second["targets"]["de"] == "Signalqualität"
 
 
+def test_migrated_targets_follow_the_first_language_change(tmp_path):
+    """Migrated rules were recorded under the default language; they move with the user's choice."""
+    rules = _rules(tmp_path, legacy={"linkquality": "Verbindungsqualität"}, language="en")
+    rules.upsert("name", "effect", None, "en", "Effekt", source="user")
+
+    rules.set_language("de")
+
+    migrated = next(rule for rule in rules.rules if rule["source"] == "migrated")
+    manual = next(rule for rule in rules.rules if rule["source"] == "user")
+    assert migrated["targets"] == {"de": "Verbindungsqualität"}
+    assert manual["targets"] == {"en": "Effekt"}
+    assert rules.find("name", "Linkquality", None, "de")["targets"]["de"] == "Verbindungsqualität"
+
+
 def test_choose_alternative_resolves_conflict(tmp_path):
     rules = _rules(tmp_path, legacy={"factory reset": "Zurücksetzen", "factory_reset": "Werksreset"})
     rule = next(rule for rule in rules.rules if rule["match"]["value"] == "factory_reset")

@@ -198,6 +198,18 @@ class NamingRules:
         return self.data.get("language") or self.default_language
 
     def set_language(self, language: str) -> None:
+        """Switch the active language.
+
+        Migrated rules carry one target that was recorded under whatever
+        language was active at migration time; it belongs to the language the
+        user actually works in, so it moves along the first time that is set.
+        """
+        previous = self.language
+        if language != previous:
+            for rule in self.rules:
+                targets = rule["targets"]
+                if rule.get("source") == "migrated" and list(targets) == [previous]:
+                    targets[language] = targets.pop(previous)
         self.data["language"] = language
         self.save()
 
