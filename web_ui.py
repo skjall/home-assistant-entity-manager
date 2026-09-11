@@ -673,7 +673,11 @@ def serve_js(filename):
 @app.route("/static/translations/<path:filename>")
 def serve_translations(filename):
     """Serve translation files"""
-    return send_from_directory("translations/ui", filename)
+    response = send_from_directory("translations/ui", filename)
+    # The UI fetches these with a cache-busting query; proxies in front of Home
+    # Assistant may still cache by path, so say explicitly that they must not.
+    response.headers["Cache-Control"] = "no-store, must-revalidate"
+    return response
 
 
 @app.route("/api/languages")
