@@ -1,6 +1,16 @@
 /**
  * Translation system for Entity Manager UI
  */
+/**
+ * Translation files live under a per-page-load version segment. Proxies in
+ * front of Home Assistant may cache by path and ignore query strings, so the
+ * path itself has to change.
+ */
+function translationUrl(lang) {
+    const version = window.assetVersion || Date.now();
+    return `static/translations/${version}/${lang}.json?v=${Date.now()}`;
+}
+
 class TranslationManager {
     constructor() {
         this.translations = {};
@@ -54,9 +64,7 @@ class TranslationManager {
      */
     async loadLanguage(lang) {
         try {
-            const cacheBuster = Date.now();
-            const url = `static/translations/${lang}.json?v=${cacheBuster}`;
-            const response = await fetch(url);
+            const response = await fetch(translationUrl(lang));
             if (response.ok) {
                 this.translations = await response.json();
                 this.currentLang = lang;
@@ -75,8 +83,7 @@ class TranslationManager {
      */
     async loadFallback() {
         try {
-            const cacheBuster = Date.now();
-            const response = await fetch(`static/translations/${this.fallbackLang}.json?v=${cacheBuster}`);
+            const response = await fetch(translationUrl(this.fallbackLang));
             if (response.ok) {
                 this.translations = await response.json();
                 this.currentLang = this.fallbackLang;

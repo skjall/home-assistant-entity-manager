@@ -671,8 +671,9 @@ def serve_js(filename):
 
 
 @app.route("/static/translations/<path:filename>")
-def serve_translations(filename):
-    """Serve translation files"""
+@app.route("/static/translations/<version>/<path:filename>")
+def serve_translations(filename, version=None):
+    """Serve translation files; ``version`` only keys caches and is otherwise ignored."""
     response = send_from_directory("translations/ui", filename)
     # The UI fetches these with a cache-busting query; proxies in front of Home
     # Assistant may still cache by path, so say explicitly that they must not.
