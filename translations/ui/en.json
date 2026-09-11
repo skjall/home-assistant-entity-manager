@@ -88,11 +88,12 @@
     "source_legacy_parse": "derived",
     "source_device_class": "Device class",
     "explain_override": "“{value}” is an exception for this entity only.",
-    "explain_rule_user": "The integration calls it “{original}”. Your rule “{key}” turns that into “{value}”.",
-    "explain_rule_system": "The integration calls it “{original}”. The built-in translation for that is “{value}”.",
+    "explain_rule_user": "The integration ({source}) calls it “{original}”. Your rule “{key}” turns that into “{value}”.",
+    "explain_rule_system": "The integration ({source}) calls it “{original}”. Default for that: “{value}”.",
     "explain_legacy": "“{value}” was derived from the previous name; the integration supplies none.",
     "explain_device_class": "“{value}” comes from the device class; the integration supplies no name.",
-    "explain_original": "“{value}” is the integration’s name, unchanged. No rule applies."
+    "explain_original": "“{value}” is the integration’s ({source}) name, unchanged.",
+    "explain_normalized": "The integration ({source}) calls it “{original}”. Only the spelling was adjusted."
   },
   "virtual_devices": {
     "automations": "Automations",
@@ -272,7 +273,7 @@
   "settings": {
     "back_to_manager": "Back to Entity Manager",
     "page_title": "Settings",
-    "system_language": "System Language:",
+    "system_language": "Language of names:",
     "search_placeholder": "Search by key or translation...",
     "filter_all": "All Types",
     "filter_system": "System Defaults",
@@ -346,7 +347,15 @@
     "migration_summary": "{imported} rules taken over, {merged} spellings merged, {conflicts} conflicts.",
     "migration_backup": "Backup at:",
     "migration_conflicts": "Conflicts — pick the value you want:",
-    "my_name_placeholder": "e.g. Battery level"
+    "my_name_placeholder": "e.g. Battery level",
+    "display_case": "Spelling:",
+    "display_case_hint": "How type names without a rule are spelled. Never changes the word, only its casing.",
+    "display_case_first_word": "First word capitalised",
+    "display_case_sentence": "Sentence case (rest lower)",
+    "display_case_off": "As supplied",
+    "redundant": "same as default",
+    "redundant_hint": "This rule yields what the spelling or the built-in default gives anyway. It can be deleted.",
+    "migration_skipped": "{count} mappings skipped that only repeat the spelling."
   },
   "type_mappings": {
     "light": "Light",

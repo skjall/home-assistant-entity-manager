@@ -4112,7 +4112,10 @@
                     const _ = this.translationsReady;
                     const won = entity?.resolution?.won_by;
                     if (!won || won === 'original' || won === 'fallback') return '';
-                    const key = 'entity.source_' + won.replace(':', '_');
+                    // Built-in defaults, device classes and names derived from an
+                    // earlier run are all "standard": nothing the user decided.
+                    const kind = (won === 'legacy_parse' || won === 'device_class') ? 'rule:system' : won;
+                    const key = 'entity.source_' + kind.replace(':', '_');
                     const label = this.t(key);
                     return label === key ? won : label;
                 },
@@ -4134,13 +4137,17 @@
                     const original = r.input || entity.original_name || '';
                     const value = r.value || '';
                     const key = r.matched_on?.value || '';
+                    const source = r.platform || entity.platform || '?';
                     switch (r.won_by) {
                         case 'override': return this.t('entity.explain_override', {value});
-                        case 'rule:user': return this.t('entity.explain_rule_user', {value, key, original});
-                        case 'rule:system': return this.t('entity.explain_rule_system', {value, original});
+                        case 'rule:user': return this.t('entity.explain_rule_user', {value, key, original, source});
+                        case 'rule:system': return this.t('entity.explain_rule_system', {value, original, source});
                         case 'legacy_parse': return this.t('entity.explain_legacy', {value});
                         case 'device_class': return this.t('entity.explain_device_class', {value});
-                        default: return this.t('entity.explain_original', {value});
+                        default:
+                            return r.normalized
+                                ? this.t('entity.explain_normalized', {value, original, source})
+                                : this.t('entity.explain_original', {value, source});
                     }
                 },
 

@@ -88,11 +88,12 @@
     "source_legacy_parse": "derivado",
     "source_device_class": "Clase de dispositivo",
     "explain_override": "“{value}” es una excepción solo para esta entidad.",
-    "explain_rule_user": "La integración lo llama “{original}”. Tu regla “{key}” lo convierte en “{value}”.",
-    "explain_rule_system": "La integración lo llama “{original}”. La traducción integrada es “{value}”.",
+    "explain_rule_user": "La integración ({source}) lo llama “{original}”. Tu regla “{key}” lo convierte en “{value}”.",
+    "explain_rule_system": "La integración ({source}) lo llama “{original}”. Valor por defecto: “{value}”.",
     "explain_legacy": "“{value}” se derivó del nombre anterior; la integración no proporciona ninguno.",
     "explain_device_class": "“{value}” proviene de la clase de dispositivo; la integración no proporciona nombre.",
-    "explain_original": "“{value}” es el nombre de la integración, sin cambios. No se aplica ninguna regla."
+    "explain_original": "“{value}” es el nombre de la integración ({source}), sin cambios.",
+    "explain_normalized": "La integración ({source}) lo llama “{original}”. Solo se ajustó la ortografía."
   },
   "virtual_devices": {
     "automations": "Automatizaciones",
@@ -292,7 +293,7 @@
   "settings": {
     "back_to_manager": "Volver al Gestor de Entidades",
     "page_title": "Ajustes",
-    "system_language": "Idioma del Sistema:",
+    "system_language": "Idioma de los nombres:",
     "search_placeholder": "Buscar por clave o traducción...",
     "filter_all": "Todos los Tipos",
     "filter_system": "Valores por Defecto del Sistema",
@@ -366,7 +367,15 @@
     "migration_summary": "{imported} reglas migradas, {merged} grafías fusionadas, {conflicts} conflictos.",
     "migration_backup": "Copia de seguridad en:",
     "migration_conflicts": "Conflictos: elige el valor deseado:",
-    "my_name_placeholder": "p. ej. Nivel de batería"
+    "my_name_placeholder": "p. ej. Nivel de batería",
+    "display_case": "Ortografía:",
+    "display_case_hint": "Cómo se escriben los tipos sin regla. Nunca cambia la palabra, solo mayúsculas y minúsculas.",
+    "display_case_first_word": "Primera palabra en mayúscula",
+    "display_case_sentence": "Tipo oración (resto en minúscula)",
+    "display_case_off": "Tal como se entrega",
+    "redundant": "igual al valor por defecto",
+    "redundant_hint": "Esta regla produce lo que la ortografía o el valor por defecto ya dan. Se puede eliminar.",
+    "migration_skipped": "{count} asignaciones omitidas que solo repiten la ortografía."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

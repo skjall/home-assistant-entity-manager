@@ -411,12 +411,18 @@
                 <h1 x-text="t('settings.page_title')">Settings</h1>
             </div>
             <div class="language-selector">
-                <label x-text="t('settings.system_language')">System Language:</label>
+                <label x-text="t('settings.system_language')">Language of names:</label>
                 <select class="filter-select" x-model="language" @change="changeLanguage()">
                     <option value="en">English</option>
                     <option value="de">Deutsch</option>
                     <option value="es">Español</option>
                     <option value="fr">Français</option>
+                </select>
+                <label x-text="t('settings.display_case')">Spelling:</label>
+                <select class="filter-select" x-model="displayCase" @change="changeDisplayCase()" :title="t('settings.display_case_hint')">
+                    <option value="first_word" x-text="t('settings.display_case_first_word')">First word capitalised</option>
+                    <option value="sentence" x-text="t('settings.display_case_sentence')">Sentence case</option>
+                    <option value="off" x-text="t('settings.display_case_off')">As supplied</option>
                 </select>
             </div>
         </div>
@@ -506,7 +512,7 @@
                 </div>
                 <div class="stat-item">
                     <span x-text="t('settings.rules_no_effect')">Without effect:</span>
-                    <span class="stat-value" x-text="rules.filter(r => !r.affected).length"></span>
+                    <span class="stat-value" x-text="rules.filter(r => !r.affected || r.redundant).length"></span>
                 </div>
                 <div class="stat-item">
                     <span x-text="t('settings.system_defaults_count')">Built-in:</span>
@@ -568,6 +574,9 @@
                                 <span x-show="row.isRule && !row.affected" class="text-amber-600 text-xs" :title="t('settings.no_effect_hint')">
                                     <i class="ri-alert-line"></i>
                                 </span>
+                                <span x-show="row.isRule && row.redundant" class="text-gray-500 text-xs" :title="t('settings.redundant_hint')">
+                                    <i class="ri-equal-line"></i> <span x-text="t('settings.redundant')">same as default</span>
+                                </span>
                             </td>
                             <td>
                                 <span x-show="row.isRule" class="user-badge">
@@ -617,6 +626,7 @@
             <div style="padding: 20px;" x-show="migration">
                 <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 12px;"
                    x-text="t('settings.migration_summary', {imported: migration?.imported || 0, merged: migration?.merged?.length || 0, conflicts: migration?.conflicts?.length || 0})"></p>
+                <p x-show="migration?.skipped?.length" style="color: #6b7280; font-size: 0.85rem;" x-text="t('settings.migration_skipped', {count: migration?.skipped?.length || 0})"></p>
                 <p style="color: #6b7280; font-size: 0.8rem; margin-bottom: 12px;" x-text="t('settings.migration_backup') + ' ' + (migration?.backup || '')"></p>
                 <template x-if="migration?.conflicts?.length">
                     <div>
@@ -791,6 +801,7 @@
                 language: 'de',
                 searchQuery: '',
                 filterType: 'all',
+                displayCase: 'first_word',
                 editingKey: null,
                 editValue: '',
                 showAddModal: false,
@@ -839,9 +850,20 @@
 
                 // Rules are applied in one language; align it with the UI language
                 // the first time the page is opened after a migration.
+                async changeDisplayCase() {
+                    await fetch('api/naming/settings', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ display_case: this.displayCase })
+                    });
+                    await this.loadMappings();
+                },
+
                 async syncRuleLanguage() {
                     try {
-                        const current = (await (await fetch('api/naming/settings')).json()).language;
+                        const settings = await (await fetch('api/naming/settings')).json();
+                        this.displayCase = settings.display_case || 'first_word';
+                        const current = settings.language;
                         if (current === this.language) return;
                         await fetch('api/naming/settings', {
                             method: 'PUT',
@@ -1044,6 +1066,7 @@
                         value: rule.targets[this.language] || Object.values(rule.targets)[0] || '',
                         system_default: systemByKey[rule.match.value] || null,
                         affected: rule.affected || 0,
+                        redundant: !!rule.redundant,
                         source: rule.source || 'user',
                         rule
                     }));
@@ -1058,8 +1081,10 @@
 
                 filterRules() {
                     let result = this.ruleRows();
-                    if (this.filterType === 'user') result = result.filter(r => r.isRule);
-                    else if (this.filterType === 'no_effect') result = result.filter(r => r.isRule && !r.affected);
+                    // Rules that only repeat the default are noise; they show under "without effect".
+                    if (this.filterType === 'all') result = result.filter(r => !r.redundant);
+                    else if (this.filterType === 'user') result = result.filter(r => r.isRule && !r.redundant);
+                    else if (this.filterType === 'no_effect') result = result.filter(r => r.isRule && (!r.affected || r.redundant));
                     else if (this.filterType === 'system') result = result.filter(r => !r.isRule);
                     if (this.searchQuery) {
                         const q = this.searchQuery.toLowerCase();

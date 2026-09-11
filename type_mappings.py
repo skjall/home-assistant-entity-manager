@@ -261,6 +261,22 @@ class TypeMappings:
         # 5. Fallback: capitalize the key
         return type_key.replace("_", " ").title()
 
+    def find_system_translation(self, type_key: str, language: str, integration: Optional[str] = None) -> Optional[str]:
+        """The built-in default for ``type_key`` in ``language``, ignoring user rules."""
+        if not type_key:
+            return None
+        key = canon(type_key)
+        if integration:
+            integration_mappings = self.system_mappings.get("integration_defaults", {}).get(integration, {})
+            if key in integration_mappings:
+                lang_mapping = integration_mappings[key]
+                return lang_mapping.get(language, lang_mapping.get("en"))
+        device_class_mappings = self.system_mappings.get("device_class", {})
+        if key in device_class_mappings:
+            lang_mapping = device_class_mappings[key]
+            return lang_mapping.get(language, lang_mapping.get("en"))
+        return None
+
     def find_translation(
         self,
         type_key: str,

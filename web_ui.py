@@ -3177,21 +3177,38 @@ def _rule_affected_counts(restructurer, rules) -> dict:
 
 
 def _rule_payload(rule: dict, affected: dict) -> dict:
-    return {**rule, "affected": affected.get(rule["id"], 0)}
+    rules = renamer_state["naming_rules"]
+    mappings = renamer_state["type_mappings"]
+    language = rules.language
+    builtin = None
+    if rule["match"]["kind"] != "translation_key":
+        builtin = mappings.find_system_translation(rule["match"]["value"], language, rule["match"].get("integration"))
+    return {
+        **rule,
+        "affected": affected.get(rule["id"], 0),
+        "redundant": rules.is_redundant(rule, language, builtin),
+    }
 
 
 @app.route("/api/naming/settings", methods=["GET", "PUT"])
 def naming_settings():
-    """Language the type rules are applied in."""
+    """Language the type rules are applied in, and the spelling of shown types."""
     rules = renamer_state["naming_rules"]
     if request.method == "PUT":
         data = request.json if isinstance(request.json, dict) else {}
         language = sanitize_string(data.get("language", ""), max_length=8)
-        if not language:
-            return jsonify({"error": "language required"}), 400
-        rules.set_language(language)
+        display_case = sanitize_string(data.get("display_case", ""), max_length=16)
+        if not language and not display_case:
+            return jsonify({"error": "language or display_case required"}), 400
+        try:
+            if language:
+                rules.set_language(language)
+            if display_case:
+                rules.set_display_case(display_case)
+        except NamingRuleError as error:
+            return jsonify({"error": str(error)}), 400
         renamer_state["type_mappings"]._refresh_user_view()
-    return jsonify({"language": rules.language})
+    return jsonify({"language": rules.language, "display_case": rules.display_case})
 
 
 @app.route("/api/naming/rules", methods=["GET", "POST"])

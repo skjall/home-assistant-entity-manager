@@ -6,6 +6,7 @@ import pytest
 
 from entity_restructurer import EntityRestructurer
 from naming_canon import canon
+from naming_display import normalize_display
 from naming_overrides import NamingOverrides
 from naming_rules import NamingRuleError, NamingRules
 from naming_templates import NamingTemplates
@@ -233,3 +234,76 @@ def test_rule_on_slug_style_original_still_wins(restructurer):
     restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
 
     assert restructurer.last_resolutions["number.x_effect_speed"]["value"] == "Nachtlicht rot"
+
+
+@pytest.mark.parametrize(
+    "value, mode, expected",
+    [
+        ("firmware", "first_word", "Firmware"),
+        ("FIRMWARE", "first_word", "Firmware"),
+        ("Battery LOW", "first_word", "Battery LOW"),
+        ("BATTERY LOW", "first_word", "Battery LOW"),
+        ("AUX Input", "first_word", "AUX Input"),
+        ("FIRMWARE", "sentence", "Firmware"),
+        ("Link Quality", "first_word", "Link Quality"),
+        ("Link Quality", "sentence", "Link quality"),
+        ("led indicator", "sentence", "LED indicator"),
+        ("CO2 Level", "sentence", "CO2 level"),
+        ("pm2.5", "first_word", "PM2.5"),
+        ("ZigBee Channel", "sentence", "ZigBee channel"),
+        ("Power-on behavior", "sentence", "Power-on behavior"),
+        ("POWER-ON BEHAVIOR", "sentence", "Power-on behavior"),
+        ("Spot 2", "sentence", "Spot 2"),
+        ("nacht_rot", "off", "Nacht Rot"),
+        ("firmware", "off", "firmware"),
+        ("Verbindungsqualität", "sentence", "Verbindungsqualität"),
+        ("", "sentence", ""),
+    ],
+)
+def test_normalize_display(value, mode, expected):
+    assert normalize_display(value, mode) == expected
+    assert normalize_display(expected, mode) == expected  # idempotent
+
+
+def test_migration_skips_mappings_that_only_repeat_the_spelling(tmp_path):
+    rules = _rules(tmp_path, legacy={"firmware": "Firmware", "linkquality": "Verbindungsqualität"})
+
+    assert [rule["match"]["value"] for rule in rules.rules] == ["linkquality"]
+    assert rules.migration_report["skipped"] == [{"key": "firmware", "value": "Firmware", "legacy_keys": ["firmware"]}]
+
+
+def test_spelling_variants_resolve_without_a_rule(restructurer):
+    restructurer.entities["number.x_effect_speed"]["original_name"] = "firmware"
+
+    restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["value"] == "Firmware"
+    assert resolution["won_by"] == "original"
+    assert resolution["normalized"] is True
+    assert resolution["platform"] == "mqtt"
+
+
+def test_rule_that_repeats_the_spelling_is_not_reported(restructurer):
+    rules = restructurer.type_mappings.rules
+    rules.upsert("name", "firmware", None, "de", "Firmware")
+    restructurer.entities["number.x_effect_speed"]["original_name"] = "firmware"
+
+    restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["won_by"] == "original"
+    assert rules.is_redundant(rules.rules[-1], "de") is True
+    assert rules.is_redundant(rules.rules[0], "de") is False  # effect_speed -> Effektgeschwindigkeit
+
+
+def test_display_case_setting_changes_resolution(restructurer):
+    rules = restructurer.type_mappings.rules
+    restructurer.entities["number.x_effect_speed"]["original_name"] = "Link Quality"
+
+    rules.set_display_case("sentence")
+    restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+    assert restructurer.last_resolutions["number.x_effect_speed"]["value"] == "Link quality"
+
+    with pytest.raises(NamingRuleError):
+        rules.set_display_case("shouting")

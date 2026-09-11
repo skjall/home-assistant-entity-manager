@@ -27,6 +27,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 import uuid
 
 from naming_canon import canon
+from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,13 @@ class NamingRules:
     # ------------------------------------------------------------------ storage
 
     def _default_data(self) -> Dict[str, Any]:
-        return {"version": SCHEMA_VERSION, "language": self.default_language, "rules": [], "migration": None}
+        return {
+            "version": SCHEMA_VERSION,
+            "language": self.default_language,
+            "display_case": DEFAULT_CASE,
+            "rules": [],
+            "migration": None,
+        }
 
     def _load(self) -> Dict[str, Any]:
         if self.storage_path.exists():
@@ -80,6 +87,7 @@ class NamingRules:
                 data.setdefault("version", SCHEMA_VERSION)
                 data.setdefault("language", self.default_language)
                 data.setdefault("migration", None)
+                data.setdefault("display_case", DEFAULT_CASE)
                 return data
             except (OSError, json.JSONDecodeError, NamingRuleError) as error:
                 logger.error("Failed to load naming rules: %s", error)
@@ -136,9 +144,15 @@ class NamingRules:
             "merged": [],
             "conflicts": [],
             "reclassified": [],
+            "skipped": [],
         }
         for (kind, key), group in sorted(grouped.items()):
             values = list(group["values"])
+            # A mapping that only repeats the original in another spelling
+            # ("firmware" -> "Firmware") is what the display spelling does anyway.
+            if len(values) == 1 and canon(values[0]) == key:
+                report["skipped"].append({"key": key, "value": values[0], "legacy_keys": group["legacy_keys"]})
+                continue
             # Several legacy spellings with one value collapse into one rule.
             # Different values for one key are kept as alternatives and reported.
             winner = values[-1]
@@ -196,6 +210,26 @@ class NamingRules:
     @property
     def language(self) -> str:
         return self.data.get("language") or self.default_language
+
+    @property
+    def display_case(self) -> str:
+        return self.data.get("display_case") or DEFAULT_CASE
+
+    def set_display_case(self, mode: str) -> None:
+        if mode not in CASE_MODES:
+            raise NamingRuleError(f"Unknown display case: {mode}")
+        self.data["display_case"] = mode
+        self.save()
+
+    def is_redundant(self, rule: Dict[str, Any], language: str, builtin: Optional[str] = None) -> bool:
+        """A rule whose target is what the display spelling or the built-in default yields anyway."""
+        target = rule["targets"].get(language)
+        if not target:
+            return False
+        if builtin is not None and target == builtin:
+            return True
+        key = rule["match"]["value"]
+        return canon(target) == key and target == normalize_display(key.replace("_", " "), self.display_case)
 
     def set_language(self, language: str) -> None:
         """Switch the active language.

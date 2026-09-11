@@ -88,11 +88,12 @@
     "source_legacy_parse": "dérivé",
     "source_device_class": "Classe d’appareil",
     "explain_override": "« {value} » est une exception pour cette entité seulement.",
-    "explain_rule_user": "L’intégration l’appelle « {original} ». Votre règle « {key} » en fait « {value} ».",
-    "explain_rule_system": "L’intégration l’appelle « {original} ». La traduction intégrée est « {value} ».",
+    "explain_rule_user": "L’intégration ({source}) l’appelle « {original} ». Votre règle « {key} » en fait « {value} ».",
+    "explain_rule_system": "L’intégration ({source}) l’appelle « {original} ». Valeur par défaut : « {value} ».",
     "explain_legacy": "« {value} » a été dérivé de l’ancien nom ; l’intégration n’en fournit aucun.",
     "explain_device_class": "« {value} » vient de la classe d’appareil ; l’intégration ne fournit pas de nom.",
-    "explain_original": "« {value} » est le nom de l’intégration, inchangé. Aucune règle ne s’applique."
+    "explain_original": "« {value} » est le nom de l’intégration ({source}), inchangé.",
+    "explain_normalized": "L’intégration ({source}) l’appelle « {original} ». Seule l’orthographe a été ajustée."
   },
   "virtual_devices": {
     "automations": "Automatisations",
@@ -292,7 +293,7 @@
   "settings": {
     "back_to_manager": "Retour au Gestionnaire d'Entités",
     "page_title": "Paramètres",
-    "system_language": "Langue du Système :",
+    "system_language": "Langue des noms :",
     "search_placeholder": "Rechercher par clé ou traduction...",
     "filter_all": "Tous les Types",
     "filter_system": "Valeurs par Défaut Système",
@@ -366,7 +367,15 @@
     "migration_summary": "{imported} règles reprises, {merged} graphies fusionnées, {conflicts} conflits.",
     "migration_backup": "Sauvegarde sous :",
     "migration_conflicts": "Conflits — choisissez la valeur souhaitée :",
-    "my_name_placeholder": "p. ex. Niveau de batterie"
+    "my_name_placeholder": "p. ex. Niveau de batterie",
+    "display_case": "Orthographe :",
+    "display_case_hint": "Comment les types sans règle sont écrits. Ne change jamais le mot, seulement la casse.",
+    "display_case_first_word": "Premier mot en majuscule",
+    "display_case_sentence": "Casse de phrase (reste en minuscules)",
+    "display_case_off": "Tel que fourni",
+    "redundant": "identique à la valeur par défaut",
+    "redundant_hint": "Cette règle donne ce que l’orthographe ou la valeur par défaut donnent déjà. Elle peut être supprimée.",
+    "migration_skipped": "{count} correspondances ignorées qui ne répètent que l’orthographe."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

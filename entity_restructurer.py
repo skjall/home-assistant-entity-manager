@@ -14,12 +14,12 @@ Integrates with:
 
 from collections import defaultdict
 import logging
-import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ha_client import HomeAssistantClient
 from hierarchy_manager import normalize_name
 from naming_canon import canon
+from naming_display import DEFAULT_CASE, normalize_display
 from naming_overrides import NamingOverrides
 from naming_templates import NamingTemplates
 
@@ -35,20 +35,6 @@ except ImportError:
     TypeMappings = None
 
 logger = logging.getLogger(__name__)
-
-
-_SLUG_NAME = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)+$")
-
-
-def humanize_supplied_name(name: str) -> str:
-    """Show a slug-style name such as ``nacht_rot`` as the words it stands for.
-
-    Some integrations (zigbee2mqtt scenes, for example) supply object-id style
-    names. Those read as "Nacht Rot" in a friendly name, not as "nacht_rot".
-    """
-    if _SLUG_NAME.match(name):
-        return name.replace("_", " ").title()
-    return name
 
 
 class EntityRestructurer:
@@ -384,8 +370,9 @@ class EntityRestructurer:
         """
         candidates: List[Dict[str, Any]] = []
         integration = registry.get("platform") or None
+        rules = getattr(self.type_mappings, "rules", None) if self.type_mappings else None
+        shown = normalize_display(name, rules.display_case if rules is not None else DEFAULT_CASE)
         if self.type_mappings:
-            rules = getattr(self.type_mappings, "rules", None)
             language = self.language
             if rules is not None:
                 translation_key = registry.get("translation_key")
@@ -423,11 +410,14 @@ class EntityRestructurer:
                         "matched_on": {"kind": "name", "value": canon(name), "integration": detected},
                     }
                 )
-        candidates.append(
-            {"value": humanize_supplied_name(name), "won_by": won_by, "rule_id": None, "matched_on": None}
-        )
+        # A rule or default that only repeats the shown spelling has no effect
+        # and is not reported as the source.
+        candidates = [candidate for candidate in candidates if candidate["value"] != shown]
+        candidates.append({"value": shown, "won_by": won_by, "rule_id": None, "matched_on": None})
         winner = dict(candidates[0])
         winner["input"] = name
+        winner["normalized"] = winner["value"] != name and winner["won_by"] == won_by
+        winner["platform"] = integration
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
 
@@ -471,6 +461,8 @@ class EntityRestructurer:
                 "rule_id": None,
                 "matched_on": None,
                 "input": value,
+                "normalized": False,
+                "platform": registry.get("platform") or None,
                 "candidates": [{"won_by": won_by, "value": value}],
             }
 

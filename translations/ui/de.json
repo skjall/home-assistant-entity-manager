@@ -88,11 +88,12 @@
     "source_legacy_parse": "abgeleitet",
     "source_device_class": "Geräteklasse",
     "explain_override": "„{value}“ ist eine Ausnahme nur für diese Entität.",
-    "explain_rule_user": "Die Integration nennt es „{original}“. Deine Regel „{key}“ macht daraus „{value}“.",
-    "explain_rule_system": "Die Integration nennt es „{original}“. Die mitgelieferte Übersetzung dafür ist „{value}“.",
+    "explain_rule_user": "Die Integration ({source}) nennt es „{original}“. Deine Regel „{key}“ macht daraus „{value}“.",
+    "explain_rule_system": "Die Integration ({source}) nennt es „{original}“. Standard dafür: „{value}“.",
     "explain_legacy": "„{value}“ wurde aus dem bisherigen Namen abgeleitet; die Integration liefert keinen eigenen.",
     "explain_device_class": "„{value}“ kommt aus der Geräteklasse; die Integration liefert keinen Namen.",
-    "explain_original": "„{value}“ ist der Name der Integration, unverändert. Keine Regel greift."
+    "explain_original": "„{value}“ ist der Name der Integration ({source}), unverändert.",
+    "explain_normalized": "Die Integration ({source}) nennt es „{original}“. Nur die Schreibweise wurde angepasst."
   },
   "virtual_devices": {
     "automations": "Automatisierungen",
@@ -272,7 +273,7 @@
   "settings": {
     "back_to_manager": "Zurück zum Entity Manager",
     "page_title": "Einstellungen",
-    "system_language": "Systemsprache:",
+    "system_language": "Sprache der Namen:",
     "search_placeholder": "Nach Key oder Übersetzung suchen...",
     "filter_all": "Alle Typen",
     "filter_system": "System-Standards",
@@ -346,7 +347,15 @@
     "migration_summary": "{imported} Regeln übernommen, {merged} Schreibweisen zusammengeführt, {conflicts} Konflikte.",
     "migration_backup": "Sicherung unter:",
     "migration_conflicts": "Konflikte – bitte den gewünschten Wert wählen:",
-    "my_name_placeholder": "z. B. Batterieladung"
+    "my_name_placeholder": "z. B. Batterieladung",
+    "display_case": "Schreibweise:",
+    "display_case_hint": "Wie Typnamen ohne Regel geschrieben werden. Ändert nie das Wort, nur Groß-/Kleinschreibung.",
+    "display_case_first_word": "Erstes Wort groß",
+    "display_case_sentence": "Satzschreibweise (Rest klein)",
+    "display_case_off": "Wie geliefert",
+    "redundant": "wie Standard",
+    "redundant_hint": "Diese Regel liefert, was Schreibweise oder mitgelieferter Standard ohnehin ergeben. Sie kann gelöscht werden.",
+    "migration_skipped": "{count} Zuordnungen übersprungen, die nur die Schreibweise wiederholen."
   },
   "type_mappings": {
     "light": "Licht",
