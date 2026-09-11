@@ -2000,6 +2000,11 @@
                                         <div class="current-state">
                                             <div class="friendly-name">
                                                 <span x-text="entity.original_name || t('entity.no_name')"></span>
+                                                <span x-show="selectedArea !== '__no_area__' && resolutionBadge(entity)"
+                                                      class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle"
+                                                      :class="resolutionBadgeClass(entity)"
+                                                      :title="resolutionExplain(entity)"
+                                                      x-text="resolutionBadge(entity)"></span>
                                                 <span x-show="isOrphanEntity(entity)"
                                                       class="text-xs text-amber-600 ml-2"
                                                       :title="t('entity.orphan_hint')">
@@ -2069,7 +2074,7 @@
                                     <!-- Edit Panel - hide in no-area mode -->
                                     <div class="edit-panel" x-show="selectedArea !== '__no_area__' && entity._expanded" @click.stop>
                                         <div class="edit-row">
-                                            <label x-text="t('entity.suffix_label')">Entity Suffix:</label>
+                                            <label x-text="t('entity.type_label')">Type:</label>
                                             <div class="edit-input-group">
                                                 <input type="text"
                                                        class="suffix-input"
@@ -2079,25 +2084,32 @@
                                                        @blur="$event.target.value = $event.target.value.trim(); updateEntityPreview(entity, $event.target.value)"
                                                        @keyup.enter="saveEntitySuffix(entity)"
                                                        :placeholder="t('entity.suffix_placeholder')">
-                                                <button @click="applySuggestion(entity)"
-                                                        class="btn btn-ghost btn-sm"
-                                                        :title="t('entity.accept_suggestion') + ': ' + getTypeMappingSuggestion(entity)">
-                                                    <i class="ri-magic-line"></i>
-                                                </button>
                                                 <button @click="revertEntitySuffix(entity)"
                                                         class="btn btn-ghost btn-sm"
                                                         :title="t('entity.revert')">
                                                     <i class="ri-arrow-go-back-line"></i>
                                                 </button>
-                                                <button @click="learnSuffixMapping(entity)"
-                                                        class="btn btn-ghost btn-sm"
-                                                        :title="t('entity.learn_mapping')">
-                                                    <i :class="suffixMappings[(entity.base_name||'').toLowerCase().trim()] ? 'ri-star-fill text-amber-500' : 'ri-star-line'"></i>
-                                                </button>
+                                                <button @click="saveEntitySuffix(entity)"
+                                                        class="btn btn-primary btn-sm"
+                                                        :disabled="applyingEntityId || renamingDevice || executing"
+                                                        x-text="t('entity.apply')">Apply</button>
                                             </div>
                                             <span x-show="isEntityIdTaken(entity)" class="text-red-500 text-xs">
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
                                             </span>
+                                        </div>
+                                        <p class="text-xs text-gray-500 mt-1" x-text="resolutionExplain(entity)"></p>
+                                        <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" x-show="typeEdited(entity)">
+                                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                                <input type="radio" :name="'scope-' + entity.registry_id" value="all"
+                                                       :checked="entity._ruleScope === 'all'" @change="entity._ruleScope = 'all'">
+                                                <span x-text="t('entity.scope_all', {name: entity.resolution?.candidates?.slice(-1)[0]?.value || entity.original_name, count: entity.type_count || 1})"></span>
+                                            </label>
+                                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                                <input type="radio" :name="'scope-' + entity.registry_id" value="here"
+                                                       :checked="entity._ruleScope === 'here'" @change="entity._ruleScope = 'here'">
+                                                <span x-text="t('entity.scope_here')"></span>
+                                            </label>
                                         </div>
                                     </div>
                                 </div>
@@ -3668,36 +3680,19 @@
                 async loadHierarchy() {
                     this.loading = true;
                     try {
-                        // Load hierarchy and suffix mappings in parallel
-                        const [hierarchyResponse, mappingsResponse, namingResponse] = await Promise.all([
+                        const [hierarchyResponse, namingResponse] = await Promise.all([
                             fetch('api/hierarchy'),
-                            fetch('api/type_mappings'),
                             fetch('api/naming_templates')
                         ]);
 
                         const data = await hierarchyResponse.json();
-                        const mappingsData = await mappingsResponse.json();
                         const namingData = await namingResponse.json();
 
                         if (data.error) {
                             throw new Error(data.error);
                         }
 
-                        // Build suffix mappings FIRST (before hierarchy triggers re-render)
-                        // Only include USER OVERRIDES - system defaults are handled by getTypeMappingSuggestion()
-                        const newSuffixMappings = {};
-                        if (mappingsData.mappings) {
-                            for (const m of mappingsData.mappings) {
-                                if (m.has_user_override && m.effective_value) {
-                                    newSuffixMappings[m.key.toLowerCase()] = m.effective_value;
-                                }
-                            }
-                        }
-
-                        // Set both suffixMappings and hierarchy together
-                        // Use Object.assign to trigger a single reactivity update
                         Object.assign(this, {
-                            suffixMappings: newSuffixMappings,
                             namingConfig: namingData,
                             hierarchy: {
                                 floors: data.floors || [],
@@ -4101,17 +4096,56 @@
                 },
 
                 async previewEntityNaming(entity, suffix = null) {
-                    const response = await fetch('api/naming_templates/preview', {
+                    const response = await fetch('api/naming/preview', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            templates: this.namingConfig.templates,
-                            context: this.entityNamingContext(entity, suffix)
-                        })
+                        body: JSON.stringify({ entity_id: entity.id, type_value: suffix })
                     });
                     const data = await response.json();
-                    if (!response.ok) throw new Error(data.error || 'Failed to preview naming templates');
+                    if (!response.ok) throw new Error(data.error || 'Failed to preview naming');
                     return data.rendered;
+                },
+
+                // Where the type came from, as a short badge label (empty for a plain original).
+                resolutionBadge(entity) {
+                    const _ = this.translationsReady;
+                    const won = entity?.resolution?.won_by;
+                    if (!won || won === 'original' || won === 'fallback') return '';
+                    const key = 'entity.source_' + won.replace(':', '_');
+                    const label = this.t(key);
+                    return label === key ? won : label;
+                },
+
+                resolutionBadgeClass(entity) {
+                    const won = entity?.resolution?.won_by || '';
+                    if (won === 'override') return 'bg-violet-100 text-violet-700';
+                    if (won === 'rule:user') return 'bg-amber-100 text-amber-700';
+                    if (won === 'rule:system') return 'bg-gray-100 text-gray-600';
+                    if (won === 'legacy_parse' || won === 'device_class') return 'bg-blue-50 text-blue-600';
+                    return '';
+                },
+
+                // One sentence for the edit panel: what the type is, and why.
+                resolutionExplain(entity) {
+                    const _ = this.translationsReady;
+                    const r = entity?.resolution;
+                    if (!r) return '';
+                    const original = entity.original_name || '';
+                    const value = r.value || '';
+                    const key = r.matched_on?.value || '';
+                    switch (r.won_by) {
+                        case 'override': return this.t('entity.explain_override', {value});
+                        case 'rule:user': return this.t('entity.explain_rule_user', {value, key, original});
+                        case 'rule:system': return this.t('entity.explain_rule_system', {value, original});
+                        case 'legacy_parse': return this.t('entity.explain_legacy', {value});
+                        case 'device_class': return this.t('entity.explain_device_class', {value});
+                        default: return this.t('entity.explain_original', {value});
+                    }
+                },
+
+                typeEdited(entity) {
+                    return entity._currentSuffix !== undefined
+                        && entity._currentSuffix.trim() !== (entity.base_name || '').trim();
                 },
 
                 // Check if device needs rename
@@ -4401,6 +4435,9 @@
                 // Toggle entity expand state
                 toggleEntityExpand(entity) {
                     entity._expanded = !entity._expanded;
+                    if (entity._expanded && entity._ruleScope === undefined) {
+                        entity._ruleScope = (entity.type_count || 0) > 1 ? 'all' : 'here';
+                    }
                     if (entity._expanded && entity._currentSuffix === undefined) {
                         const initialSuffix = this.getEntitySuffix(entity);
                         if (entity.suggested_entity_id) {
@@ -4420,15 +4457,9 @@
                 // Update live preview while typing
                 updateEntityPreview(entity, suffix) {
                     entity._currentSuffix = suffix;
-                    const context = this.entityNamingContext(entity, suffix);
-                    entity._previewName = this.renderNamingTemplate(
-                        this.namingConfig.templates.entity_name,
-                        context
-                    );
 
-                    // Slug comes from the backend (source of truth), debounced so we don't
-                    // fire a request on every keystroke. The friendly-name preview updates
-                    // instantly; the ID follows a moment later.
+                    // The server renders name and ID; the previous preview stays on screen
+                    // until it answers, so nothing flickers between two computations.
                     if (!this._normTimers) this._normTimers = {};
                     const key = entity.registry_id || entity.id;
                     clearTimeout(this._normTimers[key]);
@@ -4444,111 +4475,11 @@
                     this.previewVersion++;
                 },
 
-                // Get type mapping suggestion for an entity
-                // Get the correct suffix for an entity (shared logic for display and editing)
+                // The entity part of the name, as the server resolved it.
                 getEntitySuffix(entity) {
-                    const domain = entity.id.split('.')[0];
-                    const userMapping = this.getUserSuffixMapping(entity.base_name, domain);
-                    if (userMapping) {
-                        return userMapping;
-                    }
-                    const baseName = entity.base_name || '';
-                    if (!baseName || baseName.toLowerCase() === domain) {
-                        return this.getTypeMappingSuggestion(entity);
-                    }
-                    return baseName;
+                    return entity.base_name || '';
                 },
 
-                getTypeMappingSuggestion(entity) {
-                    // Force Alpine to track translationsReady as dependency
-                    const _ = this.translationsReady;
-
-                    // Priority: 1. user suffix/domain mapping > 2. device_class > 3. domain type
-                    const domain = entity.id.split('.')[0];
-
-                    // 1. Check if there's a user-defined mapping for base_name or domain
-                    const userMapping = this.getUserSuffixMapping(entity.base_name, domain);
-                    if (userMapping) {
-                        return userMapping;
-                    }
-
-                    // 2. Check device_class
-                    if (entity.device_class) {
-                        const key = `type_mappings.${entity.device_class}`;
-                        const translated = this.t(key);
-                        return translated !== key
-                            ? translated
-                            : entity.device_class.charAt(0).toUpperCase() + entity.device_class.slice(1);
-                    }
-
-                    // 3. Fall back to domain translation
-                    const key = `type_mappings.${domain}`;
-                    const translated = this.t(key);
-                    return translated !== key ? translated : domain;
-                },
-
-                // Check if there's a user suffix mapping for a base_name or domain (returns mapped value or null)
-                getUserSuffixMapping(baseName, domain = null) {
-                    if (!this.suffixMappings || Object.keys(this.suffixMappings).length === 0) {
-                        return null;
-                    }
-
-                    // 1. Check base_name mappings first
-                    if (baseName) {
-                        const baseNameLower = baseName.toLowerCase().trim();
-
-                        // Try exact lowercase match
-                        if (this.suffixMappings[baseNameLower]) {
-                            return this.suffixMappings[baseNameLower];
-                        }
-
-                        // Try with spaces instead of hyphens/underscores
-                        const baseNameSpaces = baseNameLower.replace(/[_-]/g, ' ');
-                        if (this.suffixMappings[baseNameSpaces]) {
-                            return this.suffixMappings[baseNameSpaces];
-                        }
-
-                        // Try with underscores
-                        const baseNameUnderscores = baseNameLower.replace(/[\s-]/g, '_');
-                        if (this.suffixMappings[baseNameUnderscores]) {
-                            return this.suffixMappings[baseNameUnderscores];
-                        }
-
-                        // Try with hyphens
-                        const baseNameHyphens = baseNameLower.replace(/[\s_]/g, '-');
-                        if (this.suffixMappings[baseNameHyphens]) {
-                            return this.suffixMappings[baseNameHyphens];
-                        }
-
-                        // If base_name exists and is different from domain, don't fall back to domain mapping
-                        // The base_name is valid and should be used as-is
-                        if (baseNameLower !== domain?.toLowerCase()) {
-                            return null;
-                        }
-                    }
-
-                    // 2. Check domain mapping ONLY when base_name is empty or equals domain
-                    // (for cases like update -> Firmwareaktualisierung)
-                    if (domain) {
-                        const domainLower = domain.toLowerCase();
-                        if (this.suffixMappings[domainLower]) {
-                            return this.suffixMappings[domainLower];
-                        }
-                    }
-
-                    return null;
-                },
-
-                // Apply the type mapping suggestion to the suffix input
-                // This explicitly uses getTypeMappingSuggestion() because the user
-                // wants something OTHER than the current base_name
-                applySuggestion(entity) {
-                    const suggestion = this.getTypeMappingSuggestion(entity);
-                    entity._currentSuffix = suggestion;
-                    this.updateEntityPreview(entity, suggestion);
-                },
-
-                // Revert suffix to original value (override_name intentionally ignored)
                 revertEntitySuffix(entity) {
                     const original = entity.base_name || '';
                     entity._currentSuffix = original;
@@ -4713,13 +4644,34 @@
                     if (!entity) return;
 
                     try {
-                        // Friendly name reflects the (possibly just-typed) suffix preview;
-                        // the slug comes fresh from the backend (source of truth) to avoid a
-                        // debounce race with the live preview.
-                        const rendered = await this.previewEntityNaming(
-                            entity,
-                            entity._currentSuffix !== undefined ? entity._currentSuffix : null
-                        );
+                        const typed = entity._currentSuffix !== undefined ? entity._currentSuffix.trim() : null;
+                        const edited = this.typeEdited(entity);
+                        let ruleScopeApplied = null;
+                        if (edited && typed) {
+                            if (entity._ruleScope === 'all') {
+                                const learn = await fetch('api/naming/learn', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ entity_id: entity.id, value: typed })
+                                });
+                                const learned = await learn.json();
+                                if (!learn.ok) throw new Error(learned.error || 'Rule not saved');
+                                ruleScopeApplied = 'all';
+                            } else {
+                                const set = await fetch('api/set_entity_override', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ registry_id: entity.registry_id, override_name: typed })
+                                });
+                                const saved = await set.json();
+                                if (!set.ok || saved.error) throw new Error(saved.error || 'Exception not saved');
+                                ruleScopeApplied = 'here';
+                            }
+                        }
+
+                        // Name and ID come fresh from the server so they include the rule
+                        // or exception just saved and the collision numbering.
+                        const rendered = await this.previewEntityNaming(entity, null);
                         const newName = rendered.entity_name;
                         const newId = rendered.entity_id;
 
@@ -4736,7 +4688,9 @@
 
                         if (!idChanged && !nameChanged) {
                             entity._expanded = false;
-                            this.showMessage('No rename needed', 'success');
+                            entity._currentSuffix = undefined;
+                            if (ruleScopeApplied === 'all') await this.loadHierarchy();
+                            this.showMessage(this.t('entity.no_change'), 'success');
                             return;
                         }
 
@@ -4757,15 +4711,19 @@
                             entity._expanded = false;
                             this.showMessage(`Renamed to "${newName}"`, 'success');
 
-                            // Update local entity data
                             entity.id = newId;
                             entity.original_name = newName;
-                            // Update base_name to the new suffix so input field shows correct value
                             if (entity._currentSuffix !== undefined) {
                                 entity.base_name = entity._currentSuffix;
                             }
                             entity._currentSuffix = undefined;
                             entity._justRenamed = true;
+                            if (ruleScopeApplied === 'all') {
+                                // Other entities of this type now render differently.
+                                await this.loadHierarchy();
+                            } else if (ruleScopeApplied === 'here') {
+                                entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: typed};
+                            }
                         } else {
                             throw new Error(renameData.error || 'Rename failed');
                         }
@@ -5060,21 +5018,6 @@
 
                 // Sternchen im Entity-Edit: aktuelles Suffix als feste Übersetzung merken.
                 // Schlüssel = Original-Basisname (z.B. "effect color"), Wert = eingegebener Suffix.
-                async learnSuffixMapping(entity) {
-                    const current = entity._currentSuffix !== undefined ? entity._currentSuffix : (entity.base_name || '');
-                    const translation = (current || '').trim();
-                    const typeKey = (entity.base_name || '').toLowerCase().trim();
-                    if (!typeKey || !translation) {
-                        this.showMessage(this.t('entity.learn_mapping_empty'), 'error');
-                        return;
-                    }
-                    await this.learnMapping(typeKey, translation);
-                    // Mapping lokal übernehmen, damit gleiche Entities sofort die Übersetzung nutzen
-                    this.suffixMappings[typeKey] = translation;
-                    this.invalidateEntityPreviews();
-                    this.showMessage(this.t('entity.learn_mapping_saved') + ': ' + entity.base_name + ' → ' + translation, 'success');
-                },
-
                 // Execute ALL pending changes with batch processing to avoid timeouts
                 async executeAllChanges() {
                     // Find all entities that need renaming

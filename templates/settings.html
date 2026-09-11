@@ -45,6 +45,16 @@
             color: #3b82f6;
         }
 
+        .section-hint { color: #6b7280; font-size: 0.85rem; padding: 0 20px 12px; }
+        .row-muted td { color: #9ca3af; }
+        .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9999px; background: #eef2ff; color: #4f46e5; font-size: 0.7rem; }
+        .conflict-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+        .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid #d1d5db; background: white; cursor: pointer; font-size: 0.85rem; }
+        .chip-active { background: #2563eb; color: white; border-color: #2563eb; }
+        .originals-list { margin-top: 6px; border: 1px solid #e5e7eb; border-radius: 6px; max-height: 220px; overflow-y: auto; }
+        .originals-item { display: flex; justify-content: space-between; width: 100%; text-align: left; padding: 8px 10px; background: white; border: 0; border-bottom: 1px solid #f3f4f6; cursor: pointer; font-size: 0.9rem; }
+        .originals-item:hover { background: #eff6ff; }
+        .originals-meta { color: #9ca3af; font-size: 0.75rem; margin-left: 12px; white-space: nowrap; }
         .mapping-section {
             background: white;
             border-radius: 12px;
@@ -397,7 +407,7 @@
                     <i class="ri-arrow-left-line"></i>
                     <span x-text="t('settings.back_to_manager')">Back to Entity Manager</span>
                 </a>
-                <h1 x-text="t('settings.page_title')">Entity Type Mappings</h1>
+                <h1 x-text="t('settings.page_title')">Settings</h1>
             </div>
             <div class="language-selector">
                 <label x-text="t('settings.system_language')">System Language:</label>
@@ -474,113 +484,113 @@
         </div>
 
         <!-- Main Section -->
+        <!-- Type rules -->
         <div class="mapping-section">
             <div class="section-header">
                 <h2>
                     <i class="ri-translate-2"></i>
-                    <span x-text="t('settings.type_translations')">Type Translations</span>
+                    <span x-text="t('settings.type_rules')">Type rules</span>
                 </h2>
-                <button class="add-btn" @click="showAddModal = true">
+                <button class="add-btn" @click="openAddRule()">
                     <i class="ri-add-line"></i>
-                    <span x-text="t('settings.add_mapping')">Add Mapping</span>
+                    <span x-text="t('settings.add_rule')">Add rule</span>
                 </button>
             </div>
+            <p class="section-hint" x-text="t('settings.type_rules_hint')"></p>
 
-            <!-- Stats -->
             <div class="stats-bar">
                 <div class="stat-item">
-                    <span x-text="t('settings.total_types')">Total Types:</span>
-                    <span class="stat-value" x-text="mappings.length"></span>
+                    <span x-text="t('settings.rules_count')">Rules:</span>
+                    <span class="stat-value" x-text="rules.length"></span>
                 </div>
                 <div class="stat-item">
-                    <span x-text="t('settings.user_overrides')">User Overrides:</span>
-                    <span class="stat-value" x-text="userMappingCount"></span>
+                    <span x-text="t('settings.rules_no_effect')">Without effect:</span>
+                    <span class="stat-value" x-text="rules.filter(r => !r.affected).length"></span>
+                </div>
+                <div class="stat-item">
+                    <span x-text="t('settings.system_defaults_count')">Built-in:</span>
+                    <span class="stat-value" x-text="systemRules.length"></span>
                 </div>
             </div>
 
-            <!-- Filter -->
             <div class="filter-bar">
                 <input type="text"
                        class="search-input"
                        :placeholder="t('settings.search_placeholder')"
                        x-model="searchQuery"
-                       @input="filterMappings()">
-                <select class="filter-select" x-model="filterType" @change="filterMappings()">
-                    <option value="all" x-text="t('settings.filter_all')">All Types</option>
-                    <option value="user" x-text="t('settings.filter_user')">User Overrides</option>
-                    <option value="system" x-text="t('settings.filter_system')">System Defaults</option>
+                       @input="filterRules()">
+                <select class="filter-select" x-model="filterType" @change="filterRules()">
+                    <option value="all" x-text="t('settings.filter_all')">All</option>
+                    <option value="user" x-text="t('settings.filter_user_rules')">My rules</option>
+                    <option value="no_effect" x-text="t('settings.filter_no_effect')">Without effect</option>
+                    <option value="system" x-text="t('settings.filter_system')">Built-in</option>
                 </select>
             </div>
 
-            <!-- Table -->
-            <table class="mappings-table" x-show="filteredMappings.length > 0">
+            <table class="mappings-table" x-show="filteredRules.length > 0">
                 <thead>
                     <tr>
-                        <th style="width: 25%" x-text="t('settings.th_type_key')">Type Key</th>
-                        <th style="width: 30%" x-text="t('settings.th_translation')">Translation</th>
-                        <th style="width: 25%" x-text="t('settings.th_system_default')">System Default</th>
+                        <th style="width: 26%" x-text="t('settings.th_original')">Original</th>
+                        <th style="width: 26%" x-text="t('settings.th_my_name')">My name</th>
+                        <th style="width: 18%" x-text="t('settings.th_system_default')">Built-in</th>
+                        <th style="width: 10%" x-text="t('settings.th_affected')">Affects</th>
                         <th style="width: 10%" x-text="t('settings.th_source')">Source</th>
                         <th style="width: 10%" x-text="t('settings.th_actions')">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <template x-for="mapping in filteredMappings" :key="mapping.key">
-                        <tr>
+                    <template x-for="row in filteredRules" :key="row.id">
+                        <tr :class="row.isRule && !row.affected ? 'row-muted' : ''">
                             <td>
-                                <span class="type-key" x-text="mapping.key"></span>
+                                <span class="type-key" x-text="row.key"></span>
+                                <span x-show="row.kind === 'translation_key'" class="kind-badge" :title="t('settings.kind_translation_key')">tk</span>
+                                <span x-show="row.kind === 'device_class'" class="kind-badge" :title="t('settings.kind_device_class')">dc</span>
+                                <span x-show="row.integration" class="kind-badge" x-text="row.integration"></span>
                             </td>
                             <td>
-                                <template x-if="editingKey !== mapping.key">
-                                    <span :class="mapping.has_user_override ? 'user-override' : 'translation-value'"
-                                          x-text="mapping.effective_value"></span>
+                                <template x-if="editingKey !== row.id">
+                                    <span :class="row.isRule ? 'user-override' : 'translation-value'"
+                                          x-text="row.isRule ? row.value : '—'"></span>
                                 </template>
-                                <template x-if="editingKey === mapping.key">
+                                <template x-if="editingKey === row.id">
                                     <input type="text"
                                            class="edit-input"
                                            x-model="editValue"
-                                           @keydown.enter="saveEdit(mapping.key)"
+                                           @keydown.enter="saveEdit(row)"
                                            @keydown.escape="cancelEdit()">
                                 </template>
                             </td>
+                            <td><span class="system-default" x-text="row.system_default || '—'"></span></td>
                             <td>
-                                <span class="system-default" x-text="mapping.system_default || '—'"></span>
+                                <span x-show="row.isRule" :class="row.affected ? '' : 'text-amber-600'"
+                                      x-text="row.affected"></span>
+                                <span x-show="row.isRule && !row.affected" class="text-amber-600 text-xs" :title="t('settings.no_effect_hint')">
+                                    <i class="ri-alert-line"></i>
+                                </span>
                             </td>
                             <td>
-                                <template x-if="mapping.has_user_override">
-                                    <span class="user-badge">
-                                        <i class="ri-user-line"></i> <span x-text="t('settings.source_user')">User</span>
-                                    </span>
-                                </template>
-                                <template x-if="!mapping.has_user_override">
-                                    <span class="system-badge">
-                                        <i class="ri-settings-3-line"></i> <span x-text="t('settings.source_system')">System</span>
-                                    </span>
-                                </template>
+                                <span x-show="row.isRule" class="user-badge">
+                                    <i class="ri-user-line"></i> <span x-text="t('settings.source_' + (row.source || 'user'))"></span>
+                                </span>
+                                <span x-show="!row.isRule" class="system-badge">
+                                    <i class="ri-settings-3-line"></i> <span x-text="t('settings.source_system')">Built-in</span>
+                                </span>
                             </td>
                             <td>
-                                <template x-if="editingKey !== mapping.key">
+                                <template x-if="editingKey !== row.id">
                                     <div class="action-btns">
-                                        <button class="action-btn"
-                                                @click="startEdit(mapping)"
-                                                :title="t('settings.edit')">
+                                        <button class="action-btn" @click="startEdit(row)" :title="t('settings.edit')">
                                             <i class="ri-pencil-line"></i>
                                         </button>
-                                        <button class="action-btn delete"
-                                                @click="deleteMapping(mapping.key)"
-                                                x-show="mapping.has_user_override"
-                                                :title="t('settings.remove_override')">
+                                        <button class="action-btn delete" @click="deleteRule(row)" x-show="row.isRule" :title="t('settings.remove_rule')">
                                             <i class="ri-delete-bin-line"></i>
                                         </button>
                                     </div>
                                 </template>
-                                <template x-if="editingKey === mapping.key">
+                                <template x-if="editingKey === row.id">
                                     <div class="save-cancel-btns">
-                                        <button class="save-btn" @click="saveEdit(mapping.key)">
-                                            <i class="ri-check-line"></i>
-                                        </button>
-                                        <button class="cancel-btn" @click="cancelEdit()">
-                                            <i class="ri-close-line"></i>
-                                        </button>
+                                        <button class="save-btn" @click="saveEdit(row)"><i class="ri-check-line"></i></button>
+                                        <button class="cancel-btn" @click="cancelEdit()"><i class="ri-close-line"></i></button>
                                     </div>
                                 </template>
                             </td>
@@ -589,14 +599,44 @@
                 </tbody>
             </table>
 
-            <!-- Empty State -->
-            <div class="empty-state" x-show="filteredMappings.length === 0">
+            <div class="empty-state" x-show="filteredRules.length === 0">
                 <i class="ri-search-line"></i>
-                <p x-text="searchQuery ? t('settings.no_results') : t('settings.no_mappings')"></p>
+                <p x-text="searchQuery ? t('settings.no_results') : t('settings.no_rules')"></p>
             </div>
         </div>
 
-        <!-- Import/Export Section -->
+        <!-- Migration report -->
+        <div class="mapping-section" style="margin-top: 24px;" x-show="migration">
+            <div class="section-header">
+                <h2>
+                    <i class="ri-history-line"></i>
+                    <span x-text="t('settings.migration_title')">Migration</span>
+                </h2>
+            </div>
+            <div style="padding: 20px;" x-show="migration">
+                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 12px;"
+                   x-text="t('settings.migration_summary', {imported: migration?.imported || 0, merged: migration?.merged?.length || 0, conflicts: migration?.conflicts?.length || 0})"></p>
+                <p style="color: #6b7280; font-size: 0.8rem; margin-bottom: 12px;" x-text="t('settings.migration_backup') + ' ' + (migration?.backup || '')"></p>
+                <template x-if="migration?.conflicts?.length">
+                    <div>
+                        <p style="font-weight: 600; margin-bottom: 8px;" x-text="t('settings.migration_conflicts')"></p>
+                        <template x-for="conflict in migration.conflicts" :key="conflict.rule_id">
+                            <div class="conflict-row">
+                                <span class="type-key" x-text="conflict.key"></span>
+                                <template x-for="value in conflict.values" :key="value">
+                                    <button class="chip-btn"
+                                            :class="conflict.chosen === value ? 'chip-active' : ''"
+                                            @click="resolveConflict(conflict, value)"
+                                            x-text="value"></button>
+                                </template>
+                                <span x-show="conflict.resolved" class="text-green-600 text-xs"><i class="ri-check-line"></i></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </div>
+
         <div class="mapping-section" style="margin-top: 24px;">
             <div class="section-header">
                 <h2>
@@ -606,7 +646,7 @@
             </div>
             <div style="padding: 20px;">
                 <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 16px;" x-text="t('settings.import_export_hint')">
-                    Format: type_key;translation (one per line). Import adds or updates mappings without deleting existing ones.
+                    Format: original;name (one per line). Import adds or updates rules without deleting existing ones.
                 </p>
                 <textarea x-model="importExportText"
                           style="width: 100%; height: 200px; font-family: monospace; font-size: 0.9rem; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; resize: vertical;"
@@ -688,21 +728,31 @@
             <div class="modal">
                 <h3>
                     <i class="ri-add-circle-line"></i>
-                    <span x-text="t('settings.modal_add_title')">Add Type Mapping</span>
+                    <span x-text="t('settings.modal_add_rule_title')">Add type rule</span>
                 </h3>
                 <div class="form-group">
-                    <label for="newKey" x-text="t('settings.type_key_label')">Type Key</label>
+                    <label for="newKey" x-text="t('settings.original_label')">Original</label>
                     <input type="text"
                            id="newKey"
                            x-model="newMapping.key"
-                           :placeholder="t('settings.type_key_placeholder')">
+                           autocomplete="off"
+                           @input="searchOriginals()"
+                           :placeholder="t('settings.original_placeholder')">
+                    <div class="originals-list" x-show="originals.length">
+                        <template x-for="item in originals" :key="item.key">
+                            <button type="button" class="originals-item" @click="pickOriginal(item)">
+                                <span x-text="item.example"></span>
+                                <span class="originals-meta" x-text="item.count + ' · ' + item.integrations.join(', ')"></span>
+                            </button>
+                        </template>
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label for="newTranslation" x-text="t('settings.translation_label')">Your Translation</label>
+                    <label for="newTranslation" x-text="t('settings.my_name_label')">My name</label>
                     <input type="text"
                            id="newTranslation"
                            x-model="newMapping.translation"
-                           :placeholder="t('settings.translation_placeholder')">
+                           :placeholder="t('settings.my_name_placeholder')">
                 </div>
                 <div class="modal-actions">
                     <button class="btn-secondary" @click="showAddModal = false; resetNewMapping()">
@@ -711,7 +761,7 @@
                     <button class="btn-primary"
                             @click="addMapping()"
                             :disabled="!newMapping.key || !newMapping.translation">
-                        <span x-text="t('settings.add_mapping')">Add Mapping</span>
+                        <span x-text="t('settings.add_rule')">Add rule</span>
                     </button>
                 </div>
             </div>
@@ -730,6 +780,11 @@
         function settingsManager() {
             return {
                 mappings: [],
+                rules: [],
+                systemRules: [],
+                filteredRules: [],
+                originals: [],
+                migration: null,
                 filteredMappings: [],
                 userMappingCount: 0,
                 language: 'de',
@@ -930,26 +985,123 @@
                         this.langVersion++;
                         document.documentElement.lang = window.translations.currentLanguage || 'en';
                     }
-                    // Reload type mappings for the new language
+                    await fetch('api/naming/settings', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ language: this.language })
+                    });
                     await this.loadMappings();
                 },
 
                 async loadMappings() {
                     this.loading = true;
                     try {
-                        const response = await fetch(`api/type_mappings?lang=${this.language}`);
-                        const data = await response.json();
-                        this.mappings = data.mappings || [];
-                        this.userMappingCount = data.user_mapping_count || 0;
-                        this.filterMappings();
+                        const [rulesResponse, migrationResponse] = await Promise.all([
+                            fetch(`api/naming/rules?lang=${this.language}`),
+                            fetch('api/naming/migration')
+                        ]);
+                        const data = await rulesResponse.json();
+                        this.rules = data.rules || [];
+                        this.systemRules = data.system || [];
+                        this.migration = (await migrationResponse.json()).report || null;
+                        this.filterRules();
                     } catch (error) {
-                        console.error('Error loading mappings:', error);
+                        console.error('Error loading rules:', error);
                     } finally {
                         this.loading = false;
                     }
                 },
 
+                // One row per rule; built-in defaults without a rule show as their own rows.
+                ruleRows() {
+                    const systemByKey = {};
+                    for (const entry of this.systemRules) systemByKey[entry.key] = entry.value;
+                    const rows = this.rules.map(rule => ({
+                        id: rule.id,
+                        isRule: true,
+                        key: rule.match.value,
+                        kind: rule.match.kind,
+                        integration: rule.match.integration,
+                        value: rule.targets[this.language] || Object.values(rule.targets)[0] || '',
+                        system_default: systemByKey[rule.match.value] || null,
+                        affected: rule.affected || 0,
+                        source: rule.source || 'user',
+                        rule
+                    }));
+                    const covered = new Set(rows.map(r => r.key));
+                    for (const entry of this.systemRules) {
+                        if (covered.has(entry.key)) continue;
+                        rows.push({ id: 'sys:' + entry.key, isRule: false, key: entry.key, kind: 'name',
+                                    integration: null, value: '', system_default: entry.value, affected: 0, source: 'system' });
+                    }
+                    return rows;
+                },
+
+                filterRules() {
+                    let result = this.ruleRows();
+                    if (this.filterType === 'user') result = result.filter(r => r.isRule);
+                    else if (this.filterType === 'no_effect') result = result.filter(r => r.isRule && !r.affected);
+                    else if (this.filterType === 'system') result = result.filter(r => !r.isRule);
+                    if (this.searchQuery) {
+                        const q = this.searchQuery.toLowerCase();
+                        result = result.filter(r =>
+                            r.key.toLowerCase().includes(q) ||
+                            (r.value && r.value.toLowerCase().includes(q)) ||
+                            (r.system_default && r.system_default.toLowerCase().includes(q))
+                        );
+                    }
+                    result.sort((a, b) => {
+                        if (a.isRule !== b.isRule) return a.isRule ? -1 : 1;
+                        if (a.isRule && (!!a.affected) !== (!!b.affected)) return a.affected ? -1 : 1;
+                        return a.key.localeCompare(b.key);
+                    });
+                    this.filteredRules = result;
+                },
+
+                async searchOriginals() {
+                    const q = (this.newMapping.key || '').trim();
+                    if (q.length < 2) { this.originals = []; return; }
+                    try {
+                        const response = await fetch(`api/naming/originals?q=${encodeURIComponent(q)}`);
+                        this.originals = (await response.json()).originals || [];
+                    } catch (e) {
+                        this.originals = [];
+                    }
+                },
+
+                pickOriginal(item) {
+                    this.newMapping.key = item.example;
+                    this.originals = [];
+                },
+
+                openAddRule() {
+                    this.resetNewMapping();
+                    this.originals = [];
+                    this.showAddModal = true;
+                },
+
+                async deleteRule(row) {
+                    if (!row.isRule) return;
+                    if (!confirm(this.t('settings.confirm_delete_rule', { key: row.key }))) return;
+                    const response = await fetch(`api/naming/rules/${encodeURIComponent(row.id)}`, { method: 'DELETE' });
+                    if (response.ok) await this.loadMappings();
+                    else alert('Error: ' + ((await response.json()).error || 'Unknown error'));
+                },
+
+                async resolveConflict(conflict, value) {
+                    const response = await fetch('api/naming/migration/resolve', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ rule_id: conflict.rule_id, value })
+                    });
+                    if (response.ok) await this.loadMappings();
+                },
+
                 filterMappings() {
+                    return this.filterRules();
+                },
+
+                _legacyFilterMappings() {
                     let result = [...this.mappings];
 
                     // Filter by type
@@ -979,9 +1131,9 @@
                     this.filteredMappings = result;
                 },
 
-                startEdit(mapping) {
-                    this.editingKey = mapping.key;
-                    this.editValue = mapping.has_user_override ? mapping.effective_value : '';
+                startEdit(row) {
+                    this.editingKey = row.id;
+                    this.editValue = row.isRule ? row.value : '';
                 },
 
                 cancelEdit() {
@@ -989,21 +1141,25 @@
                     this.editValue = '';
                 },
 
-                async saveEdit(key) {
+                async saveEdit(row) {
                     if (!this.editValue.trim()) {
                         this.cancelEdit();
                         return;
                     }
 
                     try {
-                        const response = await fetch('api/type_mappings/user', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                type_key: key,
-                                translation: this.editValue.trim()
-                            })
-                        });
+                        const value = this.editValue.trim();
+                        const response = row.isRule
+                            ? await fetch(`api/naming/rules/${encodeURIComponent(row.id)}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ targets: { ...row.rule.targets, [this.language]: value } })
+                              })
+                            : await fetch('api/naming/rules', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ match: { kind: 'name', value: row.key }, value })
+                              });
 
                         if (response.ok) {
                             await this.loadMappings();
@@ -1018,40 +1174,18 @@
                     }
                 },
 
-                async deleteMapping(key) {
-                    const confirmMsg = this.t('settings.confirm_delete', { key: key });
-                    if (!confirm(confirmMsg)) {
-                        return;
-                    }
-
-                    try {
-                        const response = await fetch(`api/type_mappings/user/${encodeURIComponent(key)}`, {
-                            method: 'DELETE'
-                        });
-
-                        if (response.ok) {
-                            await this.loadMappings();
-                        } else {
-                            const error = await response.json();
-                            alert('Error: ' + (error.error || 'Unknown error'));
-                        }
-                    } catch (error) {
-                        console.error('Error deleting mapping:', error);
-                    }
-                },
-
                 async addMapping() {
                     if (!this.newMapping.key || !this.newMapping.translation) {
                         return;
                     }
 
                     try {
-                        const response = await fetch('api/type_mappings/user', {
+                        const response = await fetch('api/naming/rules', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                type_key: this.newMapping.key.trim(),
-                                translation: this.newMapping.translation.trim()
+                                match: { kind: 'name', value: this.newMapping.key.trim() },
+                                value: this.newMapping.translation.trim()
                             })
                         });
 
@@ -1074,8 +1208,8 @@
 
                 // Export all user mappings to textarea
                 exportMappings() {
-                    const userMappings = this.mappings.filter(m => m.has_user_override);
-                    const lines = userMappings.map(m => `${m.key};${m.effective_value}`);
+                    const userMappings = this.ruleRows().filter(r => r.isRule);
+                    const lines = userMappings.map(r => `${r.key};${r.value}`);
                     this.importExportText = lines.join('\n');
                     this.importResult = {
                         success: true,
@@ -1111,10 +1245,10 @@
                         }
 
                         try {
-                            const response = await fetch('api/type_mappings/user', {
+                            const response = await fetch('api/naming/rules', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ type_key: key, translation: translation })
+                                body: JSON.stringify({ match: { kind: 'name', value: key }, value: translation })
                             });
                             if (response.ok) {
                                 imported++;
