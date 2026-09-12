@@ -18,14 +18,24 @@ from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
-# Nothing but Ingress; a published port answers no one.
+# Written alone, each of these stands for a set of networks, so the common cases
+# need no CIDR. Anything else in the setting is a network of its own.
 OFF = "off"
 # Private address space, i.e. the home network the add-on is installed in.
 LAN = "lan"
 # Every caller the port can be reached from, the internet included.
 ANY = "any"
 
-POLICIES: Tuple[str, ...] = (OFF, LAN, ANY)
+SHORTHANDS: Tuple[str, ...] = (OFF, LAN, ANY)
+
+# What a token may do once a caller is allowed through: nothing at all, read the
+# state, or change it as well. Separate from who may call, because letting a
+# script read the log is a different decision from letting it rename entities.
+API_OFF = "off"
+API_READ = "read"
+API_WRITE = "write"
+
+API_MODES: Tuple[str, ...] = (API_OFF, API_READ, API_WRITE)
 
 # The Supervisor proxies Ingress requests from this range.
 SUPERVISOR_NETWORK = ipaddress.ip_network("172.30.32.0/23")
@@ -46,14 +56,65 @@ _LOCAL_NETWORKS = tuple(
 )
 
 
-def policy() -> str:
-    """Return the configured policy, falling back to the strictest one."""
-    configured = (os.getenv("EXTERNAL_ACCESS") or "").strip().lower()
-    if configured in POLICIES:
+# What "any" expands to: everything, both families.
+_EVERY_NETWORK = (ipaddress.ip_network("0.0.0.0/0"), ipaddress.ip_network("::/0"))
+
+
+def entries(configured: str = "") -> Tuple[str, ...]:
+    """The setting split into its single entries, in the order given."""
+    raw = configured or os.getenv("EXTERNAL_ACCESS") or ""
+    parts = raw.replace("\n", ",").replace(";", ",").replace(" ", ",").split(",")
+    return tuple(part.strip().lower() for part in parts if part.strip())
+
+
+def networks(configured: str = "") -> Tuple[ipaddress._BaseNetwork, ...]:
+    """The networks a direct caller may come from.
+
+    Each entry is either one of the shorthands or a network of its own, written
+    as a CIDR or as a single address. An entry that is neither is dropped with a
+    warning: a typo must never widen access, and it must never narrow the rest
+    of the list away either.
+    """
+    resolved = []
+    for entry in entries(configured):
+        if entry == OFF:
+            continue
+        if entry == LAN:
+            resolved.extend(_LOCAL_NETWORKS)
+            continue
+        if entry == ANY:
+            resolved.extend(_EVERY_NETWORK)
+            continue
+        try:
+            resolved.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            logger.warning("Ignoring %r in external_access: not a network or address", entry)
+    return tuple(resolved)
+
+
+def state(configured: str = "") -> str:
+    """How to describe the setting in one word: off, any, or some networks."""
+    allowed = networks(configured)
+    if not allowed:
+        return OFF
+    if any(network in _EVERY_NETWORK for network in allowed):
+        return ANY
+    return "some"
+
+
+def describe(configured: str = "") -> Tuple[str, ...]:
+    """The configured networks as text, for showing what is actually allowed."""
+    return tuple(str(network) for network in networks(configured))
+
+
+def api_mode() -> str:
+    """What a token may do over a published port; reading only when unset."""
+    configured = (os.getenv("EXTERNAL_API") or "").strip().lower()
+    if configured in API_MODES:
         return configured
     if configured:
-        logger.warning("Unknown external_access value %r, refusing external access", configured)
-    return OFF
+        logger.warning("Unknown external_api value %r, allowing reading only", configured)
+    return API_READ
 
 
 def is_supervisor(peer: str) -> bool:
@@ -78,12 +139,16 @@ def is_local(peer: str) -> bool:
 def allows(peer: str, configured: str = "") -> bool:
     """True when a direct (non-Ingress) request from ``peer`` may be answered.
 
-    An address this add-on cannot make sense of counts as external, so a
-    malformed or missing peer never widens access.
+    An address this add-on cannot make sense of is refused, so a malformed or
+    missing peer never widens access.
     """
-    configured = configured or policy()
-    if configured == ANY:
-        return True
-    if configured == LAN:
-        return is_local(peer)
+    try:
+        address = ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    if address.version == 6 and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    for network in networks(configured):
+        if address.version == network.version and address in network:
+            return True
     return False

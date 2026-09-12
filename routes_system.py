@@ -78,9 +78,10 @@ def network_status():
     """
     return jsonify(
         {
-            "policy": external_access.policy(),
-            "policies": list(external_access.POLICIES),
+            "state": external_access.state(),
+            "networks": list(external_access.describe()),
             "published": _published_ports(),
+            "api": external_access.api_mode(),
             "mcp": mcp_server.mode(),
         }
     )

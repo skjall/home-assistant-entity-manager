@@ -45,7 +45,7 @@ def test_the_web_interface_answers_through_asgi():
     answer = call(application, "/api/network")
 
     assert answer["status"] == 200
-    assert b"policy" in answer["body"]
+    assert b"state" in answer["body"]
 
 
 def test_the_gate_still_sees_the_real_caller_through_asgi():
