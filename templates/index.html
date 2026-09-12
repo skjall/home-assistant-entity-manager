@@ -4211,26 +4211,42 @@
                     return '';
                 },
 
-                // One sentence for the edit panel: what the type is, and why.
+                // How far a rule reaches, counted from the entity's own numbers.
+                scopeReach(entity, match) {
+                    if (match?.model) {
+                        return this.t('entity.explain_scope_model', {model: match.model, count: entity.type_model_count || 0});
+                    }
+                    if (match?.integration) {
+                        return this.t('entity.explain_scope_integration', {integration: match.integration, count: entity.type_integration_count || 0});
+                    }
+                    return this.t('entity.explain_scope_all', {count: entity.type_count || 1});
+                },
+
+                // One compact line: what the integration supplies, what it became, how far that reaches.
                 resolutionExplain(entity) {
                     const _ = this.translationsReady;
                     const r = entity?.resolution;
                     if (!r) return '';
                     const original = r.input || entity.original_name || '';
                     const value = r.value || '';
-                    const key = r.matched_on?.value || '';
-                    const source = r.platform || entity.platform || '?';
+                    const source = r.platform || entity.platform || '';
+                    const map = original && original !== value
+                        ? this.t('entity.explain_map', {original, value})
+                        : '';
+                    const parts = [];
+                    if (map) parts.push(map);
                     switch (r.won_by) {
-                        case 'override': return this.t('entity.explain_override', {value});
-                        case 'rule:user': return this.t('entity.explain_rule_user', {value, key, original, source});
-                        case 'rule:system': return this.t('entity.explain_rule_system', {value, original, source});
-                        case 'legacy_parse': return this.t('entity.explain_legacy', {value});
-                        case 'device_class': return this.t('entity.explain_device_class', {value});
+                        case 'override': parts.push(this.t('entity.explain_scope_here')); break;
+                        case 'rule:user': parts.push(this.scopeReach(entity, r.matched_on)); break;
+                        case 'rule:system': parts.push(this.t('entity.explain_builtin')); break;
+                        case 'legacy_parse': parts.push(this.t('entity.explain_legacy')); break;
+                        case 'device_class': parts.push(this.t('entity.explain_device_class')); break;
                         default:
-                            return r.normalized
-                                ? this.t('entity.explain_normalized', {value, original, source})
-                                : this.t('entity.explain_original', {value, source});
+                            if (r.normalized) parts.push(this.t('entity.explain_spelling'));
+                            break;
                     }
+                    if (source) parts.push(this.t('entity.explain_source', {source}));
+                    return parts.join(' · ');
                 },
 
                 // The name the integration supplies, as the rule will key on it.
