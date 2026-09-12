@@ -10,8 +10,12 @@ import os
 
 from app_state import ha_translations, init_client, renamer_state
 from ha_websocket import HomeAssistantWebSocket
+from json_store import new_lock
 
 logger = logging.getLogger(__name__)
+
+# Reading the registries takes a socket and a second; only one caller does it.
+_loading = new_lock()
 
 
 async def sync_ha_language(ws) -> None:
@@ -54,6 +58,17 @@ async def ensure_registry_loaded() -> None:
         restructurer = renamer_state["restructurer"]
     if restructurer.entities:
         return
+    # Whoever arrives while the first caller is still reading waits here and
+    # then finds the entities already there; without this every one of them
+    # would open its own socket and read the whole registry again.
+    with _loading:
+        if restructurer.entities:
+            return
+        await _load_registry(restructurer)
+
+
+async def _load_registry(restructurer) -> None:
+    """Reads the registries once. Runs only under _loading."""
     token = os.getenv("HA_TOKEN", os.getenv("SUPERVISOR_TOKEN"))
     base_url = os.getenv("HA_URL")
     ws_url = (

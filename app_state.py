@@ -16,6 +16,7 @@ from entity_restructurer import EntityRestructurer
 from ha_client import HomeAssistantClient
 from ha_translations import HaTranslations
 from jobs import TERMINAL_STATES, JobStore, JobWorker
+from json_store import new_lock
 from naming_overrides import NamingOverrides
 from naming_rules import NamingRules
 from naming_templates import NamingTemplates
@@ -70,9 +71,22 @@ renamer_state["worker"] = JobWorker(renamer_state["job_store"])
 # (single, batch, device cascade) get recorded centrally.
 EntityRegistry.rename_log = renamer_state["rename_log"]
 
+# Several worker threads serve requests, so two of them can find a singleton
+# missing at the same moment and both build one; the loser's object is then
+# silently dropped along with whatever it had already fetched.
+_singletons = new_lock()
+# The bridge has its own lock because building it waits on the broker, and a
+# client lookup must not queue behind that.
+_bridge = new_lock()
+
 
 async def init_client() -> HomeAssistantClient:
-    """Initialize the Home Assistant client and restructurer."""
+    """The one Home Assistant client and restructurer, built on first use."""
+    with _singletons:
+        return _build_client()
+
+
+def _build_client() -> HomeAssistantClient:
     if not renamer_state["client"]:
         # In Add-on mode, use Supervisor API
         base_url = os.getenv("HA_URL", "http://supervisor/core")
@@ -102,10 +116,20 @@ async def ensure_mqtt_bridge():
         return renamer_state["mqtt_bridge"]
     if os.getenv("ENABLE_Z2M_BRIDGE", "true").lower() != "true":
         return None
-    if renamer_state.get("mqtt_bridge_tried"):
-        return None  # nur einmal versuchen (Connect ist teuer)
-    renamer_state["mqtt_bridge_tried"] = True
+    # Der Connect dauert bis zu zehn Sekunden. Ohne die Sperre kämen zwei
+    # Threads gleichzeitig am Versuchs-Merker vorbei und bauten beide eine
+    # Verbindung auf; der Wartende bekommt so stattdessen die fertige Brücke.
+    with _bridge:
+        if renamer_state.get("mqtt_bridge") is not None:
+            return renamer_state["mqtt_bridge"]
+        if renamer_state.get("mqtt_bridge_tried"):
+            return None  # nur einmal versuchen (Connect ist teuer)
+        renamer_state["mqtt_bridge_tried"] = True
+        return await _connect_mqtt_bridge()
 
+
+async def _connect_mqtt_bridge():
+    """Baut die Brücke auf. Läuft nur unter _bridge und nur ein einziges Mal."""
     try:
         from mqtt_credentials import get_mqtt_credentials
 
