@@ -203,3 +203,29 @@ def test_learning_for_one_model_leaves_the_other_models_alone(client):
     assert match["model"] == "MYGGBETT door/window sensor"
     assert response.get_json()["rule"]["affected"] == 1
     assert web_ui._type_key_model_counts(restructurer)[("name:tuer", "MYGGBETT door/window sensor")] == 1
+
+
+def test_backup_download_serves_the_file_from_before_the_migration(tmp_path, monkeypatch):
+    legacy = tmp_path / "user_type_mappings.json"
+    legacy.write_text('{"user_mappings": {"linkquality": "Verbindungsqualität"}}', encoding="utf-8")
+    rules = NamingRules(
+        str(tmp_path / "naming_rules.json"),
+        legacy_path=str(legacy),
+        device_class_keys=DEFAULT_SYSTEM_MAPPINGS["device_class"].keys(),
+        default_language="de",
+    )
+    monkeypatch.setitem(web_ui.renamer_state, "naming_rules", rules)
+    web_ui.app.config["TESTING"] = True
+    client = web_ui.app.test_client()
+
+    response = client.get("/api/naming/migration/backup")
+
+    assert response.status_code == 200
+    assert "Verbindungsqualität" in response.get_data(as_text=True)
+    assert "attachment" in response.headers["Content-Disposition"]
+
+
+def test_backup_download_without_a_migration_is_not_found(client, monkeypatch):
+    monkeypatch.setitem(web_ui.renamer_state["naming_rules"].data, "migration", None)
+
+    assert client.get("/api/naming/migration/backup").status_code == 404

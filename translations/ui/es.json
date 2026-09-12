@@ -374,10 +374,10 @@
     "original_label": "Original (nombre de la integración)",
     "original_placeholder": "Escribe y elige entre los nombres existentes…",
     "my_name_label": "Mi nombre",
-    "migration_title": "Migración de asignaciones",
-    "migration_summary": "{imported} reglas migradas, {merged} grafías fusionadas, {conflicts} conflictos.",
-    "migration_backup": "Copia de seguridad en:",
-    "migration_conflicts": "Conflictos: elige el valor deseado:",
+    "migration_title": "Traído de la versión anterior",
+    "migration_summary": "Habías nombrado {imported} tipos de entidad tú mismo. Esos nombres siguen vigentes y ahora son reglas arriba.",
+    "migration_backup": "Descargar el archivo anterior",
+    "migration_conflicts": "Un tipo, dos nombres distintos",
     "my_name_placeholder": "p. ej. Nivel de batería",
     "display_case": "Ortografía:",
     "display_case_hint": "Cómo se escriben los tipos sin regla. Nunca cambia la palabra, solo mayúsculas y minúsculas.",
@@ -386,7 +386,10 @@
     "display_case_off": "Tal como se entrega",
     "redundant": "igual al valor por defecto",
     "redundant_hint": "Esta regla produce lo que la ortografía o el valor por defecto ya dan. Se puede eliminar.",
-    "migration_skipped": "{count} asignaciones omitidas que solo repiten la ortografía."
+    "migration_skipped": "{count} de ellos se omitieron porque no habrían cambiado nada.",
+    "migration_merged": "{count} de ellos eran el mismo nombre escrito de otra forma y se unieron en una regla cada uno.",
+    "migration_conflicts_hint": "Habías nombrado el mismo tipo de dos maneras. Elige el nombre que debe aplicarse.",
+    "migration_backup_hint": "Tus nombres tal como estaban guardados antes del cambio."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

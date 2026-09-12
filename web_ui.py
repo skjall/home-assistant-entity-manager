@@ -3384,6 +3384,25 @@ def naming_originals():
     return jsonify({"originals": items})
 
 
+@app.route("/api/naming/migration/backup", methods=["GET"])
+def naming_migration_backup():
+    """Hand out the mappings file as it was before the migration."""
+    report = renamer_state["naming_rules"].migration_report or {}
+    backup = report.get("backup")
+    if not backup:
+        return jsonify({"error": "no migration backup"}), 404
+    name = "user_type_mappings.json"
+    if not os.path.isfile(os.path.join(backup, name)):
+        return jsonify({"error": "backup file is gone"}), 404
+    stamp = os.path.basename(os.path.normpath(backup))
+    return send_from_directory(
+        backup,
+        name,
+        as_attachment=True,
+        download_name=f"user_type_mappings_{stamp}.json",
+    )
+
+
 @app.route("/api/naming/migration", methods=["GET"])
 def naming_migration():
     return jsonify({"report": renamer_state["naming_rules"].migration_report})

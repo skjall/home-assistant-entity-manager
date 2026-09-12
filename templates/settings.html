@@ -629,13 +629,23 @@
                 </h2>
             </div>
             <div style="padding: 20px;" x-show="migration">
-                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 12px;"
-                   x-text="t('settings.migration_summary', {imported: migration?.imported || 0, merged: migration?.merged?.length || 0, conflicts: migration?.conflicts?.length || 0})"></p>
-                <p x-show="migration?.skipped?.length" style="color: #6b7280; font-size: 0.85rem;" x-text="t('settings.migration_skipped', {count: migration?.skipped?.length || 0})"></p>
-                <p style="color: #6b7280; font-size: 0.8rem; margin-bottom: 12px;" x-text="t('settings.migration_backup') + ' ' + (migration?.backup || '')"></p>
+                <p style="font-size: 0.9rem; margin-bottom: 8px;"
+                   x-text="t('settings.migration_summary', {imported: migration?.imported || 0})"></p>
+                <ul style="color: #6b7280; font-size: 0.85rem; margin: 0 0 12px 18px; list-style: disc;">
+                    <li x-show="migration?.merged?.length" x-text="t('settings.migration_merged', {count: migration?.merged?.length || 0})"></li>
+                    <li x-show="migration?.skipped?.length" x-text="t('settings.migration_skipped', {count: migration?.skipped?.length || 0})"></li>
+                </ul>
+                <p style="margin-bottom: 12px;">
+                    <a href="api/naming/migration/backup" class="btn btn-secondary btn-sm" :title="migration?.backup || ''">
+                        <i class="ri-download-2-line"></i>
+                        <span x-text="t('settings.migration_backup')">Download previous mappings</span>
+                    </a>
+                    <span style="color: #6b7280; font-size: 0.8rem; margin-left: 8px;" x-text="t('settings.migration_backup_hint')"></span>
+                </p>
                 <template x-if="migration?.conflicts?.length">
                     <div>
-                        <p style="font-weight: 600; margin-bottom: 8px;" x-text="t('settings.migration_conflicts')"></p>
+                        <p style="font-weight: 600; margin-bottom: 4px;" x-text="t('settings.migration_conflicts')"></p>
+                        <p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 8px;" x-text="t('settings.migration_conflicts_hint')"></p>
                         <template x-for="conflict in migration.conflicts" :key="conflict.rule_id">
                             <div class="conflict-row">
                                 <span class="type-key" x-text="conflict.key"></span>

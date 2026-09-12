@@ -354,10 +354,10 @@
     "original_label": "Original (integration’s name)",
     "original_placeholder": "Type and pick from the existing names…",
     "my_name_label": "My name",
-    "migration_title": "Mapping migration",
-    "migration_summary": "{imported} rules taken over, {merged} spellings merged, {conflicts} conflicts.",
-    "migration_backup": "Backup at:",
-    "migration_conflicts": "Conflicts — pick the value you want:",
+    "migration_title": "Carried over from the previous version",
+    "migration_summary": "You had named {imported} entity types yourself. Those names still apply and are now rules above.",
+    "migration_backup": "Download the old file",
+    "migration_conflicts": "One type, two different names",
     "my_name_placeholder": "e.g. Battery level",
     "display_case": "Spelling:",
     "display_case_hint": "How type names without a rule are spelled. Never changes the word, only its casing.",
@@ -366,7 +366,10 @@
     "display_case_off": "As supplied",
     "redundant": "same as default",
     "redundant_hint": "This rule yields what the spelling or the built-in default gives anyway. It can be deleted.",
-    "migration_skipped": "{count} mappings skipped that only repeat the spelling."
+    "migration_skipped": "{count} of them were left out because they would not have changed anything.",
+    "migration_merged": "{count} of them were the same name spelled differently and became one rule each.",
+    "migration_conflicts_hint": "You had named the same type in two ways. Pick the name that should apply.",
+    "migration_backup_hint": "Your names as they were stored before the change."
   },
   "type_mappings": {
     "light": "Light",

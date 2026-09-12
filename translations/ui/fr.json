@@ -374,10 +374,10 @@
     "original_label": "Original (nom de l’intégration)",
     "original_placeholder": "Saisissez et choisissez parmi les noms existants…",
     "my_name_label": "Mon nom",
-    "migration_title": "Migration des correspondances",
-    "migration_summary": "{imported} règles reprises, {merged} graphies fusionnées, {conflicts} conflits.",
-    "migration_backup": "Sauvegarde sous :",
-    "migration_conflicts": "Conflits — choisissez la valeur souhaitée :",
+    "migration_title": "Repris de la version précédente",
+    "migration_summary": "Vous aviez nommé {imported} types d’entités vous-même. Ces noms restent valables et sont désormais des règles ci-dessus.",
+    "migration_backup": "Télécharger l’ancien fichier",
+    "migration_conflicts": "Un type, deux noms différents",
     "my_name_placeholder": "p. ex. Niveau de batterie",
     "display_case": "Orthographe :",
     "display_case_hint": "Comment les types sans règle sont écrits. Ne change jamais le mot, seulement la casse.",
@@ -386,7 +386,10 @@
     "display_case_off": "Tel que fourni",
     "redundant": "identique à la valeur par défaut",
     "redundant_hint": "Cette règle donne ce que l’orthographe ou la valeur par défaut donnent déjà. Elle peut être supprimée.",
-    "migration_skipped": "{count} correspondances ignorées qui ne répètent que l’orthographe."
+    "migration_skipped": "{count} d’entre eux ont été écartés car ils n’auraient rien changé.",
+    "migration_merged": "{count} d’entre eux étaient le même nom écrit autrement et ont été réunis en une règle chacun.",
+    "migration_conflicts_hint": "Vous aviez nommé le même type de deux façons. Choisissez le nom qui doit s’appliquer.",
+    "migration_backup_hint": "Vos noms tels qu’ils étaient enregistrés avant le changement."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

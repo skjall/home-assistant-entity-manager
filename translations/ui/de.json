@@ -354,10 +354,10 @@
     "original_label": "Original (Name der Integration)",
     "original_placeholder": "Tippen und aus den vorhandenen Namen wählen …",
     "my_name_label": "Mein Name",
-    "migration_title": "Migration der Zuordnungen",
-    "migration_summary": "{imported} Regeln übernommen, {merged} Schreibweisen zusammengeführt, {conflicts} Konflikte.",
-    "migration_backup": "Sicherung unter:",
-    "migration_conflicts": "Konflikte – bitte den gewünschten Wert wählen:",
+    "migration_title": "Aus der Vorversion übernommen",
+    "migration_summary": "Du hattest {imported} Entitätstypen selbst benannt. Diese Namen gelten weiter und stehen jetzt oben als Regeln.",
+    "migration_backup": "Alte Datei herunterladen",
+    "migration_conflicts": "Zweimal derselbe Typ, zwei verschiedene Namen",
     "my_name_placeholder": "z. B. Batterieladung",
     "display_case": "Schreibweise:",
     "display_case_hint": "Wie Typnamen ohne Regel geschrieben werden. Ändert nie das Wort, nur Groß-/Kleinschreibung.",
@@ -366,7 +366,10 @@
     "display_case_off": "Wie geliefert",
     "redundant": "wie Standard",
     "redundant_hint": "Diese Regel liefert, was Schreibweise oder mitgelieferter Standard ohnehin ergeben. Sie kann gelöscht werden.",
-    "migration_skipped": "{count} Zuordnungen übersprungen, die nur die Schreibweise wiederholen."
+    "migration_skipped": "{count} davon wurden weggelassen, weil sie nichts geändert hätten.",
+    "migration_merged": "{count} davon waren derselbe Name in verschiedener Schreibweise und wurden zu je einer Regel zusammengefasst.",
+    "migration_conflicts_hint": "Du hattest denselben Typ unterschiedlich benannt. Wähle den Namen, der gelten soll.",
+    "migration_backup_hint": "Deine Namen, so wie sie vor der Umstellung gespeichert waren."
   },
   "type_mappings": {
     "light": "Licht",
