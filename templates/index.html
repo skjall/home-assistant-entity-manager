@@ -1474,7 +1474,8 @@
             max-width: 8rem;
         }
         .rule-link {
-            margin-left: 6px;
+            margin-left: 4px;
+            vertical-align: middle;
             color: #2563eb;
             text-decoration: none;
             white-space: nowrap;
@@ -2170,7 +2171,10 @@
                                             <span x-text="resolutionExplain(entity)"></span>
                                             <a x-show="entity.resolution?.rule_id"
                                                :href="'settings?rule=' + entity.resolution?.rule_id"
-                                               class="rule-link" x-text="t('entity.open_rule')"></a>
+                                               class="rule-link" :title="t('entity.open_rule')"
+                                               :aria-label="t('entity.open_rule')">
+                                                <i class="ri-external-link-line"></i>
+                                            </a>
                                         </p>
                                         <div class="scope-bar" x-show="typeEdited(entity)">
                                             <span class="scope-label" x-text="t('entity.scope_label', {name: typeOriginal(entity)})"></span>
