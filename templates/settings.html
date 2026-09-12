@@ -849,8 +849,9 @@
                                 </span>
                             </td>
                             <td>
+                                <!-- Typed, learned or carried over: every rule is the user's. -->
                                 <span x-show="row.isRule" class="user-badge">
-                                    <i class="ri-user-line"></i> <span x-text="t('settings.source_' + (row.source || 'user'))"></span>
+                                    <i class="ri-user-line"></i> <span x-text="t('settings.source_user')"></span>
                                 </span>
                                 <span x-show="!row.isRule" class="system-badge">
                                     <i class="ri-settings-3-line"></i> <span x-text="t('settings.source_system')">Built-in</span>
@@ -885,44 +886,28 @@
             </div>
         </div>
 
-        <!-- Migration report -->
-        <div class="mapping-section" style="margin-top: 24px;" x-show="migration && section === 'rules'">
+        <!-- Names that came over with two spellings and need a decision -->
+        <div class="mapping-section" style="margin-top: 24px;"
+             x-show="section === 'rules' && migration?.conflicts?.length">
             <div class="section-header">
                 <h2>
-                    <i class="ri-history-line"></i>
-                    <span x-text="t('settings.migration_title')">Migration</span>
+                    <i class="ri-git-branch-line"></i>
+                    <span x-text="t('settings.migration_conflicts')">Two names for one type</span>
                 </h2>
             </div>
-            <div style="padding: 20px;" x-show="migration">
-                <p style="font-size: 0.9rem; margin-bottom: 8px;"
-                   x-text="t('settings.migration_summary', {imported: migration?.imported || 0})"></p>
-                <ul style="color: #6b7280; font-size: 0.85rem; margin: 0 0 12px 18px; list-style: disc;">
-                    <li x-show="migration?.merged?.length" x-text="t('settings.migration_merged', {count: migration?.merged?.length || 0})"></li>
-                    <li x-show="migration?.skipped?.length" x-text="t('settings.migration_skipped', {count: migration?.skipped?.length || 0})"></li>
-                </ul>
-                <p style="margin-bottom: 12px;">
-                    <a href="api/naming/migration/backup" class="btn btn-secondary btn-sm" :title="migration?.backup || ''">
-                        <i class="ri-download-2-line"></i>
-                        <span x-text="t('settings.migration_backup')">Download previous mappings</span>
-                    </a>
-                    <span style="color: #6b7280; font-size: 0.8rem; margin-left: 8px;" x-text="t('settings.migration_backup_hint')"></span>
-                </p>
-                <template x-if="migration?.conflicts?.length">
-                    <div>
-                        <p style="font-weight: 600; margin-bottom: 4px;" x-text="t('settings.migration_conflicts')"></p>
-                        <p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 8px;" x-text="t('settings.migration_conflicts_hint')"></p>
-                        <template x-for="conflict in migration.conflicts" :key="conflict.rule_id">
-                            <div class="conflict-row">
-                                <span class="type-key" x-text="conflict.key"></span>
-                                <template x-for="value in conflict.values" :key="value">
-                                    <button class="chip-btn"
-                                            :class="conflict.chosen === value ? 'chip-active' : ''"
-                                            @click="resolveConflict(conflict, value)"
-                                            x-text="value"></button>
-                                </template>
-                                <span x-show="conflict.resolved" class="text-green-600 text-xs"><i class="ri-check-line"></i></span>
-                            </div>
+            <div style="padding: 20px;">
+                <p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 8px;"
+                   x-text="t('settings.migration_conflicts_hint')"></p>
+                <template x-for="conflict in migration?.conflicts || []" :key="conflict.rule_id">
+                    <div class="conflict-row">
+                        <span class="type-key" x-text="conflict.key"></span>
+                        <template x-for="value in conflict.values" :key="value">
+                            <button class="chip-btn"
+                                    :class="conflict.chosen === value ? 'chip-active' : ''"
+                                    @click="resolveConflict(conflict, value)"
+                                    x-text="value"></button>
                         </template>
+                        <span x-show="conflict.resolved" class="text-green-600 text-xs"><i class="ri-check-line"></i></span>
                     </div>
                 </template>
             </div>
