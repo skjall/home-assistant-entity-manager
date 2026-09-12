@@ -44,6 +44,10 @@ logger = logging.getLogger(__name__)
 # where a device has only one: "Identifizieren (1)".
 _ENDPOINT_NUMBER = re.compile(r"^(.*\S)\s*\((\d+)\)$")
 
+# Some integrations put what tells two entities of a device apart in brackets:
+# devolo names one sensor per peer adapter, "PLC uplink PHY rate (PWL-052-100)".
+_BRACKETED = re.compile(r"^(.*\S)\s*\(([^()]+)\)$")
+
 _IDENTIFIER = re.compile(
     r"^(?:"
     r"\d{1,3}(?:\.\d{1,3}){3}"  # 10.2.10.103
@@ -525,6 +529,44 @@ class EntityRestructurer:
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
 
+    def _with_discriminator(
+        self,
+        resolution: Dict[str, Any],
+        entity_id: str,
+        registry: Dict[str, Any],
+        prefixes: Tuple[str, ...],
+    ) -> Dict[str, Any]:
+        """Keep a bracket that is the only thing telling two names apart.
+
+        A rule or a translation is found by the type, which several entities of
+        a device share: all three of devolo's uplink sensors become "PLC-Uplink
+        PHY-Rate". What the integration put in brackets says which peer each one
+        measures, and a counted-up name would not.
+        """
+        match = _BRACKETED.match(registry.get("original_name") or "")
+        device_id = registry.get("device_id")
+        if not match or match.group(2).isdigit() or not device_id:
+            return resolution
+        discriminator = f"({match.group(2)})"
+        if resolution["value"].endswith(discriminator):
+            return resolution
+        for other_id, other in self.entities.items():
+            if other_id == entity_id or other.get("device_id") != device_id:
+                continue
+            other_match = _BRACKETED.match(other.get("original_name") or "")
+            if not other_match or other_match.group(2) == match.group(2):
+                continue
+            other_name = self._without_device_prefix(other.get("original_name") or "", prefixes)
+            if (
+                not other_name
+                or self._resolve_supplied_name(other_name, other_id, other)["value"] != resolution["value"]
+            ):
+                continue
+            resolution = dict(resolution)
+            resolution["value"] = f"{resolution['value']} {discriminator}"
+            return resolution
+        return resolution
+
     def _split_endpoint_number(self, name: str, registry: Dict[str, Any]) -> Tuple[str, str]:
         """Separate a Matter endpoint number from the name it is attached to.
 
@@ -704,7 +746,7 @@ class EntityRestructurer:
             if keep_number:
                 resolution = dict(resolution)
                 resolution["value"] = f"{resolution['value']} {keep_number}".strip()
-            return resolution
+            return self._with_discriminator(resolution, entity_id, registry, prefixes)
 
         # ``name`` fields may hold a name this add-on wrote on a previous run.
         # Unwind the entity template before reusing them, otherwise each run
