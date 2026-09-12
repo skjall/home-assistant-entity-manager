@@ -3147,6 +3147,8 @@ def _device_snapshot(restructurer, device_id: str) -> dict:
     return {
         "device_id": device_id,
         "name": d.get("name_by_user") or d.get("name") or "",
+        # Der Bereich gehört zur Identität, die beim Ersetzen übergeht.
+        "area_id": d.get("area_id"),
         "integrations": extract_integrations(d),
         "config_entries": d.get("config_entries", []),
         "identifiers": d.get("identifiers", []),

@@ -31,6 +31,7 @@ STATE_PROPOSED = "PROPOSED"
 STATE_CONFIRMED = "CONFIRMED"
 STATE_FREEING_OLD_NAME = "FREEING_OLD_NAME"
 STATE_RENAMING_NEW_DEVICE = "RENAMING_NEW_DEVICE"
+STATE_ASSIGNING_AREA = "ASSIGNING_AREA"
 STATE_RENAMING_ENTITIES = "RENAMING_ENTITIES"
 STATE_UPDATING_DEPENDENCIES = "UPDATING_DEPENDENCIES"
 STATE_DISPOSING_OLD_DEVICE = "DISPOSING_OLD_DEVICE"
@@ -43,6 +44,9 @@ STATE_ABORTED = "ABORTED"
 EXECUTION_SEQUENCE = [
     STATE_FREEING_OLD_NAME,
     STATE_RENAMING_NEW_DEVICE,
+    # The area comes right after the name: both make up the identity the new
+    # device takes over, and the entity names rendered later read the area.
+    STATE_ASSIGNING_AREA,
     STATE_RENAMING_ENTITIES,
     STATE_UPDATING_DEPENDENCIES,
     STATE_DISPOSING_OLD_DEVICE,
@@ -247,6 +251,7 @@ class SwapExecutor:
         handlers = {
             STATE_FREEING_OLD_NAME: self._free_old_name,
             STATE_RENAMING_NEW_DEVICE: self._rename_new_device,
+            STATE_ASSIGNING_AREA: self._assign_area,
             STATE_RENAMING_ENTITIES: self._rename_entities,
             STATE_UPDATING_DEPENDENCIES: self._update_dependencies,
             STATE_DISPOSING_OLD_DEVICE: self._dispose_old_device,
@@ -327,6 +332,32 @@ class SwapExecutor:
                 self._log(job, STATE_RENAMING_NEW_DEVICE, f"Z2M name sync error: {e}")
 
         # Struktur neu laden, damit generate_new_entity_id den neuen Device-Namen kennt.
+        if hasattr(self.restructurer, "load_structure"):
+            await self.restructurer.load_structure(self.entity_registry.ws)
+
+    async def _assign_area(self, job: Dict[str, Any]) -> None:
+        """Das neue Gerät in den Bereich des alten stellen.
+
+        Der Bereich gehört zur Identität, die das neue Gerät übernimmt: dort
+        hängen Bereichs-Automationen, Sprachsteuerung und die Namensgebung
+        daran. Ohne diesen Schritt bleibt das neue Gerät dort, wo die
+        Integration es abgelegt hat - meist nirgends.
+
+        Hatte das alte Gerät keinen Bereich, bleibt das neue, wo es ist: einen
+        gesetzten Bereich zu entfernen nähme Information weg, statt welche zu
+        übertragen.
+        """
+        target_area = (job.get("old_device") or {}).get("area_id")
+        new = job["new_device"]
+        if not target_area:
+            self._log(job, STATE_ASSIGNING_AREA, "Old device had no area, leaving the new one where it is")
+            return
+
+        await self.device_registry.assign_area(new["device_id"], target_area)
+        job["assigned_area_id"] = target_area
+        self._log(job, STATE_ASSIGNING_AREA, f"New device assigned to area '{target_area}'")
+
+        # Struktur neu laden, damit die Entity-Namen den Bereich kennen.
         if hasattr(self.restructurer, "load_structure"):
             await self.restructurer.load_structure(self.entity_registry.ws)
 
