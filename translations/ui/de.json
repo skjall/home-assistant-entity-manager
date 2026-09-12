@@ -318,7 +318,7 @@
     "save_templates": "Vorlagen speichern",
     "templates_saved": "Namensvorlagen gespeichert",
     "api_access": "Externer API-Zugriff",
-    "api_access_hint": "Erzeuge einen Token, damit ein externes Tool das Umbenennungs-Log über einen freigegebenen Port lesen kann. Der Token wird nur einmal angezeigt und ausschließlich als Hash gespeichert. Ohne Token bleibt die API nur über Ingress erreichbar.",
+    "api_access_hint": "Ein Token erlaubt einem externen Werkzeug, das Umbenennungs-Log über einen freigegebenen Port zu lesen. Er wird nur einmal angezeigt und ausschließlich als Hash gespeichert. Wer antworten darf, entscheidet die Add-on-Option „external_access“ — sie weist standardmäßig jeden ab.",
     "api_token_status_none": "Kein Token konfiguriert",
     "api_token_status_active": "Token aktiv",
     "api_token_created": "Erstellt",
@@ -388,7 +388,18 @@
     "naming_preview_more": "… {count} weitere, Suche eingrenzen",
     "cleanup_hint": "{count} Regeln ändern nichts: entweder passt keine Entität dazu, oder sie sagen dasselbe wie der Standard.",
     "cleanup_button": "{count} Regeln löschen",
-    "cleanup_confirm": "{count} Regeln endgültig löschen?"
+    "cleanup_confirm": "{count} Regeln endgültig löschen?",
+    "network_title": "Erreichbarkeit",
+    "network_policy": "Externer Zugriff",
+    "network_policy_off": "Aus — nur über Home Assistant",
+    "network_policy_lan": "Nur aus dem lokalen Netz",
+    "network_policy_any": "Von überall",
+    "network_policy_hint": "Zu ändern in den Add-on-Einstellungen unter Konfiguration, Feld „external_access“.",
+    "network_port_closed": "Der Port ist nicht freigegeben. Das Add-on ist nur über Home Assistant erreichbar.",
+    "network_port_open": "Port {port} ist als Host-Port {host} freigegeben.",
+    "network_warning_any": "Der Port ist freigegeben und es wird von überall geantwortet. Wenn Home Assistant aus dem Internet erreichbar ist, gilt das auch für diesen Port. Nur der Token schützt ihn dann noch.",
+    "network_warning_no_token": "Der Port ist freigegeben, aber es gibt keinen Token. Es wird niemand bedient — erzeuge einen Token, wenn der Zugriff gewollt ist.",
+    "network_ui_note": "Über den freigegebenen Port läuft nur die API mit Token. Die Oberfläche gibt es ausschließlich über Home Assistant."
   },
   "type_mappings": {
     "light": "Licht",

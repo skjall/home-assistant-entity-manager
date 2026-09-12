@@ -338,7 +338,7 @@
     "save_templates": "Guardar plantillas",
     "templates_saved": "Plantillas de nombres guardadas",
     "api_access": "Acceso API externo",
-    "api_access_hint": "Genera un token para que una herramienta externa pueda leer el registro de renombrados a través de un puerto asignado. El token se muestra una sola vez y se almacena únicamente como hash. Sin token, la API solo es accesible mediante Ingress.",
+    "api_access_hint": "Un token permite que una herramienta externa lea el registro de cambios de nombre por un puerto publicado. Se muestra una sola vez y se guarda solo como hash. Quién recibe respuesta lo decide la opción «external_access» del complemento, que por defecto rechaza a todos.",
     "api_token_status_none": "Ningún token configurado",
     "api_token_status_active": "Token activo",
     "api_token_created": "Creado",
@@ -408,7 +408,18 @@
     "naming_preview_more": "… {count} más, acota la búsqueda",
     "cleanup_hint": "{count} reglas no cambian nada: o ninguna entidad coincide, o dicen lo mismo que el estándar.",
     "cleanup_button": "Eliminar {count} reglas",
-    "cleanup_confirm": "¿Eliminar definitivamente {count} reglas?"
+    "cleanup_confirm": "¿Eliminar definitivamente {count} reglas?",
+    "network_title": "Accesibilidad",
+    "network_policy": "Acceso externo",
+    "network_policy_off": "Desactivado: solo a través de Home Assistant",
+    "network_policy_lan": "Solo desde la red local",
+    "network_policy_any": "Desde cualquier lugar",
+    "network_policy_hint": "Se cambia en la configuración del complemento, campo «external_access».",
+    "network_port_closed": "El puerto no está publicado. El complemento solo es accesible a través de Home Assistant.",
+    "network_port_open": "El puerto {port} está publicado como puerto {host} del anfitrión.",
+    "network_warning_any": "El puerto está publicado y se responde a cualquiera. Si Home Assistant es accesible desde internet, este puerto también lo es, y solo el token lo protege.",
+    "network_warning_no_token": "El puerto está publicado pero no hay ningún token, así que no se atiende a nadie. Genera un token si quieres ese acceso.",
+    "network_ui_note": "Por el puerto publicado solo va la API con token. La interfaz se sirve únicamente a través de Home Assistant."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

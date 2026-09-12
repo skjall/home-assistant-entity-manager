@@ -1,9 +1,12 @@
-"""Tests for the /api/* access gate.
+"""Tests for the access gate in front of every route.
 
-Ingress traffic (real peer in the Supervisor network) is trusted; direct
-(non-Ingress) access is limited to GET /api/rename_log with a valid generated
-token. The real peer is simulated via REMOTE_ADDR, which the _CapturePeerIP
-middleware copies into the per-request peer address used by the gate.
+Home Assistant authenticates the user before it proxies a request through
+Ingress, so Ingress traffic is trusted. A direct request over a published port
+is answered only where the external_access setting allows that caller, and the
+API beyond the read-only rename log stays Ingress-only either way.
+
+The real peer is simulated via REMOTE_ADDR, which the _CapturePeerIP middleware
+copies into the per-request peer address the gate reads.
 """
 
 import pytest
@@ -12,6 +15,7 @@ import web_ui
 
 INGRESS_IP = "172.30.32.2"  # inside the Supervisor network
 DIRECT_IP = "192.168.1.50"  # a LAN/host address (not Ingress)
+INTERNET_IP = "203.0.113.7"  # routable from outside
 
 
 @pytest.fixture
@@ -24,7 +28,8 @@ def store():
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.delenv("EXTERNAL_ACCESS", raising=False)
     web_ui.app.config["TESTING"] = True
     return web_ui.app.test_client()
 
@@ -35,17 +40,51 @@ def _req(client, path, ip, token=None, method="GET"):
 
 
 # --------------------------------------------------------------------------- #
-# Gate inactive when no token exists (default behaviour preserved)
+# The setting decides whether a direct caller is answered at all
 # --------------------------------------------------------------------------- #
 
 
-def test_no_token_allows_direct_lookup(client, store):
-    resp = _req(client, "/api/rename_log?entity_id=light.x", DIRECT_IP)
+def test_by_default_a_direct_caller_gets_nothing(client, store):
+    assert _req(client, "/api/rename_log?entity_id=light.x", DIRECT_IP).status_code == 403
+    assert _req(client, "/", DIRECT_IP).status_code == 403
+
+
+def test_a_token_does_not_open_the_port_by_itself(client, store):
+    token = store.generate()
+
+    resp = _req(client, "/api/rename_log?entity_id=light.x", DIRECT_IP, token=token)
+
+    assert resp.status_code == 403
+
+
+def test_the_local_setting_answers_the_home_network_only(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
+    token = store.generate()
+
+    assert _req(client, "/api/rename_log?entity_id=light.x", DIRECT_IP, token=token).status_code == 200
+    assert _req(client, "/api/rename_log?entity_id=light.x", INTERNET_IP, token=token).status_code == 403
+
+
+def test_the_open_setting_answers_everyone(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "any")
+    token = store.generate()
+
+    resp = _req(client, "/api/rename_log?entity_id=light.x", INTERNET_IP, token=token)
+
     assert resp.status_code == 200
 
 
+def test_the_web_ui_is_never_served_over_the_port(client, store, monkeypatch):
+    """The port is for scripts holding a token, not for the interface."""
+    monkeypatch.setenv("EXTERNAL_ACCESS", "any")
+    token = store.generate()
+
+    assert _req(client, "/", DIRECT_IP, token=token).status_code == 403
+    assert _req(client, "/settings/naming", DIRECT_IP, token=token).status_code == 403
+
+
 # --------------------------------------------------------------------------- #
-# Token exists: Ingress is trusted
+# Ingress is trusted
 # --------------------------------------------------------------------------- #
 
 
@@ -68,48 +107,76 @@ def test_ingress_token_management_allowed(client, store):
 
 
 # --------------------------------------------------------------------------- #
-# Token exists: direct access is restricted to the read-only lookup
+# What the setting lets in still has to hold a token for the API
 # --------------------------------------------------------------------------- #
 
 
-def test_direct_lookup_with_valid_token_allowed(client, store):
+def test_direct_lookup_with_valid_token_allowed(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
     token = store.generate()
+
     resp = _req(client, "/api/rename_log?entity_id=light.x", DIRECT_IP, token=token)
+
     assert resp.status_code == 200
 
 
-def test_direct_lookup_with_wrong_token_rejected(client, store):
+def test_direct_lookup_with_wrong_token_rejected(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
     store.generate()
+
     resp = _req(client, "/api/rename_log?entity_id=light.x", DIRECT_IP, token="em_wrong")
+
     assert resp.status_code == 401
 
 
-def test_direct_lookup_without_token_rejected(client, store):
+def test_direct_lookup_without_token_rejected(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
     store.generate()
+
     resp = _req(client, "/api/rename_log?entity_id=light.x", DIRECT_IP)
+
     assert resp.status_code == 401
 
 
-def test_direct_wrong_method_on_lookup_forbidden(client, store):
+def test_direct_wrong_method_on_lookup_forbidden(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
     token = store.generate()
+
     resp = _req(client, "/api/rename_log", DIRECT_IP, token=token, method="POST")
+
     assert resp.status_code == 403
 
 
-def test_direct_write_path_forbidden_even_with_token(client, store):
+def test_direct_write_path_forbidden_even_with_token(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
     token = store.generate()
+
     resp = _req(client, "/api/rename_entity", DIRECT_IP, token=token, method="POST")
+
     assert resp.status_code == 403
 
 
-def test_direct_token_management_forbidden_even_with_token(client, store):
-    # Generating/revoking tokens must stay Ingress-only.
+def test_direct_token_management_forbidden_even_with_token(client, store, monkeypatch):
+    """Generating and revoking tokens stays Ingress-only."""
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
     token = store.generate()
+
     resp = _req(client, "/api/api_token", DIRECT_IP, token=token, method="POST")
+
     assert resp.status_code == 403
 
 
-def test_non_api_path_not_gated(client, store):
-    store.generate()
-    resp = _req(client, "/", DIRECT_IP)
-    assert resp.status_code != 403
+def test_a_forwarded_header_cannot_claim_to_be_ingress(client, store):
+    resp = _req(
+        client,
+        "/api/rename_log?entity_id=light.x",
+        INTERNET_IP,
+    )
+    assert resp.status_code == 403
+
+    resp = client.get(
+        "/api/rename_log?entity_id=light.x",
+        headers={"X-Forwarded-For": INGRESS_IP, "X-Ingress-Path": "/api/hassio_ingress/x"},
+        environ_overrides={"REMOTE_ADDR": INTERNET_IP},
+    )
+    assert resp.status_code == 403

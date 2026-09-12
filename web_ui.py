@@ -6,7 +6,6 @@ Web UI für Home Assistant Entity Renamer - Add-on Version
 import asyncio
 from datetime import datetime, timezone
 import html
-import ipaddress
 import json
 import logging
 import os
@@ -15,6 +14,7 @@ import re
 import time
 from typing import Any, Optional
 import unicodedata
+import urllib.request
 import uuid
 
 import aiohttp
@@ -30,6 +30,7 @@ import device_swap
 from device_swap import SwapExecutor, SwapJobStore, propose_mapping
 from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
+import external_access
 from ha_client import HomeAssistantClient
 from ha_translations import HaTranslations
 from ha_websocket import HomeAssistantWebSocket
@@ -75,37 +76,31 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.wsgi_app = _CapturePeerIP(app.wsgi_app)
 CORS(app)
 
-# External API access is guarded by a generated token (see ApiTokenStore): it is
-# created on demand from the web UI, shown once, and stored only as a hash. When
-# a token exists the add-on's HTTP port may be exposed for external, read-only
-# access to the rename audit log:
-#   - Ingress requests (from the Supervisor network) pass through unchanged, so
-#     the web UI keeps working without any token.
-#   - Direct (non-Ingress) requests are rejected unless they target
-#     GET /api/rename_log with a valid bearer token. Every other /api/* route,
-#     including token management and the write endpoints, stays Ingress-exclusive.
-# With no token generated the gate is inactive; the port is closed by default,
-# so /api/* is only reachable via Ingress anyway.
+# Home Assistant authenticates the user before it proxies a request through
+# Ingress, so an Ingress request is trusted. Everything that reaches the add-on
+# past Ingress does so over a published port, and who may be answered there is
+# the external_access setting (see external_access.py), which refuses by default.
+#
+# Within what the setting allows, a generated token (see ApiTokenStore) opens
+# one read-only route for scripts: GET /api/rename_log. The token is created on
+# demand from the web UI, shown once and stored only as a hash.
 
-# HA Supervisor's internal Docker network (hassio). Ingress proxies add-on
-# requests from this range; direct host/LAN access originates elsewhere.
-_SUPERVISOR_NETWORK = ipaddress.ip_network("172.30.32.0/23")
-
-# /api/* paths reachable with a token over a directly-exposed port. Read-only.
+# /api/* paths a token opens over a directly-exposed port. Read-only.
 _EXTERNAL_API_PATHS = frozenset({"/api/rename_log"})
 
 
-def _is_ingress_request() -> bool:
-    """Return True when the request's real TCP peer is in the Supervisor network.
+def _peer_address() -> str:
+    """The request's real TCP peer, captured before ProxyFix.
 
-    Uses the address captured before ProxyFix, so it cannot be spoofed by a
-    client setting forwarded/ingress headers on a direct connection.
+    Reading it from the environment rather than from a forwarded header means a
+    client cannot claim to be Ingress by setting one on a direct connection.
     """
-    peer = request.environ.get("entity_manager.peer_addr", "")
-    try:
-        return ipaddress.ip_address(peer) in _SUPERVISOR_NETWORK
-    except ValueError:
-        return False
+    return request.environ.get("entity_manager.peer_addr", "")
+
+
+def _is_ingress_request() -> bool:
+    """Return True when the request came through the Supervisor's Ingress."""
+    return external_access.is_supervisor(_peer_address())
 
 
 def _provided_token() -> str:
@@ -118,24 +113,23 @@ def _provided_token() -> str:
 
 @app.before_request
 def _enforce_api_access() -> None:
-    """Gate /api/* routes when an API token is configured.
+    """Refuse what should not be reachable past Home Assistant's Ingress.
 
-    Ingress requests are trusted (HA already authenticated the user). Direct
-    requests are limited to the read-only rename-log lookup with a valid token;
-    everything else is refused.
+    An Ingress request passes untouched, because Home Assistant has already
+    authenticated the user. A direct request over a published port has no such
+    proof behind it, so three things must hold: the external_access setting has
+    to allow that caller, the route has to be one of the few meant for callers
+    outside, and a valid token has to be presented. The web UI is not among
+    them: it is served through Ingress only.
     """
-    store = renamer_state["api_token_store"]
-    if not store.exists():
-        return None
-    path = request.path
-    if not path.startswith("/api/"):
-        return None
     if _is_ingress_request():
         return None
-    # Direct (non-Ingress) access from here on.
-    if path not in _EXTERNAL_API_PATHS or request.method != "GET":
+    if not external_access.allows(_peer_address()):
         abort(403)
-    if not store.verify(_provided_token()):
+    if request.path not in _EXTERNAL_API_PATHS or request.method != "GET":
+        abort(403)
+    store = renamer_state["api_token_store"]
+    if not store.exists() or not store.verify(_provided_token()):
         abort(401)
     return None
 
@@ -2302,6 +2296,43 @@ def rename_log_lookup():
 
     rename_log = renamer_state["rename_log"]
     return jsonify(rename_log.search(entity_id))
+
+
+def _published_ports() -> dict:
+    """Ask the Supervisor which of this add-on's ports are published on the host.
+
+    A container cannot see its own port mapping; the Supervisor knows it. When
+    the question cannot be answered the page simply says nothing about the port.
+    """
+    token = os.getenv("SUPERVISOR_TOKEN")
+    if not token:
+        return {}
+    ask = urllib.request.Request("http://supervisor/addons/self/info", headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(ask, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError) as error:
+        logger.warning("Could not ask the Supervisor about the network: %s", error)
+        return {}
+    network = (data.get("data") or {}).get("network") or {}
+    return {port: host for port, host in network.items() if host}
+
+
+@app.route("/api/network", methods=["GET"])
+def network_status():
+    """How the add-on can be reached: the setting and what is actually published.
+
+    Both halves matter and they live in different menus: publishing a port is
+    done in the add-on's network settings, and who may be answered there is this
+    add-on's own setting. Seeing them together is what makes a mistake visible.
+    """
+    return jsonify(
+        {
+            "policy": external_access.policy(),
+            "policies": list(external_access.POLICIES),
+            "published": _published_ports(),
+        }
+    )
 
 
 @app.route("/api/api_token", methods=["GET"])

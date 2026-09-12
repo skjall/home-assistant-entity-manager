@@ -338,7 +338,7 @@
     "save_templates": "Enregistrer les modèles",
     "templates_saved": "Modèles de noms enregistrés",
     "api_access": "Accès API externe",
-    "api_access_hint": "Générez un jeton pour qu'un outil externe puisse lire le journal de renommage via un port exposé. Le jeton n'est affiché qu'une seule fois et n'est stocké que sous forme de hachage. Sans jeton, l'API reste accessible uniquement via Ingress.",
+    "api_access_hint": "Un jeton permet à un outil externe de lire le journal des renommages via un port publié. Il n’est affiché qu’une fois et n’est conservé que sous forme de hachage. Qui obtient une réponse dépend de l’option « external_access » du module complémentaire, qui refuse tout le monde par défaut.",
     "api_token_status_none": "Aucun jeton configuré",
     "api_token_status_active": "Jeton actif",
     "api_token_created": "Créé",
@@ -408,7 +408,18 @@
     "naming_preview_more": "… {count} de plus, affinez la recherche",
     "cleanup_hint": "{count} règles ne changent rien : soit aucune entité ne correspond, soit elles répètent le standard.",
     "cleanup_button": "Supprimer {count} règles",
-    "cleanup_confirm": "Supprimer définitivement {count} règles ?"
+    "cleanup_confirm": "Supprimer définitivement {count} règles ?",
+    "network_title": "Accessibilité",
+    "network_policy": "Accès externe",
+    "network_policy_off": "Désactivé — uniquement via Home Assistant",
+    "network_policy_lan": "Réseau local uniquement",
+    "network_policy_any": "Depuis partout",
+    "network_policy_hint": "À changer dans la configuration du module, champ « external_access ».",
+    "network_port_closed": "Le port n’est pas publié. Le module n’est accessible que via Home Assistant.",
+    "network_port_open": "Le port {port} est publié sur le port {host} de l’hôte.",
+    "network_warning_any": "Le port est publié et tout le monde obtient une réponse. Si Home Assistant est joignable depuis internet, ce port l’est aussi, et seul le jeton le protège.",
+    "network_warning_no_token": "Le port est publié mais aucun jeton n’existe, personne n’est donc servi. Créez un jeton si cet accès est souhaité.",
+    "network_ui_note": "Le port publié ne porte que l’API avec jeton. L’interface n’est servie que via Home Assistant."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",
