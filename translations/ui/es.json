@@ -415,12 +415,13 @@
     "access_state_lan": "Accesible desde la red local",
     "access_state_any": "Accesible desde cualquier lugar",
     "access_no_port": "No hay ningún puerto publicado.",
-    "access_port_note": "Puerto {host} · por ahí va solo la API, nunca la interfaz",
     "access_token": "Token",
     "access_token_needed": "Sin token la API no responde a nadie.",
     "access_token_meta": "Creado {created} · último uso {used}",
     "access_mcp": "Asistentes (MCP)",
-    "access_change_note": "Se cambia en los ajustes del add-on, en Configuración."
+    "access_change_note": "Se cambia en los ajustes del add-on, en Configuración.",
+    "access_address": "Dirección",
+    "access_only_address": "Solo responden las direcciones de abajo. La interfaz no está entre ellas."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

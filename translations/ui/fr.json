@@ -415,12 +415,13 @@
     "access_state_lan": "Accessible depuis le réseau local",
     "access_state_any": "Accessible depuis partout",
     "access_no_port": "Aucun port n'est publié.",
-    "access_port_note": "Port {host} · seule l'API y passe, jamais l'interface",
     "access_token": "Jeton",
     "access_token_needed": "Sans jeton, l'API ne répond à personne.",
     "access_token_meta": "Créé le {created} · dernière utilisation {used}",
     "access_mcp": "Assistants (MCP)",
-    "access_change_note": "À modifier dans les réglages de l'add-on, onglet Configuration."
+    "access_change_note": "À modifier dans les réglages de l'add-on, onglet Configuration.",
+    "access_address": "Adresse",
+    "access_only_address": "Seules les adresses ci-dessous répondent. L'interface n'en fait pas partie."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

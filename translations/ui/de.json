@@ -395,12 +395,13 @@
     "access_state_lan": "Erreichbar aus dem lokalen Netz",
     "access_state_any": "Erreichbar von überall",
     "access_no_port": "Es ist kein Port freigegeben.",
-    "access_port_note": "Port {host} · darüber läuft nur die API, nicht die Oberfläche",
     "access_token": "Token",
     "access_token_needed": "Ohne Token beantwortet die API keine Anfrage.",
     "access_token_meta": "Erstellt {created} · zuletzt benutzt {used}",
     "access_mcp": "Assistenten (MCP)",
-    "access_change_note": "Zu ändern in den Add-on-Einstellungen unter Konfiguration."
+    "access_change_note": "Zu ändern in den Add-on-Einstellungen unter Konfiguration.",
+    "access_address": "Adresse",
+    "access_only_address": "Nur die Adressen unten antworten. Die Oberfläche gibt es dort nicht."
   },
   "type_mappings": {
     "light": "Licht",
