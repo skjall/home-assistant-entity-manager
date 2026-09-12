@@ -363,6 +363,9 @@ class _FakeHaTranslations:
     def translation_key_name(self, platform, domain, key, language):
         return HaTranslations._usable(self.entity.get((platform, domain, key, language)))
 
+    def domain_name(self, domain, language):
+        return self.device_class_name(domain, "_", language)
+
 
 def test_home_assistant_names_a_device_class_in_its_own_language(restructurer):
     """A user whose Home Assistant speaks Italian needs no rule for a door sensor."""
@@ -419,3 +422,54 @@ def test_a_name_with_a_placeholder_is_not_used(restructurer):
 
     assert resolution["value"] == "Warnung 1"
     assert resolution["won_by"] == "original"
+
+
+def test_a_name_spells_out_the_domain_but_an_id_does_not(restructurer):
+    """ "button" is a word in a name and a slug in an entity ID."""
+    restructurer.ha_translations = _FakeHaTranslations({("number", "_", "de"): "Nummer"})
+    restructurer.naming_templates.set_templates(
+        {
+            "device_name": "{area} {device}",
+            "entity_name": "{area} {device} {entity} {domain}",
+            "entity_id": "{area} {device} {entity} {domain}",
+        }
+    )
+    entity = restructurer.entities["number.x_effect_speed"]
+
+    new_id, new_name = restructurer.generate_new_entity_id("number.x_effect_speed", entity)
+
+    assert new_name.endswith("Nummer")
+    assert new_id.endswith("_number")
+
+
+def test_a_device_class_becomes_its_home_assistant_word(restructurer):
+    restructurer.ha_translations = _FakeHaTranslations({("number", "reactive_power", "de"): "Blindleistung"})
+    restructurer.naming_templates.set_templates(
+        {
+            "device_name": "{device}",
+            "entity_name": "{entity} {device_class}",
+            "entity_id": "{entity} {device_class}",
+        }
+    )
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["device_class"] = "reactive_power"
+
+    new_id, new_name = restructurer.generate_new_entity_id("number.x_effect_speed", entity)
+
+    assert new_name.endswith("Blindleistung")
+    assert new_id.endswith("_reactive_power")
+
+
+def test_an_unknown_technical_value_is_read_as_words(restructurer):
+    restructurer.ha_translations = None
+
+    assert restructurer.spell_out("device_class", "power_factor", "sensor.x") == "Power factor"
+
+
+def test_the_floor_level_is_available_as_a_placeholder(restructurer):
+    restructurer.floors = {"f": {"floor_id": "f", "name": "2. Obergeschoss", "level": 2}}
+    restructurer.areas = {"k": {"area_id": "k", "name": "Küche", "floor_id": "f"}}
+
+    context = restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+
+    assert context["floor_level"] == "2"

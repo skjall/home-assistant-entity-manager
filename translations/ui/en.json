@@ -391,7 +391,9 @@
     "field_model": "Model",
     "insert_placeholder": "Insert {name}",
     "unknown_placeholder": "Unknown: {names}",
-    "naming_preview_for": "for {entity}"
+    "naming_preview_for": "for {entity}",
+    "field_floor_level": "Level",
+    "technical_fields_hint": "In names the domain and device class read as words; in the ID they stay technical."
   },
   "type_mappings": {
     "light": "Light",

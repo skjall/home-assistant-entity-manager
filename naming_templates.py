@@ -19,6 +19,7 @@ ALLOWED_FIELDS = frozenset(
     {
         "floor",
         "floor_id",
+        "floor_level",
         "area",
         "area_id",
         "device",

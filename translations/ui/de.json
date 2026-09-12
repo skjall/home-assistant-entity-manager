@@ -391,7 +391,9 @@
     "field_model": "Modell",
     "insert_placeholder": "{name} einfügen",
     "unknown_placeholder": "Unbekannt: {names}",
-    "naming_preview_for": "für {entity}"
+    "naming_preview_for": "für {entity}",
+    "field_floor_level": "Ebene",
+    "technical_fields_hint": "In Namen erscheinen Domäne und Geräteklasse als Wort, in der ID technisch."
   },
   "type_mappings": {
     "light": "Licht",

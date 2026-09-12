@@ -307,6 +307,8 @@ class EntityRestructurer:
         partial_context = {
             "floor": floor.get("name", ""),
             "floor_id": floor_id,
+            # Home Assistant numbers its floors; a basement is -1.
+            "floor_level": "" if floor.get("level") is None else str(floor.get("level")),
             "area": area.get("name", ""),
             "area_id": area_id,
             "device": "",
@@ -454,6 +456,37 @@ class EntityRestructurer:
             return self.ha_translations.device_class_name(domain, device_class, language)
         return None
 
+    # Technical values read as words in a name, but stay slugs in an entity ID.
+    SPELLED_OUT_FIELDS = ("domain", "device_class")
+
+    def spelled_out_context(self, context: Dict[str, str], entity_id: str = "") -> Dict[str, str]:
+        """A copy of ``context`` with the technical fields written as words."""
+        spelled = dict(context)
+        for field in self.SPELLED_OUT_FIELDS:
+            if spelled.get(field):
+                spelled[field] = self.spell_out(field, spelled[field], entity_id)
+        return spelled
+
+    def spell_out(self, field: str, value: str, entity_id: str = "") -> str:
+        """Turn a technical value into a word for a name: button -> Button.
+
+        Home Assistant translates its domains and device classes; where it has
+        no word, the slug is read as one. Entity IDs keep the raw value.
+        """
+        if not value:
+            return value
+        domain = entity_id.partition(".")[0]
+        if self.ha_translations:
+            if field == "device_class" and domain:
+                supplied = self.ha_translations.device_class_name(domain, value, self.language)
+                if supplied:
+                    return supplied
+            if field == "domain":
+                supplied = self.ha_translations.domain_name(value, self.language)
+                if supplied:
+                    return supplied
+        return normalize_display(value.replace("_", " "), DEFAULT_CASE)
+
     def _translate_entity_name(self, name: str, entity_id: str, registry: Optional[Dict[str, Any]] = None) -> str:
         """Return the user's wording for a supplied name (see _resolve_supplied_name)."""
         return self._resolve_supplied_name(name, entity_id, registry or {})["value"]
@@ -565,7 +598,9 @@ class EntityRestructurer:
             "",
         )
         if entity_id:
-            context = self.build_naming_context(entity_id, self.entities.get(entity_id, {}))
+            context = self.spelled_out_context(
+                self.build_naming_context(entity_id, self.entities.get(entity_id, {})), entity_id
+            )
         else:
             device = self.devices.get(device_id, {})
             area_id = device.get("area_id") or ""
@@ -602,7 +637,7 @@ class EntityRestructurer:
         if entity_name is not None:
             context["entity"] = entity_name
         object_id = self.naming_templates.render("entity_id", context, normalize=True)
-        entity_name = self.naming_templates.render("entity_name", context)
+        entity_name = self.naming_templates.render("entity_name", self.spelled_out_context(context, entity_id))
         if not object_id:
             object_id = entity_id.split(".", 1)[-1]
         return f"{domain}.{object_id}", entity_name

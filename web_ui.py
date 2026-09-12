@@ -3004,6 +3004,7 @@ def naming_templates_sample() -> Any:
     fallback = {
         "floor": "Ground floor",
         "floor_id": "ground_floor",
+        "floor_level": "0",
         "area": "Living room",
         "area_id": "living_room",
         "device": "Thermostat",
@@ -3045,9 +3046,14 @@ def preview_naming_templates() -> Any:
     try:
         manager.validate_templates(templates)
         values = {field: str(context.get(field) or "") for field in manager.get_config()["allowed_fields"]}
+        restructurer = renamer_state.get("restructurer")
+        sample_entity = f"{values.get('domain') or 'sensor'}.{values.get('entity_id') or ''}"
+        spelled = restructurer.spelled_out_context(values, sample_entity) if restructurer is not None else dict(values)
         rendered = {}
         for key, template in templates.items():
-            rendered[key] = manager.render_template(template, values, normalize=key == "entity_id")
+            # An entity ID is technical; a name reads as words.
+            source = values if key == "entity_id" else spelled
+            rendered[key] = manager.render_template(template, source, normalize=key == "entity_id")
         domain = values.get("domain") or "sensor"
         # Mirror generate_new_entity_id: never emit a bare "<domain>." when the
         # template renders empty, or the caller would send it as a rename.
