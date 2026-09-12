@@ -367,6 +367,45 @@ class _FakeHaTranslations:
         return self.device_class_name(domain, "_", language)
 
 
+def test_a_name_that_says_more_than_its_class_is_kept(restructurer):
+    """ "CPU temperature" and "Temperature" sit on one device and must stay apart."""
+    restructurer.ha_translations = _FakeHaTranslations({("number", "temperature", "de"): "Temperatur"})
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "CPU Temperatur"
+    entity["device_class"] = "temperature"
+
+    restructurer.build_naming_context("number.x_effect_speed", entity)
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["value"] == "CPU Temperatur"
+    assert resolution["won_by"] == "original"
+
+
+def test_the_english_name_of_a_class_is_translated(restructurer):
+    """A class whose English name differs from its key is still recognised."""
+    restructurer.ha_translations = _FakeHaTranslations(
+        {
+            ("number", "signal_strength", "de"): "Signalstärke",
+            ("number", "signal_strength", "en"): "Signal strength",
+        }
+    )
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "Signal strength"
+    entity["device_class"] = "signal_strength"
+
+    restructurer.build_naming_context("number.x_effect_speed", entity)
+
+    assert restructurer.last_resolutions["number.x_effect_speed"]["value"] == "Signalstärke"
+
+
+def test_a_class_fills_in_where_no_name_is_supplied(restructurer):
+    restructurer.ha_translations = _FakeHaTranslations({("cover", "shutter", "de"): "Rollladen"})
+
+    supplied = restructurer._home_assistant_name("cover.x", {"device_class": "shutter"}, "de", "")
+
+    assert supplied == "Rollladen"
+
+
 def test_home_assistant_names_a_device_class_in_its_own_language(restructurer):
     """A user whose Home Assistant speaks Italian needs no rule for a door sensor."""
     restructurer.ha_translations = _FakeHaTranslations({("number", "door", "de"): "Tür"})

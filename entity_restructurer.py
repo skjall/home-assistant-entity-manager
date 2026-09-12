@@ -465,7 +465,7 @@ class EntityRestructurer:
                     )
             # Home Assistant knows its own entities in every language it speaks,
             # which is far more than this add-on could translate itself.
-            supplied = self._home_assistant_name(entity_id, registry, language)
+            supplied = self._home_assistant_name(entity_id, registry, language, name)
             if supplied:
                 candidates.append(
                     {
@@ -500,8 +500,16 @@ class EntityRestructurer:
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
 
-    def _home_assistant_name(self, entity_id: str, registry: Dict[str, Any], language: str) -> Optional[str]:
-        """The name Home Assistant itself uses for this entity's type, if it has one."""
+    def _home_assistant_name(
+        self, entity_id: str, registry: Dict[str, Any], language: str, supplied: str = ""
+    ) -> Optional[str]:
+        """The name Home Assistant itself uses for this entity's type, if it has one.
+
+        The device class is the widest of its answers and says only what an
+        entity measures. It translates a name that means the class already, as
+        "Temperature" does; it must not overwrite one that says more, or
+        "CPU temperature" and "Temperature" on one device become the same name.
+        """
         if not self.ha_translations:
             return None
         domain = entity_id.partition(".")[0]
@@ -512,9 +520,14 @@ class EntityRestructurer:
             if name:
                 return name
         device_class = registry.get("device_class") or registry.get("original_device_class")
-        if device_class:
-            return self.ha_translations.device_class_name(domain, device_class, language)
-        return None
+        if not device_class:
+            return None
+        localized = self.ha_translations.device_class_name(domain, device_class, language)
+        if not localized or not supplied:
+            return localized
+        english = self.ha_translations.device_class_name(domain, device_class, "en") or ""
+        same_meaning = {canon(device_class), canon(english), canon(localized)}
+        return localized if canon(supplied) in same_meaning else None
 
     # Technical values read as words in a name, but stay slugs in an entity ID.
     SPELLED_OUT_FIELDS = ("domain", "device_class")

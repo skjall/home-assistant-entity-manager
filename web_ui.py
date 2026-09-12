@@ -3288,6 +3288,10 @@ async def _sync_ha_language(ws) -> None:
         entity.get("platform") for entity in renamer_state["restructurer"].entities.values() if entity.get("platform")
     }
     await ha_translations.load(ws, rules.language, integrations)
+    # The English names of the device classes say which supplied names mean the
+    # same thing as their class; one call, no integrations needed.
+    if rules.language != "en":
+        await ha_translations.load(ws, "en")
 
 
 @app.route("/api/ha/language")
