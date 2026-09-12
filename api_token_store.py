@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 # Prefix makes a leaked token recognisable as belonging to this add-on.
 TOKEN_PREFIX = "em_"
 
+# Random bytes behind the prefix. Sixty-four of them make a token of about
+# ninety characters - far more than guessing could ever reach, and short enough
+# to stay one line in a configuration file.
+TOKEN_BYTES = 64
+
 
 def _hash(token: str) -> str:
     """Return the hex SHA-256 of a token."""
@@ -61,7 +66,7 @@ class ApiTokenStore:
 
         Replaces (and thereby invalidates) any previous token.
         """
-        token = TOKEN_PREFIX + secrets.token_urlsafe(32)
+        token = TOKEN_PREFIX + secrets.token_urlsafe(TOKEN_BYTES)
         with self._lock:
             self._write(
                 {
