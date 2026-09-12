@@ -25,11 +25,16 @@ async def rename_entity(
     old_entity_id: str,
     new_entity_id: Optional[str] = None,
     friendly_name: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Rename one entity and carry the change through what refers to it.
 
     Returns what happened, including which dependencies were rewritten. A
     rename that changes nothing is reported as skipped rather than done.
+
+    ``provenance`` says where the name came from - which type name, which rule,
+    which templates - and is kept with it so a later read can tell our own name
+    from one somebody typed afterwards.
     """
     id_changed = bool(new_entity_id) and old_entity_id != new_entity_id
     if not id_changed and friendly_name is None:
@@ -44,6 +49,7 @@ async def rename_entity(
             old_entity_id=old_entity_id,
             new_entity_id=new_entity_id if id_changed else None,
             friendly_name=friendly_name,
+            provenance=provenance,
         )
     finally:
         await ws.disconnect()
@@ -127,6 +133,19 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         "name_comes_from": resolution.get("won_by"),
         "rule_id": resolution.get("rule_id"),
         "supplied_name": resolution.get("input"),
+        # The type part on its own, kept with the name once it is written so a
+        # later read gets it back without taking the rendered name apart.
+        "base_entity": resolution.get("value") or "",
+    }
+
+
+def provenance_of(proposed: Dict[str, Any]) -> Dict[str, Any]:
+    """Turn a proposal into the note that is kept with the written name."""
+    return {
+        "base_entity": proposed.get("base_entity") or "",
+        "won_by": proposed.get("name_comes_from") or "",
+        "rule_id": proposed.get("rule_id"),
+        "template_hash": renamer_state["naming_templates"].fingerprint(),
     }
 
 
@@ -154,10 +173,16 @@ async def apply_naming(entity_ids: list) -> Dict[str, Any]:
     for entity_id in entity_ids:
         try:
             proposed = await proposed_naming(entity_id)
+            if proposed["proposed_entity_id"] == entity_id and proposed["proposed_name"] == proposed["current_name"]:
+                # Applying the same names again would rewrite the registry for
+                # nothing and cost every dependent automation a reload.
+                results.append({"entity_id": entity_id, "success": True, "skipped": True, "message": "Already named"})
+                continue
             outcome = await rename_entity(
                 entity_id,
                 proposed["proposed_entity_id"],
                 proposed["proposed_name"],
+                provenance=provenance_of(proposed),
             )
         except Exception as error:  # noqa: BLE001 - one bad id must not stop the rest
             logger.warning("apply_naming failed for %s: %s", entity_id, error)

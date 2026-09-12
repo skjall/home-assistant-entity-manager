@@ -278,7 +278,7 @@ def test_applying_writes_exactly_what_was_proposed(home, monkeypatch):
     proposed = call_tool("naming_for", {"entity_id": "sensor.a_temperature"})["rendered"]
     written = {}
 
-    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
+    async def record(old_entity_id, new_entity_id=None, friendly_name=None, provenance=None):
         written.update(old=old_entity_id, new=new_entity_id, name=friendly_name)
         return {"success": True}
 
@@ -298,7 +298,7 @@ def test_one_bad_entity_does_not_stop_the_others(home, monkeypatch):
     """An assistant that got one id wrong still gets the rest of its work done."""
     written = []
 
-    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
+    async def record(old_entity_id, new_entity_id=None, friendly_name=None, provenance=None):
         written.append(old_entity_id)
         return {"success": True}
 

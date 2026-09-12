@@ -1648,6 +1648,23 @@ def _strip_prefix(full_name: str, prefix: str) -> str:
     return full_name
 
 
+def ownership_of(entity_data: dict, template_hash: str) -> dict:
+    """The provenance fields the entity list carries for one entity.
+
+    Only what the interface needs to explain a name: who it belongs to, whether
+    somebody changed it elsewhere, and whether the templates have moved on
+    since it was written - the last being a reason for a different proposal,
+    not a sign that anybody touched the name.
+    """
+    state = renamer_state["naming_state"].ownership(entity_data, template_hash)
+    return {
+        "name_owner": state["name_owner"],
+        "drift": state["drift"],
+        "template_changed": state["template_changed"],
+        "applied_name": state["applied_name"],
+    }
+
+
 async def _get_hierarchy_async():
     """Async implementation of get_hierarchy."""
     try:
@@ -1771,6 +1788,10 @@ async def _get_hierarchy_async():
         type_integration_counts = type_key_integration_counts(restructurer)
         type_model_counts = type_key_model_counts(restructurer)
 
+        # One mark for the templates as they are now; every entity compares its
+        # stored one against it.
+        template_hash = renamer_state["naming_templates"].fingerprint()
+
         entities = []
         for entity_id, entity_data in restructurer.entities.items():
             registry_id = entity_data.get("id", "")
@@ -1819,7 +1840,9 @@ async def _get_hierarchy_async():
                     "type_model_count": (
                         type_model_counts.get((type_key, entity_model(restructurer, entity_data)), 0) if type_key else 0
                     ),
-                    "name_owner": "unknown",
+                    # Who the name in the registry belongs to right now, and
+                    # whether it was changed outside this add-on since.
+                    **ownership_of(entity_data, template_hash),
                 }
             )
 
