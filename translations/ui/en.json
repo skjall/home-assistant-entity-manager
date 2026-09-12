@@ -393,7 +393,8 @@
     "unknown_placeholder": "Unknown: {names}",
     "naming_preview_for": "for {entity}",
     "field_floor_level": "Level",
-    "technical_fields_hint": "In names the domain and device class read as words; in the ID they stay technical."
+    "technical_fields_hint": "In names the domain and device class read as words; in the ID they stay technical.",
+    "template_editor_hint": "Placeholders are solid blocks; type freely around them. Backspace removes a whole block."
   },
   "type_mappings": {
     "light": "Light",

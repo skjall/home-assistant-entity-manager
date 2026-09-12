@@ -425,6 +425,37 @@
             color: #2563eb;
             border-bottom-color: #2563eb;
         }
+        .tpl-editor {
+            width: 100%;
+            min-height: 38px;
+            padding: 7px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #fff;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            outline: none;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .tpl-editor:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+        .tpl-chip {
+            display: inline-block;
+            padding: 0 8px;
+            border-radius: 10px;
+            background: #e0e7ff;
+            color: #3730a3;
+            font-size: 0.82rem;
+            white-space: nowrap;
+            user-select: all;
+        }
+        .tpl-chip.is-unknown {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
         .field-chips {
             display: flex;
             flex-wrap: wrap;
@@ -536,30 +567,20 @@
                     </select>
                 </div>
 
-                <div class="form-group">
-                    <label x-text="t('settings.device_name_template')">Device name template</label>
-                    <input class="edit-input" style="width: 100%;" x-ref="tpl_device_name"
-                           :class="unknownFields('device_name').length ? 'input-invalid' : ''"
-                           x-model="namingTemplates.device_name"
-                           @focus="activeTemplate = 'device_name'"
-                           @input.debounce.400ms="previewNamingTemplates()">
-                </div>
-                <div class="form-group">
-                    <label x-text="t('settings.entity_name_template')">Entity name template</label>
-                    <input class="edit-input" style="width: 100%;" x-ref="tpl_entity_name"
-                           :class="unknownFields('entity_name').length ? 'input-invalid' : ''"
-                           x-model="namingTemplates.entity_name"
-                           @focus="activeTemplate = 'entity_name'"
-                           @input.debounce.400ms="previewNamingTemplates()">
-                </div>
-                <div class="form-group">
-                    <label x-text="t('settings.entity_id_template')">Entity ID template</label>
-                    <input class="edit-input" style="width: 100%;" x-ref="tpl_entity_id"
-                           :class="unknownFields('entity_id').length ? 'input-invalid' : ''"
-                           x-model="namingTemplates.entity_id"
-                           @focus="activeTemplate = 'entity_id'"
-                           @input.debounce.400ms="previewNamingTemplates()">
-                </div>
+                <template x-for="which in templateFields" :key="which">
+                    <div class="form-group">
+                        <label x-text="t('settings.' + which + '_template')"></label>
+                        <div class="tpl-editor" contenteditable="true" spellcheck="false"
+                             :id="'tpl_' + which"
+                             :class="unknownFields(which).length ? 'input-invalid' : ''"
+                             @focus="activeTemplate = which"
+                             @input="readTemplateField(which)"
+                             @paste.prevent="pasteAsText($event)"
+                             @keydown.enter.prevent></div>
+                    </div>
+                </template>
+                <p style="color: #6b7280; font-size: 0.8rem; margin: -6px 0 14px;"
+                   x-text="t('settings.template_editor_hint')"></p>
 
                 <p x-show="allUnknownFields().length" class="text-amber-600" style="font-size: 0.85rem;"
                    x-text="t('settings.unknown_placeholder', {names: allUnknownFields().join(', ')})"></p>
@@ -944,6 +965,8 @@
                 namingSample: {},
                 namingSampleEntity: null,
                 activeTemplate: 'entity_name',
+                templateFields: ['device_name', 'entity_name', 'entity_id'],
+                previewTimer: null,
                 namingMessage: '',
                 namingError: false,
 
@@ -1040,6 +1063,7 @@
                         if (this.$refs.namingPresetSelect) {
                             this.$refs.namingPresetSelect.value = this.namingPreset;
                         }
+                        this.$nextTick(() => this.renderTemplateFields());
                         await this.previewNamingTemplates();
                     } catch (error) {
                         this.namingError = true;
@@ -1051,6 +1075,7 @@
                     const preset = this.namingPresets[this.namingPreset];
                     if (preset?.templates) {
                         this.namingTemplates = {...preset.templates};
+                        this.renderTemplateFields();
                     }
                     this.previewNamingTemplates();
                 },
@@ -1075,23 +1100,119 @@
                     return [...new Set(names)].map(name => '{' + name + '}');
                 },
 
+                editorFor(which) {
+                    return document.getElementById('tpl_' + which);
+                },
+
+                // A placeholder is one solid piece in the line; everything around it stays text.
+                chipFor(field) {
+                    const known = this.namingFields.includes(field);
+                    const chip = document.createElement('span');
+                    chip.className = known ? 'tpl-chip' : 'tpl-chip is-unknown';
+                    chip.setAttribute('contenteditable', 'false');
+                    chip.dataset.field = field;
+                    chip.textContent = known ? this.fieldLabel(field) : '{' + field + '}';
+                    chip.title = '{' + field + '}';
+                    return chip;
+                },
+
+                // Model -> editor. Runs when the value changes elsewhere, never while
+                // typing, so the caret survives.
+                renderTemplateField(which) {
+                    const editor = this.editorFor(which);
+                    if (!editor) return;
+                    const template = this.namingTemplates[which] || '';
+                    if (editor.dataset.rendered === template) return;
+                    editor.textContent = '';
+                    const pattern = /{([^{}]*)}/g;
+                    let at = 0;
+                    let match;
+                    while ((match = pattern.exec(template)) !== null) {
+                        if (match.index > at) {
+                            editor.appendChild(document.createTextNode(template.slice(at, match.index)));
+                        }
+                        editor.appendChild(this.chipFor(match[1]));
+                        at = match.index + match[0].length;
+                    }
+                    if (at < template.length) editor.appendChild(document.createTextNode(template.slice(at)));
+                    editor.dataset.rendered = template;
+                },
+
+                renderTemplateFields() {
+                    this.templateFields.forEach(which => this.renderTemplateField(which));
+                },
+
+                // Editor -> model: every chip becomes its placeholder again.
+                readTemplateField(which) {
+                    const editor = this.editorFor(which);
+                    if (!editor) return;
+                    let template = '';
+                    editor.childNodes.forEach(node => {
+                        const field = node.dataset ? node.dataset.field : null;
+                        if (field) template += '{' + field + '}';
+                        else template += node.textContent || '';
+                    });
+                    template = template.replace(/\u00a0/g, ' ');
+                    editor.dataset.rendered = template;
+                    this.namingTemplates[which] = template;
+                    clearTimeout(this.previewTimer);
+                    this.previewTimer = setTimeout(() => this.previewNamingTemplates(), 400);
+                },
+
+                // Pasting a whole template brings its placeholders along as chips.
+                pasteAsText(event) {
+                    const clipboard = event.clipboardData || window.clipboardData;
+                    const text = (clipboard ? clipboard.getData('text') : '').replace(/[\r\n]+/g, ' ');
+                    document.execCommand('insertText', false, text);
+                    const which = this.activeTemplate || 'entity_name';
+                    this.readTemplateField(which);
+                    this.$nextTick(() => {
+                        const editor = this.editorFor(which);
+                        if (!editor) return;
+                        editor.dataset.rendered = '';
+                        this.renderTemplateField(which);
+                        this.caretToEnd(editor);
+                    });
+                },
+
+                caretToEnd(editor) {
+                    const range = document.createRange();
+                    range.selectNodeContents(editor);
+                    range.collapse(false);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                },
+
                 // Put the placeholder where the cursor is, in the field last touched.
                 insertField(field) {
                     const which = this.activeTemplate || 'entity_name';
-                    const input = this.$refs['tpl_' + which];
-                    const token = '{' + field + '}';
-                    const current = this.namingTemplates[which] || '';
-                    const at = input && typeof input.selectionStart === 'number' ? input.selectionStart : current.length;
-                    const needsSpace = at > 0 && !/\s$/.test(current.slice(0, at)) && current.slice(0, at) !== '';
-                    const insert = (needsSpace ? ' ' : '') + token;
-                    this.namingTemplates[which] = current.slice(0, at) + insert + current.slice(at);
-                    this.$nextTick(() => {
-                        if (!input) return;
-                        input.focus();
-                        const caret = at + insert.length;
-                        input.setSelectionRange(caret, caret);
-                    });
-                    this.previewNamingTemplates();
+                    const editor = this.editorFor(which);
+                    if (!editor) return;
+                    editor.focus();
+                    const selection = window.getSelection();
+                    let range;
+                    if (selection.rangeCount && editor.contains(selection.anchorNode)) {
+                        range = selection.getRangeAt(0);
+                        range.deleteContents();
+                    } else {
+                        range = document.createRange();
+                        range.selectNodeContents(editor);
+                        range.collapse(false);
+                    }
+                    const chip = this.chipFor(field);
+                    const after = document.createTextNode(' ');
+                    range.insertNode(after);
+                    range.insertNode(chip);
+                    const before = chip.previousSibling;
+                    if (before && before.textContent && !/\s$/.test(before.textContent)) {
+                        editor.insertBefore(document.createTextNode(' '), chip);
+                    }
+                    range.setStartAfter(after);
+                    range.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    this.readTemplateField(which);
                 },
 
                 async loadNamingSample() {

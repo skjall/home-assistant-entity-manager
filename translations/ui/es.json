@@ -413,7 +413,8 @@
     "unknown_placeholder": "Desconocido: {names}",
     "naming_preview_for": "para {entity}",
     "field_floor_level": "Nivel",
-    "technical_fields_hint": "En los nombres el dominio y la clase se leen como palabras; en el ID siguen siendo técnicos."
+    "technical_fields_hint": "En los nombres el dominio y la clase se leen como palabras; en el ID siguen siendo técnicos.",
+    "template_editor_hint": "Los marcadores son bloques sólidos; escribe libremente alrededor. Retroceso elimina un bloque entero."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",
