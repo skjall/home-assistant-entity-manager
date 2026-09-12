@@ -112,6 +112,9 @@ class _DR(_Rec):
     async def rename_device(self, dev, name):
         self.calls.append(("dev", dev, name))
 
+    async def assign_area(self, dev, area_id):
+        self.calls.append(("area", dev, area_id))
+
 
 class _ER(_Rec):
     ws = object()
@@ -147,7 +150,7 @@ def _job():
         "job_id": "t1",
         "state": device_swap.STATE_CONFIRMED,
         "created": "t",
-        "old_device": {"device_id": "old", "name": "Küche Fenster"},
+        "old_device": {"device_id": "old", "name": "Küche Fenster", "area_id": "kuche"},
         "new_device": {"device_id": "new", "name": "Küche Fenster IKEA"},
         "target_device_name": "Küche Fenster",
         "old_device_disposition": device_swap.DISPOSITION_KEEP,
@@ -172,11 +175,11 @@ def _job():
     }
 
 
-def _run(tmp_path, job):
+def _run(tmp_path, job, device_registry=None):
     store = SwapJobStore(str(tmp_path))
     er = _ER()
     du = _DU()
-    ex = SwapExecutor(store, _DR(), er, du, _Bridge(), _RS(), states_by_id={}, timestamp="t1")
+    ex = SwapExecutor(store, device_registry or _DR(), er, du, _Bridge(), _RS(), states_by_id={}, timestamp="t1")
     import asyncio
 
     out = asyncio.run(ex.run(job))
@@ -227,6 +230,58 @@ def test_executor_idempotent_resume(tmp_path):
     ex = SwapExecutor(store, _DR(), _ER(), _DU(), _Bridge(), _RS(), states_by_id={}, timestamp="t2")
     again = asyncio.run(ex.run(out))
     assert again["state"] == device_swap.STATE_COMPLETED
+
+
+def test_executor_moves_the_new_device_into_the_old_area(tmp_path):
+    """Der Bereich gehört zur Identität, die das neue Gerät übernimmt: dort
+    hängen Bereichs-Automationen, Sprachsteuerung und die Namensgebung dran."""
+    dr = _DR()
+
+    out, _, _ = _run(tmp_path, _job(), device_registry=dr)
+
+    assert ("area", "new", "kuche") in dr.calls
+    assert out["assigned_area_id"] == "kuche"
+
+
+def test_executor_assigns_the_area_before_the_entities_are_renamed(tmp_path):
+    """Die Entity-Namen lesen den Bereich, also muss er vorher stehen."""
+    dr = _DR()
+
+    _, er, _ = _run(tmp_path, _job(), device_registry=dr)
+
+    assigned = min(i for i, c in enumerate(dr.calls) if c[0] == "area")
+    renamed = min(i for i, c in enumerate(dr.calls) if c[0] == "dev" and c[1] == "new")
+    assert renamed < assigned
+    assert any("_ikea" in call[0] for call in er.calls)
+
+
+def test_executor_leaves_the_new_device_where_it_is_without_an_old_area(tmp_path):
+    """Einen gesetzten Bereich zu entfernen nähme Information weg, statt
+    welche zu übertragen."""
+    job = _job()
+    job["old_device"].pop("area_id")
+    dr = _DR()
+
+    out, _, _ = _run(tmp_path, job, device_registry=dr)
+
+    assert not [c for c in dr.calls if c[0] == "area"]
+    assert out["state"] == device_swap.STATE_COMPLETED
+
+
+def test_a_job_from_before_this_step_still_gets_its_area(tmp_path):
+    """Ein Job, der die alten Schritte schon hinter sich hat, holt den neuen
+    beim Fortsetzen nach - sonst bliebe genau der Fall ungelöst, der den
+    Fehler gemeldet hat."""
+    job = _job()
+    job["steps"] = {
+        device_swap.STATE_FREEING_OLD_NAME: {"status": "done"},
+        device_swap.STATE_RENAMING_NEW_DEVICE: {"status": "done"},
+    }
+    dr = _DR()
+
+    _run(tmp_path, job, device_registry=dr)
+
+    assert ("area", "new", "kuche") in dr.calls
 
 
 # --------------------------------------------------------------------------- #
