@@ -3451,11 +3451,23 @@ def naming_preview():
     return jsonify({"rendered": {"entity_name": new_name, "entity_id": new_entity_id}, "resolution": resolution})
 
 
+SETTINGS_SECTIONS = ("naming", "rules", "system")
+
+
 @app.route("/settings")
-def settings_page():
-    """Render the settings page for type mappings management."""
+@app.route("/settings/<section>")
+def settings_page(section: str = "naming"):
+    """Render one section of the settings.
+
+    Each section is its own address so it survives a reload and can be linked
+    to. The nesting depth differs between /settings and /settings/<section>,
+    so the page is told where its own root is.
+    """
+    if section not in SETTINGS_SECTIONS:
+        section = "naming"
+    base_href = "../" if request.path.rstrip("/").count("/") > 1 else "./"
     version = str(int(time.time()))
-    response = make_response(render_template("settings.html", version=version))
+    response = make_response(render_template("settings.html", version=version, section=section, base_href=base_href))
     # Prevent browser from caching the HTML page
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"

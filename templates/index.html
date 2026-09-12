@@ -2170,7 +2170,7 @@
                                         <p class="text-xs text-gray-500 mt-1">
                                             <span x-text="resolutionExplain(entity)"></span>
                                             <a x-show="entity.resolution?.rule_id"
-                                               :href="'settings?rule=' + entity.resolution?.rule_id"
+                                               :href="'settings/rules?rule=' + entity.resolution?.rule_id"
                                                class="rule-link" :title="t('entity.open_rule')"
                                                :aria-label="t('entity.open_rule')">
                                                 <i class="ri-external-link-line"></i>

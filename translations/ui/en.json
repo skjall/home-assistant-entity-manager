@@ -369,7 +369,11 @@
     "migration_skipped": "{count} of them were left out because they would not have changed anything.",
     "migration_merged": "{count} of them were the same name spelled differently and became one rule each.",
     "migration_conflicts_hint": "You had named the same type in two ways. Pick the name that should apply.",
-    "migration_backup_hint": "Your names as they were stored before the change."
+    "migration_backup_hint": "Your names as they were stored before the change.",
+    "tab_naming": "Naming",
+    "tab_rules": "Type rules",
+    "tab_system": "System",
+    "language_section": "Language and spelling"
   },
   "type_mappings": {
     "light": "Light",

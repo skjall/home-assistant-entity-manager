@@ -229,3 +229,23 @@ def test_backup_download_without_a_migration_is_not_found(client, monkeypatch):
     monkeypatch.setitem(web_ui.renamer_state["naming_rules"].data, "migration", None)
 
     assert client.get("/api/naming/migration/backup").status_code == 404
+
+
+@pytest.mark.parametrize(
+    "path, section, expected_base",
+    [
+        ("/settings", "naming", "./"),
+        ("/settings/naming", "naming", "../"),
+        ("/settings/rules", "rules", "../"),
+        ("/settings/system", "system", "../"),
+        ("/settings/does-not-exist", "naming", "../"),
+    ],
+)
+def test_settings_sections_are_their_own_addresses(client, path, section, expected_base):
+    """Each section reloads on its own URL, and says where the app root is."""
+    response = client.get(path)
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert f'<base href="{expected_base}">' in body
+    assert f"section: '{section}'" in body

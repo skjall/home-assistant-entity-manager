@@ -389,7 +389,11 @@
     "migration_skipped": "{count} de ellos se omitieron porque no habrían cambiado nada.",
     "migration_merged": "{count} de ellos eran el mismo nombre escrito de otra forma y se unieron en una regla cada uno.",
     "migration_conflicts_hint": "Habías nombrado el mismo tipo de dos maneras. Elige el nombre que debe aplicarse.",
-    "migration_backup_hint": "Tus nombres tal como estaban guardados antes del cambio."
+    "migration_backup_hint": "Tus nombres tal como estaban guardados antes del cambio.",
+    "tab_naming": "Nombres",
+    "tab_rules": "Reglas de tipo",
+    "tab_system": "Sistema",
+    "language_section": "Idioma y ortografía"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

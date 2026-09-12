@@ -369,7 +369,11 @@
     "migration_skipped": "{count} davon wurden weggelassen, weil sie nichts geändert hätten.",
     "migration_merged": "{count} davon waren derselbe Name in verschiedener Schreibweise und wurden zu je einer Regel zusammengefasst.",
     "migration_conflicts_hint": "Du hattest denselben Typ unterschiedlich benannt. Wähle den Namen, der gelten soll.",
-    "migration_backup_hint": "Deine Namen, so wie sie vor der Umstellung gespeichert waren."
+    "migration_backup_hint": "Deine Namen, so wie sie vor der Umstellung gespeichert waren.",
+    "tab_naming": "Benennung",
+    "tab_rules": "Typ-Regeln",
+    "tab_system": "System",
+    "language_section": "Sprache und Schreibweise"
   },
   "type_mappings": {
     "light": "Licht",
