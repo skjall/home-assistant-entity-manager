@@ -13,6 +13,7 @@ from flask import Blueprint, jsonify, request
 
 from app_state import renamer_state
 import external_access
+import mcp_server
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ def network_status():
             "policy": external_access.policy(),
             "policies": list(external_access.POLICIES),
             "published": _published_ports(),
+            "mcp": mcp_server.mode(),
         }
     )
 

@@ -31,8 +31,13 @@ def build(flask_app: Any, mcp_app: Optional[Any] = None) -> Any:
     from starlette.applications import Starlette
     from starlette.routing import Mount
 
-    # Longest path first: everything that is not /mcp belongs to the web app.
-    return Starlette(routes=[Mount("/mcp", app=mcp_app), Mount("/", app=wsgi)])
+    # The MCP app keeps state for the length of a session, which it sets up and
+    # tears down through the lifespan; mounting alone would never run that, so
+    # the outer application borrows it.
+    return Starlette(
+        routes=[Mount("/mcp", app=mcp_app), Mount("/", app=wsgi)],
+        lifespan=getattr(mcp_app, "lifespan", None),
+    )
 
 
 def serve(application: Any, port: int) -> None:

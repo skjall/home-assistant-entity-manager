@@ -976,6 +976,15 @@
                     </div>
                     <div x-show="publishedPort()" x-cloak
                          style="margin-top: 8px; font-size: 0.85rem; color: #6b7280;" x-text="t('settings.network_ui_note')"></div>
+                    <div style="margin-top: 10px; font-size: 0.9rem; color: #374151;">
+                        <span x-text="t('settings.mcp_label')"></span><span>: </span>
+                        <span style="font-weight: 600;" x-text="t('settings.mcp_' + (network.mcp || 'off'))"></span>
+                    </div>
+                    <div x-show="(network.mcp || 'off') !== 'off' && publishedPort()" x-cloak
+                         style="margin-top: 4px; font-size: 0.85rem; color: #6b7280;">
+                        <span x-text="t('settings.mcp_address')"></span><span>: </span>
+                        <code x-text="'http://&lt;home-assistant&gt;:' + publishedPort().host + '/mcp'"></code>
+                    </div>
                 </div>
 
                 <div style="margin-bottom: 16px; font-size: 0.9rem; color: #374151;">

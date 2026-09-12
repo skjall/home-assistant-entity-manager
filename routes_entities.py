@@ -20,7 +20,7 @@ from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 from ha_websocket import HomeAssistantWebSocket
 from jobs import new_job
-from reference_cache import invalidate_reference_checker_cache
+import naming_service
 from routes_naming import ensure_registry_loaded
 from sanitize import sanitize_entity_id, sanitize_name, sanitize_registry_id, validate_json_input
 from z2m import sync_z2m_name
@@ -355,91 +355,11 @@ async def _rename_entity_async():
         return jsonify({"error": "new_entity_id or new_friendly_name required"}), 400
 
     try:
-        base_url = os.getenv("HA_URL")
-        token = os.getenv("HA_TOKEN")
-        ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
-
-        ws = HomeAssistantWebSocket(ws_url, token)
-        await ws.connect()
-
-        try:
-            entity_registry = EntityRegistry(ws)
-
-            # Check if anything actually needs to change
-            id_changed = new_entity_id and old_entity_id != new_entity_id
-            name_needs_update = new_friendly_name is not None
-
-            if not id_changed and not name_needs_update:
-                return jsonify({"success": True, "skipped": True, "message": "No changes needed"})
-
-            # Perform the rename
-            result = await entity_registry.rename_entity(
-                old_entity_id=old_entity_id,
-                new_entity_id=new_entity_id if id_changed else None,
-                friendly_name=new_friendly_name,
-            )
-
-            if result:
-                logger.info(
-                    f"Renamed entity: {old_entity_id} -> {new_entity_id or old_entity_id} ({new_friendly_name})"
-                )
-
-                response_data = {
-                    "success": True,
-                    "old_entity_id": old_entity_id,
-                    "new_entity_id": new_entity_id or old_entity_id,
-                    "new_friendly_name": new_friendly_name,
-                }
-
-                # Update dependencies (automations, scenes, scripts) if entity ID changed
-                if id_changed:
-                    try:
-                        dependency_updater = DependencyUpdater(base_url, token)
-                        dep_results = await dependency_updater.update_all_dependencies(old_entity_id, new_entity_id)
-
-                        # Always include dependency results for debugging
-                        response_data["dependencies_checked"] = True
-                        response_data["dependencies_updated"] = {
-                            "total": dep_results["total_success"],
-                            "scenes": dep_results["scenes"]["success"],
-                            "scripts": dep_results["scripts"]["success"],
-                            "automations": dep_results["automations"]["success"],
-                        }
-
-                        if dep_results["total_success"] > 0:
-                            logger.info(f"Updated {dep_results['total_success']} dependencies for {old_entity_id}")
-
-                        if dep_results["total_failed"] > 0:
-                            response_data["dependencies_failed"] = {
-                                "total": dep_results["total_failed"],
-                                "scenes": dep_results["scenes"]["failed"],
-                                "scripts": dep_results["scripts"]["failed"],
-                                "automations": dep_results["automations"]["failed"],
-                            }
-                            logger.warning(
-                                f"Failed to update {dep_results['total_failed']} dependencies for {old_entity_id}"
-                            )
-                    except Exception as dep_error:
-                        logger.error(f"Error updating dependencies for {old_entity_id}: {dep_error}")
-                        response_data["dependencies_checked"] = False
-                        response_data["dependencies_error"] = str(dep_error)
-                else:
-                    response_data["dependencies_checked"] = False
-                    response_data["dependencies_reason"] = "entity_id_unchanged"
-
-                # Invalidate broken references cache after rename
-                invalidate_reference_checker_cache()
-
-                return jsonify(response_data)
-            else:
-                return jsonify({"error": "Rename failed"}), 500
-
-        finally:
-            await ws.disconnect()
-
-    except Exception as e:
-        logger.error(f"Error renaming entity {old_entity_id}: {e}")
-        return jsonify({"error": str(e)}), 500
+        result = await naming_service.rename_entity(old_entity_id, new_entity_id, new_friendly_name)
+    except Exception as error:
+        logger.error(f"Error renaming entity {old_entity_id}: {error}")
+        return jsonify({"error": str(error)}), 500
+    return jsonify(result)
 
 
 @entities.route("/api/delete_entity", methods=["POST"])

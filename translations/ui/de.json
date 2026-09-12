@@ -399,7 +399,12 @@
     "network_port_open": "Port {port} ist als Host-Port {host} freigegeben.",
     "network_warning_any": "Der Port ist freigegeben und es wird von überall geantwortet. Wenn Home Assistant aus dem Internet erreichbar ist, gilt das auch für diesen Port. Nur der Token schützt ihn dann noch.",
     "network_warning_no_token": "Der Port ist freigegeben, aber es gibt keinen Token. Es wird niemand bedient — erzeuge einen Token, wenn der Zugriff gewollt ist.",
-    "network_ui_note": "Über den freigegebenen Port läuft nur die API mit Token. Die Oberfläche gibt es ausschließlich über Home Assistant."
+    "network_ui_note": "Über den freigegebenen Port läuft nur die API mit Token. Die Oberfläche gibt es ausschließlich über Home Assistant.",
+    "mcp_label": "Werkzeug-Schnittstelle (MCP)",
+    "mcp_off": "Aus",
+    "mcp_read": "Nur lesend",
+    "mcp_write": "Lesen und schreiben",
+    "mcp_address": "Adresse"
   },
   "type_mappings": {
     "light": "Licht",
