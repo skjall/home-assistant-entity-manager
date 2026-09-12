@@ -7,6 +7,8 @@ from naming_overrides import NamingOverrides
 from naming_rules import NamingRules
 from naming_templates import NamingTemplates
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
+import routes_entities
+import routes_naming
 import web_ui
 
 
@@ -186,8 +188,8 @@ def test_counts_separate_a_type_by_integration(client):
     restructurer = web_ui.renamer_state["restructurer"]
     _add_door_sensors(restructurer)
 
-    per_type = web_ui._type_key_counts(restructurer)
-    per_integration = web_ui._type_key_integration_counts(restructurer)
+    per_type = routes_naming.type_key_counts(restructurer)
+    per_integration = routes_naming.type_key_integration_counts(restructurer)
 
     assert per_type["name:tuer"] == 3
     assert per_integration[("name:tuer", "matter")] == 2
@@ -239,7 +241,7 @@ def test_learning_for_one_model_leaves_the_other_models_alone(client):
     assert match["integration"] == "matter"
     assert match["model"] == "MYGGBETT door/window sensor"
     assert response.get_json()["rule"]["affected"] == 1
-    assert web_ui._type_key_model_counts(restructurer)[("name:tuer", "MYGGBETT door/window sensor")] == 1
+    assert routes_naming.type_key_model_counts(restructurer)[("name:tuer", "MYGGBETT door/window sensor")] == 1
 
 
 @pytest.mark.parametrize(
@@ -278,7 +280,7 @@ def test_reach_is_unknown_while_no_entities_can_be_loaded(client, monkeypatch):
     async def no_registry():
         return None
 
-    monkeypatch.setattr(web_ui, "_ensure_registry_loaded", no_registry)
+    monkeypatch.setattr(routes_naming, "ensure_registry_loaded", no_registry)
     rules = client.get("/api/naming/rules").get_json()["rules"]
 
     assert rules and all(rule["affected"] is None for rule in rules)
@@ -386,7 +388,7 @@ def test_template_sample_falls_back_without_entities(client, monkeypatch):
     async def no_registry():
         return None
 
-    monkeypatch.setattr(web_ui, "_ensure_registry_loaded", no_registry)
+    monkeypatch.setattr(routes_naming, "ensure_registry_loaded", no_registry)
     data = client.get("/api/naming_templates/sample").get_json()
 
     assert data["entity_id"] is None
@@ -401,7 +403,7 @@ def test_an_exception_is_saved_before_the_registry_is_loaded(client, monkeypatch
     async def load():
         web_ui.renamer_state["restructurer"] = loaded
 
-    monkeypatch.setattr(web_ui, "_ensure_registry_loaded", load)
+    monkeypatch.setattr(routes_entities, "ensure_registry_loaded", load)
 
     response = client.post("/api/set_entity_override", json={"registry_id": "reg-unknown", "override_name": "Taste 1"})
 

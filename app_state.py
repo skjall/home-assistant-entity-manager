@@ -5,12 +5,15 @@ JSON-backed stores; they live here so no part has to import the web layer to
 reach them.
 """
 
+import asyncio
 import logging
 import os
 
 from api_token_store import ApiTokenStore
 from device_swap import SwapJobStore
 from entity_registry import EntityRegistry
+from entity_restructurer import EntityRestructurer
+from ha_client import HomeAssistantClient
 from ha_translations import HaTranslations
 from jobs import TERMINAL_STATES, JobStore, JobWorker
 from naming_overrides import NamingOverrides
@@ -66,6 +69,73 @@ renamer_state["worker"] = JobWorker(renamer_state["job_store"])
 # Share the audit log with every EntityRegistry instance so all rename paths
 # (single, batch, device cascade) get recorded centrally.
 EntityRegistry.rename_log = renamer_state["rename_log"]
+
+
+async def init_client() -> HomeAssistantClient:
+    """Initialize the Home Assistant client and restructurer."""
+    if not renamer_state["client"]:
+        # In Add-on mode, use Supervisor API
+        base_url = os.getenv("HA_URL", "http://supervisor/core")
+        token = os.getenv("HA_TOKEN", os.getenv("SUPERVISOR_TOKEN"))
+        logger.info(f"Connecting to Home Assistant at {base_url}")
+        renamer_state["client"] = HomeAssistantClient(base_url, token)
+
+    if renamer_state["restructurer"] is None:
+        renamer_state["restructurer"] = EntityRestructurer(
+            renamer_state["client"],
+            renamer_state["naming_overrides"],
+            type_mappings=renamer_state["type_mappings"],
+            naming_templates=renamer_state["naming_templates"],
+            ha_translations=ha_translations,
+        )
+    return renamer_state["client"]
+
+
+async def ensure_mqtt_bridge():
+    """Lazy MQTT/Z2M-Bridge-Singleton. Gibt None zurück, wenn nicht verfügbar.
+
+    Vollständig optional: Ohne MQTT-Broker, ohne paho, ohne Z2M oder bei
+    deaktivierter Option degradiert alles sauber zu None (kein Crash) - der
+    Geräte-Austausch läuft dann wie bisher über Matter/Registry.
+    """
+    if renamer_state.get("mqtt_bridge") is not None:
+        return renamer_state["mqtt_bridge"]
+    if os.getenv("ENABLE_Z2M_BRIDGE", "true").lower() != "true":
+        return None
+    if renamer_state.get("mqtt_bridge_tried"):
+        return None  # nur einmal versuchen (Connect ist teuer)
+    renamer_state["mqtt_bridge_tried"] = True
+
+    try:
+        from mqtt_credentials import get_mqtt_credentials
+
+        creds = await get_mqtt_credentials()
+        if not creds:
+            return None
+        from bridge_mqtt import MqttBridge  # importiert paho - nur hinter dem Guard
+
+        bridge = MqttBridge(
+            host=creds["host"],
+            port=creds["port"],
+            username=creds["username"],
+            password=creds["password"],
+            ssl=creds["ssl"],
+            base_topic=os.getenv("Z2M_BASE_TOPIC", "zigbee2mqtt"),
+        )
+        loop = asyncio.get_running_loop()
+        connected = await loop.run_in_executor(None, bridge.connect, 10.0)
+        if not connected:
+            logger.warning("MQTT bridge could not connect - Z2M features disabled")
+            return None
+        renamer_state["mqtt_bridge"] = bridge
+        logger.info("MQTT/Z2M bridge ready")
+        return bridge
+    except ImportError as e:
+        logger.info("paho-mqtt not available (%s) - Z2M features disabled (needs add-on rebuild)", e)
+        return None
+    except Exception as e:  # noqa: BLE001 - MQTT darf das Add-on nie blockieren
+        logger.warning("MQTT bridge init failed: %s - Z2M features disabled", e)
+        return None
 
 
 def ws_url() -> str:

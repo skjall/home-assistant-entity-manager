@@ -10,6 +10,7 @@ import asyncio
 import pytest
 
 from jobs import TERMINAL_STATES, JobStore, JobWorker
+import routes_entities
 import web_ui
 
 
@@ -92,9 +93,9 @@ def test_device_rename_uses_active_naming_templates() -> None:
         {"entity_id": "sensor.kitchen_sofa_voltage", "attributes": {"native_name": "Voltage"}},
     ]
     restructurer = FakeRestructurer()
-    names = web_ui._capture_device_entity_names(restructurer, "device-1", states)
+    names = routes_entities._capture_device_entity_names(restructurer, "device-1", states)
 
-    assert web_ui._plan_device_entity_changes(restructurer, "device-1", states, names) == [
+    assert routes_entities._plan_device_entity_changes(restructurer, "device-1", states, names) == [
         ("sensor.kitchen_sofa_energy", "sensor.ground_floor_sofa1_energy", "Energy"),
         ("sensor.kitchen_sofa_voltage", "sensor.ground_floor_sofa1_voltage", "Voltage"),
     ]

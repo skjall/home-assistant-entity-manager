@@ -1,0 +1,114 @@
+"""Routes about the add-on itself: its token, its reach and its audit log.
+
+These are the only routes a caller outside Home Assistant ever sees, and only
+the rename log at that; the rest is for the settings page.
+"""
+
+import json
+import logging
+import os
+import urllib.request
+
+from flask import Blueprint, jsonify, request
+
+from app_state import renamer_state
+import external_access
+
+logger = logging.getLogger(__name__)
+
+system = Blueprint("system", __name__)
+
+
+@system.route("/api/rename_log", methods=["GET"])
+def rename_log_lookup():
+    """Resolve an entity_id against the rename audit log.
+
+    Query parameter ``entity_id`` (the old / vanished id). Follows the rename
+    chain forward and returns the current id plus the hop history, e.g.::
+
+        GET /api/rename_log?entity_id=light.kitchen_old
+
+        {
+          "query": "light.kitchen_old",
+          "found": true,
+          "renamed": true,
+          "current_entity_id": "light.kitchen_ceiling",
+          "history": [ {"timestamp": ..., "old_entity_id": ...,
+                        "new_entity_id": ..., "friendly_name": ...} ]
+        }
+
+    ``found`` is ``false`` when the id was never renamed (or is unknown).
+    """
+    entity_id = request.args.get("entity_id", "").strip()
+    if not entity_id:
+        return jsonify({"error": "Missing required query parameter: entity_id"}), 400
+
+    rename_log = renamer_state["rename_log"]
+    return jsonify(rename_log.search(entity_id))
+
+
+def _published_ports() -> dict:
+    """Ask the Supervisor which of this add-on's ports are published on the host.
+
+    A container cannot see its own port mapping; the Supervisor knows it. When
+    the question cannot be answered the page simply says nothing about the port.
+    """
+    token = os.getenv("SUPERVISOR_TOKEN")
+    if not token:
+        return {}
+    ask = urllib.request.Request("http://supervisor/addons/self/info", headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(ask, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError) as error:
+        logger.warning("Could not ask the Supervisor about the network: %s", error)
+        return {}
+    network = (data.get("data") or {}).get("network") or {}
+    return {port: host for port, host in network.items() if host}
+
+
+@system.route("/api/network", methods=["GET"])
+def network_status():
+    """How the add-on can be reached: the setting and what is actually published.
+
+    Both halves matter and they live in different menus: publishing a port is
+    done in the add-on's network settings, and who may be answered there is this
+    add-on's own setting. Seeing them together is what makes a mistake visible.
+    """
+    return jsonify(
+        {
+            "policy": external_access.policy(),
+            "policies": list(external_access.POLICIES),
+            "published": _published_ports(),
+        }
+    )
+
+
+@system.route("/api/api_token", methods=["GET"])
+def api_token_status():
+    """Return whether an external API token exists (never the token itself).
+
+    Ingress-only: the access gate refuses direct (non-Ingress) requests here.
+    """
+    return jsonify(renamer_state["api_token_store"].status())
+
+
+@system.route("/api/api_token", methods=["POST"])
+def api_token_generate():
+    """Generate (or replace) the external API token and return it once.
+
+    The plaintext is shown only in this response; only its hash is stored, so it
+    cannot be retrieved again. Ingress-only.
+    """
+    store = renamer_state["api_token_store"]
+    token = store.generate()
+    result = {"token": token}
+    result.update(store.status())
+    return jsonify(result)
+
+
+@system.route("/api/api_token", methods=["DELETE"])
+def api_token_revoke():
+    """Revoke the external API token, disabling external access. Ingress-only."""
+    renamer_state["api_token_store"].revoke()
+    return jsonify(renamer_state["api_token_store"].status())
