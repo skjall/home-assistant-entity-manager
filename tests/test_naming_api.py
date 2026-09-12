@@ -304,3 +304,28 @@ def test_counting_groups_entities_of_one_type(client):
 
     assert rule["affected"] == 22  # the 20 copies plus both spellings in the fixture
     assert len(calls) < 22  # not one lookup per entity
+
+
+def test_template_sample_comes_from_a_real_entity(client):
+    """An example from the user's own home beats "Living room / Thermostat"."""
+    data = client.get("/api/naming_templates/sample").get_json()
+
+    assert data["entity_id"] == "number.a_effect_speed"
+    assert data["context"]["area"] == "Küche"
+    assert data["context"]["device"] == "Deckenleuchte"
+    assert data["context"]["entity"] == "Effect speed"
+    assert data["context"]["domain"] == "number"
+    assert data["context"]["integration"] == "mqtt"
+
+
+def test_template_sample_falls_back_without_entities(client, monkeypatch):
+    web_ui.renamer_state["restructurer"].entities = {}
+
+    async def no_registry():
+        return None
+
+    monkeypatch.setattr(web_ui, "_ensure_registry_loaded", no_registry)
+    data = client.get("/api/naming_templates/sample").get_json()
+
+    assert data["entity_id"] is None
+    assert data["context"]["area"] == "Living room"

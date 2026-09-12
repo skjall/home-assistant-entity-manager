@@ -425,6 +425,43 @@
             color: #2563eb;
             border-bottom-color: #2563eb;
         }
+        .field-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .field-chip {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1px;
+            padding: 5px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            text-align: left;
+            max-width: 200px;
+        }
+        .field-chip:hover {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+        .field-chip-name {
+            font-size: 0.8rem;
+            color: #374151;
+        }
+        .field-chip-value {
+            font-size: 0.7rem;
+            color: #6b7280;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .input-invalid {
+            border-color: #dc2626 !important;
+        }
     </style>
 </head>
 <body>
@@ -501,27 +538,48 @@
 
                 <div class="form-group">
                     <label x-text="t('settings.device_name_template')">Device name template</label>
-                    <input class="edit-input" style="width: 100%;" x-model="namingTemplates.device_name"
+                    <input class="edit-input" style="width: 100%;" x-ref="tpl_device_name"
+                           :class="unknownFields('device_name').length ? 'input-invalid' : ''"
+                           x-model="namingTemplates.device_name"
+                           @focus="activeTemplate = 'device_name'"
                            @input.debounce.400ms="previewNamingTemplates()">
                 </div>
                 <div class="form-group">
                     <label x-text="t('settings.entity_name_template')">Entity name template</label>
-                    <input class="edit-input" style="width: 100%;" x-model="namingTemplates.entity_name"
+                    <input class="edit-input" style="width: 100%;" x-ref="tpl_entity_name"
+                           :class="unknownFields('entity_name').length ? 'input-invalid' : ''"
+                           x-model="namingTemplates.entity_name"
+                           @focus="activeTemplate = 'entity_name'"
                            @input.debounce.400ms="previewNamingTemplates()">
                 </div>
                 <div class="form-group">
                     <label x-text="t('settings.entity_id_template')">Entity ID template</label>
-                    <input class="edit-input" style="width: 100%;" x-model="namingTemplates.entity_id"
+                    <input class="edit-input" style="width: 100%;" x-ref="tpl_entity_id"
+                           :class="unknownFields('entity_id').length ? 'input-invalid' : ''"
+                           x-model="namingTemplates.entity_id"
+                           @focus="activeTemplate = 'entity_id'"
                            @input.debounce.400ms="previewNamingTemplates()">
                 </div>
 
+                <p x-show="allUnknownFields().length" class="text-amber-600" style="font-size: 0.85rem;"
+                   x-text="t('settings.unknown_placeholder', {names: allUnknownFields().join(', ')})"></p>
+
                 <p style="font-size: 0.85rem; color: #6b7280; margin: 12px 0 6px;"
                    x-text="t('settings.available_placeholders')"></p>
-                <code style="display: block; white-space: normal; line-height: 1.8; color: #374151;"
-                      x-text="namingFields.map(field => '{' + field + '}').join('  ')"></code>
+                <div class="field-chips">
+                    <template x-for="field in namingFields" :key="field">
+                        <button type="button" class="field-chip" @click="insertField(field)"
+                                :title="t('settings.insert_placeholder', {name: '{' + field + '}'})">
+                            <span class="field-chip-name" x-text="fieldLabel(field)"></span>
+                            <span class="field-chip-value" x-text="namingSample[field] || '—'"></span>
+                        </button>
+                    </template>
+                </div>
 
                 <div style="margin-top: 16px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
                     <strong x-text="t('settings.naming_preview')">Example preview</strong>
+                    <span x-show="namingSampleEntity" style="color: #6b7280; font-size: 0.8rem;"
+                          x-text="t('settings.naming_preview_for', {entity: namingSampleEntity})"></span>
                     <div style="margin-top: 8px; font-size: 0.9rem;">
                         <div><span x-text="t('settings.device_name_template')"></span>: <code x-text="namingPreview.device_name || '—'"></code></div>
                         <div><span x-text="t('settings.entity_name_template')"></span>: <code x-text="namingPreview.entity_name || '—'"></code></div>
@@ -882,6 +940,9 @@
                 namingTemplates: { device_name: '', entity_name: '', entity_id: '' },
                 namingFields: [],
                 namingPreview: {},
+                namingSample: {},
+                namingSampleEntity: null,
+                activeTemplate: 'entity_name',
                 namingMessage: '',
                 namingError: false,
 
@@ -928,6 +989,7 @@
                     await this.syncRuleLanguage();
                     if (this.highlightRuleId) this.focusHighlightedRule();
                     await this.loadApiToken();
+                    await this.loadNamingSample();
                     await this.loadNamingTemplates();
                 },
 
@@ -992,15 +1054,57 @@
                     this.previewNamingTemplates();
                 },
 
+                // A placeholder reads as what it stands for, with a value from the
+                // user's own home; the raw name only appears in the tooltip.
+                fieldLabel(field) {
+                    const key = 'settings.field_' + field;
+                    const label = this.t(key);
+                    return label === key ? field : label;
+                },
+
+                unknownFields(which) {
+                    const template = this.namingTemplates[which] || '';
+                    return [...template.matchAll(/{([^{}]*)}/g)]
+                        .map(match => match[1])
+                        .filter(name => !this.namingFields.includes(name));
+                },
+
+                allUnknownFields() {
+                    const names = ['device_name', 'entity_name', 'entity_id'].flatMap(w => this.unknownFields(w));
+                    return [...new Set(names)].map(name => '{' + name + '}');
+                },
+
+                // Put the placeholder where the cursor is, in the field last touched.
+                insertField(field) {
+                    const which = this.activeTemplate || 'entity_name';
+                    const input = this.$refs['tpl_' + which];
+                    const token = '{' + field + '}';
+                    const current = this.namingTemplates[which] || '';
+                    const at = input && typeof input.selectionStart === 'number' ? input.selectionStart : current.length;
+                    const needsSpace = at > 0 && !/\s$/.test(current.slice(0, at)) && current.slice(0, at) !== '';
+                    const insert = (needsSpace ? ' ' : '') + token;
+                    this.namingTemplates[which] = current.slice(0, at) + insert + current.slice(at);
+                    this.$nextTick(() => {
+                        if (!input) return;
+                        input.focus();
+                        const caret = at + insert.length;
+                        input.setSelectionRange(caret, caret);
+                    });
+                    this.previewNamingTemplates();
+                },
+
+                async loadNamingSample() {
+                    try {
+                        const data = await (await fetch('api/naming_templates/sample')).json();
+                        this.namingSample = data.context || {};
+                        this.namingSampleEntity = data.entity_id || null;
+                    } catch (e) {
+                        console.warn('Could not load a sample entity', e);
+                    }
+                },
+
                 async previewNamingTemplates() {
-                    const context = {
-                        floor: 'Ground floor', floor_id: 'ground_floor',
-                        area: 'Living room', area_id: 'living_room',
-                        device: 'Thermostat', device_id: 'device_123',
-                        entity: 'Temperature', entity_id: 'thermostat_temperature',
-                        domain: 'sensor', device_class: 'temperature',
-                        manufacturer: 'Acme', model: 'T1000', integration: 'matter'
-                    };
+                    const context = this.namingSample;
                     try {
                         const response = await fetch('api/naming_templates/preview', {
                             method: 'POST',

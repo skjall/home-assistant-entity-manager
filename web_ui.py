@@ -2991,6 +2991,48 @@ def naming_templates_config() -> Any:
         return jsonify({"error": "Failed to save naming templates"}), 500
 
 
+@app.route("/api/naming_templates/sample")
+def naming_templates_sample() -> Any:
+    """A real entity to preview templates with, so the example is the user's own home."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_ensure_registry_loaded())
+    finally:
+        loop.close()
+    restructurer = renamer_state.get("restructurer")
+    fallback = {
+        "floor": "Ground floor",
+        "floor_id": "ground_floor",
+        "area": "Living room",
+        "area_id": "living_room",
+        "device": "Thermostat",
+        "device_id": "device_123",
+        "entity": "Temperature",
+        "entity_id": "thermostat_temperature",
+        "domain": "sensor",
+        "device_class": "temperature",
+        "manufacturer": "Acme",
+        "model": "T1000",
+        "integration": "matter",
+    }
+    if not restructurer or not restructurer.entities:
+        return jsonify({"context": fallback, "entity_id": None})
+    for entity_id, entity_data in restructurer.entities.items():
+        device = restructurer.devices.get(entity_data.get("device_id") or "")
+        if not device or not (entity_data.get("area_id") or device.get("area_id")):
+            continue
+        context = restructurer.build_naming_context(entity_id, entity_data)
+        if not context.get("entity") or not context.get("device"):
+            continue
+        sample = {field: context.get(field, "") for field in fallback}
+        sample["entity_id"] = entity_id.partition(".")[2]
+        sample["domain"] = entity_id.partition(".")[0]
+        sample["integration"] = entity_data.get("platform") or ""
+        return jsonify({"context": sample, "entity_id": entity_id})
+    return jsonify({"context": fallback, "entity_id": None})
+
+
 @app.route("/api/naming_templates/preview", methods=["POST"])
 def preview_naming_templates() -> Any:
     """Render a sample context without persisting template changes."""
