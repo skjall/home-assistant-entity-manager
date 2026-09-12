@@ -95,7 +95,9 @@
     "explain_original": "„{value}“ ist der Name der Integration ({source}), unverändert.",
     "explain_normalized": "Die Integration ({source}) nennt es „{original}“. Nur die Schreibweise wurde angepasst.",
     "scope_integration": "Für alle „{name}“ von {integration} ({count})",
-    "applying": "Wird übernommen …"
+    "applying": "Wird übernommen …",
+    "remove_exception": "Ausnahme entfernen",
+    "exception_removed": "Ausnahme entfernt"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",

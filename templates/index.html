@@ -2087,8 +2087,10 @@
                                                        :placeholder="t('entity.suffix_placeholder')">
                                                 <button @click="revertEntitySuffix(entity)"
                                                         class="btn btn-ghost btn-sm"
-                                                        :title="t('entity.revert')">
-                                                    <i class="ri-arrow-go-back-line"></i>
+                                                        x-show="typeEdited(entity) || hasException(entity)"
+                                                        :disabled="applyingEntityId"
+                                                        :title="typeEdited(entity) ? t('entity.revert') : t('entity.remove_exception')">
+                                                    <i :class="typeEdited(entity) ? 'ri-arrow-go-back-line' : 'ri-delete-bin-line'"></i>
                                                 </button>
                                                 <button @click="saveEntitySuffix(entity)"
                                                         class="btn btn-primary btn-sm"
@@ -4508,10 +4510,36 @@
                     return entity.base_name || '';
                 },
 
-                revertEntitySuffix(entity) {
-                    const original = entity.base_name || '';
-                    entity._currentSuffix = original;
-                    this.updateEntityPreview(entity, original);
+                hasException(entity) {
+                    return entity?.resolution?.won_by === 'override' || !!entity?.has_override;
+                },
+
+                // Undo the typing; with nothing typed, drop the exception itself.
+                async revertEntitySuffix(entity) {
+                    if (this.typeEdited(entity)) {
+                        const original = entity.base_name || '';
+                        entity._currentSuffix = original;
+                        this.updateEntityPreview(entity, original);
+                        return;
+                    }
+                    if (!this.hasException(entity) || this.applyingEntityId) return;
+                    this.applyingEntityId = entity.id;
+                    try {
+                        const response = await fetch('api/set_entity_override', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ registry_id: entity.registry_id, override_name: '' })
+                        });
+                        const data = await response.json();
+                        if (!response.ok || data.error) throw new Error(data.error || 'Exception not removed');
+                        entity._currentSuffix = undefined;
+                        this.showMessage(this.t('entity.exception_removed'), 'success');
+                        await this.loadHierarchy();
+                    } catch (error) {
+                        this.showMessage('Error: ' + error.message, 'error');
+                    } finally {
+                        this.applyingEntityId = null;
+                    }
                 },
 
                 // Check if entity is orphaned (no longer provided by integration)
