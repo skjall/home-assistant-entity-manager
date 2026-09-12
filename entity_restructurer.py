@@ -370,13 +370,15 @@ class EntityRestructurer:
         """
         candidates: List[Dict[str, Any]] = []
         integration = registry.get("platform") or None
+        device = self.devices.get(registry.get("device_id") or "", {})
+        model = device.get("model") or None
         rules = getattr(self.type_mappings, "rules", None) if self.type_mappings else None
         shown = normalize_display(name, rules.display_case if rules is not None else DEFAULT_CASE)
         if self.type_mappings:
             language = self.language
             if rules is not None:
                 translation_key = registry.get("translation_key")
-                rule = rules.find("translation_key", translation_key, integration, language)
+                rule = rules.find("translation_key", translation_key, integration, language, model)
                 if rule:
                     candidates.append(
                         {
@@ -386,7 +388,7 @@ class EntityRestructurer:
                             "matched_on": dict(rule["match"]),
                         }
                     )
-                rule = rules.find("name", name, integration, language)
+                rule = rules.find("name", name, integration, language, model)
                 if rule:
                     candidates.append(
                         {

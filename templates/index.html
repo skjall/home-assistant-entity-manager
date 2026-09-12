@@ -1473,6 +1473,62 @@
         .max-w-32 {
             max-width: 8rem;
         }
+        .scope-bar {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .scope-label {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        .scope-group {
+            display: inline-flex;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #fff;
+            max-width: 100%;
+        }
+        .scope-option {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            font-size: 0.75rem;
+            color: #374151;
+            background: #fff;
+            border: 0;
+            border-left: 1px solid #e5e7eb;
+            cursor: pointer;
+            white-space: nowrap;
+            min-width: 0;
+        }
+        .scope-option:first-child { border-left: 0; }
+        .scope-option:hover { background: #f3f4f6; }
+        .scope-option.is-active {
+            background: #2563eb;
+            color: #fff;
+        }
+        .scope-option.is-active .scope-count {
+            background: rgba(255, 255, 255, 0.25);
+            color: #fff;
+        }
+        .scope-count {
+            font-size: 0.7rem;
+            padding: 0 5px;
+            border-radius: 8px;
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .scope-model {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -2104,23 +2160,39 @@
                                             </span>
                                         </div>
                                         <p class="text-xs text-gray-500 mt-1" x-text="resolutionExplain(entity)"></p>
-                                        <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" x-show="typeEdited(entity)">
-                                            <label class="flex items-center gap-1.5 cursor-pointer">
-                                                <input type="radio" :name="'scope-' + entity.registry_id" value="all"
-                                                       :checked="entity._ruleScope === 'all'" @change="entity._ruleScope = 'all'">
-                                                <span x-text="t('entity.scope_all', {name: typeOriginal(entity), count: entity.type_count || 1})"></span>
-                                            </label>
-                                            <label class="flex items-center gap-1.5 cursor-pointer"
-                                                   x-show="entity.platform && entity.type_integration_count && entity.type_integration_count < (entity.type_count || 0)">
-                                                <input type="radio" :name="'scope-' + entity.registry_id" value="integration"
-                                                       :checked="entity._ruleScope === 'integration'" @change="entity._ruleScope = 'integration'">
-                                                <span x-text="t('entity.scope_integration', {name: typeOriginal(entity), integration: entity.platform, count: entity.type_integration_count || 0})"></span>
-                                            </label>
-                                            <label class="flex items-center gap-1.5 cursor-pointer">
-                                                <input type="radio" :name="'scope-' + entity.registry_id" value="here"
-                                                       :checked="entity._ruleScope === 'here'" @change="entity._ruleScope = 'here'">
-                                                <span x-text="t('entity.scope_here')"></span>
-                                            </label>
+                                        <div class="scope-bar" x-show="typeEdited(entity)">
+                                            <span class="scope-label" x-text="t('entity.scope_label', {name: typeOriginal(entity)})"></span>
+                                            <div class="scope-group" role="group">
+                                                <button type="button" class="scope-option"
+                                                        :class="entity._ruleScope === 'all' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'all'"
+                                                        :title="t('entity.scope_all_hint', {count: entity.type_count || 1})">
+                                                    <span x-text="t('entity.scope_everywhere')"></span>
+                                                    <span class="scope-count" x-text="entity.type_count || 1"></span>
+                                                </button>
+                                                <button type="button" class="scope-option"
+                                                        x-show="entity.platform && entity.type_integration_count && entity.type_integration_count < (entity.type_count || 0)"
+                                                        :class="entity._ruleScope === 'integration' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'integration'"
+                                                        :title="t('entity.scope_integration_hint', {integration: entity.platform, count: entity.type_integration_count || 0})">
+                                                    <span x-text="entity.platform"></span>
+                                                    <span class="scope-count" x-text="entity.type_integration_count || 0"></span>
+                                                </button>
+                                                <button type="button" class="scope-option"
+                                                        x-show="entity.device_model && entity.type_model_count && entity.type_model_count < (entity.type_integration_count || entity.type_count || 0)"
+                                                        :class="entity._ruleScope === 'model' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'model'"
+                                                        :title="t('entity.scope_model_hint', {model: entity.device_model, count: entity.type_model_count || 0})">
+                                                    <span class="scope-model" x-text="entity.device_model"></span>
+                                                    <span class="scope-count" x-text="entity.type_model_count || 0"></span>
+                                                </button>
+                                                <button type="button" class="scope-option"
+                                                        :class="entity._ruleScope === 'here' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'here'"
+                                                        :title="t('entity.scope_here_hint')">
+                                                    <span x-text="t('entity.scope_here')"></span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -4707,14 +4779,14 @@
                         const edited = this.typeEdited(entity);
                         let ruleScopeApplied = null;
                         if (edited && typed) {
-                            if (entity._ruleScope === 'all' || entity._ruleScope === 'integration') {
+                            if (entity._ruleScope !== 'here') {
                                 const learn = await fetch('api/naming/learn', {
                                     method: 'POST',
                                     headers: {'Content-Type': 'application/json'},
                                     body: JSON.stringify({
                                         entity_id: entity.id,
                                         value: typed,
-                                        scope: entity._ruleScope === 'integration' ? 'integration' : 'global'
+                                        scope: entity._ruleScope === 'here' ? 'here' : (entity._ruleScope || 'global')
                                     })
                                 });
                                 const learned = await learn.json();

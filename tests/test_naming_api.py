@@ -61,7 +61,7 @@ def test_learn_derives_the_key_server_side(client):
 
     assert response.status_code == 200
     rule = response.get_json()["rule"]
-    assert rule["match"] == {"kind": "name", "value": "effect_speed", "integration": None}
+    assert rule["match"] == {"kind": "name", "value": "effect_speed", "integration": None, "model": None}
     assert rule["targets"] == {"de": "Effektgeschwindigkeit"}
     # Both spellings of the supplied name are covered by the one rule.
     assert rule["affected"] == 2
@@ -173,3 +173,33 @@ def test_learning_for_one_integration_leaves_the_others_alone(client):
     assert restructurer.last_resolutions["binary_sensor.reg-c_tur"]["value"] == "Zustand"
     restructurer.build_naming_context("binary_sensor.reg-e_tur", restructurer.entities["binary_sensor.reg-e_tur"])
     assert restructurer.last_resolutions["binary_sensor.reg-e_tur"]["value"] == "Tür"
+
+
+def test_learning_for_one_model_leaves_the_other_models_alone(client):
+    restructurer = web_ui.renamer_state["restructurer"]
+    restructurer.devices = {
+        "d": {"id": "d", "name": "Deckenleuchte", "area_id": "k", "model": "MYGGBETT door/window sensor"},
+        "e": {"id": "e", "name": "Kühlschrank", "area_id": "k", "model": "Fridge freezer"},
+    }
+    for registry_id, device_id, platform in (("reg-c", "d", "matter"), ("reg-e", "e", "miele")):
+        entity_id = f"binary_sensor.{registry_id}_tur"
+        restructurer.entities[entity_id] = {
+            "id": registry_id,
+            "entity_id": entity_id,
+            "device_id": device_id,
+            "platform": platform,
+            "original_name": "Tür",
+            "has_entity_name": True,
+        }
+
+    response = client.post(
+        "/api/naming/learn",
+        json={"entity_id": "binary_sensor.reg-c_tur", "value": "Zustand", "scope": "model"},
+    )
+
+    assert response.status_code == 200
+    match = response.get_json()["rule"]["match"]
+    assert match["integration"] == "matter"
+    assert match["model"] == "MYGGBETT door/window sensor"
+    assert response.get_json()["rule"]["affected"] == 1
+    assert web_ui._type_key_model_counts(restructurer)[("name:tuer", "MYGGBETT door/window sensor")] == 1

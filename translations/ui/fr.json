@@ -80,8 +80,7 @@
     "no_name": "(sans nom)",
     "type_label": "Type :",
     "apply": "Appliquer",
-    "scope_all": "Pour tous « {name} » ({count})",
-    "scope_here": "Seulement ici (exception)",
+    "scope_here": "Ici seulement",
     "source_override": "Exception",
     "source_rule_user": "Règle",
     "source_rule_system": "Intégré",
@@ -94,10 +93,15 @@
     "explain_device_class": "« {value} » vient de la classe d’appareil ; l’intégration ne fournit pas de nom.",
     "explain_original": "« {value} » est le nom de l’intégration ({source}), inchangé.",
     "explain_normalized": "L’intégration ({source}) l’appelle « {original} ». Seule l’orthographe a été ajustée.",
-    "scope_integration": "Pour tous les « {name} » de {integration} ({count})",
     "applying": "Application …",
     "remove_exception": "Supprimer l’exception",
-    "exception_removed": "Exception supprimée"
+    "exception_removed": "Exception supprimée",
+    "scope_label": "Modifier « {name} » pour :",
+    "scope_everywhere": "Partout",
+    "scope_all_hint": "Pour les {count} entités portant ce nom, quelle que soit l’intégration.",
+    "scope_integration_hint": "Seulement pour les {count} entités de {integration}.",
+    "scope_model_hint": "Seulement pour les {count} entités sur des appareils de type {model}.",
+    "scope_here_hint": "Une exception pour cette seule entité, sans règle."
   },
   "virtual_devices": {
     "automations": "Automatisations",

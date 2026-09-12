@@ -553,6 +553,7 @@
                                 <span x-show="row.kind === 'translation_key'" class="kind-badge" :title="t('settings.kind_translation_key')">tk</span>
                                 <span x-show="row.kind === 'device_class'" class="kind-badge" :title="t('settings.kind_device_class')">dc</span>
                                 <span x-show="row.integration" class="kind-badge" x-text="row.integration"></span>
+                                <span x-show="row.model" class="kind-badge" :title="row.model" x-text="row.model"></span>
                             </td>
                             <td>
                                 <template x-if="editingKey !== row.id">
@@ -1063,6 +1064,7 @@
                         key: rule.match.value,
                         kind: rule.match.kind,
                         integration: rule.match.integration,
+                        model: rule.match.model || null,
                         value: rule.targets[this.language] || Object.values(rule.targets)[0] || '',
                         system_default: systemByKey[rule.match.value] || null,
                         affected: rule.affected || 0,
@@ -1074,7 +1076,7 @@
                     for (const entry of this.systemRules) {
                         if (covered.has(entry.key)) continue;
                         rows.push({ id: 'sys:' + entry.key, isRule: false, key: entry.key, kind: 'name',
-                                    integration: null, value: '', system_default: entry.value, affected: 0, source: 'system' });
+                                    integration: null, model: null, value: '', system_default: entry.value, affected: 0, source: 'system' });
                     }
                     return rows;
                 },

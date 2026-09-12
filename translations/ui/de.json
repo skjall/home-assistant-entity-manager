@@ -80,8 +80,7 @@
     "no_name": "(kein Name)",
     "type_label": "Typ:",
     "apply": "Übernehmen",
-    "scope_all": "Für alle „{name}“ ({count})",
-    "scope_here": "Nur hier (Ausnahme)",
+    "scope_here": "Nur hier",
     "source_override": "Ausnahme",
     "source_rule_user": "Regel",
     "source_rule_system": "Standard",
@@ -94,10 +93,15 @@
     "explain_device_class": "„{value}“ kommt aus der Geräteklasse; die Integration liefert keinen Namen.",
     "explain_original": "„{value}“ ist der Name der Integration ({source}), unverändert.",
     "explain_normalized": "Die Integration ({source}) nennt es „{original}“. Nur die Schreibweise wurde angepasst.",
-    "scope_integration": "Für alle „{name}“ von {integration} ({count})",
     "applying": "Wird übernommen …",
     "remove_exception": "Ausnahme entfernen",
-    "exception_removed": "Ausnahme entfernt"
+    "exception_removed": "Ausnahme entfernt",
+    "scope_label": "„{name}“ ändern für:",
+    "scope_everywhere": "Überall",
+    "scope_all_hint": "Für alle {count} Entitäten mit diesem Namen, egal welche Integration.",
+    "scope_integration_hint": "Nur für die {count} Entitäten von {integration}.",
+    "scope_model_hint": "Nur für die {count} Entitäten an Geräten vom Typ {model}.",
+    "scope_here_hint": "Ausnahme nur für diese eine Entität, ohne Regel."
   },
   "virtual_devices": {
     "automations": "Automatisierungen",

@@ -2888,6 +2888,7 @@ async def _get_hierarchy_async():
 
         type_counts = _type_key_counts(restructurer)
         type_integration_counts = _type_key_integration_counts(restructurer)
+        type_model_counts = _type_key_model_counts(restructurer)
 
         entities = []
         for entity_id, entity_data in restructurer.entities.items():
@@ -2932,6 +2933,12 @@ async def _get_hierarchy_async():
                     "type_count": type_counts.get(type_key, 0) if type_key else 0,
                     "type_integration_count": (
                         type_integration_counts.get((type_key, entity_data.get("platform")), 0) if type_key else 0
+                    ),
+                    "device_model": _entity_model(restructurer, entity_data),
+                    "type_model_count": (
+                        type_model_counts.get((type_key, _entity_model(restructurer, entity_data)), 0)
+                        if type_key
+                        else 0
                     ),
                     "name_owner": "unknown",
                 }
@@ -3174,6 +3181,22 @@ def _type_key_integration_counts(restructurer) -> dict:
     return counts
 
 
+def _entity_model(restructurer, entity_data: dict) -> str:
+    device = restructurer.devices.get(entity_data.get("device_id") or "", {})
+    return device.get("model") or ""
+
+
+def _type_key_model_counts(restructurer) -> dict:
+    """Entities per type and device model, the narrowest scope a rule can take."""
+    counts: dict = {}
+    for entity_data in restructurer.entities.values():
+        key = _entity_type_key(entity_data)
+        model = _entity_model(restructurer, entity_data)
+        if key and model:
+            counts[(key, model)] = counts.get((key, model), 0) + 1
+    return counts
+
+
 def _rule_affected_counts(restructurer, rules) -> dict:
     """How many loaded entities each rule currently applies to."""
     if restructurer is None:
@@ -3183,9 +3206,10 @@ def _rule_affected_counts(restructurer, rules) -> dict:
     for entity_data in restructurer.entities.values():
         integration = entity_data.get("platform") or None
         native = entity_data.get("original_name") or ""
-        rule = rules.find("translation_key", entity_data.get("translation_key"), integration, language) or rules.find(
-            "name", native, integration, language
-        )
+        model = _entity_model(restructurer, entity_data) or None
+        rule = rules.find(
+            "translation_key", entity_data.get("translation_key"), integration, language, model
+        ) or rules.find("name", native, integration, language, model)
         if rule:
             counts[rule["id"]] = counts.get(rule["id"], 0) + 1
     return counts
@@ -3246,6 +3270,7 @@ def naming_rules_collection():
                 language,
                 sanitize_string(target),
                 source="user",
+                model=sanitize_string(match.get("model") or "", max_length=128) or None,
             )
         except NamingRuleError as error:
             return jsonify({"error": str(error)}), 400
@@ -3282,7 +3307,10 @@ def naming_rule_item(rule_id):
         integration = ...
         if "integration" in data:
             integration = sanitize_string(data.get("integration") or "", max_length=64) or None
-        rule = rules.update(rule_id, targets=data.get("targets"), integration=integration)
+        model = ...
+        if "model" in data:
+            model = sanitize_string(data.get("model") or "", max_length=128) or None
+        rule = rules.update(rule_id, targets=data.get("targets"), integration=integration, model=model)
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()
@@ -3306,7 +3334,8 @@ def naming_learn():
         return jsonify({"error": "unknown entity"}), 404
     if not value:
         return jsonify({"error": "value required"}), 400
-    integration = (entity.get("platform") or None) if scope == "integration" else None
+    integration = (entity.get("platform") or None) if scope in ("integration", "model") else None
+    model = _entity_model(restructurer, entity) or None if scope == "model" else None
     if entity.get("translation_key"):
         kind, key = "translation_key", entity["translation_key"]
     else:
@@ -3315,7 +3344,9 @@ def naming_learn():
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
     rules = renamer_state["naming_rules"]
     try:
-        rule = rules.upsert(kind, key, integration, rules.language, value, source="learned", learned_from=entity_id)
+        rule = rules.upsert(
+            kind, key, integration, rules.language, value, source="learned", learned_from=entity_id, model=model
+        )
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()

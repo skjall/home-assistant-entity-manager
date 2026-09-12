@@ -315,3 +315,35 @@ def test_display_case_setting_changes_resolution(restructurer):
 
     with pytest.raises(NamingRuleError):
         rules.set_display_case("shouting")
+
+
+def test_model_scope_wins_over_integration_and_global(tmp_path):
+    rules = _rules(tmp_path, legacy={})
+    rules.upsert("name", "Tür", None, "de", "Zustand")
+    rules.upsert("name", "Tür", "matter", "de", "Kontakt")
+    rules.upsert("name", "Tür", "matter", "de", "Fensterkontakt", model="MYGGBETT door/window sensor")
+
+    assert rules.find("name", "Tür", "matter", "de", "MYGGBETT door/window sensor")["targets"]["de"] == "Fensterkontakt"
+    assert rules.find("name", "Tür", "matter", "de", "Eve Door 20EBN9901")["targets"]["de"] == "Kontakt"
+    assert rules.find("name", "Tür", "miele", "de", "Fridge freezer")["targets"]["de"] == "Zustand"
+    assert len(rules.rules) == 3
+
+
+def test_model_rule_is_matched_regardless_of_spelling(tmp_path):
+    rules = _rules(tmp_path, legacy={})
+    rules.upsert("name", "Tür", "matter", "de", "Fensterkontakt", model="MYGGBETT door/window sensor")
+
+    assert rules.find("name", "Tür", "matter", "de", "myggbett door/window SENSOR") is not None
+
+
+def test_resolution_uses_the_device_model(restructurer):
+    rules = restructurer.type_mappings.rules
+    restructurer.devices["d"]["model"] = "Eve Door 20EBN9901"
+    restructurer.entities["number.x_effect_speed"]["original_name"] = "Tür"
+    rules.upsert("name", "Tür", "mqtt", "de", "Kontakt", model="Eve Door 20EBN9901")
+
+    restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["value"] == "Kontakt"
+    assert resolution["matched_on"]["model"] == "Eve Door 20EBN9901"

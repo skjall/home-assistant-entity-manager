@@ -80,8 +80,7 @@
     "no_name": "(no name)",
     "type_label": "Type:",
     "apply": "Apply",
-    "scope_all": "For all “{name}” ({count})",
-    "scope_here": "Only here (exception)",
+    "scope_here": "Here only",
     "source_override": "Exception",
     "source_rule_user": "Rule",
     "source_rule_system": "Built-in",
@@ -94,10 +93,15 @@
     "explain_device_class": "“{value}” comes from the device class; the integration supplies no name.",
     "explain_original": "“{value}” is the integration’s ({source}) name, unchanged.",
     "explain_normalized": "The integration ({source}) calls it “{original}”. Only the spelling was adjusted.",
-    "scope_integration": "For all “{name}” from {integration} ({count})",
     "applying": "Applying …",
     "remove_exception": "Remove exception",
-    "exception_removed": "Exception removed"
+    "exception_removed": "Exception removed",
+    "scope_label": "Change “{name}” for:",
+    "scope_everywhere": "Everywhere",
+    "scope_all_hint": "For all {count} entities with this name, whatever the integration.",
+    "scope_integration_hint": "Only for the {count} entities from {integration}.",
+    "scope_model_hint": "Only for the {count} entities on devices of type {model}.",
+    "scope_here_hint": "An exception for this one entity, without a rule."
   },
   "virtual_devices": {
     "automations": "Automations",

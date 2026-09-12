@@ -88,6 +88,8 @@ class NamingRules:
                 data.setdefault("language", self.default_language)
                 data.setdefault("migration", None)
                 data.setdefault("display_case", DEFAULT_CASE)
+                for rule in data["rules"]:
+                    rule.get("match", {}).setdefault("model", None)
                 return data
             except (OSError, json.JSONDecodeError, NamingRuleError) as error:
                 logger.error("Failed to load naming rules: %s", error)
@@ -188,6 +190,7 @@ class NamingRules:
         targets: Mapping[str, str],
         source: str = "user",
         learned_from: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> Dict[str, Any]:
         if kind not in KINDS:
             raise NamingRuleError(f"Unknown rule kind: {kind}")
@@ -198,7 +201,7 @@ class NamingRules:
             raise NamingRuleError("A rule needs at least one target")
         rule = {
             "id": _new_id(),
-            "match": {"kind": kind, "value": value, "integration": integration or None},
+            "match": {"kind": kind, "value": value, "integration": integration or None, "model": model or None},
             "targets": clean_targets,
             "source": source,
             "created_at": _now(),
@@ -258,24 +261,45 @@ class NamingRules:
     def get(self, rule_id: str) -> Optional[Dict[str, Any]]:
         return next((rule for rule in self.rules if rule["id"] == rule_id), None)
 
-    def _matching(self, kind: str, value: str, integration: Optional[str]) -> Optional[Dict[str, Any]]:
+    def _matching(
+        self, kind: str, value: str, integration: Optional[str], model: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         for rule in self.rules:
             match = rule["match"]
-            if match["kind"] == kind and match["value"] == value and (match.get("integration") or None) == integration:
+            if match["kind"] != kind or match["value"] != value:
+                continue
+            if (match.get("integration") or None) != integration:
+                continue
+            if canon(match.get("model") or "") == canon(model or ""):
                 return rule
         return None
 
+    @staticmethod
+    def _scopes(integration: Optional[str], model: Optional[str]):
+        """Scopes from narrow to wide: this model, then this integration, then everywhere."""
+        candidates = [(integration, model), (None, model), (integration, None), (None, None)]
+        seen = []
+        for scope in candidates:
+            if scope not in seen:
+                seen.append(scope)
+        return seen
+
     def find(
-        self, kind: str, value: Optional[str], integration: Optional[str], language: str
+        self,
+        kind: str,
+        value: Optional[str],
+        integration: Optional[str],
+        language: str,
+        model: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Return the rule for ``kind``/``value``, integration-specific before global."""
+        """Return the rule for ``kind``/``value``, the narrowest scope first."""
         if not value:
             return None
         key = value if kind == "translation_key" else canon(value)
         if not key:
             return None
-        for scope in ((integration, None) if integration else (None,)):
-            rule = self._matching(kind, key, scope)
+        for scope_integration, scope_model in self._scopes(integration or None, model or None):
+            rule = self._matching(kind, key, scope_integration, scope_model)
             if rule and rule["targets"].get(language):
                 return rule
         return None
@@ -289,12 +313,13 @@ class NamingRules:
         target: str,
         source: str = "user",
         learned_from: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create or update the rule for one match, setting its target for ``language``."""
         key = value if kind == "translation_key" else canon(value)
-        rule = self._matching(kind, key, integration or None)
+        rule = self._matching(kind, key, integration or None, model or None)
         if rule is None:
-            rule = self._make_rule(kind, key, integration, {language: target}, source, learned_from)
+            rule = self._make_rule(kind, key, integration, {language: target}, source, learned_from, model)
             self.rules.append(rule)
         else:
             if not target.strip():
@@ -307,7 +332,11 @@ class NamingRules:
         return rule
 
     def update(
-        self, rule_id: str, targets: Optional[Mapping[str, str]] = None, integration: Any = ...
+        self,
+        rule_id: str,
+        targets: Optional[Mapping[str, str]] = None,
+        integration: Any = ...,
+        model: Any = ...,
     ) -> Dict[str, Any]:
         rule = self.get(rule_id)
         if rule is None:
@@ -319,6 +348,8 @@ class NamingRules:
             rule["targets"] = clean
         if integration is not ...:
             rule["match"]["integration"] = integration or None
+        if model is not ...:
+            rule["match"]["model"] = model or None
         rule["updated_at"] = _now()
         self.save()
         return rule
