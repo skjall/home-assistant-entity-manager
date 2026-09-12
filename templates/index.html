@@ -1559,7 +1559,7 @@
                     <button @click="openSwap()" class="btn btn-ghost" title="Gerät ersetzen">
                         <i class="ri-exchange-line"></i>
                     </button>
-                    <a href="settings" class="btn btn-ghost" :title="t('header.settings')">
+                    <a :href="settingsHref()" class="btn btn-ghost" :title="t('header.settings')">
                         <i class="ri-settings-3-line"></i>
                     </a>
                 </div>
@@ -1577,7 +1577,7 @@
                 <h2 x-text="getMobileTitle()">Areas</h2>
                 <p class="nav-subtitle" x-show="getMobileSubtitle()" x-text="getMobileSubtitle()"></p>
             </div>
-            <a href="settings" class="back-btn" style="background: transparent;">
+            <a :href="settingsHref()" class="back-btn" style="background: transparent;">
                 <i class="ri-settings-3-line text-xl text-gray-500"></i>
             </a>
         </div>
@@ -3442,6 +3442,10 @@
 
                 // Initialize
                 async init() {
+                    // Home Assistant always opens this app at its root, so a reload
+                    // from the settings would drop the user here. Go back.
+                    if (this.resumeSettings()) return;
+
                     // Wait for styles to be applied before doing anything
                     await new Promise(resolve => requestAnimationFrame(resolve));
 
@@ -4607,6 +4611,28 @@
                 // The entity part of the name, as the server resolved it.
                 getEntitySuffix(entity) {
                     return entity.base_name || '';
+                },
+
+                resumeSettings() {
+                    const params = new URLSearchParams(window.location.search);
+                    if (params.has('area') || params.has('device')) return false;
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        if (saved.lastPage !== 'settings') return false;
+                        window.location.replace('settings/' + (saved.section || 'naming'));
+                        return true;
+                    } catch (e) {
+                        return false;
+                    }
+                },
+
+                // Reopen the settings on the section the user last used.
+                settingsHref() {
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        if (saved.section) return 'settings/' + saved.section;
+                    } catch (e) { /* storage may be unavailable */ }
+                    return 'settings';
                 },
 
                 hasException(entity) {

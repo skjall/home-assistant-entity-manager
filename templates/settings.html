@@ -432,7 +432,7 @@
         <!-- Header -->
         <div class="settings-header">
             <div>
-                <a href="./" class="back-link">
+                <a href="./" class="back-link" @click="leaveSettings()">
                     <i class="ri-arrow-left-line"></i>
                     <span x-text="t('settings.back_to_manager')">Back to Entity Manager</span>
                 </a>
@@ -903,8 +903,10 @@
                         // Set HTML lang attribute dynamically
                         document.documentElement.lang = this.language;
                     }
-                    // Filter, search and the rule to mark all come from the address,
-                    // so a reload and a shared link show the same page.
+                    // Home Assistant shows this app in a frame and forgets its address,
+                    // so the state has to survive in storage, as on the main page.
+                    // The address still wins when it carries something, for links.
+                    this.restoreState();
                     const params = new URLSearchParams(window.location.search);
                     const wanted = params.get('rule');
                     if (wanted) {
@@ -913,6 +915,7 @@
                     }
                     if (params.get('filter')) this.filterType = params.get('filter');
                     if (params.get('q')) this.searchQuery = params.get('q');
+                    this.rememberState();
                     await this.loadMappings();
                     await this.syncRuleLanguage();
                     if (this.highlightRuleId) this.focusHighlightedRule();
@@ -1164,6 +1167,34 @@
                     return rows;
                 },
 
+                // The main page is where the user wants to be next; do not bounce back.
+                leaveSettings() {
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        saved.lastPage = 'main';
+                        localStorage.setItem('entityManagerSettings', JSON.stringify(saved));
+                    } catch (e) { /* storage may be unavailable */ }
+                },
+
+                restoreState() {
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        if (saved.filter) this.filterType = saved.filter;
+                        if (saved.q) this.searchQuery = saved.q;
+                    } catch (e) { /* storage may be unavailable */ }
+                },
+
+                rememberState() {
+                    try {
+                        localStorage.setItem('entityManagerSettings', JSON.stringify({
+                            lastPage: 'settings',
+                            section: this.section,
+                            filter: this.filterType,
+                            q: this.searchQuery
+                        }));
+                    } catch (e) { /* storage may be unavailable */ }
+                },
+
                 // Keep filter and search in the address without adding history entries.
                 rememberQuery() {
                     const params = new URLSearchParams();
@@ -1178,6 +1209,7 @@
 
                 filterRules() {
                     this.rememberQuery();
+                    this.rememberState();
                     let result = this.ruleRows();
                     // Rules that only repeat the default are noise; they show under "without effect".
                     if (this.filterType === 'all') result = result.filter(r => !r.redundant);
