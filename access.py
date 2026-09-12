@@ -108,6 +108,12 @@ def install(app: Any, token_store: Callable[[], Any]) -> None:
                 ", ".join(external_access.describe()) or "empty",
             )
             abort(403)
+        # A browser asks permission before it sends a cross-origin call. That
+        # question carries no data and no token, and refusing it only means the
+        # real call never happens - so it is answered for anyone the networks
+        # already allow.
+        if request.method == "OPTIONS":
+            return None
         rule = request.url_rule.rule if request.url_rule else ""
         mode = external_access.api_mode()
         if not route_allowed(rule, request.method, mode):
