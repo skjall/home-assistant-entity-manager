@@ -418,7 +418,7 @@
     "naming_preview_shuffle": "Afficher un autre exemple",
     "naming_preview_no_match": "Aucun résultat",
     "naming_preview_more": "… {count} de plus, affinez la recherche",
-    "cleanup_hint": "{count} règles ne correspondent à aucune entité chez vous. L’appareil d’origine n’existe plus.",
+    "cleanup_hint": "{count} règles ne s’appliquent à aucune de vos entités. Le plus souvent l’appareil a disparu ou Home Assistant fournit désormais le nom.",
     "cleanup_button": "Supprimer {count} règles",
     "cleanup_confirm": "Supprimer définitivement {count} règles ?"
   },

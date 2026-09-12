@@ -418,7 +418,7 @@
     "naming_preview_shuffle": "Mostrar otro ejemplo",
     "naming_preview_no_match": "Sin coincidencias",
     "naming_preview_more": "… {count} más, acota la búsqueda",
-    "cleanup_hint": "{count} reglas no coinciden con ninguna entidad de tu casa. El dispositivo ya no existe.",
+    "cleanup_hint": "{count} reglas no se aplican a ninguna de tus entidades. Normalmente el dispositivo ya no está o Home Assistant ya da el nombre.",
     "cleanup_button": "Eliminar {count} reglas",
     "cleanup_confirm": "¿Eliminar definitivamente {count} reglas?"
   },
