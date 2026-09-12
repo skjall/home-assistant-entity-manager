@@ -4225,14 +4225,12 @@
                             return this.t('entity.explain_exception', {value, original});
                         case 'rule:user':
                             if (match?.model) {
-                                return this.t('entity.explain_rule_model', {
-                                    original, value, model: match.model, count: entity.type_model_count || 0});
+                                return this.t('entity.explain_rule_model', {original, value, model: match.model});
                             }
                             if (match?.integration) {
-                                return this.t('entity.explain_rule_integration', {
-                                    original, value, integration: match.integration, count: entity.type_integration_count || 0});
+                                return this.t('entity.explain_rule_integration', {original, value, integration: match.integration});
                             }
-                            return this.t('entity.explain_rule_all', {original, value, count: entity.type_count || 1});
+                            return this.t('entity.explain_rule_all', {original, value});
                         case 'rule:system':
                             return this.t('entity.explain_builtin', {original, value});
                         case 'legacy_parse':

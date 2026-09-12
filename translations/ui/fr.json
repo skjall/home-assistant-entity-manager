@@ -99,9 +99,9 @@
     "scope_here_hint": "Une exception pour cette seule entité, sans règle.",
     "explain_builtin": "Intégré : « {original} » s’appelle « {value} »",
     "explain_spelling": "Orthographe ajustée : « {original} » → « {value} »",
-    "explain_rule_all": "Votre règle : « {original} » s’appelle « {value} » partout ({count} entités)",
-    "explain_rule_integration": "Votre règle : « {original} » s’appelle « {value} » sur {integration} ({count} entités)",
-    "explain_rule_model": "Votre règle : « {original} » s’appelle « {value} » sur {model} ({count} entités)",
+    "explain_rule_all": "Votre règle : « {original} » s’appelle « {value} » partout",
+    "explain_rule_integration": "Votre règle : « {original} » s’appelle « {value} » sur {integration}",
+    "explain_rule_model": "Votre règle : « {original} » s’appelle « {value} » sur {model}",
     "explain_exception": "Cette entité seule s’appelle « {value} » au lieu de « {original} »",
     "explain_supplied": "{source} fournit « {value} »"
   },

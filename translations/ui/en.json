@@ -99,9 +99,9 @@
     "scope_here_hint": "An exception for this one entity, without a rule.",
     "explain_builtin": "Built in: “{original}” is called “{value}”",
     "explain_spelling": "Spelling adjusted: “{original}” → “{value}”",
-    "explain_rule_all": "Your rule: “{original}” is called “{value}” everywhere ({count} entities)",
-    "explain_rule_integration": "Your rule: “{original}” is called “{value}” on {integration} ({count} entities)",
-    "explain_rule_model": "Your rule: “{original}” is called “{value}” on {model} ({count} entities)",
+    "explain_rule_all": "Your rule: “{original}” is called “{value}” everywhere",
+    "explain_rule_integration": "Your rule: “{original}” is called “{value}” on {integration}",
+    "explain_rule_model": "Your rule: “{original}” is called “{value}” on {model}",
     "explain_exception": "This entity alone is called “{value}” instead of “{original}”",
     "explain_supplied": "{source} supplies “{value}”"
   },

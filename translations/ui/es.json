@@ -99,9 +99,9 @@
     "scope_here_hint": "Una excepción solo para esta entidad, sin regla.",
     "explain_builtin": "Integrado: “{original}” se llama “{value}”",
     "explain_spelling": "Ortografía ajustada: “{original}” → “{value}”",
-    "explain_rule_all": "Tu regla: “{original}” se llama “{value}” en todas partes ({count} entidades)",
-    "explain_rule_integration": "Tu regla: “{original}” se llama “{value}” en {integration} ({count} entidades)",
-    "explain_rule_model": "Tu regla: “{original}” se llama “{value}” en {model} ({count} entidades)",
+    "explain_rule_all": "Tu regla: “{original}” se llama “{value}” en todas partes",
+    "explain_rule_integration": "Tu regla: “{original}” se llama “{value}” en {integration}",
+    "explain_rule_model": "Tu regla: “{original}” se llama “{value}” en {model}",
     "explain_exception": "Solo esta entidad se llama “{value}” en lugar de “{original}”",
     "explain_supplied": "{source} proporciona “{value}”"
   },

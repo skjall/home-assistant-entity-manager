@@ -99,9 +99,9 @@
     "scope_here_hint": "Ausnahme nur für diese eine Entität, ohne Regel.",
     "explain_builtin": "Mitgeliefert: „{original}“ heißt „{value}“",
     "explain_spelling": "Schreibweise angepasst: „{original}“ → „{value}“",
-    "explain_rule_all": "Deine Regel: „{original}“ heißt überall „{value}“ ({count} Entitäten)",
-    "explain_rule_integration": "Deine Regel: „{original}“ heißt bei {integration} „{value}“ ({count} Entitäten)",
-    "explain_rule_model": "Deine Regel: „{original}“ heißt bei {model} „{value}“ ({count} Entitäten)",
+    "explain_rule_all": "Deine Regel: „{original}“ heißt überall „{value}“",
+    "explain_rule_integration": "Deine Regel: „{original}“ heißt bei {integration} „{value}“",
+    "explain_rule_model": "Deine Regel: „{original}“ heißt bei {model} „{value}“",
     "explain_exception": "Nur diese Entität heißt „{value}“ statt „{original}“",
     "explain_supplied": "{source} liefert „{value}“"
   },
