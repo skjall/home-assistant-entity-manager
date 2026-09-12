@@ -1,7 +1,8 @@
-"""Routes about the add-on itself: its token, its reach and its audit log.
+"""Routes about the add-on itself: its token, its reach, its log and its API description.
 
-These are the only routes a caller outside Home Assistant ever sees, and only
-the rename log at that; the rest is for the settings page.
+The token management and the documentation pages are for the settings page and
+stay behind Ingress; the rename log and the reachability are part of the API a
+token opens.
 """
 
 import json
@@ -9,8 +10,9 @@ import logging
 import os
 import urllib.request
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
 
+import api_spec
 from app_state import renamer_state
 import external_access
 import mcp_server
@@ -85,6 +87,22 @@ def network_status():
             "mcp": mcp_server.mode(),
         }
     )
+
+
+@system.route("/api/openapi.json", methods=["GET"])
+def openapi_document():
+    """The API description: what a token opens, in one machine-readable file.
+
+    The server address follows the path this request arrived on, so the page's
+    "try it out" works both through Ingress and over the published port.
+    """
+    return jsonify(api_spec.document(base_url=(request.script_root or "") + "/"))
+
+
+@system.route("/api/docs", methods=["GET"])
+def api_docs():
+    """The same description, to read and try out. Ingress-only, like the UI."""
+    return render_template("api_docs.html", document_url=(request.script_root or "") + "/api/openapi.json")
 
 
 @system.route("/api/api_token", methods=["GET"])

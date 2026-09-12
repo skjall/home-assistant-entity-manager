@@ -8,7 +8,7 @@
     "build": "npm run build:css && npm run build:js && npm run copy:assets && npm run copy:translations && npm run copy:config",
     "build:css": "postcss src/css/main.css -o static/css/styles.css",
     "build:js": "esbuild src/js/app.js --bundle --minify --outfile=static/js/app.js",
-    "copy:assets": "npm run copy:alpine && npm run copy:remixicon",
+    "copy:assets": "npm run copy:alpine && npm run copy:remixicon && npm run copy:swagger",
     "copy:alpine": "cp node_modules/alpinejs/dist/cdn.min.js static/js/alpine.min.js",
     "copy:remixicon": "cp node_modules/remixicon/fonts/remixicon.css static/css/ && cp node_modules/remixicon/fonts/remixicon.woff* static/fonts/ && npm run fix:remixicon-paths",
     "fix:remixicon-paths": "node scripts/fix-font-paths.js",
@@ -16,11 +16,13 @@
     "copy:config": "cp src/js/config.js static/js/",
     "watch": "npm run build -- --watch",
     "test:visual": "playwright test",
-    "test:visual:update": "playwright test --update-snapshots"
+    "test:visual:update": "playwright test --update-snapshots",
+    "copy:swagger": "cp node_modules/swagger-ui-dist/swagger-ui-bundle.js static/js/ && cp node_modules/swagger-ui-dist/swagger-ui.css static/css/"
   },
   "dependencies": {
     "alpinejs": "^3.13.3",
-    "remixicon": "^4.0.0"
+    "remixicon": "^4.0.0",
+    "swagger-ui-dist": "^5.32.15"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",

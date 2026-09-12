@@ -401,7 +401,12 @@
     "access_state_some": "Reachable from these networks",
     "access_mode_off": "Off",
     "access_mode_read": "Reading only",
-    "access_mode_write": "Reading and writing"
+    "access_mode_write": "Reading and writing",
+    "access_mcp_howto": "Connect an assistant",
+    "access_mcp_howto_hint": "Paste this into the assistant's MCP configuration and replace the placeholder with the token. The token is shown once, when it is created.",
+    "access_mcp_token_placeholder": "token",
+    "access_docs": "Open the API documentation",
+    "access_docs_hint": "Every route with its fields, to read and to try out."
   },
   "type_mappings": {
     "light": "Light",

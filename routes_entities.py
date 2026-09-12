@@ -362,6 +362,30 @@ async def _rename_entity_async():
     return jsonify(result)
 
 
+@entities.route("/api/apply_naming", methods=["POST"])
+def apply_naming():
+    """Write the proposed names of several entities, in one request."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_apply_naming_async())
+    finally:
+        loop.close()
+
+
+async def _apply_naming_async():
+    data = request.json or {}
+    wanted = data.get("entity_ids")
+    if not isinstance(wanted, list) or not all(isinstance(one, str) for one in wanted):
+        return jsonify({"error": "entity_ids must be a list of entity ids"}), 400
+
+    entity_ids = [sanitize_entity_id(one) or one for one in wanted]
+    try:
+        return jsonify(await naming_service.apply_naming(entity_ids))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+
 @entities.route("/api/delete_entity", methods=["POST"])
 def delete_entity():
     """Delete an orphaned entity from the registry."""

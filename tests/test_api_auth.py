@@ -225,7 +225,7 @@ def test_writing_still_leaves_everything_unnamed_closed(client, store, monkeypat
     token = store.generate()
 
     assert _req(client, "/api/api_token", DIRECT_IP, token=token, method="POST").status_code == 403
-    assert _req(client, "/api/execute_direct", DIRECT_IP, token=token, method="POST").status_code == 403
+    assert _req(client, "/api/update_mapping", DIRECT_IP, token=token, method="POST").status_code == 403
     assert _req(client, "/", DIRECT_IP, token=token).status_code == 403
 
 

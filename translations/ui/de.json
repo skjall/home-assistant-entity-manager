@@ -401,7 +401,12 @@
     "access_state_some": "Erreichbar aus diesen Netzen",
     "access_mode_off": "Aus",
     "access_mode_read": "Nur lesend",
-    "access_mode_write": "Lesen und schreiben"
+    "access_mode_write": "Lesen und schreiben",
+    "access_mcp_howto": "In einen Assistenten einbinden",
+    "access_mcp_howto_hint": "Diesen Abschnitt in die MCP-Konfiguration des Assistenten übernehmen und den Platzhalter durch den Token ersetzen. Der Token wird beim Erzeugen einmal angezeigt.",
+    "access_mcp_token_placeholder": "Token",
+    "access_docs": "API-Dokumentation öffnen",
+    "access_docs_hint": "Jede Route mit ihren Feldern, zum Nachlesen und Ausprobieren."
   },
   "type_mappings": {
     "light": "Licht",

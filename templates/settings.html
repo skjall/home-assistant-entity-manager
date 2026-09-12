@@ -1037,6 +1037,35 @@
                             <i class="ri-file-copy-line"></i>
                         </button>
                     </div>
+
+                    <!-- What a client needs, in the shape a client wants it. -->
+                    <div x-show="(network.mcp || 'off') !== 'off' && publishedPort()" x-cloak style="margin-top: 10px;">
+                        <button type="button" @click="showMcpSetup = !showMcpSetup"
+                                style="border: none; background: none; padding: 0; cursor: pointer; color: #2563eb; font-size: 0.85rem;">
+                            <i :class="showMcpSetup ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
+                            <span x-text="t('settings.access_mcp_howto')"></span>
+                        </button>
+                        <div x-show="showMcpSetup" x-cloak style="margin-top: 8px;">
+                            <p style="font-size: 0.85rem; color: #6b7280; margin: 0 0 6px;"
+                               x-text="t('settings.access_mcp_howto_hint')"></p>
+                            <pre style="margin: 0; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; overflow-x: auto; font-size: 0.8rem;"><code x-text="mcpSetupSnippet()"></code></pre>
+                            <button class="add-btn" @click="copyAddress(mcpSetupSnippet())"
+                                    style="margin-top: 8px; background: #6b7280;">
+                                <i class="ri-file-copy-line"></i>
+                                <span x-text="t('settings.api_token_copy')"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="padding: 12px 0; border-top: 1px solid #e5e7eb;">
+                    <a :href="docsUrl()" target="_blank" rel="noopener"
+                       style="font-size: 0.9rem; color: #2563eb; text-decoration: none;">
+                        <i class="ri-book-2-line"></i>
+                        <span x-text="t('settings.access_docs')"></span>
+                    </a>
+                    <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;"
+                         x-text="t('settings.access_docs_hint')"></div>
                 </div>
 
                 <div style="margin-top: 12px; font-size: 0.85rem; color: #6b7280;" x-text="t('settings.access_change_note')"></div>
@@ -1126,6 +1155,7 @@
                 importResult: null,
                 apiToken: { configured: false, created_at: null, last_used_at: null },
                 network: { state: 'off', networks: [], published: {} },
+                showMcpSetup: false,
                 newApiToken: '',
                 tokenCopied: false,
                 namingPreset: 'entity_manager',
@@ -1557,6 +1587,21 @@
                     const published = this.publishedPort();
                     if (!published) return '';
                     return 'http://' + window.location.hostname + ':' + published.host + path;
+                },
+
+                // The one place a client needs the address and the token
+                // together, in the shape every MCP client reads.
+                mcpSetupSnippet() {
+                    const server = {
+                        url: this.externalUrl('/mcp'),
+                        headers: { Authorization: 'Bearer <' + this.t('settings.access_mcp_token_placeholder') + '>' },
+                    };
+                    return JSON.stringify({ mcpServers: { 'entity-manager': server } }, null, 2);
+                },
+
+                // The documentation lives behind Ingress, next to this page.
+                docsUrl() {
+                    return 'api/docs';
                 },
 
                 async copyAddress(text) {
