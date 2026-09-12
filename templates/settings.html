@@ -926,7 +926,6 @@
                     });
                     await this.loadMappings();
                     await this.syncRuleLanguage();
-                    await this.countRules();
                     if (this.highlightRuleId) this.focusHighlightedRule();
                     await this.loadApiToken();
                     await this.loadNamingTemplates();
@@ -934,19 +933,6 @@
 
                 // Rules are applied in one language; align it with the UI language
                 // the first time the page is opened after a migration.
-                // Counting a rule's reach needs the entity list. It is loaded on the main
-                // page, so coming straight here leaves the counts unknown; fetch it once.
-                async countRules() {
-                    if (!this.rules.some(rule => rule.affected === null || rule.affected === undefined)) return;
-                    try {
-                        await fetch('api/hierarchy');
-                        await this.loadMappings();
-                        if (this.highlightRuleId) this.focusHighlightedRule();
-                    } catch (e) {
-                        console.warn('Could not count the rules', e);
-                    }
-                },
-
                 // Put the rule the user came for in view, and search for it so it stands alone.
                 focusHighlightedRule() {
                     const rule = this.rules.find(r => r.id === this.highlightRuleId);

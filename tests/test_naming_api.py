@@ -258,12 +258,49 @@ def test_bare_settings_goes_to_the_first_section(client):
     assert response.headers["Location"] == "settings/naming"
 
 
-def test_reach_is_unknown_while_no_entities_are_loaded(client):
+def test_reach_is_unknown_while_no_entities_can_be_loaded(client, monkeypatch):
     """Zero would brand every rule as useless right after a start; unknown is the truth."""
     restructurer = web_ui.renamer_state["restructurer"]
     client.post("/api/naming/learn", json={"entity_id": "number.a_effect_speed", "value": "Effektgeschwindigkeit"})
     restructurer.entities = {}
 
+    async def no_registry():
+        return None
+
+    monkeypatch.setattr(web_ui, "_ensure_registry_loaded", no_registry)
     rules = client.get("/api/naming/rules").get_json()["rules"]
 
     assert rules and all(rule["affected"] is None for rule in rules)
+
+
+def test_counting_groups_entities_of_one_type(client):
+    """One lookup per type, integration and model instead of one per entity."""
+    restructurer = web_ui.renamer_state["restructurer"]
+    for index in range(20):
+        entity_id = f"number.copy{index}_effect_speed"
+        restructurer.entities[entity_id] = {
+            "id": f"reg-copy{index}",
+            "entity_id": entity_id,
+            "device_id": "d",
+            "platform": "mqtt",
+            "original_name": "Effect speed",
+            "has_entity_name": True,
+        }
+    rules = web_ui.renamer_state["naming_rules"]
+    calls = []
+    original_find = rules.find
+
+    def counting_find(*args, **kwargs):
+        calls.append(args)
+        return original_find(*args, **kwargs)
+
+    rules.find = counting_find
+    try:
+        rule = client.post(
+            "/api/naming/learn", json={"entity_id": "number.a_effect_speed", "value": "Effektgeschwindigkeit"}
+        ).get_json()["rule"]
+    finally:
+        rules.find = original_find
+
+    assert rule["affected"] == 22  # the 20 copies plus both spellings in the fixture
+    assert len(calls) < 22  # not one lookup per entity

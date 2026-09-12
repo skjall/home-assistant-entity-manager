@@ -3240,15 +3240,23 @@ def _rule_affected_counts(restructurer, rules):
         return None
     language = rules.language
     counts = {rule["id"]: 0 for rule in rules.rules}
+    # Entities sharing a type, integration and model all land on the same rule,
+    # so group them first: thousands of entities become a few hundred lookups.
+    groups: dict = {}
     for entity_data in restructurer.entities.values():
-        integration = entity_data.get("platform") or None
-        native = entity_data.get("original_name") or ""
-        model = _entity_model(restructurer, entity_data) or None
-        rule = rules.find(
-            "translation_key", entity_data.get("translation_key"), integration, language, model
-        ) or rules.find("name", native, integration, language, model)
+        group = (
+            entity_data.get("translation_key") or "",
+            entity_data.get("original_name") or "",
+            entity_data.get("platform") or None,
+            _entity_model(restructurer, entity_data) or None,
+        )
+        groups[group] = groups.get(group, 0) + 1
+    for (translation_key, native, integration, model), size in groups.items():
+        rule = rules.find("translation_key", translation_key, integration, language, model) or rules.find(
+            "name", native, integration, language, model
+        )
         if rule:
-            counts[rule["id"]] = counts.get(rule["id"], 0) + 1
+            counts[rule["id"]] = counts.get(rule["id"], 0) + size
     return counts
 
 
@@ -3287,6 +3295,40 @@ def naming_settings():
     return jsonify({"language": rules.language, "display_case": rules.display_case})
 
 
+async def _ensure_registry_loaded() -> None:
+    """Make sure the entity list is there, without the cost of a full hierarchy.
+
+    Reading the registries takes about a tenth of a second; the states and the
+    rename suggestions that /api/hierarchy also builds take ten times that and
+    say nothing about how far a rule reaches.
+    """
+    restructurer = renamer_state.get("restructurer")
+    if restructurer is None:
+        await init_client()
+        restructurer = renamer_state["restructurer"]
+    if restructurer.entities:
+        return
+    token = os.getenv("HA_TOKEN", os.getenv("SUPERVISOR_TOKEN"))
+    base_url = os.getenv("HA_URL")
+    ws_url = (
+        base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
+        if base_url
+        else "ws://supervisor/core/websocket"
+    )
+    ws = HomeAssistantWebSocket(ws_url, token)
+    try:
+        await ws.connect()
+        await restructurer.load_structure(ws)
+        await _sync_ha_language(ws)
+    except Exception as error:
+        logger.warning("Could not load the registries: %s", error)
+    finally:
+        try:
+            await ws.disconnect()
+        except Exception:
+            pass
+
+
 @app.route("/api/naming/rules", methods=["GET", "POST"])
 def naming_rules_collection():
     """List type rules with their reach, or create one."""
@@ -3315,6 +3357,12 @@ def naming_rules_collection():
         affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
         return jsonify({"rule": _rule_payload(rule, affected)})
 
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_ensure_registry_loaded())
+    finally:
+        loop.close()
     affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
     language = request.args.get("lang") or rules.language
     system = []
