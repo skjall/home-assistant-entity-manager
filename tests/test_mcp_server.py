@@ -248,3 +248,55 @@ def test_deleting_a_rule_puts_the_supplied_name_back(home):
 
     assert run("list_rules") == []
     assert "Raumtemperatur" not in run("naming_for", entity_id="sensor.a_temperature")["proposed_name"]
+
+
+def test_applying_writes_exactly_what_was_proposed(home, monkeypatch):
+    """The tool must hand on the proposal, not a name it invented on the way."""
+    run("set_rule", kind="translation_key", key="temperature", value="Raumtemperatur")
+    proposed = run("naming_for", entity_id="sensor.a_temperature")
+    written = {}
+
+    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
+        written.update(old=old_entity_id, new=new_entity_id, name=friendly_name)
+        return {"success": True}
+
+    monkeypatch.setattr("naming_service.rename_entity", record)
+
+    assert run("apply_naming", entity_id="sensor.a_temperature")["success"] is True
+    assert written == {
+        "old": "sensor.a_temperature",
+        "new": proposed["proposed_entity_id"],
+        "name": proposed["proposed_name"],
+    }
+
+
+def test_applying_to_an_unknown_entity_renames_nothing(home, monkeypatch):
+    """An assistant that guesses an id must not hit a different entity."""
+    touched = []
+
+    async def record(*args, **kwargs):
+        touched.append(args)
+        return {"success": True}
+
+    monkeypatch.setattr("naming_service.rename_entity", record)
+
+    with pytest.raises(Exception):
+        run("apply_naming", entity_id="sensor.does_not_exist")
+
+    assert touched == []
+
+
+def test_applying_an_exception_uses_the_exception(home, monkeypatch):
+    """What set_exception decided has to be what apply_naming writes."""
+    run("set_exception", entity_id="sensor.a_temperature", name="Fühler vorne")
+    written = {}
+
+    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
+        written.update(new=new_entity_id, name=friendly_name)
+        return {"success": True}
+
+    monkeypatch.setattr("naming_service.rename_entity", record)
+    run("apply_naming", entity_id="sensor.a_temperature")
+
+    assert "Fühler vorne" in written["name"]
+    assert "fuhler_vorne" in written["new"] or "fühler_vorne" in written["new"]
