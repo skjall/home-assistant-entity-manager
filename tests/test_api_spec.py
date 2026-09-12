@@ -95,3 +95,21 @@ def test_a_body_field_is_always_explained():
     for operation in api_spec.OPERATIONS:
         for field, schema in operation.body.items():
             assert schema.get("description"), f"{operation.name}.{field}"
+
+
+def test_the_document_is_served_under_the_path_it_was_asked_for():
+    """Through Ingress the add-on lives under a prefix; a document that does
+    not carry it sends every call to Home Assistant itself."""
+    client = web_ui.app.test_client()
+    ingress = {"REMOTE_ADDR": "172.30.32.2"}
+    prefix = "/api/hassio_ingress/abc123"
+
+    plain = client.get("/api/openapi.json", environ_overrides=ingress).json
+    proxied = client.get(
+        "/api/openapi.json",
+        environ_overrides=ingress,
+        headers={"X-Ingress-Path": prefix},
+    ).json
+
+    assert plain["servers"] == [{"url": "/"}]
+    assert proxied["servers"] == [{"url": prefix + "/"}]

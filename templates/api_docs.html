@@ -45,14 +45,31 @@
     <div id="swagger"></div>
     <script src="static/js/swagger-ui-bundle.js"></script>
     <script>
-        window.ui = SwaggerUIBundle({
-            url: {{ document_url | tojson }},
-            dom_id: '#swagger',
-            deepLinking: true,
-            defaultModelsExpandDepth: -1,
-            docExpansion: 'list',
-            tryItOutEnabled: true,
-        });
+        // Home Assistant serves the add-on under a long Ingress prefix. The
+        // page knows it - it is in its own address - while the server only
+        // learns it from a header it may not get, so the address to call is
+        // worked out here and written into the document before it is shown.
+        // Without this, "try it out" calls Home Assistant itself and gets 404.
+        fetch({{ document_url | tojson }})
+            .then(function (answer) { return answer.json(); })
+            .then(function (spec) {
+                spec.servers = [{
+                    url: new URL('.', document.baseURI).href.replace(/\/$/, ''),
+                    description: 'This add-on',
+                }];
+                window.ui = SwaggerUIBundle({
+                    spec: spec,
+                    dom_id: '#swagger',
+                    deepLinking: true,
+                    defaultModelsExpandDepth: -1,
+                    docExpansion: 'list',
+                    tryItOutEnabled: true,
+                });
+            })
+            .catch(function (error) {
+                document.getElementById('swagger').textContent =
+                    'The API description could not be loaded: ' + error;
+            });
     </script>
 </body>
 </html>
