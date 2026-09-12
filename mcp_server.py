@@ -242,20 +242,53 @@ async def set_exception(entity_id: str, name: str) -> Dict[str, Any]:
     return await naming_service.proposed_naming(entity_id)
 
 
-async def apply_naming(entity_id: str) -> Dict[str, Any]:
-    """Write the proposed name and id to Home Assistant.
+# One call may rename this many entities. A whole home in a single call would
+# run for many minutes with nobody able to see how far it got, and a mistaken
+# one would be that much harder to undo.
+APPLY_LIMIT = 100
 
-    Everything that refers to the old id — automations, scripts, scenes — is
-    rewritten along with it. This changes the user's house; read naming_for
-    first and say what will happen.
+
+async def apply_naming(entity_ids: List[str]) -> Dict[str, Any]:
+    """Write the proposed names and ids to Home Assistant.
+
+    Takes as many entities as should change together, so a whole room is one
+    call rather than one call per entity. Everything that refers to an old id —
+    automations, scripts, scenes — is rewritten along with it. This changes the
+    user's house; read naming_for first and say what will happen.
+
+    Each entity is reported on its own and one that fails does not stop the
+    rest. The proposal is worked out per entity as its turn comes, so a name
+    that only collides because of an earlier rename in the same call is
+    numbered against what is by then already there.
     """
-    entity_id = sanitize_entity_id(entity_id) or entity_id
-    proposed = await naming_service.proposed_naming(entity_id)
-    return await naming_service.rename_entity(
-        entity_id,
-        proposed["proposed_entity_id"],
-        proposed["proposed_name"],
-    )
+    if not entity_ids:
+        raise ValueError("name at least one entity")
+    if len(entity_ids) > APPLY_LIMIT:
+        raise ValueError(f"at most {APPLY_LIMIT} entities per call, got {len(entity_ids)}")
+
+    results = []
+    for wanted in entity_ids:
+        entity_id = sanitize_entity_id(wanted) or wanted
+        try:
+            proposed = await naming_service.proposed_naming(entity_id)
+            outcome = await naming_service.rename_entity(
+                entity_id,
+                proposed["proposed_entity_id"],
+                proposed["proposed_name"],
+            )
+        except Exception as error:  # noqa: BLE001 - one bad id must not stop the rest
+            logger.warning("apply_naming failed for %s: %s", entity_id, error)
+            results.append({"entity_id": entity_id, "success": False, "error": str(error)})
+            continue
+        results.append({"entity_id": entity_id, **outcome})
+
+    renamed = [row for row in results if row.get("success") and not row.get("skipped")]
+    return {
+        "renamed": len(renamed),
+        "unchanged": sum(1 for row in results if row.get("skipped")),
+        "failed": sum(1 for row in results if not row.get("success")),
+        "results": results,
+    }
 
 
 READ_TOOLS = (find_entities, naming_for, list_areas, list_rules, naming_settings, entities_affected_by)
