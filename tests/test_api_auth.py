@@ -245,3 +245,20 @@ def test_a_named_network_decides_who_is_answered(client, store, monkeypatch):
 
     assert _req(client, "/api/naming/rules", DIRECT_IP, token=token).status_code == 200
     assert _req(client, "/api/naming/rules", "192.168.2.50", token=token).status_code == 403
+
+
+def test_a_browser_may_ask_permission_before_it_calls(client, store, monkeypatch):
+    """A refused preflight means the real call is never even attempted."""
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
+    store.generate()
+
+    assert _req(client, "/api/naming/rules", DIRECT_IP, method="OPTIONS").status_code != 403
+
+
+def test_asking_permission_does_not_open_the_door(client, store, monkeypatch):
+    """The question is answered; the call behind it still needs a token."""
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
+    store.generate()
+
+    assert _req(client, "/api/naming/rules", DIRECT_IP).status_code == 401
+    assert _req(client, "/api/naming/rules", INTERNET_IP, method="OPTIONS").status_code == 403

@@ -33,30 +33,67 @@
     <div class="intro">
         <h1>Entity Manager API</h1>
         <p>
-            Every call needs the API token from the add-on's settings page, sent as
-            <code>Authorization: Bearer &lt;token&gt;</code> or as <code>X-API-Key: &lt;token&gt;</code>.
+            A call over the published port needs the API token from the add-on's settings page,
+            sent as <code>Authorization: Bearer &lt;token&gt;</code> or as
+            <code>X-API-Key: &lt;token&gt;</code>. Put it in under <b>Authorize</b> to try a call out.
         </p>
         <p>
-            Which callers are answered at all is the add-on option <code>external_access</code>;
-            how far the token reaches is <code>external_api</code>. The web interface itself is
-            never served over the published port.
+            Read through Home Assistant, this page is already signed in, so the second server in
+            the list answers without a token. That is a different door from the one described here.
+        </p>
+        <p>
+            Which callers are answered over the port at all is the add-on option
+            <code>external_access</code>; how far the token reaches is <code>external_api</code>.
+            The web interface itself is never served over the published port.
         </p>
     </div>
     <div id="swagger"></div>
     <script src="static/js/swagger-ui-bundle.js"></script>
     <script>
-        // Home Assistant serves the add-on under a long Ingress prefix. The
-        // page knows it - it is in its own address - while the server only
-        // learns it from a header it may not get, so the address to call is
-        // worked out here and written into the document before it is shown.
-        // Without this, "try it out" calls Home Assistant itself and gets 404.
-        fetch({{ document_url | tojson }})
-            .then(function (answer) { return answer.json(); })
-            .then(function (spec) {
-                spec.servers = [{
-                    url: new URL('.', document.baseURI).href.replace(/\/$/, ''),
-                    description: 'This add-on',
-                }];
+        // Which address a call should go to is decided here, because only the
+        // page knows where it is being read from.
+        //
+        // The API this documents lives on the published port, and that is the
+        // address to offer first: a call there goes through the token, which is
+        // the thing being documented. The path this page itself is served under
+        // is offered as well - Home Assistant has already authenticated the
+        // reader there, so a call needs no token, which is convenient for a
+        // quick look but is not the door described below.
+        function servers(published) {
+            const here = new URL('.', document.baseURI).href.replace(/\/$/, '');
+            const found = [];
+            if (published) {
+                // Left editable on purpose: the port is often reached under a
+                // different name than this page, through a reverse proxy, and a
+                // page served over https cannot call a plain http address at
+                // all. Whoever knows that name can put it in here.
+                found.push({
+                    url: '{base}',
+                    description: 'The published port - needs the API token',
+                    variables: {
+                        base: {
+                            default: 'http://' + window.location.hostname + ':' + published,
+                            description: 'Where the add-on port is reachable from this browser',
+                        },
+                    },
+                });
+            }
+            found.push({ url: here, description: 'Through Home Assistant - already signed in, no token' });
+            return found;
+        }
+
+        function publishedPort(network) {
+            const entries = Object.entries((network && network.published) || {});
+            return entries.length ? entries[0][1] : null;
+        }
+
+        Promise.all([
+            fetch({{ document_url | tojson }}).then(function (answer) { return answer.json(); }),
+            fetch('api/network').then(function (answer) { return answer.json(); }).catch(function () { return {}; }),
+        ])
+            .then(function (both) {
+                const spec = both[0];
+                spec.servers = servers(publishedPort(both[1]));
                 window.ui = SwaggerUIBundle({
                     spec: spec,
                     dom_id: '#swagger',
