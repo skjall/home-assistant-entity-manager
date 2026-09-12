@@ -78,6 +78,7 @@ class EntityRestructurer:
         naming_templates: Optional[NamingTemplates] = None,
         language: str = "en",
         ha_translations: Optional[Any] = None,
+        naming_state: Optional[Any] = None,
     ):
         """
         Initialize the entity restructurer.
@@ -88,6 +89,9 @@ class EntityRestructurer:
             type_mappings: Optional TypeMappings instance for translations
             naming_templates: Optional naming-template configuration
             language: Language code for translations (default: "en")
+            naming_state: Optional record of the names this add-on wrote, so a
+                name it wrote before comes back exactly instead of being taken
+                apart again
         """
         self.client = client
         self.devices = {}
@@ -98,6 +102,7 @@ class EntityRestructurer:
         self._loading = threading.RLock()
         self.naming_overrides = naming_overrides or NamingOverrides()
         self.naming_templates = naming_templates or NamingTemplates()
+        self.naming_state = naming_state
         # Home Assistant's own entity names, in the language it is set to.
         self.ha_translations = ha_translations
         self._language = language
@@ -454,6 +459,20 @@ class EntityRestructurer:
                 name = name[len(prefix) :].strip()
         return name
 
+    def _remembered_type(self, registry: Dict[str, Any]) -> str:
+        """The type part of a name this add-on wrote, if it is still that name.
+
+        Empty when there is no note, when the registry holds something else
+        now - somebody renamed the entity elsewhere, and their wording is not
+        ours to take apart - or when the note carries no type part.
+        """
+        if self.naming_state is None:
+            return ""
+        stored = self.naming_state.get(registry.get("id") or "")
+        if not stored or stored["applied_name"] != (registry.get("name") or ""):
+            return ""
+        return stored["base_entity"] or ""
+
     def _strip_applied_entity_name(
         self,
         name: str,
@@ -798,6 +817,13 @@ class EntityRestructurer:
             None,
         )
         if applied is not None:
+            # A name this add-on wrote was noted along with the type part it was
+            # built from. Where that note is there and still matches, the type
+            # part comes back exactly; taking the rendered name apart is what is
+            # left for everything named before the note existed.
+            remembered = self._remembered_type(registry)
+            if remembered:
+                return self._resolve_supplied_name(remembered, entity_id, registry)
             base = self._strip_applied_entity_name(applied, prefixes, context)
             if base:
                 return self._resolve_supplied_name(base, entity_id, registry, won_by="legacy_parse")

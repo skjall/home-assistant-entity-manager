@@ -108,6 +108,7 @@ def _build_client() -> HomeAssistantClient:
             type_mappings=renamer_state["type_mappings"],
             naming_templates=renamer_state["naming_templates"],
             ha_translations=ha_translations,
+            naming_state=renamer_state["naming_state"],
         )
     return renamer_state["client"]
 
