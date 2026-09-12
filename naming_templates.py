@@ -1,6 +1,7 @@
 """Persistent, safe naming templates for devices and entities."""
 
 from copy import deepcopy
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -193,6 +194,17 @@ class NamingTemplates:
     def get_templates(self) -> Dict[str, str]:
         """Return a copy of the active templates."""
         return deepcopy(self.data["templates"])
+
+    def fingerprint(self) -> str:
+        """A short mark for the templates as they are right now.
+
+        Stored alongside a name that was written, it lets a later read tell a
+        proposal that differs because the templates changed from one that
+        differs because somebody renamed the entity by hand.
+        """
+        active = self.get_templates()
+        material = "|".join(f"{key}={active.get(key, '')}" for key in sorted(active))
+        return hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
 
     def get_config(self) -> Dict[str, Any]:
         """Return the public configuration used by the Settings UI."""

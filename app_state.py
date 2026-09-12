@@ -19,6 +19,7 @@ from jobs import TERMINAL_STATES, JobStore, JobWorker
 from json_store import new_lock
 from naming_overrides import NamingOverrides
 from naming_rules import NamingRules
+from naming_state import NamingState
 from naming_templates import NamingTemplates
 from rename_log import RenameLog
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
@@ -51,6 +52,8 @@ renamer_state = {
     "proposed_changes": {},
     "naming_overrides": NamingOverrides(os.path.join(DATA_DIR, "naming_overrides.json")),
     "naming_templates": NamingTemplates(os.path.join(DATA_DIR, "naming_templates.json")),
+    # Which names this add-on wrote itself; see naming_state.
+    "naming_state": NamingState(os.path.join(DATA_DIR, "naming_state.json")),
     "type_mappings": TypeMappings(
         user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json"),
         rules=naming_rules_store,
@@ -70,6 +73,10 @@ renamer_state["worker"] = JobWorker(renamer_state["job_store"])
 # Share the audit log with every EntityRegistry instance so all rename paths
 # (single, batch, device cascade) get recorded centrally.
 EntityRegistry.rename_log = renamer_state["rename_log"]
+
+# Same for the record of which names came from here: every write goes through
+# EntityRegistry.update_entity, so no rename path can forget to note it.
+EntityRegistry.naming_state = renamer_state["naming_state"]
 
 # Several worker threads serve requests, so two of them can find a singleton
 # missing at the same moment and both build one; the loser's object is then
