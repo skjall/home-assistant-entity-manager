@@ -417,7 +417,10 @@
     "naming_preview_pick": "Chercher une entité pour l’exemple…",
     "naming_preview_shuffle": "Afficher un autre exemple",
     "naming_preview_no_match": "Aucun résultat",
-    "naming_preview_more": "… {count} de plus, affinez la recherche"
+    "naming_preview_more": "… {count} de plus, affinez la recherche",
+    "cleanup_hint": "{count} règles ne correspondent à aucune entité chez vous. L’appareil d’origine n’existe plus.",
+    "cleanup_button": "Supprimer {count} règles",
+    "cleanup_confirm": "Supprimer définitivement {count} règles ?"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

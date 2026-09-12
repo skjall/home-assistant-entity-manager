@@ -397,7 +397,10 @@
     "naming_preview_pick": "Entität für das Beispiel suchen…",
     "naming_preview_shuffle": "Ein anderes Beispiel zeigen",
     "naming_preview_no_match": "Kein Treffer",
-    "naming_preview_more": "… {count} weitere, Suche eingrenzen"
+    "naming_preview_more": "… {count} weitere, Suche eingrenzen",
+    "cleanup_hint": "{count} Regeln passen zu keiner Entität in deinem Zuhause. Das Gerät dazu gibt es nicht mehr.",
+    "cleanup_button": "{count} Regeln löschen",
+    "cleanup_confirm": "{count} Regeln endgültig löschen?"
   },
   "type_mappings": {
     "light": "Licht",

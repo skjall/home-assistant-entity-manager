@@ -318,6 +318,21 @@ def test_template_sample_comes_from_a_real_entity(client):
     assert data["context"]["integration"] == "mqtt"
 
 
+def test_unused_rules_can_be_listed_and_removed(client):
+    """A rule no entity matches is offered for removal, never removed by itself."""
+    rules = web_ui.renamer_state["naming_rules"]
+    orphan = rules.upsert("name", "gone_with_the_device", None, rules.language, "Weg")
+
+    listed = client.get("/api/naming/rules/unused").get_json()["rules"]
+    assert orphan["id"] in [rule["id"] for rule in listed]
+    assert rules.get(orphan["id"]) is not None
+
+    removed = client.delete("/api/naming/rules/unused").get_json()["removed"]
+
+    assert removed == len(listed)
+    assert rules.get(orphan["id"]) is None
+
+
 def test_template_sample_takes_the_entity_it_is_asked_for(client):
     """The user picks the entity the preview runs on."""
     entity_id = next(eid for eid in web_ui.renamer_state["restructurer"].entities if eid != "number.a_effect_speed")

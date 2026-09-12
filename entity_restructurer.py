@@ -450,6 +450,19 @@ class EntityRestructurer:
                             "matched_on": dict(rule["match"]),
                         }
                     )
+                # The device class is the widest anchor: it says what a value
+                # measures where neither a key nor a name matched.
+                device_class = registry.get("device_class") or registry.get("original_device_class")
+                rule = rules.find("device_class", device_class, integration, language, model)
+                if rule:
+                    candidates.append(
+                        {
+                            "value": rule["targets"][language],
+                            "won_by": "rule:user",
+                            "rule_id": rule["id"],
+                            "matched_on": dict(rule["match"]),
+                        }
+                    )
             # Home Assistant knows its own entities in every language it speaks,
             # which is far more than this add-on could translate itself.
             supplied = self._home_assistant_name(entity_id, registry, language)

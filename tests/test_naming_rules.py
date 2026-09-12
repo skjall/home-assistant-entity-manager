@@ -473,3 +473,55 @@ def test_the_floor_level_is_available_as_a_placeholder(restructurer):
     context = restructurer.build_naming_context("number.x_effect_speed", restructurer.entities["number.x_effect_speed"])
 
     assert context["floor_level"] == "2"
+
+
+def test_repair_moves_a_rule_whose_value_is_a_device_class(tmp_path):
+    """A rule filed under the name can never match a device class."""
+    store = NamingRules(str(tmp_path / "rules.json"), device_class_keys=["battery", "humidity"])
+    rule = store.upsert("name", "battery", None, "de", "Akku")
+
+    report = store.repair_kinds(translation_keys=set(), names={"Firmware"})
+
+    assert [item["kind"] for item in report["moved"]] == ["device_class"]
+    assert store.get(rule["id"])["match"]["kind"] == "device_class"
+    assert store.find("device_class", "battery", None, "de")["targets"]["de"] == "Akku"
+
+
+def test_repair_moves_a_rule_whose_value_is_a_translation_key(tmp_path):
+    store = NamingRules(str(tmp_path / "rules.json"), device_class_keys=["battery"])
+    rule = store.upsert("name", "cpu_temperature", None, "de", "Prozessortemperatur")
+
+    store.repair_kinds(translation_keys={"cpu_temperature"}, names={"Firmware"})
+
+    assert store.get(rule["id"])["match"]["kind"] == "translation_key"
+
+
+def test_repair_leaves_a_rule_that_matches_a_real_name(tmp_path):
+    store = NamingRules(str(tmp_path / "rules.json"), device_class_keys=["battery"])
+    rule = store.upsert("name", "Battery", None, "de", "Akku")
+
+    store.repair_kinds(translation_keys=set(), names={"Battery"})
+
+    assert store.get(rule["id"])["match"]["kind"] == "name"
+
+
+def test_repair_runs_only_once(tmp_path):
+    store = NamingRules(str(tmp_path / "rules.json"), device_class_keys=["battery"])
+    store.upsert("name", "battery", None, "de", "Akku")
+
+    first = store.repair_kinds(translation_keys=set(), names=set())
+    second = store.repair_kinds(translation_keys=set(), names=set())
+
+    assert len(first["moved"]) == 1
+    assert second is None
+
+
+def test_delete_many_removes_what_it_is_given(tmp_path):
+    store = NamingRules(str(tmp_path / "rules.json"))
+    first = store.upsert("name", "one", None, "de", "Eins")
+    second = store.upsert("name", "two", None, "de", "Zwei")
+
+    removed = store.delete_many([first["id"], "nothing"])
+
+    assert removed == 1
+    assert [rule["id"] for rule in store.rules] == [second["id"]]

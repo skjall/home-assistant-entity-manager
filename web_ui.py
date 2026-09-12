@@ -3339,6 +3339,26 @@ def _type_key_model_counts(restructurer) -> dict:
     return counts
 
 
+def _repair_rule_kinds(restructurer, rules) -> None:
+    """Once, move rules whose value is a device class or a translation key.
+
+    Which is which can only be told against a real home, so it waits until the
+    entities are there.
+    """
+    if restructurer is None or not restructurer.entities:
+        return
+    report = rules.repair_kinds(
+        translation_keys={entity.get("translation_key") for entity in restructurer.entities.values()},
+        names={entity.get("original_name") for entity in restructurer.entities.values()},
+        device_classes={
+            entity.get("device_class") or entity.get("original_device_class")
+            for entity in restructurer.entities.values()
+        },
+    )
+    if report and report["moved"]:
+        renamer_state["type_mappings"]._refresh_user_view()
+
+
 def _rule_affected_counts(restructurer, rules):
     """How many loaded entities each rule applies to, or None when nothing is loaded.
 
@@ -3356,13 +3376,16 @@ def _rule_affected_counts(restructurer, rules):
         group = (
             entity_data.get("translation_key") or "",
             entity_data.get("original_name") or "",
+            entity_data.get("device_class") or entity_data.get("original_device_class") or "",
             entity_data.get("platform") or None,
             _entity_model(restructurer, entity_data) or None,
         )
         groups[group] = groups.get(group, 0) + 1
-    for (translation_key, native, integration, model), size in groups.items():
-        rule = rules.find("translation_key", translation_key, integration, language, model) or rules.find(
-            "name", native, integration, language, model
+    for (translation_key, native, device_class, integration, model), size in groups.items():
+        rule = (
+            rules.find("translation_key", translation_key, integration, language, model)
+            or rules.find("name", native, integration, language, model)
+            or rules.find("device_class", device_class, integration, language, model)
         )
         if rule:
             counts[rule["id"]] = counts.get(rule["id"], 0) + size
@@ -3472,6 +3495,7 @@ def naming_rules_collection():
         loop.run_until_complete(_ensure_registry_loaded())
     finally:
         loop.close()
+    _repair_rule_kinds(renamer_state.get("restructurer"), rules)
     affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
     language = request.args.get("lang") or rules.language
     system = []
@@ -3485,6 +3509,28 @@ def naming_rules_collection():
             "system": system,
         }
     )
+
+
+@app.route("/api/naming/rules/unused", methods=["GET", "DELETE"])
+def naming_rules_unused():
+    """The rules no entity in this home matches, and a way to be rid of them."""
+    rules = renamer_state["naming_rules"]
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_ensure_registry_loaded())
+    finally:
+        loop.close()
+    restructurer = renamer_state.get("restructurer")
+    affected = _rule_affected_counts(restructurer, rules)
+    if affected is None:
+        return jsonify({"error": "the entities are not loaded yet"}), 409
+    unused = rules.unused(affected)
+    if request.method == "GET":
+        return jsonify({"rules": [_rule_payload(rule, affected) for rule in unused]})
+    removed = rules.delete_many(rule["id"] for rule in unused)
+    renamer_state["type_mappings"]._refresh_user_view()
+    return jsonify({"removed": removed})
 
 
 @app.route("/api/naming/rules/<rule_id>", methods=["PUT", "DELETE"])

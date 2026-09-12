@@ -185,6 +185,70 @@ class NamingRules:
             len(report["conflicts"]),
         )
 
+    def repair_kinds(
+        self,
+        translation_keys: Iterable[str],
+        names: Iterable[str],
+        device_classes: Iterable[str] = (),
+    ) -> Optional[Dict[str, Any]]:
+        """Move rules that are stored under the wrong kind, once.
+
+        Older versions filed every rule under the entity's name. A value that is
+        in truth a device class or an integration's translation key never equals
+        a display name, so such a rule can never match anything.
+        """
+        if self.data.get("repair"):
+            return None
+        known_names = {canon(name) for name in names if name}
+        known_keys = {key for key in translation_keys if key}
+        # A home can use classes the built-in list does not name.
+        known_classes = self.device_class_keys | {canon(value) for value in device_classes if value}
+        moved = []
+        for rule in self.rules:
+            match = rule["match"]
+            if match["kind"] != "name":
+                continue
+            value = canon(match["value"])
+            if not value or value in known_names:
+                continue
+            if value in known_classes:
+                kind = "device_class"
+            elif match["value"] in known_keys or value in known_keys:
+                kind = "translation_key"
+            else:
+                continue
+            match["kind"] = kind
+            rule["updated_at"] = _now()
+            moved.append({"rule_id": rule["id"], "value": match["value"], "kind": kind})
+
+        if moved:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            backup_dir = self.storage_path.parent / "migrations" / stamp
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            if self.storage_path.exists():
+                shutil.copy2(self.storage_path, backup_dir / self.storage_path.name)
+            report = {"at": _now(), "backup": str(backup_dir), "moved": moved}
+        else:
+            report = {"at": _now(), "backup": None, "moved": []}
+        self.data["repair"] = report
+        self.save()
+        logger.info("Repaired %d rules that were filed under the wrong kind", len(moved))
+        return report
+
+    def unused(self, counts: Mapping[str, int]) -> List[Dict[str, Any]]:
+        """Rules that no entity in this home matches."""
+        return [rule for rule in self.rules if not counts.get(rule["id"])]
+
+    def delete_many(self, rule_ids: Iterable[str]) -> int:
+        """Remove several rules at once, reporting how many went."""
+        wanted = set(rule_ids)
+        before = len(self.rules)
+        self.data["rules"] = [rule for rule in self.rules if rule["id"] not in wanted]
+        removed = before - len(self.rules)
+        if removed:
+            self.save()
+        return removed
+
     # ------------------------------------------------------------------- rules
 
     @staticmethod
