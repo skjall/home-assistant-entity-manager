@@ -104,7 +104,15 @@
     "explain_rule_model": "Todas las entidades “{original}” de {model} se llaman “{value}” para ti",
     "explain_exception": "Solo esta entidad se llama “{value}” en lugar de “{original}”",
     "explain_supplied": "{source} proporciona “{value}”",
-    "open_rule": "Ver regla"
+    "open_rule": "Ver regla",
+    "drift_badge": "cambiado en HA",
+    "drift_hint": "Cambiado en Home Assistant después de aplicarlo. Aquí figuraba “{applied}”.",
+    "drift_explain": "Este nombre se cambió en Home Assistant. “{applied}” venía de aquí.",
+    "drift_adopt": "Conservar este nombre",
+    "drift_adopt_hint": "El nombre puesto en Home Assistant se convierte en una excepción para esta entidad.",
+    "drift_overwrite": "Sobrescribir",
+    "drift_overwrite_hint": "Escribir la propuesta de las reglas sobre el nombre cambiado.",
+    "drift_adopted": "“{value}” conservado como excepción"
   },
   "virtual_devices": {
     "automations": "Automatizaciones",
@@ -426,7 +434,22 @@
     "access_mcp_howto_hint": "Copia esto en la configuración MCP del asistente y sustituye el marcador por el token. El token se muestra una sola vez, al crearlo.",
     "access_mcp_token_placeholder": "token",
     "access_docs": "Abrir la documentación de la API",
-    "access_docs_hint": "Cada ruta con sus campos, para leer y probar."
+    "access_docs_hint": "Cada ruta con sus campos, para leer y probar.",
+    "exceptions": "Excepciones",
+    "exceptions_hint": "Entidades nombradas a mano. Una excepción va antes que cualquier regla.",
+    "exceptions_entity": "Entidad",
+    "exceptions_name": "Nombre",
+    "exceptions_source": "Origen",
+    "exceptions_without": "Sin ella",
+    "exceptions_from_here": "puesta aquí",
+    "exceptions_from_ha": "desde Home Assistant",
+    "exceptions_ignored": "se deja como está",
+    "exceptions_orphan": "falta la entidad",
+    "exceptions_redundant": "igual",
+    "exceptions_remove": "Quitar excepción",
+    "exceptions_none": "Sin excepciones. Todos los nombres vienen de las reglas.",
+    "exceptions_cleanup": "Limpiar {count}",
+    "exceptions_cleanup_hint": "Quita solo las excepciones que ya no cambian nada y las que no tienen entidad."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

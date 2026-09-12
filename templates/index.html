@@ -1504,6 +1504,28 @@
             white-space: nowrap;
         }
         .rule-link:hover { text-decoration: underline; }
+        /* A name that was changed in Home Assistant itself: what happened, and
+           the two ways out of it. */
+        .drift-bar {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+        }
+        .drift-text {
+            font-size: 0.75rem;
+            color: #1d4ed8;
+        }
+        .drift-actions {
+            display: flex;
+            gap: 6px;
+            margin-left: auto;
+        }
         .scope-bar {
             display: flex;
             align-items: center;
@@ -2096,6 +2118,10 @@
                                                       :class="resolutionBadgeClass(entity)"
                                                       :title="resolutionExplain(entity)"
                                                       x-text="resolutionBadge(entity)"></span>
+                                                <span x-show="entity.drift"
+                                                      class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-blue-100 text-blue-700"
+                                                      :title="t('entity.drift_hint', {applied: entity.applied_name || ''})"
+                                                      x-text="t('entity.drift_badge')">changed in HA</span>
                                                 <span x-show="isOrphanEntity(entity)"
                                                       class="text-xs text-amber-600 ml-2"
                                                       :title="t('entity.orphan_hint')">
@@ -2197,6 +2223,22 @@
                                             <span x-show="isEntityIdTaken(entity)" class="text-red-500 text-xs">
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
                                             </span>
+                                        </div>
+                                        <div x-show="entity.drift" class="drift-bar">
+                                            <span class="drift-text"
+                                                  x-text="t('entity.drift_explain', {applied: entity.applied_name || ''})"></span>
+                                            <div class="drift-actions">
+                                                <button type="button" class="btn btn-secondary btn-sm"
+                                                        @click="adoptDriftedName(entity)"
+                                                        :disabled="applyingEntityId === entity.id"
+                                                        :title="t('entity.drift_adopt_hint')"
+                                                        x-text="t('entity.drift_adopt')">Keep</button>
+                                                <button type="button" class="btn btn-secondary btn-sm"
+                                                        @click="overwriteDriftedName(entity)"
+                                                        :disabled="applyingEntityId === entity.id"
+                                                        :title="t('entity.drift_overwrite_hint')"
+                                                        x-text="t('entity.drift_overwrite')">Overwrite</button>
+                                            </div>
                                         </div>
                                         <p class="text-xs text-gray-500 mt-1">
                                             <span x-text="resolutionExplain(entity)"></span>
@@ -4879,6 +4921,44 @@
                 },
 
                 // Execute rename in HA (no entity-specific overrides are saved)
+                // A name changed in Home Assistant has exactly two honest ways
+                // out: keep it, or write the proposal over it. Nothing here
+                // decides silently.
+                async adoptDriftedName(entity) {
+                    if (!entity || this.applyingEntityId) return;
+                    this.applyingEntityId = entity.id;
+                    try {
+                        const response = await fetch('api/naming/exceptions/adopt', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({registry_id: entity.registry_id})
+                        });
+                        const answer = await response.json();
+                        if (!response.ok || answer.error) throw new Error(answer.error || 'Not adopted');
+                        entity.drift = false;
+                        entity.name_owner = 'entity_manager';
+                        entity.applied_name = entity.original_name;
+                        entity.base_name = answer.name;
+                        entity.has_override = true;
+                        entity.override_name = answer.name;
+                        entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: answer.name};
+                        this.showMessage(this.t('entity.drift_adopted', {value: answer.name}), 'success');
+                    } catch (error) {
+                        this.showMessage(error.message, 'error');
+                    } finally {
+                        this.applyingEntityId = null;
+                    }
+                },
+
+                async overwriteDriftedName(entity) {
+                    // The proposal is what the rules say; applying it is the
+                    // same work as the Apply button, so it goes the same way.
+                    if (!entity) return;
+                    entity._currentSuffix = undefined;
+                    await this.saveEntitySuffix(entity);
+                    entity.drift = false;
+                },
+
                 async saveEntitySuffix(entity) {
                     // The button stays pressed until the rule, the preview and the
                     // rename are through; a second press would repeat all three.

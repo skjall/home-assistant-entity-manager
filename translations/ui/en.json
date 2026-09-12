@@ -104,7 +104,15 @@
     "explain_rule_model": "All “{original}” entities from {model} are called “{value}” for you",
     "explain_exception": "This entity alone is called “{value}” instead of “{original}”",
     "explain_supplied": "{source} supplies “{value}”",
-    "open_rule": "View rule"
+    "open_rule": "View rule",
+    "drift_badge": "changed in HA",
+    "drift_hint": "Changed in Home Assistant after it was applied. This was “{applied}”.",
+    "drift_explain": "This name was changed in Home Assistant. “{applied}” came from here.",
+    "drift_adopt": "Keep this name",
+    "drift_adopt_hint": "The name set in Home Assistant becomes an exception for this one entity.",
+    "drift_overwrite": "Overwrite",
+    "drift_overwrite_hint": "Write the proposal from the rules over the changed name.",
+    "drift_adopted": "Kept “{value}” as an exception"
   },
   "virtual_devices": {
     "automations": "Automations",
@@ -406,7 +414,22 @@
     "access_mcp_howto_hint": "Paste this into the assistant's MCP configuration and replace the placeholder with the token. The token is shown once, when it is created.",
     "access_mcp_token_placeholder": "token",
     "access_docs": "Open the API documentation",
-    "access_docs_hint": "Every route with its fields, to read and to try out."
+    "access_docs_hint": "Every route with its fields, to read and to try out.",
+    "exceptions": "Exceptions",
+    "exceptions_hint": "Entities named by hand. An exception comes before every rule.",
+    "exceptions_entity": "Entity",
+    "exceptions_name": "Name",
+    "exceptions_source": "From",
+    "exceptions_without": "Without it",
+    "exceptions_from_here": "set here",
+    "exceptions_from_ha": "from Home Assistant",
+    "exceptions_ignored": "left alone",
+    "exceptions_orphan": "entity gone",
+    "exceptions_redundant": "same",
+    "exceptions_remove": "Remove exception",
+    "exceptions_none": "No exceptions. Every name comes from the rules.",
+    "exceptions_cleanup": "Clean up {count}",
+    "exceptions_cleanup_hint": "Removes only the exceptions that change nothing any more, and those without an entity."
   },
   "type_mappings": {
     "light": "Light",
