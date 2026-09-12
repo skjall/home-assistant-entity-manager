@@ -160,10 +160,15 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      # Needs no baselines: asks whether the pages answer, whether Alpine binds
+      # them and whether any JavaScript faults. Runs on every branch.
+      - name: End-to-end smoke
+        run: npx playwright test tests/visual/smoke.spec.js
+
       - name: Visual regression
         run: |
           if ls tests/visual/__screenshots__/**/*.png > /dev/null 2>&1; then
-            npx playwright test
+            npx playwright test tests/visual/home.spec.js
           else
             echo "::warning::No visual baselines committed yet. Run the 'Visual baselines' workflow to seed them, then this check will compare against them."
           fi
