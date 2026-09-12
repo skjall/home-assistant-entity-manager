@@ -97,7 +97,9 @@ def test_rules_list_delete_and_settings(client):
     listed = client.get("/api/naming/rules").get_json()
     assert listed["language"] == "de"
     assert len(listed["rules"]) == 1 and listed["rules"][0]["affected"] == 2
-    assert any(entry["key"] == "battery" for entry in listed["system"])
+    # Only what this home can use: the number domain is here, a battery is not.
+    assert any(entry["key"] == "number" for entry in listed["system"])
+    assert not any(entry["key"] == "battery" for entry in listed["system"])
 
     rule_id = listed["rules"][0]["id"]
     updated = client.put(f"/api/naming/rules/{rule_id}", json={"targets": {"de": "Tempo"}}).get_json()["rule"]

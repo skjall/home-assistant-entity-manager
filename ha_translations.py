@@ -106,3 +106,39 @@ class HaTranslations:
     def domain_name(self, domain: str, language: str) -> Optional[str]:
         """The generic name of a domain, used when nothing more specific exists."""
         return self.device_class_name(domain, "_", language)
+
+    def _component_keys(self, language: str):
+        """Every (domain, key) pair Home Assistant translates for a language."""
+        for resource in self._component.get(language, {}):
+            parts = resource.split(".")
+            if len(parts) >= 5 and parts[0] == "component" and parts[2] == "entity_component" and parts[-1] == "name":
+                yield parts[1], ".".join(parts[3:-1])
+
+    def device_classes(self, language: Optional[str] = None) -> set:
+        """Every device class Home Assistant knows, across all its domains.
+
+        This is what makes a value a device class rather than a name, and it
+        comes from Home Assistant instead of a list kept here.
+        """
+        languages = [language] if language else list(self._component)
+        classes = set()
+        for lang in languages:
+            classes.update(key for _, key in self._component_keys(lang) if key != "_")
+        return classes
+
+    def name_for_key(self, key: str, language: str) -> Optional[str]:
+        """The name of a device class without knowing its domain.
+
+        Domains agree on the common classes, so the first usable name wins; a
+        domain that is sure of itself asks device_class_name instead.
+        """
+        if not key:
+            return None
+        resources = self._component.get(language, {})
+        for domain, candidate in self._component_keys(language):
+            if candidate != key:
+                continue
+            name = self._usable(resources.get(_COMPONENT.format(domain=domain, key=key)))
+            if name:
+                return name
+        return None

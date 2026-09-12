@@ -525,3 +525,45 @@ def test_delete_many_removes_what_it_is_given(tmp_path):
 
     assert removed == 1
     assert [rule["id"] for rule in store.rules] == [second["id"]]
+
+
+class _HaNames:
+    """Stands in for Home Assistant's translations, with two classes it knows."""
+
+    KNOWN = {"power_factor": "Leistungsfaktor", "battery": "Akkustand"}
+
+    def name_for_key(self, key, language):
+        return self.KNOWN.get(key)
+
+    def device_classes(self, language=None):
+        return set(self.KNOWN)
+
+
+def test_home_assistant_names_a_class_the_embedded_table_misses(tmp_path):
+    """The embedded table has no power factor; Home Assistant does."""
+    mappings = TypeMappings(user_mappings_path=str(tmp_path / "user.json"), ha_translations=_HaNames())
+
+    assert mappings.find_system_translation("power_factor", "de") == "Leistungsfaktor"
+
+
+def test_home_assistant_wins_over_the_embedded_table(tmp_path):
+    """Where both know a class, the answer comes from Home Assistant."""
+    mappings = TypeMappings(user_mappings_path=str(tmp_path / "user.json"), ha_translations=_HaNames())
+
+    assert mappings.find_system_translation("battery", "de") == "Akkustand"
+    assert mappings.find_translation("battery", "de") == "Akkustand"
+
+
+def test_the_embedded_table_still_answers_without_home_assistant(tmp_path):
+    mappings = TypeMappings(user_mappings_path=str(tmp_path / "user.json"))
+
+    assert mappings.find_system_translation("battery", "de") == "Batterie"
+
+
+def test_known_types_list_what_home_assistant_knows(tmp_path):
+    mappings = TypeMappings(user_mappings_path=str(tmp_path / "user.json"), ha_translations=_HaNames())
+
+    entries = {entry["key"]: entry["system_default"] for entry in mappings.get_all_known_types("de")}
+
+    assert entries["power_factor"] == "Leistungsfaktor"
+    assert entries["battery"] == "Akkustand"

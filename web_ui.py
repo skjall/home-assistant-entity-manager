@@ -177,7 +177,9 @@ renamer_state = {
     "naming_overrides": NamingOverrides(os.path.join(DATA_DIR, "naming_overrides.json")),
     "naming_templates": NamingTemplates(os.path.join(DATA_DIR, "naming_templates.json")),
     "type_mappings": TypeMappings(
-        user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json"), rules=naming_rules_store
+        user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json"),
+        rules=naming_rules_store,
+        ha_translations=ha_translations,
     ),
     "swap_store": SwapJobStore(os.path.join(DATA_DIR, "device_swaps")),
     "rename_log": RenameLog(os.path.join(DATA_DIR, "rename_log.jsonl")),
@@ -3339,6 +3341,25 @@ def _type_key_model_counts(restructurer) -> dict:
     return counts
 
 
+def _keys_in_use(restructurer) -> Optional[set]:
+    """Every value this home could match a rule on, or ``None`` when unknown."""
+    if restructurer is None or not restructurer.entities:
+        return None
+    keys = set()
+    for entity in restructurer.entities.values():
+        for value in (
+            entity.get("translation_key"),
+            entity.get("device_class") or entity.get("original_device_class"),
+            entity.get("original_name"),
+        ):
+            if value:
+                keys.add(canon(value))
+        entity_id = entity.get("entity_id") or ""
+        if entity_id:
+            keys.add(entity_id.partition(".")[0])
+    return keys
+
+
 def _repair_rule_kinds(restructurer, rules) -> None:
     """Once, move rules whose value is a device class or a translation key.
 
@@ -3350,7 +3371,10 @@ def _repair_rule_kinds(restructurer, rules) -> None:
     report = rules.repair_kinds(
         translation_keys={entity.get("translation_key") for entity in restructurer.entities.values()},
         names={entity.get("original_name") for entity in restructurer.entities.values()},
-        device_classes={
+        # What counts as a device class is Home Assistant's to say; the ones in
+        # this home cover what a custom integration invents on top.
+        device_classes=ha_translations.device_classes()
+        | {
             entity.get("device_class") or entity.get("original_device_class")
             for entity in restructurer.entities.values()
         },
@@ -3498,10 +3522,16 @@ def naming_rules_collection():
     _repair_rule_kinds(renamer_state.get("restructurer"), rules)
     affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
     language = request.args.get("lang") or rules.language
+    wanted = _keys_in_use(renamer_state.get("restructurer"))
     system = []
     for entry in renamer_state["type_mappings"].get_all_known_types(language):
-        if entry.get("system_default"):
-            system.append({"key": entry["key"], "value": entry["system_default"], "source": entry.get("source")})
+        if not entry.get("system_default"):
+            continue
+        # Home Assistant knows hundreds of device classes; a list of the ones
+        # this home does not have would bury the ones it does.
+        if wanted is not None and entry["key"] not in wanted:
+            continue
+        system.append({"key": entry["key"], "value": entry["system_default"], "source": entry.get("source")})
     return jsonify(
         {
             "language": rules.language,

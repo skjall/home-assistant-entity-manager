@@ -4209,15 +4209,13 @@
                     return data.rendered;
                 },
 
-                // Where the type came from, as a short badge label (empty for a plain original).
+                // A badge marks what the user decided: a rule or an exception.
+                // Everything else is the standard and needs no mark.
                 resolutionBadge(entity) {
                     const _ = this.translationsReady;
                     const won = entity?.resolution?.won_by;
-                    if (!won || won === 'original' || won === 'fallback') return '';
-                    // Built-in defaults, device classes and names derived from an
-                    // earlier run are all "standard": nothing the user decided.
-                    const kind = (won === 'legacy_parse' || won === 'device_class') ? 'rule:system' : won;
-                    const key = 'entity.source_' + kind.replace(':', '_');
+                    if (won !== 'override' && won !== 'rule:user') return '';
+                    const key = 'entity.source_' + won.replace(':', '_');
                     const label = this.t(key);
                     return label === key ? won : label;
                 },
@@ -4226,8 +4224,6 @@
                     const won = entity?.resolution?.won_by || '';
                     if (won === 'override') return 'bg-violet-100 text-violet-700';
                     if (won === 'rule:user') return 'bg-amber-100 text-amber-700';
-                    if (won === 'rule:system') return 'bg-gray-100 text-gray-600';
-                    if (won === 'legacy_parse' || won === 'device_class') return 'bg-blue-50 text-blue-600';
                     return '';
                 },
 

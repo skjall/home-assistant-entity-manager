@@ -24,8 +24,9 @@ from naming_canon import canon
 
 logger = logging.getLogger(__name__)
 
-# Default system mappings embedded in code
-# These are multilingual translations for standard device classes
+# Names used when Home Assistant cannot be asked, for instance before the first
+# connection. Home Assistant itself knows several hundred device classes in
+# every language it speaks and is the source whenever it answers.
 DEFAULT_SYSTEM_MAPPINGS = {
     "device_class": {
         # Sensors
@@ -159,6 +160,7 @@ class TypeMappings:
         system_mappings_path: Optional[str] = None,
         user_mappings_path: str = "/data/user_type_mappings.json",
         rules: Optional[Any] = None,
+        ha_translations: Optional[Any] = None,
     ):
         """
         Initialize the type mappings manager.
@@ -172,6 +174,8 @@ class TypeMappings:
         self.system_mappings_path = Path(system_mappings_path) if system_mappings_path else None
         self.user_mappings_path = Path(user_mappings_path)
         self.rules = rules
+        # Home Assistant's own names; asked before the embedded table.
+        self.ha_translations = ha_translations
 
         self.system_mappings = self._load_system_mappings()
         self.user_mappings = self._load_user_mappings()
@@ -261,8 +265,14 @@ class TypeMappings:
         # 5. Fallback: capitalize the key
         return type_key.replace("_", " ").title()
 
+    def _supplied_name(self, key: str, language: str) -> Optional[str]:
+        """What Home Assistant calls this device class, if it knows it."""
+        if not key or self.ha_translations is None:
+            return None
+        return self.ha_translations.name_for_key(key, language)
+
     def find_system_translation(self, type_key: str, language: str, integration: Optional[str] = None) -> Optional[str]:
-        """The built-in default for ``type_key`` in ``language``, ignoring user rules."""
+        """The default for ``type_key`` in ``language``, ignoring user rules."""
         if not type_key:
             return None
         key = canon(type_key)
@@ -271,6 +281,9 @@ class TypeMappings:
             if key in integration_mappings:
                 lang_mapping = integration_mappings[key]
                 return lang_mapping.get(language, lang_mapping.get("en"))
+        supplied = self._supplied_name(key, language)
+        if supplied:
+            return supplied
         device_class_mappings = self.system_mappings.get("device_class", {})
         if key in device_class_mappings:
             lang_mapping = device_class_mappings[key]
@@ -320,7 +333,10 @@ class TypeMappings:
                 lang_mapping = integration_mappings[type_key_lower]
                 return lang_mapping.get(language, lang_mapping.get("en", type_key.title()))
 
-        # 3. Check system device_class defaults
+        # 3. What Home Assistant calls this device class, then the embedded table
+        supplied = self._supplied_name(type_key_lower, language)
+        if supplied:
+            return supplied
         device_class_mappings = self.system_mappings.get("device_class", {})
         if type_key_lower in device_class_mappings:
             lang_mapping = device_class_mappings[type_key_lower]
@@ -329,6 +345,9 @@ class TypeMappings:
         # 4. Check domain as fallback
         if domain:
             domain_lower = domain.lower()
+            supplied = self._supplied_name(domain_lower, language)
+            if supplied:
+                return supplied
             if domain_lower in device_class_mappings:
                 lang_mapping = device_class_mappings[domain_lower]
                 return lang_mapping.get(language, lang_mapping.get("en", domain.title()))
@@ -405,6 +424,22 @@ class TypeMappings:
         self._refresh_user_view()
         all_types = []
         seen_keys = set()
+
+        # Every device class Home Assistant knows, in its own words
+        if self.ha_translations is not None:
+            for type_key in sorted(self.ha_translations.device_classes(language)):
+                name = self.ha_translations.name_for_key(type_key, language)
+                if not name or type_key in seen_keys:
+                    continue
+                seen_keys.add(type_key)
+                all_types.append(
+                    {
+                        "key": type_key,
+                        "system_default": name,
+                        "user_mapping": self.user_mappings.get(type_key),
+                        "source": "device_class",
+                    }
+                )
 
         # Collect from device_class mappings
         for type_key, lang_mapping in self.system_mappings.get("device_class", {}).items():
@@ -486,6 +521,10 @@ class TypeMappings:
             System default translation or None
         """
         type_key_lower = type_key.lower()
+
+        supplied = self._supplied_name(type_key_lower, language)
+        if supplied:
+            return supplied
 
         # Check device_class
         device_class_mappings = self.system_mappings.get("device_class", {})
