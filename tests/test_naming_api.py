@@ -318,6 +318,29 @@ def test_template_sample_comes_from_a_real_entity(client):
     assert data["context"]["integration"] == "mqtt"
 
 
+def test_template_sample_takes_the_entity_it_is_asked_for(client):
+    """The user picks the entity the preview runs on."""
+    entity_id = next(eid for eid in web_ui.renamer_state["restructurer"].entities if eid != "number.a_effect_speed")
+    data = client.get(f"/api/naming_templates/sample?entity_id={entity_id}").get_json()
+
+    assert data["entity_id"] == entity_id
+
+
+def test_template_sample_ignores_an_entity_it_does_not_know(client):
+    data = client.get("/api/naming_templates/sample?entity_id=sensor.nowhere").get_json()
+
+    assert data["entity_id"] == "number.a_effect_speed"
+
+
+def test_template_sample_entities_carry_a_name_and_an_area(client):
+    rows = client.get("/api/naming_templates/sample/entities").get_json()["entities"]
+
+    assert rows
+    first = next(row for row in rows if row["entity_id"] == "number.a_effect_speed")
+    assert first["area"] == "Küche"
+    assert first["name"]
+
+
 def test_template_sample_falls_back_without_entities(client, monkeypatch):
     web_ui.renamer_state["restructurer"].entities = {}
 

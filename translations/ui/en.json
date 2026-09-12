@@ -394,7 +394,11 @@
     "naming_preview_for": "for {entity}",
     "field_floor_level": "Level",
     "technical_fields_hint": "In names the domain and device class read as words; in the ID they stay technical.",
-    "template_editor_hint": "Placeholders are solid blocks; type freely around them. Backspace removes a whole block."
+    "template_editor_hint": "Placeholders are solid blocks; type freely around them. Backspace removes a whole block.",
+    "naming_preview_pick": "Search an entity for the example…",
+    "naming_preview_shuffle": "Show another example",
+    "naming_preview_no_match": "No match",
+    "naming_preview_more": "… {count} more, narrow the search"
   },
   "type_mappings": {
     "light": "Light",

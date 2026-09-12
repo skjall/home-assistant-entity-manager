@@ -414,7 +414,11 @@
     "naming_preview_for": "pour {entity}",
     "field_floor_level": "Niveau",
     "technical_fields_hint": "Dans les noms, le domaine et la classe s’écrivent en toutes lettres ; dans l’ID ils restent techniques.",
-    "template_editor_hint": "Les espaces réservés sont des blocs entiers ; écrivez librement autour. Retour arrière en supprime un."
+    "template_editor_hint": "Les espaces réservés sont des blocs entiers ; écrivez librement autour. Retour arrière en supprime un.",
+    "naming_preview_pick": "Chercher une entité pour l’exemple…",
+    "naming_preview_shuffle": "Afficher un autre exemple",
+    "naming_preview_no_match": "Aucun résultat",
+    "naming_preview_more": "… {count} de plus, affinez la recherche"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

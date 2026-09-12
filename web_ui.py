@@ -10,6 +10,7 @@ import ipaddress
 import json
 import logging
 import os
+import random
 import re
 import time
 from typing import Any, Optional
@@ -2991,9 +2992,65 @@ def naming_templates_config() -> Any:
         return jsonify({"error": "Failed to save naming templates"}), 500
 
 
+SAMPLE_FALLBACK = {
+    "floor": "Ground floor",
+    "floor_id": "ground_floor",
+    "floor_level": "0",
+    "area": "Living room",
+    "area_id": "living_room",
+    "device": "Thermostat",
+    "device_id": "device_123",
+    "entity": "Temperature",
+    "entity_id": "thermostat_temperature",
+    "domain": "sensor",
+    "device_class": "temperature",
+    "manufacturer": "Acme",
+    "model": "T1000",
+    "integration": "matter",
+}
+
+
+def _sample_rows(restructurer: Any) -> list:
+    """Entities that can carry a full example: they have a device and an area."""
+    rows = []
+    for entity_id, entity_data in restructurer.entities.items():
+        device = restructurer.devices.get(entity_data.get("device_id") or "")
+        if not device:
+            continue
+        area_id = entity_data.get("area_id") or device.get("area_id") or ""
+        if not area_id:
+            continue
+        rows.append(
+            {
+                "entity_id": entity_id,
+                "name": entity_data.get("name") or entity_data.get("original_name") or entity_id,
+                "area": restructurer.areas.get(area_id, {}).get("name", ""),
+            }
+        )
+    return rows
+
+
+def _sample_context(restructurer: Any, entity_id: str) -> Optional[dict]:
+    """The template context of one entity, or ``None`` when it shows too little."""
+    entity_data = restructurer.entities.get(entity_id)
+    if entity_data is None:
+        return None
+    context = restructurer.build_naming_context(entity_id, entity_data)
+    if not context.get("entity") or not context.get("device"):
+        return None
+    sample = {field: context.get(field, "") for field in SAMPLE_FALLBACK}
+    sample["entity_id"] = entity_id.partition(".")[2]
+    sample["domain"] = entity_id.partition(".")[0]
+    sample["integration"] = entity_data.get("platform") or ""
+    return sample
+
+
 @app.route("/api/naming_templates/sample")
 def naming_templates_sample() -> Any:
-    """A real entity to preview templates with, so the example is the user's own home."""
+    """A real entity to preview templates with, so the example is the user's own home.
+
+    ``entity_id`` asks for one by name, ``pick=random`` for any other one.
+    """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -3001,37 +3058,41 @@ def naming_templates_sample() -> Any:
     finally:
         loop.close()
     restructurer = renamer_state.get("restructurer")
-    fallback = {
-        "floor": "Ground floor",
-        "floor_id": "ground_floor",
-        "floor_level": "0",
-        "area": "Living room",
-        "area_id": "living_room",
-        "device": "Thermostat",
-        "device_id": "device_123",
-        "entity": "Temperature",
-        "entity_id": "thermostat_temperature",
-        "domain": "sensor",
-        "device_class": "temperature",
-        "manufacturer": "Acme",
-        "model": "T1000",
-        "integration": "matter",
-    }
     if not restructurer or not restructurer.entities:
-        return jsonify({"context": fallback, "entity_id": None})
-    for entity_id, entity_data in restructurer.entities.items():
-        device = restructurer.devices.get(entity_data.get("device_id") or "")
-        if not device or not (entity_data.get("area_id") or device.get("area_id")):
-            continue
-        context = restructurer.build_naming_context(entity_id, entity_data)
-        if not context.get("entity") or not context.get("device"):
-            continue
-        sample = {field: context.get(field, "") for field in fallback}
-        sample["entity_id"] = entity_id.partition(".")[2]
-        sample["domain"] = entity_id.partition(".")[0]
-        sample["integration"] = entity_data.get("platform") or ""
-        return jsonify({"context": sample, "entity_id": entity_id})
-    return jsonify({"context": fallback, "entity_id": None})
+        return jsonify({"context": SAMPLE_FALLBACK, "entity_id": None})
+
+    wanted = request.args.get("entity_id") or ""
+    if wanted:
+        sample = _sample_context(restructurer, wanted)
+        if sample is not None:
+            return jsonify({"context": sample, "entity_id": wanted})
+
+    rows = _sample_rows(restructurer)
+    if request.args.get("pick") == "random" and rows:
+        for candidate in random.sample(rows, min(len(rows), 25)):
+            sample = _sample_context(restructurer, candidate["entity_id"])
+            if sample is not None:
+                return jsonify({"context": sample, "entity_id": candidate["entity_id"]})
+    for row in rows:
+        sample = _sample_context(restructurer, row["entity_id"])
+        if sample is not None:
+            return jsonify({"context": sample, "entity_id": row["entity_id"]})
+    return jsonify({"context": SAMPLE_FALLBACK, "entity_id": None})
+
+
+@app.route("/api/naming_templates/sample/entities")
+def naming_templates_sample_entities() -> Any:
+    """Every entity the preview can use, for the search field to filter."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_ensure_registry_loaded())
+    finally:
+        loop.close()
+    restructurer = renamer_state.get("restructurer")
+    if not restructurer or not restructurer.entities:
+        return jsonify({"entities": []})
+    return jsonify({"entities": _sample_rows(restructurer)})
 
 
 @app.route("/api/naming_templates/preview", methods=["POST"])

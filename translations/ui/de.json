@@ -394,7 +394,11 @@
     "naming_preview_for": "für {entity}",
     "field_floor_level": "Ebene",
     "technical_fields_hint": "In Namen erscheinen Domäne und Geräteklasse als Wort, in der ID technisch.",
-    "template_editor_hint": "Platzhalter sind feste Bausteine, dazwischen schreibst du frei. Die Rücktaste entfernt einen Baustein ganz."
+    "template_editor_hint": "Platzhalter sind feste Bausteine, dazwischen schreibst du frei. Die Rücktaste entfernt einen Baustein ganz.",
+    "naming_preview_pick": "Entität für das Beispiel suchen…",
+    "naming_preview_shuffle": "Ein anderes Beispiel zeigen",
+    "naming_preview_no_match": "Kein Treffer",
+    "naming_preview_more": "… {count} weitere, Suche eingrenzen"
   },
   "type_mappings": {
     "light": "Licht",

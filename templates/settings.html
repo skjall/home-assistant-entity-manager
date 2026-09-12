@@ -425,6 +425,98 @@
             color: #2563eb;
             border-bottom-color: #2563eb;
         }
+        .sample-picker {
+            position: relative;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-top: 8px;
+        }
+        .sample-field {
+            position: relative;
+            flex: 1;
+        }
+        .sample-icon {
+            position: absolute;
+            left: 9px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            font-size: 0.9rem;
+        }
+        .sample-input {
+            width: 100%;
+            padding-left: 30px;
+        }
+        .sample-shuffle {
+            flex: none;
+            padding: 7px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #fff;
+            color: #4b5563;
+            cursor: pointer;
+        }
+        .sample-shuffle:hover {
+            background: #f3f4f6;
+        }
+        .sample-list {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            z-index: 50;
+            margin-top: 4px;
+            max-height: 260px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+        }
+        .sample-option {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+            padding: 7px 10px;
+            border: none;
+            border-bottom: 1px solid #f3f4f6;
+            background: none;
+            text-align: left;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .sample-option:hover {
+            background: #eff6ff;
+        }
+        .sample-option.is-current {
+            background: #dbeafe;
+            font-weight: 500;
+        }
+        .sample-option-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .sample-option-area {
+            color: #9ca3af;
+        }
+        .sample-option-id {
+            flex: none;
+            color: #9ca3af;
+            font-size: 0.75rem;
+        }
+        .sample-empty,
+        .sample-more {
+            padding: 7px 10px;
+            color: #9ca3af;
+            font-size: 0.8rem;
+        }
+        .sample-more {
+            background: #f9fafb;
+        }
         .tpl-editor {
             width: 100%;
             min-height: 38px;
@@ -599,8 +691,36 @@
 
                 <div style="margin-top: 16px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
                     <strong x-text="t('settings.naming_preview')">Example preview</strong>
-                    <span x-show="namingSampleEntity" style="color: #6b7280; font-size: 0.8rem;"
-                          x-text="t('settings.naming_preview_for', {entity: namingSampleEntity})"></span>
+                    <div class="sample-picker" @click.away="sampleOpen = false" @keydown.escape.stop="sampleOpen = false">
+                        <div class="sample-field">
+                            <i class="ri-search-line sample-icon"></i>
+                            <input type="text" class="edit-input sample-input" autocomplete="off"
+                                   x-model="sampleSearch"
+                                   :placeholder="t('settings.naming_preview_pick')"
+                                   @focus="sampleOpen = true" @click="sampleOpen = true" @input="sampleOpen = true">
+                        </div>
+                        <button type="button" class="sample-shuffle" @click="shuffleNamingSample()"
+                                :title="t('settings.naming_preview_shuffle')">
+                            <i class="ri-shuffle-line"></i>
+                        </button>
+                        <div class="sample-list" x-show="sampleOpen">
+                            <template x-for="row in sampleMatches().slice(0, 50)" :key="row.entity_id">
+                                <button type="button" class="sample-option"
+                                        :class="row.entity_id === namingSampleEntity ? 'is-current' : ''"
+                                        @click="pickNamingSample(row)">
+                                    <span class="sample-option-name">
+                                        <span class="sample-option-area" x-show="row.area" x-text="row.area + ' / '"></span>
+                                        <span x-text="row.name"></span>
+                                    </span>
+                                    <code class="sample-option-id" x-text="row.entity_id"></code>
+                                </button>
+                            </template>
+                            <div class="sample-empty" x-show="!sampleMatches().length"
+                                 x-text="t('settings.naming_preview_no_match')"></div>
+                            <div class="sample-more" x-show="sampleMatches().length > 50"
+                                 x-text="t('settings.naming_preview_more', {count: sampleMatches().length - 50})"></div>
+                        </div>
+                    </div>
                     <div style="margin-top: 8px; font-size: 0.9rem;">
                         <div><span x-text="t('settings.device_name_template')"></span>: <code x-text="namingPreview.device_name || '—'"></code></div>
                         <div><span x-text="t('settings.entity_name_template')"></span>: <code x-text="namingPreview.entity_name || '—'"></code></div>
@@ -966,6 +1086,9 @@
                 namingSampleEntity: null,
                 activeTemplate: 'entity_name',
                 templateFields: ['device_name', 'entity_name', 'entity_id'],
+                sampleEntities: [],
+                sampleSearch: '',
+                sampleOpen: false,
                 previewTimer: null,
                 namingMessage: '',
                 namingError: false,
@@ -1013,8 +1136,11 @@
                     await this.syncRuleLanguage();
                     if (this.highlightRuleId) this.focusHighlightedRule();
                     await this.loadApiToken();
-                    await this.loadNamingSample();
+                    await this.loadNamingSample(
+                        this.namingSampleEntity ? '?entity_id=' + encodeURIComponent(this.namingSampleEntity) : ''
+                    );
                     await this.loadNamingTemplates();
+                    await this.loadSampleEntities();
                 },
 
                 // Rules are applied in one language; align it with the UI language
@@ -1215,14 +1341,45 @@
                     this.readTemplateField(which);
                 },
 
-                async loadNamingSample() {
+                // The preview runs on one entity of the user's own home; the field picks it.
+                async loadNamingSample(query = '') {
                     try {
-                        const data = await (await fetch('api/naming_templates/sample')).json();
+                        const data = await (await fetch('api/naming_templates/sample' + query)).json();
                         this.namingSample = data.context || {};
                         this.namingSampleEntity = data.entity_id || null;
+                        this.sampleSearch = data.entity_id || '';
+                        this.rememberState();
                     } catch (e) {
                         console.warn('Could not load a sample entity', e);
                     }
+                },
+
+                async loadSampleEntities() {
+                    try {
+                        const data = await (await fetch('api/naming_templates/sample/entities')).json();
+                        this.sampleEntities = data.entities || [];
+                    } catch (e) {
+                        console.warn('Could not load the entities for the preview', e);
+                    }
+                },
+
+                sampleMatches() {
+                    const query = (this.sampleSearch || '').trim().toLowerCase();
+                    if (!query || query === this.namingSampleEntity) return this.sampleEntities;
+                    return this.sampleEntities.filter(row =>
+                        (row.entity_id + ' ' + row.name + ' ' + (row.area || '')).toLowerCase().includes(query));
+                },
+
+                async pickNamingSample(row) {
+                    this.sampleOpen = false;
+                    await this.loadNamingSample('?entity_id=' + encodeURIComponent(row.entity_id));
+                    await this.previewNamingTemplates();
+                },
+
+                async shuffleNamingSample() {
+                    this.sampleOpen = false;
+                    await this.loadNamingSample('?pick=random');
+                    await this.previewNamingTemplates();
                 },
 
                 // Editing a template means it is no longer the preset it started from.
@@ -1412,6 +1569,7 @@
                         const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
                         if (saved.filter) this.filterType = saved.filter;
                         if (saved.q) this.searchQuery = saved.q;
+                        if (saved.sample) this.namingSampleEntity = saved.sample;
                     } catch (e) { /* storage may be unavailable */ }
                 },
 
@@ -1421,7 +1579,8 @@
                             lastPage: 'settings',
                             section: this.section,
                             filter: this.filterType,
-                            q: this.searchQuery
+                            q: this.searchQuery,
+                            sample: this.namingSampleEntity
                         }));
                     } catch (e) { /* storage may be unavailable */ }
                 },
