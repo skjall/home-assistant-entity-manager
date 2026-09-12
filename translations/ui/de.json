@@ -101,7 +101,7 @@
     "explain_spelling": "„{original}“ wird als „{value}“ geschrieben",
     "explain_rule_all": "Alle „{original}“-Entitäten heißen bei dir „{value}“",
     "explain_rule_integration": "Alle „{original}“-Entitäten von {integration} heißen bei dir „{value}“",
-    "explain_rule_model": "Alle „{original}“-Entitäten des {model} heißen bei dir „{value}“",
+    "explain_rule_model": "Alle „{original}“-Entitäten von {model} heißen bei dir „{value}“",
     "explain_exception": "Nur diese Entität heißt „{value}“ statt „{original}“",
     "explain_supplied": "{source} liefert „{value}“",
     "open_rule": "Regel ansehen"

@@ -101,7 +101,7 @@
     "explain_spelling": "« {original} » s’écrit « {value} »",
     "explain_rule_all": "Toutes les entités « {original} » s’appellent « {value} » chez vous",
     "explain_rule_integration": "Toutes les entités « {original} » de {integration} s’appellent « {value} » chez vous",
-    "explain_rule_model": "Toutes les entités « {original} » du {model} s’appellent « {value} » chez vous",
+    "explain_rule_model": "Toutes les entités « {original} » de {model} s’appellent « {value} » chez vous",
     "explain_exception": "Cette entité seule s’appelle « {value} » au lieu de « {original} »",
     "explain_supplied": "{source} fournit « {value} »",
     "open_rule": "Voir la règle"

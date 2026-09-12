@@ -101,7 +101,7 @@
     "explain_spelling": "“{original}” se escribe “{value}”",
     "explain_rule_all": "Todas las entidades “{original}” se llaman “{value}” para ti",
     "explain_rule_integration": "Todas las entidades “{original}” de {integration} se llaman “{value}” para ti",
-    "explain_rule_model": "Todas las entidades “{original}” del {model} se llaman “{value}” para ti",
+    "explain_rule_model": "Todas las entidades “{original}” de {model} se llaman “{value}” para ti",
     "explain_exception": "Solo esta entidad se llama “{value}” en lugar de “{original}”",
     "explain_supplied": "{source} proporciona “{value}”",
     "open_rule": "Ver regla"

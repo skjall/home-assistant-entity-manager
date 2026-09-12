@@ -101,7 +101,7 @@
     "explain_spelling": "“{original}” is spelled “{value}”",
     "explain_rule_all": "All “{original}” entities are called “{value}” for you",
     "explain_rule_integration": "All “{original}” entities from {integration} are called “{value}” for you",
-    "explain_rule_model": "All “{original}” entities of the {model} are called “{value}” for you",
+    "explain_rule_model": "All “{original}” entities from {model} are called “{value}” for you",
     "explain_exception": "This entity alone is called “{value}” instead of “{original}”",
     "explain_supplied": "{source} supplies “{value}”",
     "open_rule": "View rule"
