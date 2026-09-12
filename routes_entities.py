@@ -22,7 +22,12 @@ from ha_websocket import HomeAssistantWebSocket
 from jobs import new_job
 import naming_service
 from routes_naming import ensure_registry_loaded
-from sanitize import sanitize_entity_id, sanitize_name, sanitize_registry_id, validate_json_input
+from sanitize import (
+    sanitize_entity_id,
+    sanitize_name,
+    sanitize_registry_id,
+    validate_json_input,
+)
 from z2m import sync_z2m_name
 
 logger = logging.getLogger(__name__)

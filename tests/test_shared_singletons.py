@@ -6,9 +6,9 @@ object is dropped, and with it whatever it had already fetched.
 """
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 

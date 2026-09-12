@@ -14,11 +14,12 @@ from typing import Any, Optional
 from flask import Blueprint, jsonify, request
 
 from app_state import ha_translations, renamer_state
-from registry import ensure_registry_loaded
 from naming_canon import canon
+import naming_overrides
 from naming_rules import NamingRuleError
 from naming_templates import NamingTemplateError
-from sanitize import sanitize_string, validate_json_input
+from registry import ensure_registry_loaded
+from sanitize import sanitize_registry_id, sanitize_string, validate_json_input
 
 logger = logging.getLogger(__name__)
 
@@ -726,6 +727,143 @@ def naming_preview():
     if suffix > 1 and new_name:
         new_name = f"{new_name} {suffix}"
     return jsonify({"rendered": {"entity_name": new_name, "entity_id": new_entity_id}, "resolution": resolution})
+
+
+# --------------------------------------------------------------------------- #
+# Exceptions: one entity, named its own way
+# --------------------------------------------------------------------------- #
+
+
+def _entity_of(registry_id: str):
+    """The entity_id and registry entry behind a registry id, or (None, None)."""
+    restructurer = renamer_state.get("restructurer")
+    for entity_id, entity in (restructurer.entities if restructurer else {}).items():
+        if entity.get("id") == registry_id:
+            return entity_id, entity
+    return None, None
+
+
+def _type_without_exception(entity_id: str, entity: dict) -> str:
+    """What the rules alone would call this entity."""
+    restructurer = renamer_state.get("restructurer")
+    if not restructurer:
+        return ""
+    return restructurer.build_naming_context(entity_id, entity, ignore_exception=True).get("entity", "")
+
+
+def _exception_rows():
+    """Every exception with the entity it belongs to and what it still changes."""
+    stored = renamer_state["naming_overrides"].get_all_entity_overrides()
+    rows = []
+    for registry_id, entry in stored.items():
+        entity_id, entity = _entity_of(registry_id)
+        would_be = _type_without_exception(entity_id, entity) if entity_id else ""
+        name = (entry or {}).get("name") or ""
+        rows.append(
+            {
+                "registry_id": registry_id,
+                "entity_id": entity_id,
+                "name": name,
+                "source": (entry or {}).get("source") or naming_overrides.USER,
+                "keep_original": bool((entry or {}).get("keep_original")),
+                "created_at": (entry or {}).get("created_at"),
+                "would_be": would_be,
+                # An exception that says exactly what the rules already say
+                # changes nothing and only makes the list harder to read.
+                "redundant": bool(entity_id) and not (entry or {}).get("keep_original") and name == would_be,
+                "orphan": entity_id is None,
+            }
+        )
+    rows.sort(key=lambda row: (row["entity_id"] or "￿", row["registry_id"]))
+    return rows
+
+
+@naming.route("/api/naming/exceptions", methods=["GET"])
+def naming_exceptions():
+    """List the exceptions, saying which of them still change anything."""
+    return jsonify({"exceptions": _exception_rows()})
+
+
+@naming.route("/api/naming/exceptions/<registry_id>", methods=["DELETE"])
+def naming_exception_delete(registry_id: str):
+    """Drop one exception; the rules decide the name again from now on."""
+    renamer_state["naming_overrides"].remove_entity_override(sanitize_registry_id(registry_id))
+    return jsonify({"success": True})
+
+
+@naming.route("/api/naming/exceptions/cleanup", methods=["POST"])
+def naming_exceptions_cleanup():
+    """Remove the exceptions a rule has meanwhile caught up with.
+
+    Only those whose value matches what the rules say anyway, and those whose
+    entity no longer exists. Anything that still changes a name is left alone.
+    """
+    overrides = renamer_state["naming_overrides"]
+    removed = [row for row in _exception_rows() if row["redundant"] or row["orphan"]]
+    for row in removed:
+        overrides.remove_entity_override(row["registry_id"])
+    return jsonify({"success": True, "removed": [row["registry_id"] for row in removed], "count": len(removed)})
+
+
+@naming.route("/api/naming/exceptions/adopt", methods=["POST"])
+def naming_exception_adopt():
+    """Keep a name that was set in Home Assistant itself.
+
+    The stored name is the whole rendered name; what an exception holds is the
+    type part alone. The templates say how to take the one apart to get the
+    other; a name that fits no template is kept as it stands, because guessing
+    would be worse than a value the user can see and correct.
+    """
+    data = request.json
+    is_valid, error = validate_json_input(data, ["registry_id"])
+    if not is_valid:
+        return jsonify({"error": error}), 400
+
+    registry_id = sanitize_registry_id(data.get("registry_id"))
+    entity_id, entity = _entity_of(registry_id)
+    if not entity_id:
+        return jsonify({"error": "unknown entity"}), 404
+
+    current = entity.get("name") or ""
+    if not current:
+        return jsonify({"error": "this entity carries no name of its own"}), 400
+
+    restructurer = renamer_state["restructurer"]
+    context = restructurer.build_naming_context(entity_id, entity, ignore_exception=True)
+    adopted = restructurer.naming_templates.extract_field("entity_name", current, "entity", context) or current
+
+    renamer_state["naming_overrides"].set_entity_override(registry_id, adopted, source=naming_overrides.HA_UI)
+    # The name in the registry is now the one the exception describes, so it
+    # belongs here again and stops counting as changed elsewhere.
+    renamer_state["naming_state"].record(
+        registry_id,
+        applied_name=current,
+        applied_entity_id=entity_id,
+        base_entity=adopted,
+        template_hash=restructurer.naming_templates.fingerprint(),
+        won_by="override",
+    )
+    return jsonify({"success": True, "name": adopted, "entity_id": entity_id})
+
+
+@naming.route("/api/naming/exceptions/ignore", methods=["POST"])
+def naming_exception_ignore():
+    """Leave one entity alone: no proposal, the supplied name stays."""
+    data = request.json
+    is_valid, error = validate_json_input(data, ["registry_id"])
+    if not is_valid:
+        return jsonify({"error": error}), 400
+
+    registry_id = sanitize_registry_id(data.get("registry_id"))
+    if not registry_id:
+        return jsonify({"error": "Invalid registry ID"}), 400
+
+    if data.get("ignore") is False:
+        renamer_state["naming_overrides"].remove_entity_override(registry_id)
+        return jsonify({"success": True, "ignored": False})
+
+    renamer_state["naming_overrides"].ignore_entity(registry_id)
+    return jsonify({"success": True, "ignored": True})
 
 
 SETTINGS_SECTIONS = ("naming", "rules", "system")

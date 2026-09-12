@@ -5,8 +5,8 @@ server that answers requests in parallel, an unguarded store would let the
 second writer save the state the first one had already replaced.
 """
 
-import json
 from concurrent.futures import ThreadPoolExecutor
+import json
 
 import pytest
 

@@ -11,15 +11,31 @@ import time
 import uuid
 
 import aiohttp
-from flask import Flask, jsonify, make_response, redirect, render_template, request, send_from_directory
+from flask import (
+    Flask,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+)
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import access
+from app_state import UNASSIGNED_AREA, ensure_mqtt_bridge, init_client, renamer_state
 import asgi
+from dependency_updater import DependencyUpdater
+from device_registry import DeviceRegistry
+from entity_registry import EntityRegistry
+from ha_websocket import HomeAssistantWebSocket
+from hierarchy_manager import normalize_name
+from jobs import new_job
 import mcp_server
-from z2m import sync_z2m_name
+from reference_cache import get_reference_checker, invalidate_reference_checker_cache
 from registry import sync_ha_language
+from routes_entities import entities as entity_routes
 from routes_naming import (
     SETTINGS_SECTIONS,
     entity_model,
@@ -29,23 +45,15 @@ from routes_naming import (
     type_key_integration_counts,
     type_key_model_counts,
 )
-from reference_cache import get_reference_checker, invalidate_reference_checker_cache
-from routes_entities import entities as entity_routes
 from routes_swap import swap as swap_routes
 from routes_system import system as system_routes
-from app_state import UNASSIGNED_AREA, ensure_mqtt_bridge, init_client, renamer_state
-from dependency_updater import DependencyUpdater
-from device_registry import DeviceRegistry
-from entity_registry import EntityRegistry
-from ha_websocket import HomeAssistantWebSocket
-from hierarchy_manager import normalize_name
-from jobs import new_job
 from sanitize import (
     sanitize_entity_id,
     sanitize_name,
     sanitize_string,
     validate_json_input,
 )
+from z2m import sync_z2m_name
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
 # load_dotenv()

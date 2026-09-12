@@ -3,7 +3,16 @@
 import threading
 
 import jobs
-from jobs import STATE_COMPLETED, STATE_FAILED, STATE_QUEUED, STATE_RUNNING, JobContext, JobStore, JobWorker, new_job
+from jobs import (
+    STATE_COMPLETED,
+    STATE_FAILED,
+    STATE_QUEUED,
+    STATE_RUNNING,
+    JobContext,
+    JobStore,
+    JobWorker,
+    new_job,
+)
 
 TERMINAL = {STATE_COMPLETED, STATE_FAILED}
 

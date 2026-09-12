@@ -295,6 +295,62 @@ OPERATIONS: List[Operation] = [
         tag="Naming",
     ),
     Operation(
+        "/api/naming/exceptions",
+        "get",
+        "exceptions",
+        "Every entity that is named by hand rather than by a rule.",
+        "Each entry says where the exception came from - typed here, or adopted from a name set in "
+        "Home Assistant itself - and what the rules alone would call the entity. An entry marked "
+        "redundant says exactly what the rules already say and could go; one marked orphan belongs "
+        "to an entity that no longer exists.",
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/exceptions/<registry_id>",
+        "delete",
+        "delete_exception",
+        "Drop one exception, so the rules decide that name again.",
+        "registry_id is the entity's registry id, which hierarchy and all_entities report as id. "
+        "The name already written into Home Assistant stays until the entity is renamed again.",
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/exceptions/cleanup",
+        "post",
+        "cleanup_exceptions",
+        "Remove the exceptions that no longer change anything.",
+        "Only those whose value matches what the rules say anyway, and those whose entity is gone. "
+        "Anything that still changes a name is left alone. Returns which ones were removed.",
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/exceptions/adopt",
+        "post",
+        "adopt_name",
+        "Keep a name that was set in Home Assistant itself.",
+        "Use this when an entity is reported with drift: somebody renamed it outside this add-on. "
+        "The rendered name is taken apart along the templates to get the type part, which is then "
+        "stored as an exception, and the entity counts as named from here again. The other way out "
+        "of drift is apply_naming, which writes the proposal over the changed name.",
+        body={"registry_id": text("The entity's registry id.")},
+        required=("registry_id",),
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/exceptions/ignore",
+        "post",
+        "ignore_entity",
+        "Leave one entity alone: no proposal, the supplied name stays.",
+        "An ignored entity keeps whatever its integration calls it and is never proposed for "
+        "renaming. Send ignore false to take it back into the naming again.",
+        body={
+            "registry_id": text("The entity's registry id."),
+            "ignore": flag("False takes the entity back into the naming. Defaults to true."),
+        },
+        required=("registry_id",),
+        tag="Naming",
+    ),
+    Operation(
         "/api/naming_templates",
         "get",
         "naming_templates",
