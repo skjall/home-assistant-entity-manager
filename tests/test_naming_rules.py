@@ -5,6 +5,7 @@ import json
 import pytest
 
 from entity_restructurer import EntityRestructurer
+from ha_translations import HaTranslations
 from naming_canon import canon
 from naming_display import normalize_display
 from naming_overrides import NamingOverrides
@@ -357,10 +358,10 @@ class _FakeHaTranslations:
         self.entity = entity or {}
 
     def device_class_name(self, domain, device_class, language):
-        return self.component.get((domain, device_class, language))
+        return HaTranslations._usable(self.component.get((domain, device_class, language)))
 
     def translation_key_name(self, platform, domain, key, language):
-        return self.entity.get((platform, domain, key, language))
+        return HaTranslations._usable(self.entity.get((platform, domain, key, language)))
 
 
 def test_home_assistant_names_a_device_class_in_its_own_language(restructurer):
@@ -404,3 +405,17 @@ def test_a_user_rule_still_beats_home_assistant(restructurer):
 
     assert resolution["value"] == "Zustand"
     assert resolution["won_by"] == "rule:user"
+
+
+def test_a_name_with_a_placeholder_is_not_used(restructurer):
+    """Home Assistant fills "Warnung {slot_id}" itself; the original is the better name."""
+    restructurer.ha_translations = _FakeHaTranslations({("number", "problem", "de"): "Warnung {slot_id}"})
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "Warnung 1"
+    entity["device_class"] = "problem"
+
+    restructurer.build_naming_context("number.x_effect_speed", entity)
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["value"] == "Warnung 1"
+    assert resolution["won_by"] == "original"

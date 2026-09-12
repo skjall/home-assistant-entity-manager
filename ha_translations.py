@@ -82,17 +82,26 @@ class HaTranslations:
             return None
         return (response.get("result") or {}).get("resources", {})
 
+    @staticmethod
+    def _usable(name: Optional[str]) -> Optional[str]:
+        """Home Assistant fills placeholders like "Warnung {slot_id}" itself; we cannot."""
+        if not name or "{" in name or "}" in name:
+            return None
+        return name
+
     def device_class_name(self, domain: str, device_class: str, language: str) -> Optional[str]:
         """What Home Assistant calls this device class, e.g. door -> "Tür"."""
         if not domain or not device_class:
             return None
-        return self._component.get(language, {}).get(_COMPONENT.format(domain=domain, key=device_class))
+        return self._usable(self._component.get(language, {}).get(_COMPONENT.format(domain=domain, key=device_class)))
 
     def translation_key_name(self, platform: str, domain: str, key: str, language: str) -> Optional[str]:
         """What the integration calls this entity, e.g. matter/reactive_current."""
         if not platform or not domain or not key:
             return None
-        return self._entity.get(language, {}).get(_ENTITY.format(platform=platform, domain=domain, key=key))
+        return self._usable(
+            self._entity.get(language, {}).get(_ENTITY.format(platform=platform, domain=domain, key=key))
+        )
 
     def domain_name(self, domain: str, language: str) -> Optional[str]:
         """The generic name of a domain, used when nothing more specific exists."""
