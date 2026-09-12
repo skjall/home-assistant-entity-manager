@@ -395,12 +395,13 @@
     "access_state_lan": "Reachable from the local network",
     "access_state_any": "Reachable from anywhere",
     "access_no_port": "No port is published.",
-    "access_port_note": "Port {host} · carries the API only, never the interface",
     "access_token": "Token",
     "access_token_needed": "Without a token the API answers no one.",
     "access_token_meta": "Created {created} · last used {used}",
     "access_mcp": "Assistants (MCP)",
-    "access_change_note": "Change it in the add-on settings under Configuration."
+    "access_change_note": "Change it in the add-on settings under Configuration.",
+    "access_address": "Address",
+    "access_only_address": "Only the addresses below answer. The interface is not among them."
   },
   "type_mappings": {
     "light": "Light",

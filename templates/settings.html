@@ -976,6 +976,16 @@
                             <span x-text="apiToken.configured ? t('settings.api_token_status_active') : t('settings.api_token_status_none')"></span>
                         </div>
                         <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;" x-text="tokenDetail()"></div>
+                        <div x-show="publishedPort()" x-cloak style="margin-top: 6px;">
+                            <span style="font-size: 0.85rem; color: #6b7280;" x-text="t('settings.access_address')"></span>
+                            <span style="font-size: 0.85rem; color: #6b7280;">: </span>
+                            <code style="font-size: 0.85rem;" x-text="externalUrl('/api/rename_log')"></code>
+                            <button type="button" @click="copyAddress(externalUrl('/api/rename_log'))"
+                                    style="margin-left: 6px; border: none; background: none; cursor: pointer; color: #6b7280;"
+                                    :title="t('settings.api_token_copy')">
+                                <i class="ri-file-copy-line"></i>
+                            </button>
+                        </div>
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button class="add-btn" @click="generateApiToken()">
@@ -1011,7 +1021,13 @@
                     </div>
                     <div x-show="(network.mcp || 'off') !== 'off' && publishedPort()" x-cloak
                          style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;">
-                        <code x-text="'http://&lt;home-assistant&gt;:' + (publishedPort() ? publishedPort().host : '') + '/mcp'"></code>
+                        <span x-text="t('settings.access_address')"></span><span>: </span>
+                        <code x-text="externalUrl('/mcp')"></code>
+                        <button type="button" @click="copyAddress(externalUrl('/mcp'))"
+                                style="margin-left: 6px; border: none; background: none; cursor: pointer; color: #6b7280;"
+                                :title="t('settings.api_token_copy')">
+                            <i class="ri-file-copy-line"></i>
+                        </button>
                     </div>
                 </div>
 
@@ -1519,11 +1535,27 @@
                     return this.network.policy === 'any' ? '#f59e0b' : '#10b981';
                 },
 
-                // The line under the headline: which port, and what is not on it.
+                // The line under the headline. A bare port number tells nobody
+                // where anything is, so the addresses below carry that job.
                 accessDetail() {
+                    if (!this.publishedPort()) return this.t('settings.access_no_port');
+                    return this.t('settings.access_only_address');
+                },
+
+                // The address as the browser reached Home Assistant, with the
+                // add-on's own host port; that is the host the port sits on.
+                externalUrl(path) {
                     const published = this.publishedPort();
-                    if (!published) return this.t('settings.access_no_port');
-                    return this.t('settings.access_port_note', { host: published.host });
+                    if (!published) return '';
+                    return 'http://' + window.location.hostname + ':' + published.host + path;
+                },
+
+                async copyAddress(text) {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                    } catch (e) {
+                        console.error('Could not copy the address', e);
+                    }
                 },
 
                 tokenDetail() {
