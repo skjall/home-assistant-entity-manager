@@ -128,3 +128,46 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         "rule_id": resolution.get("rule_id"),
         "supplied_name": resolution.get("input"),
     }
+
+
+# One call applies this many names. A whole home in one request would run for
+# minutes with nobody able to see how far it got, and a mistaken one would be
+# that much harder to undo.
+APPLY_LIMIT = 100
+
+
+async def apply_naming(entity_ids: list) -> Dict[str, Any]:
+    """Write the proposed name and id of each entity into Home Assistant.
+
+    Each entity is reported on its own and one that fails does not stop the
+    rest, so a single wrong id costs one rename instead of the whole batch. The
+    proposal is worked out per entity as its turn comes, so a name that only
+    collides because of an earlier rename in the same call is numbered against
+    what is by then already there.
+    """
+    if not entity_ids:
+        raise ValueError("name at least one entity")
+    if len(entity_ids) > APPLY_LIMIT:
+        raise ValueError(f"at most {APPLY_LIMIT} entities per call, got {len(entity_ids)}")
+
+    results = []
+    for entity_id in entity_ids:
+        try:
+            proposed = await proposed_naming(entity_id)
+            outcome = await rename_entity(
+                entity_id,
+                proposed["proposed_entity_id"],
+                proposed["proposed_name"],
+            )
+        except Exception as error:  # noqa: BLE001 - one bad id must not stop the rest
+            logger.warning("apply_naming failed for %s: %s", entity_id, error)
+            results.append({"entity_id": entity_id, "success": False, "error": str(error)})
+            continue
+        results.append({"entity_id": entity_id, **outcome})
+
+    return {
+        "renamed": sum(1 for row in results if row.get("success") and not row.get("skipped")),
+        "unchanged": sum(1 for row in results if row.get("skipped")),
+        "failed": sum(1 for row in results if not row.get("success")),
+        "results": results,
+    }

@@ -17,38 +17,17 @@ from typing import Any, Callable
 
 from flask import abort, request
 
+import api_spec
 import external_access
 
 logger = logging.getLogger(__name__)
 
-# What a token opens over a published port. Matched against the route's rule
-# rather than the request path, so a rule carrying a parameter is recognised
-# too, and a route that is not named here stays unreachable from outside no
-# matter what it does.
-READ_ROUTES = frozenset(
-    {
-        "/api/rename_log",
-        "/api/stats",
-        "/api/areas",
-        "/api/all_entities",
-        "/api/hierarchy",
-        "/api/naming/rules",
-        "/api/naming/settings",
-    }
-)
-
-# Only reachable with external_api set to write. These change the registry or
-# the rules behind it; everything else a browser can do stays Ingress-only.
-WRITE_ROUTES = frozenset(
-    {
-        "/api/naming/rules",
-        "/api/naming/rules/<rule_id>",
-        "/api/naming/settings",
-        "/api/set_entity_override",
-        "/api/rename_entity",
-        "/api/execute",
-    }
-)
+# What a token opens over a published port: exactly what the API description
+# documents, so a route cannot be reachable without being written down or
+# written down without being reachable. Matched against the route's rule rather
+# than the request path, so a rule carrying a parameter is recognised too.
+READ_ROUTES = api_spec.read_routes()
+WRITE_ROUTES = api_spec.write_routes()
 
 
 def route_allowed(rule: str, method: str, mode: str) -> bool:

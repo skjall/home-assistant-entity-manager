@@ -421,7 +421,12 @@
     "access_state_some": "Accessible depuis ces réseaux",
     "access_mode_off": "Désactivé",
     "access_mode_read": "Lecture seule",
-    "access_mode_write": "Lecture et écriture"
+    "access_mode_write": "Lecture et écriture",
+    "access_mcp_howto": "Connecter un assistant",
+    "access_mcp_howto_hint": "Copiez ceci dans la configuration MCP de l'assistant et remplacez l'espace réservé par le jeton. Le jeton n'est affiché qu'une fois, à sa création.",
+    "access_mcp_token_placeholder": "jeton",
+    "access_docs": "Ouvrir la documentation de l'API",
+    "access_docs_hint": "Chaque route avec ses champs, à lire et à essayer."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

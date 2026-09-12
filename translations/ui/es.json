@@ -421,7 +421,12 @@
     "access_state_some": "Accesible desde estas redes",
     "access_mode_off": "Desactivado",
     "access_mode_read": "Solo lectura",
-    "access_mode_write": "Lectura y escritura"
+    "access_mode_write": "Lectura y escritura",
+    "access_mcp_howto": "Conectar un asistente",
+    "access_mcp_howto_hint": "Copia esto en la configuración MCP del asistente y sustituye el marcador por el token. El token se muestra una sola vez, al crearlo.",
+    "access_mcp_token_placeholder": "token",
+    "access_docs": "Abrir la documentación de la API",
+    "access_docs_hint": "Cada ruta con sus campos, para leer y probar."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

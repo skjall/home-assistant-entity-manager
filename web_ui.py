@@ -1905,7 +1905,7 @@ if __name__ == "__main__":
     else:
         # The MCP server is off unless the mcp option says otherwise; when it is
         # on it is mounted beside the web interface and guarded the same way.
-        server = mcp_server.build()
+        server = mcp_server.build(app)
         mcp_app = None
         if server is not None:
             mcp_app = access.Guard(server.http_app(path="/"), lambda: renamer_state["api_token_store"])

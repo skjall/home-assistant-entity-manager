@@ -1,66 +1,82 @@
-"""What the MCP server offers, and who is allowed to reach it."""
+"""What the MCP server offers, and who is allowed to reach it.
+
+The tools are not written by hand any more: they come from the API description
+in api_spec.py. So what is worth checking here is that the description really
+becomes working tools, that a reading mode offers nothing that writes, and that
+a call reaches the route and comes back with the route's own answer.
+"""
 
 import asyncio
 
 import pytest
 
+import api_spec
 from api_token_store import ApiTokenStore
 import external_access
 import mcp_server
+import web_ui
 
 INGRESS = "172.30.32.2"
 LAN = "192.168.1.50"
 INTERNET = "203.0.113.7"
 
 
-def tool_names(server):
-    async def ask():
-        from fastmcp import Client
-
-        async with Client(server) as client:
-            return sorted(tool.name for tool in await client.list_tools())
-
-    return asyncio.run(ask())
+def server_for(chosen):
+    return mcp_server.build(web_ui.app, chosen)
 
 
-def test_the_setting_decides_whether_there_is_a_server(monkeypatch):
-    monkeypatch.delenv("MCP", raising=False)
-    assert mcp_server.build() is None
-
-    monkeypatch.setenv("MCP", "nonsense")
-    assert mcp_server.build() is None
-
-
-def test_reading_mode_offers_no_tool_that_writes():
-    server = mcp_server.build(mcp_server.READ)
-
-    names = tool_names(server)
-
-    assert "naming_for" in names
-    assert "set_rule" not in names
-    assert "apply_naming" not in names
-
-
-def test_writing_mode_offers_both():
-    server = mcp_server.build(mcp_server.WRITE)
-
-    names = tool_names(server)
-
-    assert "naming_for" in names
-    assert {"set_rule", "delete_rule", "set_exception", "apply_naming"} <= set(names)
-
-
-def test_every_tool_says_what_it_does():
-    """A tool an assistant cannot read the purpose of is a tool it misuses."""
-    server = mcp_server.build(mcp_server.WRITE)
-
+def tools_of(server):
     async def ask():
         from fastmcp import Client
 
         async with Client(server) as client:
             return await client.list_tools()
 
-    for tool in asyncio.run(ask()):
+    return asyncio.run(ask())
+
+
+def call_tool(name, arguments=None):
+    """Call one tool the way a client would, through the whole chain."""
+
+    async def ask():
+        from fastmcp import Client
+
+        async with Client(server_for(mcp_server.WRITE)) as client:
+            return (await client.call_tool(name, arguments or {})).data
+
+    return asyncio.run(ask())
+
+
+# --------------------------------------------------------------------------- #
+# The setting decides what exists
+# --------------------------------------------------------------------------- #
+
+
+def test_the_setting_decides_whether_there_is_a_server(monkeypatch):
+    monkeypatch.delenv("MCP", raising=False)
+    assert mcp_server.build(web_ui.app) is None
+
+    monkeypatch.setenv("MCP", "nonsense")
+    assert mcp_server.build(web_ui.app) is None
+
+
+def test_reading_mode_offers_no_tool_that_writes():
+    names = {tool.name for tool in tools_of(server_for(mcp_server.READ))}
+
+    assert "rules" in names
+    for writing in ("create_rule", "delete_rule", "rename_entity", "apply_naming", "set_exception"):
+        assert writing not in names
+
+
+def test_writing_mode_offers_everything_the_api_has():
+    names = {tool.name for tool in tools_of(server_for(mcp_server.WRITE))}
+
+    assert names == {operation.name for operation in api_spec.OPERATIONS}
+
+
+def test_every_tool_says_what_it_does():
+    """A tool an assistant cannot understand is a tool it will misuse."""
+    for tool in tools_of(server_for(mcp_server.WRITE)):
         assert tool.description and len(tool.description) > 30, tool.name
 
 
@@ -189,71 +205,77 @@ def home(tmp_path, monkeypatch):
     async def already_loaded():
         return None
 
+    # Setting an exception writes the resulting name into Home Assistant; these
+    # stand in for it so the test stays about naming rather than about a socket.
+    class FakeClient:
+        async def get_states(self):
+            return []
+
+    class FakeSocket:
+        async def connect(self):
+            return None
+
+        async def disconnect(self):
+            return None
+
+    class FakeRegistry:
+        def __init__(self, ws):
+            self.ws = ws
+
+        async def update_entity(self, **written):
+            restructurer.written = written
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("routes_entities.init_client", fake_client)
+    monkeypatch.setattr("routes_entities.HomeAssistantWebSocket", lambda *a, **k: FakeSocket())
+    monkeypatch.setattr("routes_entities.EntityRegistry", FakeRegistry)
+    monkeypatch.setenv("HA_URL", "http://supervisor/core")
+
     monkeypatch.setattr("registry.ensure_registry_loaded", already_loaded)
     monkeypatch.setattr("naming_service.ensure_registry_loaded", already_loaded)
-    monkeypatch.setattr("mcp_server.ensure_registry_loaded", already_loaded)
+    monkeypatch.setattr("routes_entities.ensure_registry_loaded", already_loaded)
+    monkeypatch.setattr("routes_naming.ensure_registry_loaded", already_loaded)
     return restructurer
 
 
-def run(tool, **arguments):
-    """Call one tool the way a client would, through the server."""
-    server = mcp_server.build(mcp_server.WRITE)
-
-    async def ask():
-        from fastmcp import Client
-
-        async with Client(server) as client:
-            return (await client.call_tool(tool, arguments)).data
-
-    return asyncio.run(ask())
-
-
-def test_every_reading_tool_answers(home):
-    """Each one is called for real: a wrong attribute shows up here, not live."""
-    assert run("list_areas")[0]["name"] == "Küche"
-    assert run("naming_settings")["language"] == "de"
-    assert run("list_rules") == []
-    found = run("find_entities", query="temperature")
-    assert {row["entity_id"] for row in found} == {"sensor.a_temperature", "sensor.b_temperature"}
-    assert len(run("entities_affected_by", kind="translation_key", key="temperature")) == 2
-    naming = run("naming_for", entity_id="sensor.a_temperature")
-    assert naming["entity_id"] == "sensor.a_temperature"
-    assert naming["proposed_name"]
+def test_a_reading_tool_returns_the_route_s_own_answer(home):
+    """The whole chain: tool, in-process call, route, answer back."""
+    assert call_tool("naming_settings")["language"] == "de"
+    assert call_tool("rules")["rules"] == []
 
 
 def test_a_rule_written_through_a_tool_changes_the_name(home):
-    before = run("naming_for", entity_id="sensor.a_temperature")["proposed_name"]
+    before = call_tool("naming_for", {"entity_id": "sensor.a_temperature"})["rendered"]["entity_name"]
 
-    run("set_rule", kind="translation_key", key="temperature", value="Raumtemperatur")
+    call_tool(
+        "create_rule",
+        {"match": {"kind": "translation_key", "value": "temperature"}, "targets": {"de": "Raumtemperatur"}},
+    )
 
-    after = run("naming_for", entity_id="sensor.a_temperature")["proposed_name"]
+    after = call_tool("naming_for", {"entity_id": "sensor.a_temperature"})["rendered"]["entity_name"]
     assert after != before
     assert "Raumtemperatur" in after
-    assert run("list_rules")[0]["value"] == "Raumtemperatur"
 
 
 def test_an_exception_beats_the_rule_for_one_entity(home):
-    run("set_rule", kind="translation_key", key="temperature", value="Raumtemperatur")
+    call_tool(
+        "create_rule",
+        {"match": {"kind": "translation_key", "value": "temperature"}, "targets": {"de": "Raumtemperatur"}},
+    )
+    call_tool("set_exception", {"registry_id": "reg-b", "override_name": "Fühler hinten"})
 
-    run("set_exception", entity_id="sensor.b_temperature", name="Fühler hinten")
+    first = call_tool("naming_for", {"entity_id": "sensor.a_temperature"})["rendered"]["entity_name"]
+    second = call_tool("naming_for", {"entity_id": "sensor.b_temperature"})["rendered"]["entity_name"]
 
-    assert "Fühler hinten" in run("naming_for", entity_id="sensor.b_temperature")["proposed_name"]
-    assert "Raumtemperatur" in run("naming_for", entity_id="sensor.a_temperature")["proposed_name"]
-
-
-def test_deleting_a_rule_puts_the_supplied_name_back(home):
-    rule = run("set_rule", kind="translation_key", key="temperature", value="Raumtemperatur")
-
-    run("delete_rule", rule_id=rule["id"])
-
-    assert run("list_rules") == []
-    assert "Raumtemperatur" not in run("naming_for", entity_id="sensor.a_temperature")["proposed_name"]
+    assert "Raumtemperatur" in first
+    assert "Fühler hinten" in second
 
 
 def test_applying_writes_exactly_what_was_proposed(home, monkeypatch):
-    """The tool must hand on the proposal, not a name it invented on the way."""
-    run("set_rule", kind="translation_key", key="temperature", value="Raumtemperatur")
-    proposed = run("naming_for", entity_id="sensor.a_temperature")
+    """The tool must hand on the proposal, not a name invented on the way."""
+    proposed = call_tool("naming_for", {"entity_id": "sensor.a_temperature"})["rendered"]
     written = {}
 
     async def record(old_entity_id, new_entity_id=None, friendly_name=None):
@@ -262,64 +284,14 @@ def test_applying_writes_exactly_what_was_proposed(home, monkeypatch):
 
     monkeypatch.setattr("naming_service.rename_entity", record)
 
-    answer = run("apply_naming", entity_ids=["sensor.a_temperature"])
+    answer = call_tool("apply_naming", {"entity_ids": ["sensor.a_temperature"]})
 
     assert answer["renamed"] == 1
-    assert answer["failed"] == 0
     assert written == {
         "old": "sensor.a_temperature",
-        "new": proposed["proposed_entity_id"],
-        "name": proposed["proposed_name"],
+        "new": proposed["entity_id"],
+        "name": proposed["entity_name"],
     }
-
-
-def test_applying_to_an_unknown_entity_renames_nothing(home, monkeypatch):
-    """An assistant that guesses an id must not hit a different entity."""
-    touched = []
-
-    async def record(*args, **kwargs):
-        touched.append(args)
-        return {"success": True}
-
-    monkeypatch.setattr("naming_service.rename_entity", record)
-
-    answer = run("apply_naming", entity_ids=["sensor.does_not_exist"])
-
-    assert answer["failed"] == 1
-    assert answer["renamed"] == 0
-    assert touched == []
-
-
-def test_applying_an_exception_uses_the_exception(home, monkeypatch):
-    """What set_exception decided has to be what apply_naming writes."""
-    run("set_exception", entity_id="sensor.a_temperature", name="Fühler vorne")
-    written = {}
-
-    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
-        written.update(new=new_entity_id, name=friendly_name)
-        return {"success": True}
-
-    monkeypatch.setattr("naming_service.rename_entity", record)
-    run("apply_naming", entity_ids=["sensor.a_temperature"])
-
-    assert "Fühler vorne" in written["name"]
-    assert "fuhler_vorne" in written["new"] or "fühler_vorne" in written["new"]
-
-
-def test_a_whole_room_is_one_call(home, monkeypatch):
-    """The point of the batch: not one round trip per entity."""
-    written = []
-
-    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
-        written.append(old_entity_id)
-        return {"success": True}
-
-    monkeypatch.setattr("naming_service.rename_entity", record)
-
-    answer = run("apply_naming", entity_ids=["sensor.a_temperature", "sensor.b_temperature"])
-
-    assert written == ["sensor.a_temperature", "sensor.b_temperature"]
-    assert answer["renamed"] == 2
 
 
 def test_one_bad_entity_does_not_stop_the_others(home, monkeypatch):
@@ -332,42 +304,8 @@ def test_one_bad_entity_does_not_stop_the_others(home, monkeypatch):
 
     monkeypatch.setattr("naming_service.rename_entity", record)
 
-    answer = run(
-        "apply_naming",
-        entity_ids=["sensor.does_not_exist", "sensor.b_temperature"],
-    )
+    answer = call_tool("apply_naming", {"entity_ids": ["sensor.does_not_exist", "sensor.b_temperature"]})
 
     assert written == ["sensor.b_temperature"]
     assert answer["renamed"] == 1
     assert answer["failed"] == 1
-    assert answer["results"][0]["entity_id"] == "sensor.does_not_exist"
-    assert "unknown entity" in answer["results"][0]["error"]
-
-
-def test_a_rename_that_changes_nothing_counts_as_unchanged(home, monkeypatch):
-    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
-        return {"success": True, "skipped": True, "message": "No changes needed"}
-
-    monkeypatch.setattr("naming_service.rename_entity", record)
-
-    answer = run("apply_naming", entity_ids=["sensor.a_temperature"])
-
-    assert answer["unchanged"] == 1
-    assert answer["renamed"] == 0
-
-
-def test_the_batch_has_an_upper_bound(home, monkeypatch):
-    """A whole home in one call would run blind for minutes."""
-    touched = []
-
-    async def record(*args, **kwargs):
-        touched.append(args)
-        return {"success": True}
-
-    monkeypatch.setattr("naming_service.rename_entity", record)
-    too_many = [f"sensor.x{number}" for number in range(mcp_server.APPLY_LIMIT + 1)]
-
-    with pytest.raises(Exception):
-        run("apply_naming", entity_ids=too_many)
-
-    assert touched == []

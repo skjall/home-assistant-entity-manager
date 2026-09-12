@@ -1,0 +1,55 @@
+{# The API, browsable. Everything shown here comes from api_spec.py, so this
+   page cannot describe a route that does not exist or miss one that does. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Entity Manager API</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/swagger-ui.css') }}">
+    <style>
+        body { margin: 0; background: #fafafa; }
+        .topbar { display: none; }
+        .intro {
+            font-family: system-ui, sans-serif;
+            padding: 20px 24px;
+            background: #fff;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .intro h1 { margin: 0 0 6px; font-size: 1.3rem; }
+        .intro p { margin: 4px 0; color: #374151; font-size: 0.9rem; max-width: 70ch; }
+        .intro code {
+            background: #f3f4f6;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="intro">
+        <h1>Entity Manager API</h1>
+        <p>
+            Every call needs the API token from the add-on's settings page, sent as
+            <code>Authorization: Bearer &lt;token&gt;</code> or as <code>X-API-Key: &lt;token&gt;</code>.
+        </p>
+        <p>
+            Which callers are answered at all is the add-on option <code>external_access</code>;
+            how far the token reaches is <code>external_api</code>. The web interface itself is
+            never served over the published port.
+        </p>
+    </div>
+    <div id="swagger"></div>
+    <script src="{{ url_for('static', filename='js/swagger-ui-bundle.js') }}"></script>
+    <script>
+        window.ui = SwaggerUIBundle({
+            url: {{ document_url | tojson }},
+            dom_id: '#swagger',
+            deepLinking: true,
+            defaultModelsExpandDepth: -1,
+            docExpansion: 'list',
+            tryItOutEnabled: true,
+        });
+    </script>
+</body>
+</html>
