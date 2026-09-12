@@ -15,6 +15,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
+from json_store import atomically, guarded, new_lock
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,8 @@ class NamingOverrides:
         Args:
             storage_path: Path to the JSON storage file
         """
+        # One lock per store: a read-change-write stays one step.
+        self._lock = new_lock()
         self.storage_path = Path(storage_path)
         # Ensure directory exists
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -83,14 +86,14 @@ class NamingOverrides:
     def _save_data(self) -> None:
         """Speichere Overrides"""
         try:
-            with open(self.storage_path, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2, ensure_ascii=False)
+            atomically(self.storage_path, self.data)
             logger.info(f"Overrides gespeichert: {len(self.data['entities'])} entities")
         except Exception as e:
             logger.error(f"Fehler beim Speichern der Overrides: {e}")
 
     # === Entity Overrides ===
 
+    @guarded
     def set_entity_override(self, registry_id: str, name: str, type_override: Optional[str] = None) -> None:
         """Setze Entity Name Override"""
         if "entities" not in self.data:
@@ -105,6 +108,7 @@ class NamingOverrides:
         """Hole Entity Override"""
         return self.data.get("entities", {}).get(registry_id)
 
+    @guarded
     def remove_entity_override(self, registry_id: str) -> None:
         """Entferne Entity Override"""
         if "entities" in self.data and registry_id in self.data["entities"]:
@@ -118,6 +122,7 @@ class NamingOverrides:
         """Hole alle Entity Overrides"""
         return self.data.get("entities", {}).copy()
 
+    @guarded
     def clear_all(self) -> None:
         """Clear all overrides while preserving schema version."""
         self.data = {"version": SCHEMA_VERSION, "entities": {}}

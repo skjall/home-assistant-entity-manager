@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from naming_canon import canon
+from json_store import atomically, guarded, new_lock
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,8 @@ class TypeMappings:
             rules: NamingRules store; when given, user mappings are a view on
                 its rules for the active language and the legacy file is not used
         """
+        # One lock per store: a read-change-write stays one step.
+        self._lock = new_lock()
         self.system_mappings_path = Path(system_mappings_path) if system_mappings_path else None
         self.user_mappings_path = Path(user_mappings_path)
         self.rules = rules
@@ -218,13 +221,7 @@ class TypeMappings:
         if self.rules is not None:
             return
         try:
-            # Ensure directory exists
-            self.user_mappings_path.parent.mkdir(parents=True, exist_ok=True)
-
-            data = {"user_mappings": self.user_mappings}
-            with open(self.user_mappings_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-
+            atomically(self.user_mappings_path, {"user_mappings": self.user_mappings})
             logger.info(f"User mappings saved: {len(self.user_mappings)} entries")
         except Exception as e:
             logger.error(f"Error saving user mappings: {e}")
@@ -354,6 +351,7 @@ class TypeMappings:
 
         return None
 
+    @guarded
     def set_user_mapping(self, type_key: str, translation: str) -> None:
         """
         Set a user mapping for a type key.
@@ -371,6 +369,7 @@ class TypeMappings:
         self._save_user_mappings()
         logger.info(f"User mapping set: {type_key_lower} -> {translation}")
 
+    @guarded
     def remove_user_mapping(self, type_key: str) -> bool:
         """
         Remove a user mapping.
@@ -544,6 +543,7 @@ class TypeMappings:
         """Check if a user mapping exists for the type key."""
         return type_key.lower() in self.user_mappings
 
+    @guarded
     def reload(self) -> None:
         """Reload mappings from files."""
         self.system_mappings = self._load_system_mappings()
