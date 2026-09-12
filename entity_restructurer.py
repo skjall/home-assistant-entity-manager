@@ -389,7 +389,15 @@ class EntityRestructurer:
             state_info,
             entity_override,
             device_class,
-            (raw_device_name, partial_context["area"], device_name),
+            (
+                raw_device_name,
+                partial_context["area"],
+                device_name,
+                # An integration may still write the name the device had when it
+                # was added, or its model, into every entity name.
+                device.get("name", ""),
+                device.get("model", ""),
+            ),
             partial_context,
         )
         return {key: str(value or "") for key, value in partial_context.items()}
@@ -512,6 +520,21 @@ class EntityRestructurer:
         winner["platform"] = integration
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
+
+    @staticmethod
+    def _without_device_prefix(name: str, prefixes: Tuple[str, ...]) -> str:
+        """Drop the device's own name from the front of an entity name.
+
+        An integration without native entity names writes the device into every
+        entity name it supplies, and it may use the name the device had when it
+        was added: "Aqara-Hub-M100-9152 Identify" is an Identify button.
+        """
+        for prefix in sorted({prefix for prefix in prefixes if prefix}, key=len, reverse=True):
+            if name.lower() == prefix.lower():
+                return ""
+            if name.lower().startswith(prefix.lower() + " "):
+                return name[len(prefix) :].strip()
+        return name
 
     @staticmethod
     def is_identifier(name: str) -> bool:
@@ -637,6 +660,8 @@ class EntityRestructurer:
 
         native = (registry.get("original_name"), state.get("original_name"))
         name = next((candidate for candidate in native if candidate), None)
+        if name:
+            name = self._without_device_prefix(name, prefixes) or None
         # A host name or a hardware address identifies the machine, not what the
         # entity is; the sources below know better than "WAP-001-230.h01.lh.lan".
         unnamed = name is not None and self.is_identifier(name)

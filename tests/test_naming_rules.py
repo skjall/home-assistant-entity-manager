@@ -634,3 +634,21 @@ def test_a_supplied_host_name_is_not_used_as_a_name(restructurer):
 
     assert "lh.lan" not in resolution["value"]
     assert resolution["won_by"] in ("device_class", "fallback")
+
+
+def test_the_device_name_is_dropped_from_a_supplied_entity_name(restructurer):
+    """Aqara supplies "Aqara-Hub-M100-9152 Identify"; that is an Identify button."""
+    restructurer.devices["dev-x"] = {
+        "id": "dev-x",
+        "name": "Aqara-Hub-M100-9152",
+        "name_by_user": "Kammer Aqara Hub-M100",
+        "area_id": "office",
+    }
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["device_id"] = "dev-x"
+    entity["original_name"] = "Aqara-Hub-M100-9152 Identify"
+    entity["has_entity_name"] = False
+
+    context = restructurer.build_naming_context("number.x_effect_speed", entity)
+
+    assert context["entity"] == "Identify"
