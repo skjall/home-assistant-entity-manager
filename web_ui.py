@@ -5,45 +5,50 @@ Web UI für Home Assistant Entity Renamer - Add-on Version
 
 import asyncio
 from datetime import datetime, timezone
-import html
 import json
 import logging
 import os
 import random
-import re
 import time
 from typing import Any, Optional
-import unicodedata
 import urllib.request
 import uuid
 
 import aiohttp
-from flask import Flask, abort, jsonify, make_response, redirect, render_template, request, send_from_directory
+from flask import Flask, jsonify, make_response, redirect, render_template, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from api_token_store import ApiTokenStore
+import access
+from app_state import (
+    UNASSIGNED_AREA,
+    ha_translations,
+    renamer_state,
+)
 from bridge_adapters import build_bridge
 from dependency_updater import DependencyUpdater
 from device_registry import DeviceRegistry
 import device_swap
-from device_swap import SwapExecutor, SwapJobStore, propose_mapping
+from device_swap import SwapExecutor, propose_mapping
 from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 import external_access
 from ha_client import HomeAssistantClient
-from ha_translations import HaTranslations
 from ha_websocket import HomeAssistantWebSocket
 from hierarchy_manager import normalize_name
-from jobs import TERMINAL_STATES, JobStore, JobWorker, new_job
+from jobs import new_job
 from lovelace_updater import LovelaceUpdater
 from naming_canon import canon
-from naming_overrides import NamingOverrides
-from naming_rules import NamingRuleError, NamingRules
-from naming_templates import NamingTemplateError, NamingTemplates
+from naming_rules import NamingRuleError
+from naming_templates import NamingTemplateError
 from reference_checker import ReferenceChecker
-from rename_log import RenameLog
-from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
+from sanitize import (
+    sanitize_entity_id,
+    sanitize_name,
+    sanitize_registry_id,
+    sanitize_string,
+    validate_json_input,
+)
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
 # load_dotenv()
@@ -52,86 +57,13 @@ from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
 UNASSIGNED_AREA = "__unassigned__"
 
 
-class _CapturePeerIP:
-    """WSGI middleware recording the real TCP peer address.
-
-    Installed as the outermost layer so it sees the untouched ``REMOTE_ADDR``
-    before ProxyFix rewrites it from forwarded headers. This lets the API gate
-    tell genuine Ingress traffic (from the Supervisor network) apart from direct
-    port access, which a client cannot forge via request headers.
-    """
-
-    def __init__(self, wsgi_app: object) -> None:
-        self.wsgi_app = wsgi_app
-
-    def __call__(self, environ: dict, start_response: object) -> object:
-        environ["entity_manager.peer_addr"] = environ.get("REMOTE_ADDR", "")
-        return self.wsgi_app(environ, start_response)
-
-
 app = Flask(__name__, static_folder="static", static_url_path="/static")
-# Ingress proxy header support. _CapturePeerIP wraps the outside so it records
-# the real TCP peer before ProxyFix trusts forwarded headers (X-Forwarded-For).
+# Ingress proxy header support. The access gate wraps the outside of this so it
+# records the real TCP peer before ProxyFix trusts forwarded headers.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-app.wsgi_app = _CapturePeerIP(app.wsgi_app)
 CORS(app)
-
-# Home Assistant authenticates the user before it proxies a request through
-# Ingress, so an Ingress request is trusted. Everything that reaches the add-on
-# past Ingress does so over a published port, and who may be answered there is
-# the external_access setting (see external_access.py), which refuses by default.
-#
-# Within what the setting allows, a generated token (see ApiTokenStore) opens
-# one read-only route for scripts: GET /api/rename_log. The token is created on
-# demand from the web UI, shown once and stored only as a hash.
-
-# /api/* paths a token opens over a directly-exposed port. Read-only.
-_EXTERNAL_API_PATHS = frozenset({"/api/rename_log"})
-
-
-def _peer_address() -> str:
-    """The request's real TCP peer, captured before ProxyFix.
-
-    Reading it from the environment rather than from a forwarded header means a
-    client cannot claim to be Ingress by setting one on a direct connection.
-    """
-    return request.environ.get("entity_manager.peer_addr", "")
-
-
-def _is_ingress_request() -> bool:
-    """Return True when the request came through the Supervisor's Ingress."""
-    return external_access.is_supervisor(_peer_address())
-
-
-def _provided_token() -> str:
-    """Extract the bearer token from Authorization (or the X-API-Key header)."""
-    header = request.headers.get("Authorization", "")
-    if header.startswith("Bearer "):
-        return header[len("Bearer ") :].strip()
-    return request.headers.get("X-API-Key", "").strip()
-
-
-@app.before_request
-def _enforce_api_access() -> None:
-    """Refuse what should not be reachable past Home Assistant's Ingress.
-
-    An Ingress request passes untouched, because Home Assistant has already
-    authenticated the user. A direct request over a published port has no such
-    proof behind it, so three things must hold: the external_access setting has
-    to allow that caller, the route has to be one of the few meant for callers
-    outside, and a valid token has to be presented. The web UI is not among
-    them: it is served through Ingress only.
-    """
-    if _is_ingress_request():
-        return None
-    if not external_access.allows(_peer_address()):
-        abort(403)
-    if request.path not in _EXTERNAL_API_PATHS or request.method != "GET":
-        abort(403)
-    store = renamer_state["api_token_store"]
-    if not store.exists() or not store.verify(_provided_token()):
-        abort(401)
-    return None
+# Read the store per request: it is replaced in tests and created further down.
+access.install(app, lambda: renamer_state["api_token_store"])
 
 
 # Setup logging to both console and file
@@ -146,181 +78,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-# Persistent data directory. Defaults to the add-on's /data mount; overridable
-# via DATA_DIR for local runs, tests and CI where /data is not available.
-DATA_DIR = os.getenv("DATA_DIR", "/data")
-
-# Global state
-# Type rules replace the flat user mappings; the legacy file is migrated once
-# and kept as a backup next to a report of what was merged.
-ha_translations = HaTranslations()
-naming_rules_store = NamingRules(
-    os.path.join(DATA_DIR, "naming_rules.json"),
-    legacy_path=os.path.join(DATA_DIR, "user_type_mappings.json"),
-    device_class_keys=DEFAULT_SYSTEM_MAPPINGS["device_class"].keys(),
-)
-
-renamer_state = {
-    "client": None,
-    "naming_rules": naming_rules_store,
-    "restructurer": None,
-    "areas": {},
-    "entities_by_area": {},
-    "proposed_changes": {},
-    "naming_overrides": NamingOverrides(os.path.join(DATA_DIR, "naming_overrides.json")),
-    "naming_templates": NamingTemplates(os.path.join(DATA_DIR, "naming_templates.json")),
-    "type_mappings": TypeMappings(
-        user_mappings_path=os.path.join(DATA_DIR, "user_type_mappings.json"),
-        rules=naming_rules_store,
-        ha_translations=ha_translations,
-    ),
-    "swap_store": SwapJobStore(os.path.join(DATA_DIR, "device_swaps")),
-    "rename_log": RenameLog(os.path.join(DATA_DIR, "rename_log.jsonl")),
-    "api_token_store": ApiTokenStore(os.path.join(DATA_DIR, "api_token.json")),
-    # Generic background-job infrastructure for long-running operations. Jobs run
-    # serially on a single worker thread, off the request path (load_structure
-    # rebuilds the restructurer by reassignment and handlers work on snapshots,
-    # so no cross-thread lock is needed).
-    "job_store": JobStore(os.path.join(DATA_DIR, "jobs"), terminal_states=TERMINAL_STATES),
-}
-renamer_state["worker"] = JobWorker(renamer_state["job_store"])
-
-# Share the audit log with every EntityRegistry instance so all rename paths
-# (single, batch, device cascade) get recorded centrally.
-EntityRegistry.rename_log = renamer_state["rename_log"]
-
-
-# =============================================================================
-# Input Sanitization
-# =============================================================================
-
-# Maximum lengths for different input types
-MAX_NAME_LENGTH = 255
-MAX_ENTITY_ID_LENGTH = 255
-MAX_REGISTRY_ID_LENGTH = 64
-
-# Valid characters for entity IDs (Home Assistant format: domain.object_id)
-ENTITY_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
-
-# Valid characters for registry IDs (typically alphanumeric with some special chars)
-REGISTRY_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
-
-
-def sanitize_string(value: str, max_length: int = MAX_NAME_LENGTH) -> str:
-    """
-    Sanitize a general string input.
-    - Strips whitespace
-    - Removes control characters
-    - Escapes HTML entities
-    - Limits length
-    """
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        value = str(value)
-
-    # Strip whitespace
-    value = value.strip()
-
-    # Remove control characters (keep newlines and tabs for multi-line text)
-    value = "".join(char for char in value if unicodedata.category(char) != "Cc" or char in "\n\t")
-
-    # Remove null bytes and other dangerous characters
-    value = value.replace("\x00", "")
-
-    # Limit length
-    value = value[:max_length]
-
-    return value
-
-
-def sanitize_name(value: str, max_length: int = MAX_NAME_LENGTH) -> str:
-    """
-    Sanitize a display name (friendly name, area name, device name).
-    - All general sanitization
-    - Escape HTML to prevent XSS
-    - Remove script tags and event handlers
-    """
-    value = sanitize_string(value, max_length)
-    if value is None:
-        return None
-
-    # Remove any script tags or event handlers (case insensitive)
-    value = re.sub(r"<script[^>]*>.*?</script>", "", value, flags=re.IGNORECASE | re.DOTALL)
-    value = re.sub(r"on\w+\s*=", "", value, flags=re.IGNORECASE)
-
-    # Escape HTML entities to prevent XSS
-    value = html.escape(value, quote=True)
-
-    return value
-
-
-def sanitize_entity_id(value: str) -> str:
-    """
-    Sanitize and validate an entity ID.
-    Entity IDs must be lowercase, alphanumeric with underscores, in format domain.object_id
-    """
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        return None
-
-    # Strip and lowercase
-    value = value.strip().lower()
-
-    # Limit length
-    value = value[:MAX_ENTITY_ID_LENGTH]
-
-    # Replace spaces and hyphens with underscores
-    value = value.replace(" ", "_").replace("-", "_")
-
-    # Remove any characters that aren't valid
-    value = re.sub(r"[^a-z0-9_.]", "", value)
-
-    # Validate format
-    if not ENTITY_ID_PATTERN.match(value):
-        return None
-
-    return value
-
-
-def sanitize_registry_id(value: str) -> str:
-    """
-    Sanitize and validate a registry ID.
-    """
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        return None
-
-    # Strip whitespace
-    value = value.strip()
-
-    # Limit length
-    value = value[:MAX_REGISTRY_ID_LENGTH]
-
-    # Validate format (alphanumeric, underscore, hyphen)
-    if not REGISTRY_ID_PATTERN.match(value):
-        return None
-
-    return value
-
-
-def validate_json_input(data: dict, required_fields: list = None) -> tuple:
-    """
-    Validate that JSON input is a dict and has required fields.
-    Returns (is_valid, error_message)
-    """
-    if not isinstance(data, dict):
-        return False, "Invalid JSON input"
-
-    if required_fields:
-        missing = [f for f in required_fields if f not in data]
-        if missing:
-            return False, f"Missing required fields: {', '.join(missing)}"
-
-    return True, None
 
 
 async def init_client() -> HomeAssistantClient:
