@@ -343,8 +343,6 @@
     "th_original": "Original",
     "th_my_name": "Mein Name",
     "th_affected": "Betrifft",
-    "kind_translation_key": "Schlüssel der Integration (translation_key)",
-    "kind_device_class": "Geräteklasse",
     "no_effect_hint": "Keine geladene Entität passt zu dieser Regel – die Integration liefert den Namen vermutlich inzwischen anders.",
     "source_learned": "gelernt",
     "source_migrated": "migriert",

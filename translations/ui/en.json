@@ -343,8 +343,6 @@
     "th_original": "Original",
     "th_my_name": "My name",
     "th_affected": "Affects",
-    "kind_translation_key": "Integration key (translation_key)",
-    "kind_device_class": "Device class",
     "no_effect_hint": "No loaded entity matches this rule — the integration probably supplies the name differently now.",
     "source_learned": "learned",
     "source_migrated": "migrated",

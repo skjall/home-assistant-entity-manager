@@ -363,8 +363,6 @@
     "th_original": "Original",
     "th_my_name": "Mi nombre",
     "th_affected": "Afecta",
-    "kind_translation_key": "Clave de la integración (translation_key)",
-    "kind_device_class": "Clase de dispositivo",
     "no_effect_hint": "Ninguna entidad cargada coincide con esta regla; probablemente la integración ahora proporciona el nombre de otra forma.",
     "source_learned": "aprendida",
     "source_migrated": "migrada",

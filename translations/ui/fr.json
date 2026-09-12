@@ -363,8 +363,6 @@
     "th_original": "Original",
     "th_my_name": "Mon nom",
     "th_affected": "Concerne",
-    "kind_translation_key": "Clé de l’intégration (translation_key)",
-    "kind_device_class": "Classe d’appareil",
     "no_effect_hint": "Aucune entité chargée ne correspond à cette règle ; l’intégration fournit probablement le nom autrement désormais.",
     "source_learned": "apprise",
     "source_migrated": "migrée",

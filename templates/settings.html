@@ -823,8 +823,6 @@
                         <tr :class="(row.isRule && !row.affected ? 'row-muted ' : '') + (row.id === highlightRuleId ? 'row-highlight' : '')">
                             <td>
                                 <span class="type-key" x-text="row.key"></span>
-                                <span x-show="row.kind === 'translation_key'" class="kind-badge" :title="t('settings.kind_translation_key')">tk</span>
-                                <span x-show="row.kind === 'device_class'" class="kind-badge" :title="t('settings.kind_device_class')">dc</span>
                                 <span x-show="row.integration" class="kind-badge" x-text="row.integration"></span>
                                 <span x-show="row.model" class="kind-badge" :title="row.model" x-text="row.model"></span>
                             </td>
