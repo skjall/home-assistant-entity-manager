@@ -652,3 +652,30 @@ def test_the_device_name_is_dropped_from_a_supplied_entity_name(restructurer):
     context = restructurer.build_naming_context("number.x_effect_speed", entity)
 
     assert context["entity"] == "Identify"
+
+
+def test_a_lone_endpoint_number_is_dropped(restructurer):
+    """Matter numbers its endpoints even where a device has only one."""
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "Identifizieren (1)"
+
+    context = restructurer.build_naming_context("number.x_effect_speed", entity)
+
+    assert context["entity"] == "Identifizieren"
+
+
+def test_an_endpoint_number_that_tells_siblings_apart_stays(restructurer):
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "Identifizieren (1)"
+    entity["device_id"] = "dev-two"
+    restructurer.devices["dev-two"] = {"id": "dev-two", "name": "Bewegungsmelder", "area_id": "office"}
+    restructurer.entities["number.x_second"] = {
+        "id": "reg-second",
+        "entity_id": "number.x_second",
+        "device_id": "dev-two",
+        "original_name": "Identifizieren (2)",
+    }
+
+    context = restructurer.build_naming_context("number.x_effect_speed", entity)
+
+    assert context["entity"] == "Identifizieren (1)"

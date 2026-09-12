@@ -2006,6 +2006,10 @@ async def _set_entity_override_async():
         return jsonify({"error": "Invalid registry ID"}), 400
 
     try:
+        # The registry says which entity the registry id belongs to, so it has
+        # to be there before the override can be turned into a name.
+        await _ensure_registry_loaded()
+
         # Speichere Override
         if override_name:
             renamer_state["naming_overrides"].set_entity_override(registry_id, override_name)
