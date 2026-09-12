@@ -14,6 +14,7 @@ Integrates with:
 
 from collections import defaultdict
 import logging
+import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ha_client import HomeAssistantClient
@@ -35,6 +36,18 @@ except ImportError:
     TypeMappings = None
 
 logger = logging.getLogger(__name__)
+
+# A host name, an address or a hardware address identifies a machine and says
+# nothing about what an entity is. Integrations sometimes supply one as the
+# entity name; taken literally it would become the entity's name and its ID.
+_IDENTIFIER = re.compile(
+    r"^(?:"
+    r"\d{1,3}(?:\.\d{1,3}){3}"  # 10.2.10.103
+    r"|[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}"  # 3c:22:fb:01:02:03
+    r"|[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.[A-Za-z]{2,}"  # wap-001.h01.lh.lan
+    r")$",
+    re.IGNORECASE,
+)
 
 
 class EntityRestructurer:
@@ -500,6 +513,11 @@ class EntityRestructurer:
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
 
+    @staticmethod
+    def is_identifier(name: str) -> bool:
+        """True for a host name, an IP address or a hardware address."""
+        return bool(name) and " " not in name and bool(_IDENTIFIER.match(name.strip()))
+
     def _home_assistant_name(
         self, entity_id: str, registry: Dict[str, Any], language: str, supplied: str = ""
     ) -> Optional[str]:
@@ -619,6 +637,11 @@ class EntityRestructurer:
 
         native = (registry.get("original_name"), state.get("original_name"))
         name = next((candidate for candidate in native if candidate), None)
+        # A host name or a hardware address identifies the machine, not what the
+        # entity is; the sources below know better than "WAP-001-230.h01.lh.lan".
+        unnamed = name is not None and self.is_identifier(name)
+        if unnamed:
+            name = None
         if name is not None:
             return self._resolve_supplied_name(name, entity_id, registry)
 
@@ -641,7 +664,7 @@ class EntityRestructurer:
                     name = ""
                 elif name.lower().startswith(prefix.lower() + " "):
                     name = name[len(prefix) :].strip()
-            if name:
+            if name and not self.is_identifier(name):
                 return plain(name, "original")
 
             # Integrations without native entity names may expose only the
@@ -653,7 +676,7 @@ class EntityRestructurer:
                     object_id = ""
                 elif normalized_prefix and object_id.startswith(normalized_prefix + "_"):
                     object_id = object_id[len(normalized_prefix) + 1 :]
-            if object_id and not registry.get("has_entity_name"):
+            if object_id and not registry.get("has_entity_name") and not unnamed:
                 return plain(object_id.replace("_", " ").title(), "fallback")
             return plain("", "fallback")
 

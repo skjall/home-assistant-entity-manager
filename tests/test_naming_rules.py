@@ -606,3 +606,31 @@ def test_known_types_list_what_home_assistant_knows(tmp_path):
 
     assert entries["power_factor"] == "Leistungsfaktor"
     assert entries["battery"] == "Akkustand"
+
+
+@pytest.mark.parametrize(
+    "value, identifier",
+    [
+        ("WAP-001-230.h01.lh.lan", True),
+        ("10.2.10.103", True),
+        ("3c:22:fb:01:02:03", True),
+        ("PM2.5", False),
+        ("CPU Temperatur", False),
+        ("Version 2.1", False),
+        ("Temperatur", False),
+    ],
+)
+def test_an_identifier_is_told_from_a_name(value, identifier):
+    assert EntityRestructurer.is_identifier(value) is identifier
+
+
+def test_a_supplied_host_name_is_not_used_as_a_name(restructurer):
+    """UniFi names its trackers after the host; that is the machine, not the entity."""
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "WAP-001-230.h01.lh.lan"
+
+    restructurer.build_naming_context("number.x_effect_speed", entity)
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert "lh.lan" not in resolution["value"]
+    assert resolution["won_by"] in ("device_class", "fallback")
