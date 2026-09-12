@@ -107,3 +107,29 @@ async def _drive(application):
         pass
 
     await application(scope, receive, send)
+
+
+def test_the_mcp_address_works_without_a_trailing_slash():
+    """Clients write /mcp. A mount only covers what is below it, so the bare
+    address would otherwise fall through to the web interface and be refused."""
+    reached = []
+
+    async def mcp_app(scope, receive, send):
+        reached.append(scope["path"])
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"mcp"})
+
+    application = asgi.build(web_ui.app, mcp_app)
+
+    assert call(application, "/mcp")["body"] == b"mcp"
+    assert call(application, "/mcp/")["body"] == b"mcp"
+    assert reached == ["/mcp/", "/mcp/"]
+
+
+def test_everything_else_still_goes_to_the_web_interface():
+    async def mcp_app(scope, receive, send):
+        raise AssertionError("the web interface was routed to MCP")
+
+    application = asgi.build(web_ui.app, mcp_app)
+
+    assert call(application, "/api/network")["status"] == 200

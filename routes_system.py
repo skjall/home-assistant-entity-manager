@@ -102,7 +102,7 @@ def openapi_document():
 @system.route("/api/docs", methods=["GET"])
 def api_docs():
     """The same description, to read and try out. Ingress-only, like the UI."""
-    return render_template("api_docs.html", document_url=(request.script_root or "") + "/api/openapi.json")
+    return render_template("api_docs.html", document_url="api/openapi.json")
 
 
 @system.route("/api/api_token", methods=["GET"])

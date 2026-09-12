@@ -5,8 +5,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {# Ingress serves the add-on under a long prefix it does not tell Flask
+       about, so every address here is relative to the app root. #}
+    <base href="../">
     <title>Entity Manager API</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/swagger-ui.css') }}">
+    <link rel="stylesheet" href="static/css/swagger-ui.css">
     <style>
         body { margin: 0; background: #fafafa; }
         .topbar { display: none; }
@@ -40,7 +43,7 @@
         </p>
     </div>
     <div id="swagger"></div>
-    <script src="{{ url_for('static', filename='js/swagger-ui-bundle.js') }}"></script>
+    <script src="static/js/swagger-ui-bundle.js"></script>
     <script>
         window.ui = SwaggerUIBundle({
             url: {{ document_url | tojson }},
