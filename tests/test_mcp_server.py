@@ -262,7 +262,10 @@ def test_applying_writes_exactly_what_was_proposed(home, monkeypatch):
 
     monkeypatch.setattr("naming_service.rename_entity", record)
 
-    assert run("apply_naming", entity_id="sensor.a_temperature")["success"] is True
+    answer = run("apply_naming", entity_ids=["sensor.a_temperature"])
+
+    assert answer["renamed"] == 1
+    assert answer["failed"] == 0
     assert written == {
         "old": "sensor.a_temperature",
         "new": proposed["proposed_entity_id"],
@@ -280,9 +283,10 @@ def test_applying_to_an_unknown_entity_renames_nothing(home, monkeypatch):
 
     monkeypatch.setattr("naming_service.rename_entity", record)
 
-    with pytest.raises(Exception):
-        run("apply_naming", entity_id="sensor.does_not_exist")
+    answer = run("apply_naming", entity_ids=["sensor.does_not_exist"])
 
+    assert answer["failed"] == 1
+    assert answer["renamed"] == 0
     assert touched == []
 
 
@@ -296,7 +300,74 @@ def test_applying_an_exception_uses_the_exception(home, monkeypatch):
         return {"success": True}
 
     monkeypatch.setattr("naming_service.rename_entity", record)
-    run("apply_naming", entity_id="sensor.a_temperature")
+    run("apply_naming", entity_ids=["sensor.a_temperature"])
 
     assert "Fühler vorne" in written["name"]
     assert "fuhler_vorne" in written["new"] or "fühler_vorne" in written["new"]
+
+
+def test_a_whole_room_is_one_call(home, monkeypatch):
+    """The point of the batch: not one round trip per entity."""
+    written = []
+
+    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
+        written.append(old_entity_id)
+        return {"success": True}
+
+    monkeypatch.setattr("naming_service.rename_entity", record)
+
+    answer = run("apply_naming", entity_ids=["sensor.a_temperature", "sensor.b_temperature"])
+
+    assert written == ["sensor.a_temperature", "sensor.b_temperature"]
+    assert answer["renamed"] == 2
+
+
+def test_one_bad_entity_does_not_stop_the_others(home, monkeypatch):
+    """An assistant that got one id wrong still gets the rest of its work done."""
+    written = []
+
+    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
+        written.append(old_entity_id)
+        return {"success": True}
+
+    monkeypatch.setattr("naming_service.rename_entity", record)
+
+    answer = run(
+        "apply_naming",
+        entity_ids=["sensor.does_not_exist", "sensor.b_temperature"],
+    )
+
+    assert written == ["sensor.b_temperature"]
+    assert answer["renamed"] == 1
+    assert answer["failed"] == 1
+    assert answer["results"][0]["entity_id"] == "sensor.does_not_exist"
+    assert "unknown entity" in answer["results"][0]["error"]
+
+
+def test_a_rename_that_changes_nothing_counts_as_unchanged(home, monkeypatch):
+    async def record(old_entity_id, new_entity_id=None, friendly_name=None):
+        return {"success": True, "skipped": True, "message": "No changes needed"}
+
+    monkeypatch.setattr("naming_service.rename_entity", record)
+
+    answer = run("apply_naming", entity_ids=["sensor.a_temperature"])
+
+    assert answer["unchanged"] == 1
+    assert answer["renamed"] == 0
+
+
+def test_the_batch_has_an_upper_bound(home, monkeypatch):
+    """A whole home in one call would run blind for minutes."""
+    touched = []
+
+    async def record(*args, **kwargs):
+        touched.append(args)
+        return {"success": True}
+
+    monkeypatch.setattr("naming_service.rename_entity", record)
+    too_many = [f"sensor.x{number}" for number in range(mcp_server.APPLY_LIMIT + 1)]
+
+    with pytest.raises(Exception):
+        run("apply_naming", entity_ids=too_many)
+
+    assert touched == []
