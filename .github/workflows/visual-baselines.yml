@@ -40,7 +40,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Update snapshots
-        run: npx playwright test --update-snapshots
+        # Only the screenshot test has baselines; the smoke test has none.
+        run: npx playwright test tests/visual/home.spec.js --update-snapshots
 
       - name: Commit baselines
         run: |

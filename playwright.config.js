@@ -30,7 +30,10 @@ module.exports = defineConfig({
     // DATA_DIR points the app's persistent storage at a throwaway dir (no /data
     // mount outside the add-on). No HA_URL/HA_TOKEN: the static shell renders
     // without a backend; data panels are masked in the test.
-    command: `DATA_DIR=$(mktemp -d) WEB_UI_PORT=${PORT} LOG_LEVEL=ERROR python3 web_ui.py`,
+    // Started through serve_as_ingress.py: the web interface is answered only
+    // to Home Assistant's Ingress, and a browser on the loopback address is not
+    // that. See the module for why the test may fake it and the add-on may not.
+    command: `DATA_DIR=$(mktemp -d) WEB_UI_PORT=${PORT} LOG_LEVEL=ERROR python3 tests/visual/serve_as_ingress.py`,
     url: `http://127.0.0.1:${PORT}/`,
     timeout: 60_000,
     reuseExistingServer: !process.env.CI,
