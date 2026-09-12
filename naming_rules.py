@@ -28,6 +28,7 @@ import uuid
 
 from naming_canon import canon
 from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
+from json_store import atomically, guarded, new_lock
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,8 @@ class NamingRules:
         device_class_keys: Iterable[str] = (),
         default_language: str = "en",
     ) -> None:
+        # One lock per store: a read-change-write stays one step.
+        self._lock = new_lock()
         self.storage_path = Path(storage_path)
         self.legacy_path = Path(legacy_path) if legacy_path else None
         self.device_class_keys = {canon(key) for key in device_class_keys}
@@ -103,14 +106,12 @@ class NamingRules:
         return data
 
     def _write(self, data: Mapping[str, Any]) -> None:
-        temporary = self.storage_path.with_suffix(self.storage_path.suffix + ".tmp")
-        with temporary.open("w", encoding="utf-8") as file:
-            json.dump(data, file, indent=2, ensure_ascii=False)
-        temporary.replace(self.storage_path)
+        atomically(self.storage_path, data)
 
     def _forget_index(self) -> None:
         self._rule_index = None
 
+    @guarded
     def save(self) -> None:
         self._forget_index()
         self._write(self.data)
@@ -185,6 +186,7 @@ class NamingRules:
             len(report["conflicts"]),
         )
 
+    @guarded
     def repair_kinds(
         self,
         translation_keys: Iterable[str],
@@ -248,6 +250,7 @@ class NamingRules:
                 useless.append(rule)
         return useless
 
+    @guarded
     def delete_many(self, rule_ids: Iterable[str]) -> int:
         """Remove several rules at once, reporting how many went."""
         wanted = set(rule_ids)
@@ -296,6 +299,7 @@ class NamingRules:
     def display_case(self) -> str:
         return self.data.get("display_case") or DEFAULT_CASE
 
+    @guarded
     def set_display_case(self, mode: str) -> None:
         if mode not in CASE_MODES:
             raise NamingRuleError(f"Unknown display case: {mode}")
@@ -312,6 +316,7 @@ class NamingRules:
         key = rule["match"]["value"]
         return canon(target) == key and target == normalize_display(key.replace("_", " "), self.display_case)
 
+    @guarded
     def set_language(self, language: str) -> None:
         """Switch the active language.
 
@@ -396,6 +401,7 @@ class NamingRules:
                 return rule
         return None
 
+    @guarded
     def upsert(
         self,
         kind: str,
@@ -423,6 +429,7 @@ class NamingRules:
         self.save()
         return rule
 
+    @guarded
     def update(
         self,
         rule_id: str,
@@ -446,6 +453,7 @@ class NamingRules:
         self.save()
         return rule
 
+    @guarded
     def delete(self, rule_id: str) -> bool:
         before = len(self.rules)
         self.data["rules"] = [rule for rule in self.rules if rule["id"] != rule_id]
@@ -454,6 +462,7 @@ class NamingRules:
         self.save()
         return True
 
+    @guarded
     def choose_alternative(self, rule_id: str, value: str, language: Optional[str] = None) -> Dict[str, Any]:
         """Resolve a migration conflict by promoting one of the alternatives."""
         rule = self.get(rule_id)

@@ -9,6 +9,7 @@ from string import Formatter
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
 from hierarchy_manager import normalize_name
+from json_store import atomically, guarded, new_lock
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,8 @@ class NamingTemplates:
 
     def __init__(self, storage_path: str = "naming_templates.json") -> None:
         """Initialize naming templates from ``storage_path``."""
+        # One lock per store: a read-change-write stays one step.
+        self._lock = new_lock()
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self.data = self._load_data()
@@ -139,10 +142,7 @@ class NamingTemplates:
 
     def _write_data(self, data: Mapping[str, Any]) -> None:
         """Atomically write template data."""
-        temporary_path = self.storage_path.with_suffix(self.storage_path.suffix + ".tmp")
-        with temporary_path.open("w", encoding="utf-8") as file:
-            json.dump(data, file, indent=2, ensure_ascii=False)
-        temporary_path.replace(self.storage_path)
+        atomically(self.storage_path, data)
 
     def _save_data(self) -> None:
         """Atomically persist the current configuration."""
@@ -203,6 +203,7 @@ class NamingTemplates:
             "allowed_fields": sorted(ALLOWED_FIELDS),
         }
 
+    @guarded
     def set_templates(self, templates: Mapping[str, str]) -> Dict[str, Any]:
         """Validate and save templates, detecting whether they match a preset."""
         # Validate before stripping: a non-string value would otherwise raise
@@ -225,6 +226,7 @@ class NamingTemplates:
         self._save_data()
         return self.get_config()
 
+    @guarded
     def apply_preset(self, preset: str) -> Dict[str, Any]:
         """Apply and persist a named preset."""
         if preset not in PRESETS:
