@@ -42,9 +42,37 @@ def build(flask_app: Any, mcp_app: Optional[Any] = None) -> Any:
     # tears down through the lifespan; mounting alone would never run that, so
     # the outer application borrows it.
     return Starlette(
-        routes=[Mount("/mcp", app=mcp_app), Mount("/", app=wsgi)],
+        routes=[Mount("/mcp", app=mcp_app), Mount("/", app=_BarePath("/mcp", mcp_app, wsgi))],
         lifespan=getattr(mcp_app, "lifespan", None),
     )
+
+
+class _BarePath:
+    """Serve ``/mcp`` as what every client means by it: ``/mcp/``.
+
+    A mount only matches the addresses below it, so the bare mount point falls
+    through to whatever comes next — here the web interface, which answers a
+    stranger with 403. Clients write the address without a trailing slash, so
+    that is the one that has to work.
+    """
+
+    def __init__(self, mount: str, mounted: Any, otherwise: Any) -> None:
+        self.mount = mount
+        self.mounted = mounted
+        self.otherwise = otherwise
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope.get("type") in ("http", "websocket") and scope.get("path") == self.mount:
+            # Hand the mounted app exactly what a mount would have handed it
+            # for the slashed address: the full path, and the mount point as
+            # the root the app is served under.
+            inner = dict(scope)
+            inner["path"] = self.mount + "/"
+            inner["raw_path"] = inner["path"].encode()
+            inner["root_path"] = scope.get("root_path", "") + self.mount
+            await self.mounted(inner, receive, send)
+            return
+        await self.otherwise(scope, receive, send)
 
 
 def serve(application: Any, port: int) -> None:
