@@ -64,6 +64,7 @@ class NamingRules:
         self.device_class_keys = {canon(key) for key in device_class_keys}
         self.default_language = default_language
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        self._rule_index = None
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -107,7 +108,11 @@ class NamingRules:
             json.dump(data, file, indent=2, ensure_ascii=False)
         temporary.replace(self.storage_path)
 
+    def _forget_index(self) -> None:
+        self._rule_index = None
+
     def save(self) -> None:
+        self._forget_index()
         self._write(self.data)
 
     # ---------------------------------------------------------------- migration
@@ -261,18 +266,32 @@ class NamingRules:
     def get(self, rule_id: str) -> Optional[Dict[str, Any]]:
         return next((rule for rule in self.rules if rule["id"] == rule_id), None)
 
+    @staticmethod
+    def _index_key(kind: str, value: str, integration: Optional[str], model: Optional[str]):
+        return (kind, value, integration or None, canon(model or ""))
+
+    def _index(self) -> Dict[tuple, Dict[str, Any]]:
+        """Rules by what they match on.
+
+        Resolution asks for a rule twice per entity, so a scan over every rule
+        would be thousands of comparisons per entity on a large installation.
+        """
+        if self._rule_index is None:
+            self._rule_index = {
+                self._index_key(
+                    rule["match"]["kind"],
+                    rule["match"]["value"],
+                    rule["match"].get("integration"),
+                    rule["match"].get("model"),
+                ): rule
+                for rule in self.rules
+            }
+        return self._rule_index
+
     def _matching(
         self, kind: str, value: str, integration: Optional[str], model: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        for rule in self.rules:
-            match = rule["match"]
-            if match["kind"] != kind or match["value"] != value:
-                continue
-            if (match.get("integration") or None) != integration:
-                continue
-            if canon(match.get("model") or "") == canon(model or ""):
-                return rule
-        return None
+        return self._index().get(self._index_key(kind, value, integration, model))
 
     @staticmethod
     def _scopes(integration: Optional[str], model: Optional[str]):
