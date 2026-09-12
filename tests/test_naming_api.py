@@ -234,7 +234,6 @@ def test_backup_download_without_a_migration_is_not_found(client, monkeypatch):
 @pytest.mark.parametrize(
     "path, section, expected_base",
     [
-        ("/settings", "naming", "./"),
         ("/settings/naming", "naming", "../"),
         ("/settings/rules", "rules", "../"),
         ("/settings/system", "system", "../"),
@@ -249,3 +248,11 @@ def test_settings_sections_are_their_own_addresses(client, path, section, expect
     assert response.status_code == 200
     assert f'<base href="{expected_base}">' in body
     assert f"section: '{section}'" in body
+
+
+def test_bare_settings_goes_to_the_first_section(client):
+    """One depth for every section keeps relative asset and API paths valid."""
+    response = client.get("/settings")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "settings/naming"

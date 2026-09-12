@@ -441,13 +441,16 @@
         </div>
 
         <nav class="settings-tabs">
-            <a href="settings/naming" class="settings-tab" :class="section === 'naming' ? 'is-active' : ''">
+            <a href="settings/naming" class="settings-tab" :class="section === 'naming' ? 'is-active' : ''"
+               @click.prevent="showSection('naming')">
                 <i class="ri-braces-line"></i> <span x-text="t('settings.tab_naming')">Naming</span>
             </a>
-            <a href="settings/rules" class="settings-tab" :class="section === 'rules' ? 'is-active' : ''">
+            <a href="settings/rules" class="settings-tab" :class="section === 'rules' ? 'is-active' : ''"
+               @click.prevent="showSection('rules')">
                 <i class="ri-translate-2"></i> <span x-text="t('settings.tab_rules')">Type rules</span>
             </a>
-            <a href="settings/system" class="settings-tab" :class="section === 'system' ? 'is-active' : ''">
+            <a href="settings/system" class="settings-tab" :class="section === 'system' ? 'is-active' : ''"
+               @click.prevent="showSection('system')">
                 <i class="ri-settings-3-line"></i> <span x-text="t('settings.tab_system')">System</span>
             </a>
         </nav>
@@ -916,6 +919,12 @@
                     if (params.get('filter')) this.filterType = params.get('filter');
                     if (params.get('q')) this.searchQuery = params.get('q');
                     this.rememberState();
+                    // Back and forward move between sections without a page load.
+                    window.addEventListener('popstate', () => {
+                        const last = window.location.pathname.split('/').pop();
+                        this.section = ['naming', 'rules', 'system'].includes(last) ? last : 'naming';
+                        this.rememberState();
+                    });
                     await this.loadMappings();
                     await this.syncRuleLanguage();
                     if (this.highlightRuleId) this.focusHighlightedRule();
@@ -1167,6 +1176,15 @@
                     return rows;
                 },
 
+                // Everything is already loaded, so a section switch is a change of view,
+                // not of page. The address follows so links and reloads still work.
+                showSection(name) {
+                    if (name === this.section) return;
+                    this.section = name;
+                    this.rememberState();
+                    this.rememberQuery(name);
+                },
+
                 // The main page is where the user wants to be next; do not bounce back.
                 leaveSettings() {
                     try {
@@ -1196,14 +1214,19 @@
                 },
 
                 // Keep filter and search in the address without adding history entries.
-                rememberQuery() {
+                rememberQuery(pushSection) {
                     const params = new URLSearchParams();
                     if (this.filterType && this.filterType !== 'all') params.set('filter', this.filterType);
                     if (this.searchQuery) params.set('q', this.searchQuery);
                     if (this.highlightRuleId) params.set('rule', this.highlightRuleId);
                     const query = params.toString();
+                    const path = pushSection
+                        ? window.location.pathname.replace(/[^/]*$/, pushSection)
+                        : window.location.pathname;
+                    const url = path + (query ? '?' + query : '');
                     try {
-                        window.history.replaceState({}, '', window.location.pathname + (query ? '?' + query : ''));
+                        if (pushSection) window.history.pushState({section: pushSection}, '', url);
+                        else window.history.replaceState({}, '', url);
                     } catch (e) { /* ignore */ }
                 },
 

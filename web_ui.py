@@ -17,7 +17,7 @@ import unicodedata
 import uuid
 
 import aiohttp
-from flask import Flask, abort, jsonify, make_response, render_template, request, send_from_directory
+from flask import Flask, abort, jsonify, make_response, redirect, render_template, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -3463,9 +3463,12 @@ def settings_page(section: str = "naming"):
     to. The nesting depth differs between /settings and /settings/<section>,
     so the page is told where its own root is.
     """
+    if request.path.rstrip("/").count("/") < 2:
+        # One depth for every section keeps relative asset and API paths valid.
+        return redirect("settings/naming")
     if section not in SETTINGS_SECTIONS:
         section = "naming"
-    base_href = "../" if request.path.rstrip("/").count("/") > 1 else "./"
+    base_href = "../"
     version = str(int(time.time()))
     response = make_response(render_template("settings.html", version=version, section=section, base_href=base_href))
     # Prevent browser from caching the HTML page
