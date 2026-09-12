@@ -12,11 +12,14 @@ the web UI, shown once and stored only as a hash.
 """
 
 import json
+import logging
 from typing import Any, Callable
 
 from flask import abort, request
 
 import external_access
+
+logger = logging.getLogger(__name__)
 
 # What a token opens over a published port. Matched against the route's rule
 # rather than the request path, so a rule carrying a parameter is recognised
@@ -113,13 +116,27 @@ def install(app: Any, token_store: Callable[[], Any]) -> None:
         """
         if is_ingress_request():
             return None
-        if not external_access.allows(peer_address()):
+        peer = peer_address()
+        if not external_access.allows(peer):
+            # Named, because a refusal that does not say who was refused is the
+            # hardest kind to configure against - a proxy shows its own address,
+            # not the browser's, and that is the address to allow.
+            logger.warning(
+                "Refused %s %s from %s: not in external_access (%s)",
+                request.method,
+                request.path,
+                peer or "an unreadable address",
+                ", ".join(external_access.describe()) or "empty",
+            )
             abort(403)
         rule = request.url_rule.rule if request.url_rule else ""
-        if not route_allowed(rule, request.method, external_access.api_mode()):
+        mode = external_access.api_mode()
+        if not route_allowed(rule, request.method, mode):
+            logger.warning("Refused %s %s from %s: external_api is %s", request.method, request.path, peer, mode)
             abort(403)
         store = token_store()
         if not store.exists() or not store.verify(provided_token()):
+            logger.warning("Refused %s %s from %s: no valid token", request.method, request.path, peer)
             abort(401)
         return None
 
@@ -159,10 +176,16 @@ class Guard:
         peer = (scope.get("client") or ("", 0))[0] or ""
         if not external_access.is_supervisor(peer):
             if not external_access.allows(peer):
+                logger.warning(
+                    "Refused MCP from %s: not in external_access (%s)",
+                    peer or "an unreadable address",
+                    ", ".join(external_access.describe()) or "empty",
+                )
                 await self._refuse(scope, send, 403, "external access is off")
                 return
             store = self.token_store()
             if not store.exists() or not store.verify(self._token_from(scope.get("headers") or [])):
+                logger.warning("Refused MCP from %s: no valid token", peer)
                 await self._refuse(scope, send, 401, "a valid API token is required")
                 return
         await self.app(scope, receive, send)
