@@ -18,7 +18,6 @@ from integration_bridge import (
     BridgeResult,
     IntegrationBridge,
     IntegrationBridgeAdapter,
-    extract_config_entry_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,26 +50,64 @@ class RegistryAdapter(IntegrationBridgeAdapter):
         )
 
     async def remove_native(self, device_data: Dict[str, Any], *, force: bool = False) -> BridgeResult:
+        """Entfernt das Gerät über seine Config-Entries.
+
+        Ein Gerät verschwindet erst, wenn der letzte Config-Entry weg ist, der
+        es hält. Home Assistant antwortet deshalb auf jedes Entfernen mit dem
+        Gerät, wie es danach aussieht - und mit nichts, wenn es weg ist. Genau
+        das entscheidet hier: solange noch ein Gerät zurückkommt, ist es noch
+        da, und der nächste Entry ist dran.
+
+        Bleibt es auch dann stehen, wird das als Fehler gemeldet. Erfolg zu
+        melden, während das Altgerät noch in der Liste steht, wäre die
+        unangenehmste Variante: der Nutzer erfährt es erst beim Nachsehen.
+        """
         # Snapshots nutzen "device_id", rohe Registry-Einträge "id" -> beide akzeptieren.
         device_id = device_data.get("device_id") or device_data.get("id")
-        config_entry_id = extract_config_entry_id(device_data)
         if not device_id:
             return BridgeResult(
                 success=False,
                 native_supported=True,
                 error="No device_id in device data; cannot remove via registry",
             )
-        if not config_entry_id:
+
+        pending = list(device_data.get("config_entries") or [])
+        if not pending:
             return BridgeResult(
                 success=False,
                 native_supported=True,
                 error="No config_entry found for device; cannot remove via registry",
             )
-        try:
-            await self.device_registry.remove_config_entry(device_id, config_entry_id)
-            return BridgeResult(success=True, native_supported=True, detail="Removed via remove_config_entry")
-        except Exception as e:  # noqa: BLE001 - HA-Fehlermeldung an den Aufrufer durchreichen
-            return BridgeResult(success=False, native_supported=True, error=str(e))
+
+        removed: List[str] = []
+        while pending:
+            entry_id = pending.pop(0)
+            try:
+                answer = await self.device_registry.remove_config_entry(device_id, entry_id)
+            except Exception as e:  # noqa: BLE001 - HA-Fehlermeldung an den Aufrufer durchreichen
+                return BridgeResult(success=False, native_supported=True, error=str(e))
+            removed.append(entry_id)
+
+            remaining = (answer or {}).get("result")
+            if not remaining:
+                detail = "Removed via remove_config_entry"
+                if len(removed) > 1:
+                    detail += f" ({len(removed)} config entries)"
+                return BridgeResult(success=True, native_supported=True, detail=detail)
+
+            # Das Gerät hängt noch an weiteren Entries; die Antwort kennt sie
+            # genauer als der Schnappschuss, der inzwischen alt sein kann.
+            if isinstance(remaining, dict):
+                pending = [entry for entry in (remaining.get("config_entries") or []) if entry not in removed]
+
+        return BridgeResult(
+            success=False,
+            native_supported=True,
+            error=(
+                f"Device still in the registry after removing {len(removed)} config entr"
+                f"{'y' if len(removed) == 1 else 'ies'}"
+            ),
+        )
 
     @property
     def capabilities(self) -> Set[str]:

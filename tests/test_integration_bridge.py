@@ -5,7 +5,6 @@ import asyncio
 from bridge_adapters import build_bridge
 from bridge_mqtt_adapter import MqttZ2MAdapter
 from integration_bridge import (
-    extract_config_entry_id,
     extract_integrations,
     extract_z2m_ieee,
 )
@@ -31,17 +30,23 @@ def test_extract_z2m_ieee_ignores_non_z2m_and_bridge():
     assert extract_z2m_ieee({"identifiers": [["matter", "serial_x"]]}) is None
 
 
-def test_extract_config_entry_id():
-    assert extract_config_entry_id({"config_entries": ["01ABC"]}) == "01ABC"
-    assert extract_config_entry_id({"config_entries": []}) is None
-
-
 class _DR:
-    def __init__(self):
+    """Antwortet wie Home Assistant: das Gerät, wie es nach dem Entfernen
+    aussieht - und nichts, wenn es weg ist.
+
+    ``survives`` sind die Config-Entries, nach deren Entfernen das Gerät noch
+    steht; das ist der Fall, der ein Matter-Altgerät zurückbleiben ließ.
+    """
+
+    def __init__(self, survives=(), remaining=()):
         self.calls = []
+        self.survives = set(survives)
+        self.remaining = list(remaining)
 
     async def remove_config_entry(self, device_id, config_entry_id):
         self.calls.append((device_id, config_entry_id))
+        if config_entry_id in self.survives:
+            return {"success": True, "result": {"id": device_id, "config_entries": list(self.remaining)}}
         return {"success": True}
 
 
@@ -75,3 +80,51 @@ def test_registry_remove_native_missing_device_id():
     res = asyncio.run(bridge.remove_native({"config_entries": ["01ABC"]}, force=True))
     assert not res.success
     assert dr.calls == []
+
+
+MATTER = {"device_id": "fe443", "integrations": ["matter"], "config_entries": ["01ABC", "02DEF"]}
+
+
+def test_a_device_held_by_several_entries_loses_all_of_them():
+    """Ein Gerät verschwindet erst, wenn der letzte Config-Entry weg ist. Nur
+    den ersten zu entfernen ließ das Altgerät stehen."""
+    dr = _DR(survives=["01ABC"], remaining=["02DEF"])
+    bridge = build_bridge(dr, mqtt_bridge=None)
+
+    res = asyncio.run(bridge.remove_native(MATTER, force=True))
+
+    assert res.success
+    assert dr.calls == [("fe443", "01ABC"), ("fe443", "02DEF")]
+
+
+def test_the_answer_decides_which_entry_comes_next():
+    """Der Schnappschuss kann alt sein; Home Assistant weiß es genauer."""
+    dr = _DR(survives=["01ABC"], remaining=["03GHI"])
+    bridge = build_bridge(dr, mqtt_bridge=None)
+
+    res = asyncio.run(bridge.remove_native(MATTER, force=True))
+
+    assert res.success
+    assert dr.calls == [("fe443", "01ABC"), ("fe443", "03GHI")]
+
+
+def test_a_device_that_stays_is_reported_as_a_failure():
+    """Erfolg zu melden, während das Altgerät noch in der Liste steht, wäre
+    die unangenehmste Variante: der Nutzer erfährt es erst beim Nachsehen."""
+    dr = _DR(survives=["01ABC", "02DEF"], remaining=["02DEF"])
+    bridge = build_bridge(dr, mqtt_bridge=None)
+
+    res = asyncio.run(bridge.remove_native(MATTER, force=True))
+
+    assert not res.success
+    assert "still in the registry" in res.error
+
+
+def test_one_entry_is_still_the_common_case():
+    dr = _DR()
+    bridge = build_bridge(dr, mqtt_bridge=None)
+
+    res = asyncio.run(bridge.remove_native({"device_id": "fe443", "config_entries": ["01ABC"]}, force=True))
+
+    assert res.success
+    assert dr.calls == [("fe443", "01ABC")]
