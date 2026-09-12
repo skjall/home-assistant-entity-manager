@@ -67,6 +67,41 @@ def test_learn_derives_the_key_server_side(client):
     assert rule["affected"] == 2
 
 
+def test_learn_anchors_on_the_device_class_when_the_name_holds_the_device(client):
+    """ "Tomate air humidity" names the device too; only the class is shared."""
+    restructurer = web_ui.renamer_state["restructurer"]
+    restructurer.entities["sensor.balkon_tomate_luftfeuchtigkeit"] = {
+        "id": "reg-plant",
+        "entity_id": "sensor.balkon_tomate_luftfeuchtigkeit",
+        "device_id": "d",
+        "platform": "plant",
+        "original_name": "Tomate air humidity",
+        "device_class": "humidity",
+        "has_entity_name": False,
+    }
+
+    response = client.post(
+        "/api/naming/learn",
+        json={"entity_id": "sensor.balkon_tomate_luftfeuchtigkeit", "value": "Luftfeuchtigkeit"},
+    )
+
+    match = response.get_json()["rule"]["match"]
+    assert match["kind"] == "device_class"
+    assert match["value"] == "humidity"
+
+
+def test_learn_keeps_the_name_when_the_entity_names_itself(client):
+    """A native entity name stands for the type alone and stays the anchor."""
+    restructurer = web_ui.renamer_state["restructurer"]
+    restructurer.entities["number.a_effect_speed"]["device_class"] = "humidity"
+
+    response = client.post(
+        "/api/naming/learn", json={"entity_id": "number.a_effect_speed", "value": "Effektgeschwindigkeit"}
+    )
+
+    assert response.get_json()["rule"]["match"]["kind"] == "name"
+
+
 def test_learn_scoped_to_integration(client):
     response = client.post(
         "/api/naming/learn",

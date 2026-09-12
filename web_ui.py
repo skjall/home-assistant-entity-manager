@@ -3341,6 +3341,23 @@ def _type_key_model_counts(restructurer) -> dict:
     return counts
 
 
+def _rule_key_for(entity: dict) -> tuple:
+    """What a rule learned from this entity should match on.
+
+    An integration that declares a translation key is the surest anchor. Where
+    it does not, the supplied name is only usable when it names the entity
+    alone: integrations without native entity names write the device into it,
+    as in "Tomate air humidity", and no two of those names are alike. Their
+    device class says what the entity measures and holds for all of them.
+    """
+    if entity.get("translation_key"):
+        return "translation_key", entity["translation_key"]
+    device_class = entity.get("device_class") or entity.get("original_device_class")
+    if device_class and not entity.get("has_entity_name"):
+        return "device_class", device_class
+    return "name", entity.get("original_name") or ""
+
+
 def _keys_in_use(restructurer) -> Optional[set]:
     """Every value this home could match a rule on, or ``None`` when unknown."""
     if restructurer is None or not restructurer.entities:
@@ -3606,10 +3623,7 @@ def naming_learn():
         return jsonify({"error": "value required"}), 400
     integration = (entity.get("platform") or None) if scope in ("integration", "model") else None
     model = _entity_model(restructurer, entity) or None if scope == "model" else None
-    if entity.get("translation_key"):
-        kind, key = "translation_key", entity["translation_key"]
-    else:
-        kind, key = "name", entity.get("original_name") or ""
+    kind, key = _rule_key_for(entity)
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
     rules = renamer_state["naming_rules"]
