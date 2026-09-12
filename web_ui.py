@@ -2887,6 +2887,7 @@ async def _get_hierarchy_async():
         }
 
         type_counts = _type_key_counts(restructurer)
+        type_integration_counts = _type_key_integration_counts(restructurer)
 
         entities = []
         for entity_id, entity_data in restructurer.entities.items():
@@ -2929,6 +2930,9 @@ async def _get_hierarchy_async():
                     "resolution": restructurer.last_resolutions.get(entity_id),
                     "type_key": type_key,
                     "type_count": type_counts.get(type_key, 0) if type_key else 0,
+                    "type_integration_count": (
+                        type_integration_counts.get((type_key, entity_data.get("platform")), 0) if type_key else 0
+                    ),
                     "name_owner": "unknown",
                 }
             )
@@ -3156,6 +3160,17 @@ def _type_key_counts(restructurer) -> dict:
         key = _entity_type_key(entity_data)
         if key:
             counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _type_key_integration_counts(restructurer) -> dict:
+    """Entities per type and integration: "Tür" from Matter is a door sensor, from Miele a fridge."""
+    counts: dict = {}
+    for entity_data in restructurer.entities.values():
+        key = _entity_type_key(entity_data)
+        integration = entity_data.get("platform")
+        if key and integration:
+            counts[(key, integration)] = counts.get((key, integration), 0) + 1
     return counts
 
 

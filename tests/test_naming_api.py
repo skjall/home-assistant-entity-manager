@@ -129,3 +129,47 @@ def test_legacy_learn_endpoint_still_creates_a_rule(client):
     assert response.status_code == 200
     rules = client.get("/api/naming/rules").get_json()["rules"]
     assert rules[0]["match"]["value"] == "factory_reset"
+
+
+def _add_door_sensors(restructurer):
+    for registry_id, platform in (("reg-c", "matter"), ("reg-d", "matter"), ("reg-e", "miele")):
+        entity_id = f"binary_sensor.{registry_id}_tur"
+        restructurer.entities[entity_id] = {
+            "id": registry_id,
+            "entity_id": entity_id,
+            "device_id": "d",
+            "platform": platform,
+            "original_name": "Tür",
+            "has_entity_name": True,
+        }
+
+
+def test_counts_separate_a_type_by_integration(client):
+    """ "Tür" from Matter is a contact sensor, from Miele a fridge door; the counts tell them apart."""
+    restructurer = web_ui.renamer_state["restructurer"]
+    _add_door_sensors(restructurer)
+
+    per_type = web_ui._type_key_counts(restructurer)
+    per_integration = web_ui._type_key_integration_counts(restructurer)
+
+    assert per_type["name:tuer"] == 3
+    assert per_integration[("name:tuer", "matter")] == 2
+    assert per_integration[("name:tuer", "miele")] == 1
+
+
+def test_learning_for_one_integration_leaves_the_others_alone(client):
+    restructurer = web_ui.renamer_state["restructurer"]
+    _add_door_sensors(restructurer)
+
+    response = client.post(
+        "/api/naming/learn",
+        json={"entity_id": "binary_sensor.reg-c_tur", "value": "Zustand", "scope": "integration"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["rule"]["match"]["integration"] == "matter"
+    assert response.get_json()["rule"]["affected"] == 2
+    restructurer.build_naming_context("binary_sensor.reg-c_tur", restructurer.entities["binary_sensor.reg-c_tur"])
+    assert restructurer.last_resolutions["binary_sensor.reg-c_tur"]["value"] == "Zustand"
+    restructurer.build_naming_context("binary_sensor.reg-e_tur", restructurer.entities["binary_sensor.reg-e_tur"])
+    assert restructurer.last_resolutions["binary_sensor.reg-e_tur"]["value"] == "Tür"

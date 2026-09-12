@@ -93,7 +93,9 @@
     "explain_legacy": "„{value}“ wurde aus dem bisherigen Namen abgeleitet; die Integration liefert keinen eigenen.",
     "explain_device_class": "„{value}“ kommt aus der Geräteklasse; die Integration liefert keinen Namen.",
     "explain_original": "„{value}“ ist der Name der Integration ({source}), unverändert.",
-    "explain_normalized": "Die Integration ({source}) nennt es „{original}“. Nur die Schreibweise wurde angepasst."
+    "explain_normalized": "Die Integration ({source}) nennt es „{original}“. Nur die Schreibweise wurde angepasst.",
+    "scope_integration": "Für alle „{name}“ von {integration} ({count})",
+    "applying": "Wird übernommen …"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",

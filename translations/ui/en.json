@@ -93,7 +93,9 @@
     "explain_legacy": "“{value}” was derived from the previous name; the integration supplies none.",
     "explain_device_class": "“{value}” comes from the device class; the integration supplies no name.",
     "explain_original": "“{value}” is the integration’s ({source}) name, unchanged.",
-    "explain_normalized": "The integration ({source}) calls it “{original}”. Only the spelling was adjusted."
+    "explain_normalized": "The integration ({source}) calls it “{original}”. Only the spelling was adjusted.",
+    "scope_integration": "For all “{name}” from {integration} ({count})",
+    "applying": "Applying …"
   },
   "virtual_devices": {
     "automations": "Automations",

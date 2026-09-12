@@ -2092,8 +2092,10 @@
                                                 </button>
                                                 <button @click="saveEntitySuffix(entity)"
                                                         class="btn btn-primary btn-sm"
-                                                        :disabled="applyingEntityId || renamingDevice || executing"
-                                                        x-text="t('entity.apply')">Apply</button>
+                                                        :disabled="applyingEntityId || renamingDevice || executing">
+                                                    <i x-show="applyingEntityId === entity.id" class="ri-loader-4-line animate-spin"></i>
+                                                    <span x-text="applyingEntityId === entity.id ? t('entity.applying') : t('entity.apply')">Apply</span>
+                                                </button>
                                             </div>
                                             <span x-show="isEntityIdTaken(entity)" class="text-red-500 text-xs">
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
@@ -2104,7 +2106,13 @@
                                             <label class="flex items-center gap-1.5 cursor-pointer">
                                                 <input type="radio" :name="'scope-' + entity.registry_id" value="all"
                                                        :checked="entity._ruleScope === 'all'" @change="entity._ruleScope = 'all'">
-                                                <span x-text="t('entity.scope_all', {name: entity.resolution?.candidates?.slice(-1)[0]?.value || entity.original_name, count: entity.type_count || 1})"></span>
+                                                <span x-text="t('entity.scope_all', {name: typeOriginal(entity), count: entity.type_count || 1})"></span>
+                                            </label>
+                                            <label class="flex items-center gap-1.5 cursor-pointer"
+                                                   x-show="entity.platform && entity.type_integration_count && entity.type_integration_count < (entity.type_count || 0)">
+                                                <input type="radio" :name="'scope-' + entity.registry_id" value="integration"
+                                                       :checked="entity._ruleScope === 'integration'" @change="entity._ruleScope = 'integration'">
+                                                <span x-text="t('entity.scope_integration', {name: typeOriginal(entity), integration: entity.platform, count: entity.type_integration_count || 0})"></span>
                                             </label>
                                             <label class="flex items-center gap-1.5 cursor-pointer">
                                                 <input type="radio" :name="'scope-' + entity.registry_id" value="here"
@@ -4151,6 +4159,11 @@
                     }
                 },
 
+                // The name the integration supplies, as the rule will key on it.
+                typeOriginal(entity) {
+                    return entity.resolution?.input || entity.original_name || '';
+                },
+
                 typeEdited(entity) {
                     return entity._currentSuffix !== undefined
                         && entity._currentSuffix.trim() !== (entity.base_name || '').trim();
@@ -4397,7 +4410,8 @@
                         return;
                     }
 
-                    this.applyingEntityId = entity.id;
+                    const owned = !this.applyingEntityId;
+                    if (owned) this.applyingEntityId = entity.id;
                     try {
                         // Note: No entity-specific overrides are saved - only type mappings are used
                         // Rename in HA
@@ -4436,7 +4450,7 @@
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     } finally {
-                        this.applyingEntityId = null;
+                        if (owned) this.applyingEntityId = null;
                     }
                 },
 
@@ -4444,7 +4458,13 @@
                 toggleEntityExpand(entity) {
                     entity._expanded = !entity._expanded;
                     if (entity._expanded && entity._ruleScope === undefined) {
-                        entity._ruleScope = (entity.type_count || 0) > 1 ? 'all' : 'here';
+                        // A type that several integrations supply means different things
+                        // per integration ("Tür" is a contact sensor here, a fridge there),
+                        // so that is the safer default.
+                        const perIntegration = entity.type_integration_count || 0;
+                        entity._ruleScope = (entity.type_count || 0) > 1
+                            ? (perIntegration && perIntegration < entity.type_count ? 'integration' : 'all')
+                            : 'here';
                     }
                     if (entity._expanded && entity._currentSuffix === undefined) {
                         const initialSuffix = this.getEntitySuffix(entity);
@@ -4649,18 +4669,25 @@
 
                 // Execute rename in HA (no entity-specific overrides are saved)
                 async saveEntitySuffix(entity) {
-                    if (!entity) return;
+                    // The button stays pressed until the rule, the preview and the
+                    // rename are through; a second press would repeat all three.
+                    if (!entity || this.applyingEntityId) return;
+                    this.applyingEntityId = entity.id;
 
                     try {
                         const typed = entity._currentSuffix !== undefined ? entity._currentSuffix.trim() : null;
                         const edited = this.typeEdited(entity);
                         let ruleScopeApplied = null;
                         if (edited && typed) {
-                            if (entity._ruleScope === 'all') {
+                            if (entity._ruleScope === 'all' || entity._ruleScope === 'integration') {
                                 const learn = await fetch('api/naming/learn', {
                                     method: 'POST',
                                     headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({ entity_id: entity.id, value: typed })
+                                    body: JSON.stringify({
+                                        entity_id: entity.id,
+                                        value: typed,
+                                        scope: entity._ruleScope === 'integration' ? 'integration' : 'global'
+                                    })
                                 });
                                 const learned = await learn.json();
                                 if (!learn.ok) throw new Error(learned.error || 'Rule not saved');
@@ -4737,6 +4764,8 @@
                         }
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
+                    } finally {
+                        this.applyingEntityId = null;
                     }
                 },
 
