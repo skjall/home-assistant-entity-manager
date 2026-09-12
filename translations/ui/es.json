@@ -304,7 +304,7 @@
   "settings": {
     "back_to_manager": "Volver al Gestor de Entidades",
     "page_title": "Ajustes",
-    "system_language": "Idioma de los nombres:",
+    "system_language": "Idioma:",
     "search_placeholder": "Buscar por clave o traducción...",
     "filter_all": "Todos los Tipos",
     "filter_system": "Valores por Defecto del Sistema",
@@ -393,7 +393,8 @@
     "tab_naming": "Nombres",
     "tab_rules": "Reglas de tipo",
     "tab_system": "Sistema",
-    "language_section": "Idioma y ortografía"
+    "language_section": "Idioma y ortografía",
+    "language_from_ha": "Viene de Home Assistant y se aplica a la interfaz y a los nombres."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

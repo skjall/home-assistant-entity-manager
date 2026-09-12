@@ -55,6 +55,7 @@ class EntityRestructurer:
         type_mappings: Optional[Any] = None,
         naming_templates: Optional[NamingTemplates] = None,
         language: str = "en",
+        ha_translations: Optional[Any] = None,
     ):
         """
         Initialize the entity restructurer.
@@ -73,6 +74,8 @@ class EntityRestructurer:
         self.entities = {}
         self.naming_overrides = naming_overrides or NamingOverrides()
         self.naming_templates = naming_templates or NamingTemplates()
+        # Home Assistant's own entity names, in the language it is set to.
+        self.ha_translations = ha_translations
         self._language = language
         # How the entity part of each name was decided, keyed by entity_id.
         # Filled by build_naming_context; read by the hierarchy endpoint.
@@ -398,6 +401,18 @@ class EntityRestructurer:
                             "matched_on": dict(rule["match"]),
                         }
                     )
+            # Home Assistant knows its own entities in every language it speaks,
+            # which is far more than this add-on could translate itself.
+            supplied = self._home_assistant_name(entity_id, registry, language)
+            if supplied:
+                candidates.append(
+                    {
+                        "value": supplied,
+                        "won_by": "rule:system",
+                        "rule_id": None,
+                        "matched_on": {"kind": "home_assistant", "value": canon(name), "integration": integration},
+                    }
+                )
             detected = integration or self.type_mappings.detect_integration(entity_id)
             # No domain fallback: it would replace a specific name with "Sensor".
             system = self.type_mappings.find_translation(name, language, detected)
@@ -422,6 +437,22 @@ class EntityRestructurer:
         winner["platform"] = integration
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
+
+    def _home_assistant_name(self, entity_id: str, registry: Dict[str, Any], language: str) -> Optional[str]:
+        """The name Home Assistant itself uses for this entity's type, if it has one."""
+        if not self.ha_translations:
+            return None
+        domain = entity_id.partition(".")[0]
+        platform = registry.get("platform") or ""
+        translation_key = registry.get("translation_key")
+        if translation_key:
+            name = self.ha_translations.translation_key_name(platform, domain, translation_key, language)
+            if name:
+                return name
+        device_class = registry.get("device_class") or registry.get("original_device_class")
+        if device_class:
+            return self.ha_translations.device_class_name(domain, device_class, language)
+        return None
 
     def _translate_entity_name(self, name: str, entity_id: str, registry: Optional[Dict[str, Any]] = None) -> str:
         """Return the user's wording for a supplied name (see _resolve_supplied_name)."""
@@ -520,6 +551,10 @@ class EntityRestructurer:
                 return plain(object_id.replace("_", " ").title(), "fallback")
             return plain("", "fallback")
 
+        if device_class and self.ha_translations:
+            supplied = self.ha_translations.device_class_name(entity_id.partition(".")[0], device_class, self.language)
+            if supplied:
+                return plain(supplied, "device_class")
         entity_type = self.get_entity_type(entity_id, device_class)
         return plain(entity_type.replace("_", " ").title(), "device_class" if device_class else "fallback")
 

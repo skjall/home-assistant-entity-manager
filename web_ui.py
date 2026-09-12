@@ -30,6 +30,7 @@ from device_swap import SwapExecutor, SwapJobStore, propose_mapping
 from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 from ha_client import HomeAssistantClient
+from ha_translations import HaTranslations
 from ha_websocket import HomeAssistantWebSocket
 from hierarchy_manager import normalize_name
 from jobs import TERMINAL_STATES, JobStore, JobWorker, new_job
@@ -158,6 +159,7 @@ DATA_DIR = os.getenv("DATA_DIR", "/data")
 # Global state
 # Type rules replace the flat user mappings; the legacy file is migrated once
 # and kept as a backup next to a report of what was merged.
+ha_translations = HaTranslations()
 naming_rules_store = NamingRules(
     os.path.join(DATA_DIR, "naming_rules.json"),
     legacy_path=os.path.join(DATA_DIR, "user_type_mappings.json"),
@@ -339,6 +341,7 @@ async def init_client() -> HomeAssistantClient:
             renamer_state["naming_overrides"],
             type_mappings=renamer_state["type_mappings"],
             naming_templates=renamer_state["naming_templates"],
+            ha_translations=ha_translations,
         )
     return renamer_state["client"]
 
@@ -439,6 +442,7 @@ async def load_areas_and_entities():
             # Load structure (Areas, Devices, etc) via WebSocket
             logger.info("Loading Home Assistant structure via WebSocket...")
             await renamer_state["restructurer"].load_structure(ws)
+            await _sync_ha_language(ws)
 
             # Ensure that areas were loaded
             areas_count = len(renamer_state["restructurer"].areas)
@@ -3150,6 +3154,35 @@ def learn_type_mapping():
     except Exception as e:
         logger.error(f"Error learning type mapping: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+async def _sync_ha_language(ws) -> None:
+    """Follow Home Assistant's language and load the names it uses.
+
+    Home Assistant is the one place a user sets their language, and its own
+    translations cover far more languages than this add-on could maintain.
+    """
+    rules = renamer_state["naming_rules"]
+    try:
+        config = await ws.get_config()
+        language = (config.get("language") or "").split("-")[0]
+    except Exception as error:
+        logger.warning("Could not read the Home Assistant language: %s", error)
+        language = rules.language
+    if language and language != rules.language:
+        logger.info("Following the Home Assistant language: %s", language)
+        rules.set_language(language)
+        renamer_state["type_mappings"]._refresh_user_view()
+    integrations = {
+        entity.get("platform") for entity in renamer_state["restructurer"].entities.values() if entity.get("platform")
+    }
+    await ha_translations.load(ws, rules.language, integrations)
+
+
+@app.route("/api/ha/language")
+def get_ha_language():
+    """The language the app speaks, which is the one Home Assistant is set to."""
+    return jsonify({"language": renamer_state["naming_rules"].language})
 
 
 def _entity_type_key(entity_data: dict) -> str:

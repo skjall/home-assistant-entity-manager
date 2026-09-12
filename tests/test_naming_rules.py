@@ -347,3 +347,60 @@ def test_resolution_uses_the_device_model(restructurer):
 
     assert resolution["value"] == "Kontakt"
     assert resolution["matched_on"]["model"] == "Eve Door 20EBN9901"
+
+
+class _FakeHaTranslations:
+    """Stands in for Home Assistant's own names."""
+
+    def __init__(self, component=None, entity=None):
+        self.component = component or {}
+        self.entity = entity or {}
+
+    def device_class_name(self, domain, device_class, language):
+        return self.component.get((domain, device_class, language))
+
+    def translation_key_name(self, platform, domain, key, language):
+        return self.entity.get((platform, domain, key, language))
+
+
+def test_home_assistant_names_a_device_class_in_its_own_language(restructurer):
+    """A user whose Home Assistant speaks Italian needs no rule for a door sensor."""
+    restructurer.ha_translations = _FakeHaTranslations({("number", "door", "de"): "Tür"})
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "Door"
+    entity["device_class"] = "door"
+
+    restructurer.build_naming_context("number.x_effect_speed", entity)
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["value"] == "Tür"
+    assert resolution["won_by"] == "rule:system"
+
+
+def test_a_translation_key_beats_the_device_class(restructurer):
+    restructurer.ha_translations = _FakeHaTranslations(
+        {("number", "door", "de"): "Tür"},
+        {("mqtt", "number", "reactive_current", "de"): "Blindstrom"},
+    )
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "Reactive current"
+    entity["device_class"] = "door"
+    entity["translation_key"] = "reactive_current"
+
+    restructurer.build_naming_context("number.x_effect_speed", entity)
+
+    assert restructurer.last_resolutions["number.x_effect_speed"]["value"] == "Blindstrom"
+
+
+def test_a_user_rule_still_beats_home_assistant(restructurer):
+    restructurer.ha_translations = _FakeHaTranslations({("number", "door", "de"): "Tür"})
+    restructurer.type_mappings.rules.upsert("name", "Door", None, "de", "Zustand")
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "Door"
+    entity["device_class"] = "door"
+
+    restructurer.build_naming_context("number.x_effect_speed", entity)
+    resolution = restructurer.last_resolutions["number.x_effect_speed"]
+
+    assert resolution["value"] == "Zustand"
+    assert resolution["won_by"] == "rule:user"

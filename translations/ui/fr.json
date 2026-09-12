@@ -304,7 +304,7 @@
   "settings": {
     "back_to_manager": "Retour au Gestionnaire d'Entités",
     "page_title": "Paramètres",
-    "system_language": "Langue des noms :",
+    "system_language": "Langue :",
     "search_placeholder": "Rechercher par clé ou traduction...",
     "filter_all": "Tous les Types",
     "filter_system": "Valeurs par Défaut Système",
@@ -393,7 +393,8 @@
     "tab_naming": "Nommage",
     "tab_rules": "Règles de type",
     "tab_system": "Système",
-    "language_section": "Langue et orthographe"
+    "language_section": "Langue et orthographe",
+    "language_from_ha": "Vient de Home Assistant et s’applique à l’interface et aux noms."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

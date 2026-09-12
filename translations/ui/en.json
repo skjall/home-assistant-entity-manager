@@ -284,7 +284,7 @@
   "settings": {
     "back_to_manager": "Back to Entity Manager",
     "page_title": "Settings",
-    "system_language": "Language of names:",
+    "system_language": "Language:",
     "search_placeholder": "Search by key or translation...",
     "filter_all": "All Types",
     "filter_system": "System Defaults",
@@ -373,7 +373,8 @@
     "tab_naming": "Naming",
     "tab_rules": "Type rules",
     "tab_system": "System",
-    "language_section": "Language and spelling"
+    "language_section": "Language and spelling",
+    "language_from_ha": "Comes from Home Assistant and applies to the interface and the names."
   },
   "type_mappings": {
     "light": "Light",

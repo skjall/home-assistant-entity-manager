@@ -463,13 +463,11 @@
                 </h2>
             </div>
             <div style="padding: 20px;" class="language-selector">
-                <label x-text="t('settings.system_language')">Language of names:</label>
-                <select class="filter-select" x-model="language" @change="changeLanguage()">
-                    <option value="en">English</option>
-                    <option value="de">Deutsch</option>
-                    <option value="es">Español</option>
-                    <option value="fr">Français</option>
-                </select>
+                <label x-text="t('settings.system_language')">Language:</label>
+                <span class="kind-badge" x-text="language"></span>
+                <span style="color: #6b7280; font-size: 0.8rem;" x-text="t('settings.language_from_ha')"></span>
+            </div>
+            <div style="padding: 0 20px 20px;" class="language-selector">
                 <label x-text="t('settings.display_case')">Spelling:</label>
                 <select class="filter-select" x-model="displayCase" @change="changeDisplayCase()" :title="t('settings.display_case_hint')">
                     <option value="first_word" x-text="t('settings.display_case_first_word')">First word capitalised</option>
@@ -955,20 +953,14 @@
                     await this.loadMappings();
                 },
 
+                // The language comes from Home Assistant; the page only shows it.
                 async syncRuleLanguage() {
                     try {
                         const settings = await (await fetch('api/naming/settings')).json();
                         this.displayCase = settings.display_case || 'first_word';
-                        const current = settings.language;
-                        if (current === this.language) return;
-                        await fetch('api/naming/settings', {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ language: this.language })
-                        });
-                        await this.loadMappings();
+                        this.language = settings.language || this.language;
                     } catch (e) {
-                        console.error('Failed to sync rule language', e);
+                        console.error('Failed to read the naming settings', e);
                     }
                 },
 
@@ -1112,22 +1104,6 @@
                         // Fallback: select the field so the user can copy manually
                         if (this.$refs.tokenField) this.$refs.tokenField.select();
                     }
-                },
-
-                // Switch the UI language and reload language-dependent data
-                async changeLanguage() {
-                    if (window.translations) {
-                        await window.translations.switchLanguage(this.language);
-                        // Force Alpine to re-evaluate all t() bindings
-                        this.langVersion++;
-                        document.documentElement.lang = window.translations.currentLanguage || 'en';
-                    }
-                    await fetch('api/naming/settings', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ language: this.language })
-                    });
-                    await this.loadMappings();
                 },
 
                 async loadMappings() {
