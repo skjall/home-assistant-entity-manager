@@ -11,20 +11,27 @@ Wrapping means Flask's own views run in a worker thread, several at a time. The
 stores they write are guarded (see json_store.py) and a registry load lets only
 one caller in at a time (see EntityRestructurer.load_structure), so that is
 safe — it was not before those two.
+
+The bridge is a2wsgi rather than asgiref: asgiref sends every WSGI call through
+a single thread, which measured as no concurrency at all — eight requests that
+each wait 0.2 s took 1.61 s instead of 0.20 s, and one slow request held up
+every other. a2wsgi uses a real pool of worker threads.
 """
 
 import logging
 import os
 from typing import Any, Optional
 
-from asgiref.wsgi import WsgiToAsgi
+from a2wsgi import WSGIMiddleware
 
 logger = logging.getLogger(__name__)
 
 
 def build(flask_app: Any, mcp_app: Optional[Any] = None) -> Any:
     """Return the ASGI application: the web interface, plus MCP when present."""
-    wsgi = WsgiToAsgi(flask_app)
+    # Four measured best for this mix of waiting and computing: fewer leaves a
+    # caller queued behind one slow request, more only adds thread switching.
+    wsgi = WSGIMiddleware(flask_app, workers=int(os.getenv("WEB_UI_THREADS", 4)))
     if mcp_app is None:
         return wsgi
 
@@ -44,7 +51,7 @@ def serve(application: Any, port: int) -> None:
     """Run the application on an ASGI server."""
     import uvicorn
 
-    workers = int(os.getenv("WEB_UI_THREADS", 8))
+    workers = int(os.getenv("WEB_UI_THREADS", 4))
     logger.info("Starting Web UI (uvicorn) on port %d", port)
     uvicorn.run(
         application,

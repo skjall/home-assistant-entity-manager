@@ -54,3 +54,56 @@ def test_the_gate_still_sees_the_real_caller_through_asgi():
 
     assert call(application, "/api/network", peer="203.0.113.7")["status"] == 403
     assert call(application, "/api/network", peer=INGRESS)["status"] == 200
+
+
+def test_requests_that_wait_are_served_at_the_same_time():
+    """A slow request must not hold up every other one.
+
+    This is not theoretical: the first bridge tried here sent every call
+    through a single thread, so eight requests that each wait a fifth of a
+    second took eight fifths, and the web interface froze while the hierarchy
+    was being rebuilt.
+    """
+    import time
+
+    def waiting_app(environ, start_response):
+        time.sleep(0.2)
+        start_response("200 OK", [("content-type", "text/plain")])
+        return [b"ok"]
+
+    application = asgi.build(waiting_app)
+
+    async def eight_at_once():
+        started = time.perf_counter()
+        await asyncio.gather(*(_drive(application) for _ in range(8)))
+        return time.perf_counter() - started
+
+    took = asyncio.run(eight_at_once())
+
+    assert took < 0.6, f"eight waiting requests took {took:.2f}s, so they ran one after another"
+
+
+async def _drive(application):
+    """Send one bare request through an ASGI application."""
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/",
+        "raw_path": b"/",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"host", b"localhost")],
+        "client": (INGRESS, 51000),
+        "server": ("localhost", 5000),
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        pass
+
+    await application(scope, receive, send)

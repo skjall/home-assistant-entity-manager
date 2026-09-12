@@ -27,6 +27,8 @@ class HaTranslations:
         self._component: Dict[str, Dict[str, str]] = {}
         self._entity: Dict[str, Dict[str, str]] = {}
         self._integrations: Dict[str, set] = {}
+        # Built once per language from _component; see _names_by_key.
+        self._by_key: Dict[str, Dict[str, str]] = {}
 
     @property
     def languages(self) -> Iterable[str]:
@@ -49,6 +51,7 @@ class HaTranslations:
             if resources is None:
                 return
             self._component[language] = resources
+            self._by_key.pop(language, None)
             self._entity.setdefault(language, {})
             self._integrations.setdefault(language, set())
         missing = wanted - self._integrations[language]
@@ -126,6 +129,27 @@ class HaTranslations:
             classes.update(key for _, key in self._component_keys(lang) if key != "_")
         return classes
 
+    def _names_by_key(self, language: str) -> Dict[str, str]:
+        """Every device class of a language with its name, indexed once.
+
+        Walking all 800 resources for every lookup cost a tenth of a second per
+        request on a real home; the answer never changes between loads, so it
+        is built once and kept until new translations arrive.
+        """
+        indexed = self._by_key.get(language)
+        if indexed is not None:
+            return indexed
+        resources = self._component.get(language, {})
+        indexed = {}
+        for domain, key in self._component_keys(language):
+            if key in indexed:
+                continue
+            name = self._usable(resources.get(_COMPONENT.format(domain=domain, key=key)))
+            if name:
+                indexed[key] = name
+        self._by_key[language] = indexed
+        return indexed
+
     def name_for_key(self, key: str, language: str) -> Optional[str]:
         """The name of a device class without knowing its domain.
 
@@ -134,11 +158,4 @@ class HaTranslations:
         """
         if not key:
             return None
-        resources = self._component.get(language, {})
-        for domain, candidate in self._component_keys(language):
-            if candidate != key:
-                continue
-            name = self._usable(resources.get(_COMPONENT.format(domain=domain, key=key)))
-            if name:
-                return name
-        return None
+        return self._names_by_key(language).get(key)
