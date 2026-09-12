@@ -847,9 +847,6 @@
                                 <span x-show="row.isRule && row.affected === 0" class="text-amber-600 text-xs" :title="t('settings.no_effect_hint')">
                                     <i class="ri-alert-line"></i>
                                 </span>
-                                <span x-show="row.isRule && row.redundant" class="text-gray-500 text-xs" :title="t('settings.redundant_hint')">
-                                    <i class="ri-equal-line"></i> <span x-text="t('settings.redundant')">same as default</span>
-                                </span>
                             </td>
                             <td>
                                 <span x-show="row.isRule" class="user-badge">
@@ -1368,7 +1365,7 @@
                 // A rule that matches nothing is not wrong, only useless; the
                 // user decides whether it goes.
                 unusedCount() {
-                    return this.rules.filter(rule => rule.affected === 0).length;
+                    return this.rules.filter(rule => rule.affected === 0 || rule.redundant).length;
                 },
 
                 async deleteUnusedRules() {

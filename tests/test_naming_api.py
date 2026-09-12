@@ -355,6 +355,19 @@ def test_template_sample_comes_from_a_real_entity(client):
     assert data["context"]["integration"] == "mqtt"
 
 
+def test_cleanup_also_takes_a_rule_that_repeats_the_standard(client):
+    """A rule naming "Effect speed" what is already called that changes nothing."""
+    rules = web_ui.renamer_state["naming_rules"]
+    same = rules.upsert("name", "effect_speed", None, rules.language, "Effect speed")
+
+    listed = client.get("/api/naming/rules/unused").get_json()["rules"]
+    ids = [rule["id"] for rule in listed]
+
+    assert same["id"] in ids
+    assert client.delete("/api/naming/rules/unused").get_json()["removed"] == len(ids)
+    assert rules.get(same["id"]) is None
+
+
 def test_unused_rules_can_be_listed_and_removed(client):
     """A rule no entity matches is offered for removal, never removed by itself."""
     rules = web_ui.renamer_state["naming_rules"]

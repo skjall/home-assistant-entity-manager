@@ -362,8 +362,6 @@
     "display_case_first_word": "Erstes Wort groß",
     "display_case_sentence": "Satzschreibweise (Rest klein)",
     "display_case_off": "Wie geliefert",
-    "redundant": "wie Standard",
-    "redundant_hint": "Diese Regel liefert, was Schreibweise oder mitgelieferter Standard ohnehin ergeben. Sie kann gelöscht werden.",
     "migration_skipped": "{count} davon wurden weggelassen, weil sie nichts geändert hätten.",
     "migration_merged": "{count} davon waren derselbe Name in verschiedener Schreibweise und wurden zu je einer Regel zusammengefasst.",
     "migration_conflicts_hint": "Du hattest denselben Typ unterschiedlich benannt. Wähle den Namen, der gelten soll.",
@@ -396,7 +394,7 @@
     "naming_preview_shuffle": "Ein anderes Beispiel zeigen",
     "naming_preview_no_match": "Kein Treffer",
     "naming_preview_more": "… {count} weitere, Suche eingrenzen",
-    "cleanup_hint": "{count} Regeln greifen bei keiner deiner Entitäten. Meist ist das Gerät weg oder Home Assistant liefert den Namen inzwischen selbst.",
+    "cleanup_hint": "{count} Regeln ändern nichts: entweder passt keine Entität dazu, oder sie sagen dasselbe wie der Standard.",
     "cleanup_button": "{count} Regeln löschen",
     "cleanup_confirm": "{count} Regeln endgültig löschen?"
   },

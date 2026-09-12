@@ -235,9 +235,18 @@ class NamingRules:
         logger.info("Repaired %d rules that were filed under the wrong kind", len(moved))
         return report
 
-    def unused(self, counts: Mapping[str, int]) -> List[Dict[str, Any]]:
-        """Rules that no entity in this home matches."""
-        return [rule for rule in self.rules if not counts.get(rule["id"])]
+    def unused(
+        self, counts: Mapping[str, int], language: str = "", builtins: Mapping[str, str] = {}
+    ) -> List[Dict[str, Any]]:
+        """Rules that change nothing: no entity matches, or the name is the standard."""
+        language = language or self.language
+        useless = []
+        for rule in self.rules:
+            if not counts.get(rule["id"]):
+                useless.append(rule)
+            elif self.is_redundant(rule, language, builtins.get(rule["id"])):
+                useless.append(rule)
+        return useless
 
     def delete_many(self, rule_ids: Iterable[str]) -> int:
         """Remove several rules at once, reporting how many went."""

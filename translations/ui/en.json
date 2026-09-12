@@ -362,8 +362,6 @@
     "display_case_first_word": "First word capitalised",
     "display_case_sentence": "Sentence case (rest lower)",
     "display_case_off": "As supplied",
-    "redundant": "same as default",
-    "redundant_hint": "This rule yields what the spelling or the built-in default gives anyway. It can be deleted.",
     "migration_skipped": "{count} of them were left out because they would not have changed anything.",
     "migration_merged": "{count} of them were the same name spelled differently and became one rule each.",
     "migration_conflicts_hint": "You had named the same type in two ways. Pick the name that should apply.",
@@ -396,7 +394,7 @@
     "naming_preview_shuffle": "Show another example",
     "naming_preview_no_match": "No match",
     "naming_preview_more": "… {count} more, narrow the search",
-    "cleanup_hint": "{count} rules apply to none of your entities. Usually the device is gone, or Home Assistant now supplies the name itself.",
+    "cleanup_hint": "{count} rules change nothing: either no entity matches, or they say what the standard already says.",
     "cleanup_button": "Delete {count} rules",
     "cleanup_confirm": "Delete {count} rules for good?"
   },

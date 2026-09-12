@@ -382,8 +382,6 @@
     "display_case_first_word": "Premier mot en majuscule",
     "display_case_sentence": "Casse de phrase (reste en minuscules)",
     "display_case_off": "Tel que fourni",
-    "redundant": "identique à la valeur par défaut",
-    "redundant_hint": "Cette règle donne ce que l’orthographe ou la valeur par défaut donnent déjà. Elle peut être supprimée.",
     "migration_skipped": "{count} d’entre eux ont été écartés car ils n’auraient rien changé.",
     "migration_merged": "{count} d’entre eux étaient le même nom écrit autrement et ont été réunis en une règle chacun.",
     "migration_conflicts_hint": "Vous aviez nommé le même type de deux façons. Choisissez le nom qui doit s’appliquer.",
@@ -416,7 +414,7 @@
     "naming_preview_shuffle": "Afficher un autre exemple",
     "naming_preview_no_match": "Aucun résultat",
     "naming_preview_more": "… {count} de plus, affinez la recherche",
-    "cleanup_hint": "{count} règles ne s’appliquent à aucune de vos entités. Le plus souvent l’appareil a disparu ou Home Assistant fournit désormais le nom.",
+    "cleanup_hint": "{count} règles ne changent rien : soit aucune entité ne correspond, soit elles répètent le standard.",
     "cleanup_button": "Supprimer {count} règles",
     "cleanup_confirm": "Supprimer définitivement {count} règles ?"
   },

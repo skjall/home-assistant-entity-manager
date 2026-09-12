@@ -3433,6 +3433,20 @@ def _rule_affected_counts(restructurer, rules):
     return counts
 
 
+def _rule_builtins(rules) -> dict:
+    """The built-in name each rule competes with, by rule id."""
+    mappings = renamer_state["type_mappings"]
+    language = rules.language
+    builtins = {}
+    for rule in rules.rules:
+        if rule["match"]["kind"] == "translation_key":
+            continue
+        builtin = mappings.find_system_translation(rule["match"]["value"], language, rule["match"].get("integration"))
+        if builtin is not None:
+            builtins[rule["id"]] = builtin
+    return builtins
+
+
 def _rule_payload(rule: dict, affected: dict) -> dict:
     rules = renamer_state["naming_rules"]
     mappings = renamer_state["type_mappings"]
@@ -3572,7 +3586,7 @@ def naming_rules_unused():
     affected = _rule_affected_counts(restructurer, rules)
     if affected is None:
         return jsonify({"error": "the entities are not loaded yet"}), 409
-    unused = rules.unused(affected)
+    unused = rules.unused(affected, rules.language, _rule_builtins(rules))
     if request.method == "GET":
         return jsonify({"rules": [_rule_payload(rule, affected) for rule in unused]})
     removed = rules.delete_many(rule["id"] for rule in unused)
