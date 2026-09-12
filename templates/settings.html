@@ -561,7 +561,7 @@
                 </div>
                 <div class="stat-item">
                     <span x-text="t('settings.rules_no_effect')">Without effect:</span>
-                    <span class="stat-value" x-text="rules.filter(r => !r.affected || r.redundant).length"></span>
+                    <span class="stat-value" x-text="rules.filter(r => r.affected === 0 || r.redundant).length"></span>
                 </div>
                 <div class="stat-item">
                     <span x-text="t('settings.system_defaults_count')">Built-in:</span>
@@ -619,9 +619,10 @@
                             </td>
                             <td><span class="system-default" x-text="row.system_default || '—'"></span></td>
                             <td>
-                                <span x-show="row.isRule" :class="row.affected ? '' : 'text-amber-600'"
-                                      x-text="row.affected"></span>
-                                <span x-show="row.isRule && !row.affected" class="text-amber-600 text-xs" :title="t('settings.no_effect_hint')">
+                                <span x-show="row.isRule" :class="row.affected === 0 ? 'text-amber-600' : ''"
+                                      :title="row.affected === null ? t('settings.affected_unknown') : ''"
+                                      x-text="row.affected === null ? '—' : row.affected"></span>
+                                <span x-show="row.isRule && row.affected === 0" class="text-amber-600 text-xs" :title="t('settings.no_effect_hint')">
                                     <i class="ri-alert-line"></i>
                                 </span>
                                 <span x-show="row.isRule && row.redundant" class="text-gray-500 text-xs" :title="t('settings.redundant_hint')">
@@ -925,6 +926,7 @@
                     });
                     await this.loadMappings();
                     await this.syncRuleLanguage();
+                    await this.countRules();
                     if (this.highlightRuleId) this.focusHighlightedRule();
                     await this.loadApiToken();
                     await this.loadNamingTemplates();
@@ -932,6 +934,19 @@
 
                 // Rules are applied in one language; align it with the UI language
                 // the first time the page is opened after a migration.
+                // Counting a rule's reach needs the entity list. It is loaded on the main
+                // page, so coming straight here leaves the counts unknown; fetch it once.
+                async countRules() {
+                    if (!this.rules.some(rule => rule.affected === null || rule.affected === undefined)) return;
+                    try {
+                        await fetch('api/hierarchy');
+                        await this.loadMappings();
+                        if (this.highlightRuleId) this.focusHighlightedRule();
+                    } catch (e) {
+                        console.warn('Could not count the rules', e);
+                    }
+                },
+
                 // Put the rule the user came for in view, and search for it so it stands alone.
                 focusHighlightedRule() {
                     const rule = this.rules.find(r => r.id === this.highlightRuleId);
@@ -1138,7 +1153,7 @@
                         model: rule.match.model || null,
                         value: rule.targets[this.language] || Object.values(rule.targets)[0] || '',
                         system_default: systemByKey[rule.match.value] || null,
-                        affected: rule.affected || 0,
+                        affected: rule.affected === null || rule.affected === undefined ? null : rule.affected,
                         redundant: !!rule.redundant,
                         source: rule.source || 'user',
                         rule
@@ -1213,7 +1228,7 @@
                     // Rules that only repeat the default are noise; they show under "without effect".
                     if (this.filterType === 'all') result = result.filter(r => !r.redundant);
                     else if (this.filterType === 'user') result = result.filter(r => r.isRule && !r.redundant);
-                    else if (this.filterType === 'no_effect') result = result.filter(r => r.isRule && (!r.affected || r.redundant));
+                    else if (this.filterType === 'no_effect') result = result.filter(r => r.isRule && (r.affected === 0 || r.redundant));
                     else if (this.filterType === 'system') result = result.filter(r => !r.isRule);
                     if (this.searchQuery) {
                         const q = this.searchQuery.toLowerCase();

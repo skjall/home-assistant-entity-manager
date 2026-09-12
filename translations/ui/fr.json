@@ -394,7 +394,8 @@
     "tab_rules": "Règles de type",
     "tab_system": "Système",
     "language_section": "Langue et orthographe",
-    "language_from_ha": "Vient de Home Assistant et s’applique à l’interface et aux noms."
+    "language_from_ha": "Vient de Home Assistant et s’applique à l’interface et aux noms.",
+    "affected_unknown": "Pas encore compté. La liste des entités est en cours de chargement."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

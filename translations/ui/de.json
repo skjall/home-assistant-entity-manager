@@ -374,7 +374,8 @@
     "tab_rules": "Typ-Regeln",
     "tab_system": "System",
     "language_section": "Sprache und Schreibweise",
-    "language_from_ha": "Kommt aus Home Assistant und gilt für Oberfläche und Namen."
+    "language_from_ha": "Kommt aus Home Assistant und gilt für Oberfläche und Namen.",
+    "affected_unknown": "Noch nicht gezählt. Die Entitätsliste wird gerade geladen."
   },
   "type_mappings": {
     "light": "Licht",

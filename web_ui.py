@@ -3230,10 +3230,14 @@ def _type_key_model_counts(restructurer) -> dict:
     return counts
 
 
-def _rule_affected_counts(restructurer, rules) -> dict:
-    """How many loaded entities each rule currently applies to."""
-    if restructurer is None:
-        return {}
+def _rule_affected_counts(restructurer, rules):
+    """How many loaded entities each rule applies to, or None when nothing is loaded.
+
+    Without the entity list a rule's reach is unknown, which is not the same as
+    zero: reporting zero would brand every rule as useless right after a start.
+    """
+    if restructurer is None or not restructurer.entities:
+        return None
     language = rules.language
     counts = {rule["id"]: 0 for rule in rules.rules}
     for entity_data in restructurer.entities.values():
@@ -3257,7 +3261,7 @@ def _rule_payload(rule: dict, affected: dict) -> dict:
         builtin = mappings.find_system_translation(rule["match"]["value"], language, rule["match"].get("integration"))
     return {
         **rule,
-        "affected": affected.get(rule["id"], 0),
+        "affected": affected.get(rule["id"], 0) if affected is not None else None,
         "redundant": rules.is_redundant(rule, language, builtin),
     }
 

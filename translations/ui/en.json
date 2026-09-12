@@ -374,7 +374,8 @@
     "tab_rules": "Type rules",
     "tab_system": "System",
     "language_section": "Language and spelling",
-    "language_from_ha": "Comes from Home Assistant and applies to the interface and the names."
+    "language_from_ha": "Comes from Home Assistant and applies to the interface and the names.",
+    "affected_unknown": "Not counted yet. The entity list is still loading."
   },
   "type_mappings": {
     "light": "Light",

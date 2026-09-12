@@ -256,3 +256,14 @@ def test_bare_settings_goes_to_the_first_section(client):
 
     assert response.status_code == 302
     assert response.headers["Location"] == "settings/naming"
+
+
+def test_reach_is_unknown_while_no_entities_are_loaded(client):
+    """Zero would brand every rule as useless right after a start; unknown is the truth."""
+    restructurer = web_ui.renamer_state["restructurer"]
+    client.post("/api/naming/learn", json={"entity_id": "number.a_effect_speed", "value": "Effektgeschwindigkeit"})
+    restructurer.entities = {}
+
+    rules = client.get("/api/naming/rules").get_json()["rules"]
+
+    assert rules and all(rule["affected"] is None for rule in rules)
