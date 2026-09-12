@@ -394,7 +394,6 @@
     "tab_rules": "Reglas de tipo",
     "tab_system": "Sistema",
     "language_section": "Idioma y ortografía",
-    "language_from_ha": "Viene de Home Assistant y se aplica a la interfaz y a los nombres.",
     "affected_unknown": "Aún sin contar. La lista de entidades se está cargando.",
     "field_area": "Área",
     "field_area_id": "ID de área",
