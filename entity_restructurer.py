@@ -15,6 +15,7 @@ Integrates with:
 from collections import defaultdict
 import logging
 import re
+import threading
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ha_client import HomeAssistantClient
@@ -93,6 +94,8 @@ class EntityRestructurer:
         self.areas = {}
         self.floors = {}
         self.entities = {}
+        # Only one registry load at a time; see load_structure.
+        self._loading = threading.RLock()
         self.naming_overrides = naming_overrides or NamingOverrides()
         self.naming_templates = naming_templates or NamingTemplates()
         # Home Assistant's own entity names, in the language it is set to.
@@ -194,7 +197,17 @@ class EntityRestructurer:
         - self.devices: Dict of device_id -> device data
         - self.entities: Dict of entity_id -> entity data
         - self.hierarchy_manager: If available, also populated for cascade updates
+
+        One load at a time: several requests may ask for fresh registries at
+        once, and two loads running together would leave readers looking at a
+        mixture of both. The second caller waits and then sees the first
+        caller's result.
         """
+        with self._loading:
+            await self._load_structure(ws_client)
+
+    async def _load_structure(self, ws_client: Optional[Any]) -> None:
+        """Read the registries and replace what this object holds."""
         # If no WebSocket client was provided, use REST API fallback
         if not ws_client:
             logger.warning("No WebSocket client available, using limited mode")
