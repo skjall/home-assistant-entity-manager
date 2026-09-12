@@ -97,13 +97,14 @@
     "scope_integration_hint": "Nur für die {count} Entitäten von {integration}.",
     "scope_model_hint": "Nur für die {count} Entitäten an Geräten vom Typ {model}.",
     "scope_here_hint": "Ausnahme nur für diese eine Entität, ohne Regel.",
-    "explain_builtin": "Mitgeliefert: „{original}“ heißt „{value}“",
-    "explain_spelling": "Schreibweise angepasst: „{original}“ → „{value}“",
-    "explain_rule_all": "Deine Regel: „{original}“ heißt überall „{value}“",
-    "explain_rule_integration": "Deine Regel: „{original}“ heißt bei {integration} „{value}“",
-    "explain_rule_model": "Deine Regel: „{original}“ heißt bei {model} „{value}“",
+    "explain_builtin": "Alle „{original}“-Entitäten heißen „{value}“ (mitgeliefert)",
+    "explain_spelling": "„{original}“ wird als „{value}“ geschrieben",
+    "explain_rule_all": "Alle „{original}“-Entitäten heißen bei dir „{value}“",
+    "explain_rule_integration": "Alle „{original}“-Entitäten von {integration} heißen bei dir „{value}“",
+    "explain_rule_model": "Alle „{original}“-Entitäten des {model} heißen bei dir „{value}“",
     "explain_exception": "Nur diese Entität heißt „{value}“ statt „{original}“",
-    "explain_supplied": "{source} liefert „{value}“"
+    "explain_supplied": "{source} liefert „{value}“",
+    "open_rule": "Regel ansehen"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",

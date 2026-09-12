@@ -397,6 +397,10 @@
             font-size: 0.9rem;
             color: #6b7280;
         }
+        .row-highlight {
+            background: #eff6ff;
+            box-shadow: inset 3px 0 0 #2563eb;
+        }
     </style>
 </head>
 <body>
@@ -547,7 +551,7 @@
                 </thead>
                 <tbody>
                     <template x-for="row in filteredRules" :key="row.id">
-                        <tr :class="row.isRule && !row.affected ? 'row-muted' : ''">
+                        <tr :class="(row.isRule && !row.affected ? 'row-muted ' : '') + (row.id === highlightRuleId ? 'row-highlight' : '')">
                             <td>
                                 <span class="type-key" x-text="row.key"></span>
                                 <span x-show="row.kind === 'translation_key'" class="kind-badge" :title="t('settings.kind_translation_key')">tk</span>
@@ -802,6 +806,7 @@
                 language: 'de',
                 searchQuery: '',
                 filterType: 'all',
+                highlightRuleId: null,
                 displayCase: 'first_word',
                 editingKey: null,
                 editValue: '',
@@ -843,14 +848,33 @@
                         // Set HTML lang attribute dynamically
                         document.documentElement.lang = this.language;
                     }
+                    // Opened from an entity card: show that one rule and mark it.
+                    const wanted = new URLSearchParams(window.location.search).get('rule');
+                    if (wanted) {
+                        this.highlightRuleId = wanted;
+                        this.filterType = 'user';
+                    }
                     await this.loadMappings();
                     await this.syncRuleLanguage();
+                    if (this.highlightRuleId) this.focusHighlightedRule();
                     await this.loadApiToken();
                     await this.loadNamingTemplates();
                 },
 
                 // Rules are applied in one language; align it with the UI language
                 // the first time the page is opened after a migration.
+                // Put the rule the user came for in view, and search for it so it stands alone.
+                focusHighlightedRule() {
+                    const rule = this.rules.find(r => r.id === this.highlightRuleId);
+                    if (!rule) return;
+                    this.searchQuery = rule.match?.value || '';
+                    this.filterRules();
+                    this.$nextTick(() => {
+                        const row = document.querySelector('.row-highlight');
+                        if (row) row.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    });
+                },
+
                 async changeDisplayCase() {
                     await fetch('api/naming/settings', {
                         method: 'PUT',

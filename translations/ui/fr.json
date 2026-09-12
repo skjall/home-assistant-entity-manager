@@ -97,13 +97,14 @@
     "scope_integration_hint": "Seulement pour les {count} entités de {integration}.",
     "scope_model_hint": "Seulement pour les {count} entités sur des appareils de type {model}.",
     "scope_here_hint": "Une exception pour cette seule entité, sans règle.",
-    "explain_builtin": "Intégré : « {original} » s’appelle « {value} »",
-    "explain_spelling": "Orthographe ajustée : « {original} » → « {value} »",
-    "explain_rule_all": "Votre règle : « {original} » s’appelle « {value} » partout",
-    "explain_rule_integration": "Votre règle : « {original} » s’appelle « {value} » sur {integration}",
-    "explain_rule_model": "Votre règle : « {original} » s’appelle « {value} » sur {model}",
+    "explain_builtin": "Toutes les entités « {original} » s’appellent « {value} » (intégré)",
+    "explain_spelling": "« {original} » s’écrit « {value} »",
+    "explain_rule_all": "Toutes les entités « {original} » s’appellent « {value} » chez vous",
+    "explain_rule_integration": "Toutes les entités « {original} » de {integration} s’appellent « {value} » chez vous",
+    "explain_rule_model": "Toutes les entités « {original} » du {model} s’appellent « {value} » chez vous",
     "explain_exception": "Cette entité seule s’appelle « {value} » au lieu de « {original} »",
-    "explain_supplied": "{source} fournit « {value} »"
+    "explain_supplied": "{source} fournit « {value} »",
+    "open_rule": "Voir la règle"
   },
   "virtual_devices": {
     "automations": "Automatisations",

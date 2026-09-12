@@ -97,13 +97,14 @@
     "scope_integration_hint": "Only for the {count} entities from {integration}.",
     "scope_model_hint": "Only for the {count} entities on devices of type {model}.",
     "scope_here_hint": "An exception for this one entity, without a rule.",
-    "explain_builtin": "Built in: “{original}” is called “{value}”",
-    "explain_spelling": "Spelling adjusted: “{original}” → “{value}”",
-    "explain_rule_all": "Your rule: “{original}” is called “{value}” everywhere",
-    "explain_rule_integration": "Your rule: “{original}” is called “{value}” on {integration}",
-    "explain_rule_model": "Your rule: “{original}” is called “{value}” on {model}",
+    "explain_builtin": "All “{original}” entities are called “{value}” (built in)",
+    "explain_spelling": "“{original}” is spelled “{value}”",
+    "explain_rule_all": "All “{original}” entities are called “{value}” for you",
+    "explain_rule_integration": "All “{original}” entities from {integration} are called “{value}” for you",
+    "explain_rule_model": "All “{original}” entities of the {model} are called “{value}” for you",
     "explain_exception": "This entity alone is called “{value}” instead of “{original}”",
-    "explain_supplied": "{source} supplies “{value}”"
+    "explain_supplied": "{source} supplies “{value}”",
+    "open_rule": "View rule"
   },
   "virtual_devices": {
     "automations": "Automations",

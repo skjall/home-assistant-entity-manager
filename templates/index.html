@@ -1473,6 +1473,13 @@
         .max-w-32 {
             max-width: 8rem;
         }
+        .rule-link {
+            margin-left: 6px;
+            color: #2563eb;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .rule-link:hover { text-decoration: underline; }
         .scope-bar {
             display: flex;
             align-items: center;
@@ -2159,7 +2166,12 @@
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
                                             </span>
                                         </div>
-                                        <p class="text-xs text-gray-500 mt-1" x-text="resolutionExplain(entity)"></p>
+                                        <p class="text-xs text-gray-500 mt-1">
+                                            <span x-text="resolutionExplain(entity)"></span>
+                                            <a x-show="entity.resolution?.rule_id"
+                                               :href="'settings?rule=' + entity.resolution?.rule_id"
+                                               class="rule-link" x-text="t('entity.open_rule')"></a>
+                                        </p>
                                         <div class="scope-bar" x-show="typeEdited(entity)">
                                             <span class="scope-label" x-text="t('entity.scope_label', {name: typeOriginal(entity)})"></span>
                                             <div class="scope-group" role="group">
