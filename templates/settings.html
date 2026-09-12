@@ -955,6 +955,29 @@
             <div style="padding: 20px;">
                 <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 16px;" x-text="t('settings.api_access_hint')"></p>
 
+                <!-- Reachability: the setting and what is actually published, side by side -->
+                <div style="margin-bottom: 20px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;" x-text="t('settings.network_title')"></div>
+                    <div style="font-size: 0.9rem; color: #374151; margin-bottom: 4px;">
+                        <span x-text="t('settings.network_policy')"></span><span>: </span>
+                        <span style="font-weight: 600;" x-text="t('settings.network_policy_' + (network.policy || 'off'))"></span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #6b7280; margin-bottom: 8px;" x-text="t('settings.network_policy_hint')"></div>
+                    <div style="font-size: 0.9rem; color: #374151;">
+                        <span x-show="!publishedPort()" x-text="t('settings.network_port_closed')"></span>
+                        <template x-if="publishedPort()">
+                            <span x-text="t('settings.network_port_open', {port: publishedPort().port, host: publishedPort().host})"></span>
+                        </template>
+                    </div>
+                    <div x-show="networkWarning()" x-cloak
+                         style="margin-top: 10px; padding: 10px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px; color: #92400e; font-size: 0.85rem;">
+                        <i class="ri-alert-line"></i>
+                        <span x-text="networkWarning()"></span>
+                    </div>
+                    <div x-show="publishedPort()" x-cloak
+                         style="margin-top: 8px; font-size: 0.85rem; color: #6b7280;" x-text="t('settings.network_ui_note')"></div>
+                </div>
+
                 <div style="margin-bottom: 16px; font-size: 0.9rem; color: #374151;">
                     <span x-show="!apiToken.configured" x-text="t('settings.api_token_status_none')"></span>
                     <template x-if="apiToken.configured">
@@ -1079,6 +1102,7 @@
                 importExportText: '',
                 importResult: null,
                 apiToken: { configured: false, created_at: null, last_used_at: null },
+                network: { policy: 'off', published: {} },
                 newApiToken: '',
                 tokenCopied: false,
                 namingPreset: 'entity_manager',
@@ -1141,6 +1165,7 @@
                     await this.syncRuleLanguage();
                     if (this.highlightRuleId) this.focusHighlightedRule();
                     await this.loadApiToken();
+                    await this.loadNetwork();
                     await this.loadNamingSample(
                         this.namingSampleEntity ? '?entity_id=' + encodeURIComponent(this.namingSampleEntity) : ''
                     );
@@ -1463,6 +1488,30 @@
                 },
 
                 // --- External API token management ---
+
+                async loadNetwork() {
+                    try {
+                        const response = await fetch('api/network');
+                        if (response.ok) {
+                            this.network = await response.json();
+                        }
+                    } catch (e) {
+                        console.error('Failed to load network status', e);
+                    }
+                },
+
+                // The port is published when the Supervisor maps it to a host port.
+                publishedPort() {
+                    const entries = Object.entries(this.network.published || {});
+                    return entries.length ? { port: entries[0][0], host: entries[0][1] } : null;
+                },
+
+                networkWarning() {
+                    if (!this.publishedPort()) return '';
+                    if (!this.apiToken.configured) return this.t('settings.network_warning_no_token');
+                    if (this.network.policy === 'any') return this.t('settings.network_warning_any');
+                    return '';
+                },
 
                 async loadApiToken() {
                     try {

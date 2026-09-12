@@ -318,7 +318,7 @@
     "save_templates": "Save templates",
     "templates_saved": "Naming templates saved",
     "api_access": "External API access",
-    "api_access_hint": "Generate a token to let an external tool read the rename log over a mapped port. The token is shown once and stored only as a hash. Without a token the API stays reachable only via Ingress.",
+    "api_access_hint": "A token lets an external tool read the rename log over a published port. It is shown once and stored only as a hash. Who gets answered there is the add-on's “external_access” option, which refuses everyone by default.",
     "api_token_status_none": "No token configured",
     "api_token_status_active": "Token active",
     "api_token_created": "Created",
@@ -388,7 +388,18 @@
     "naming_preview_more": "… {count} more, narrow the search",
     "cleanup_hint": "{count} rules change nothing: either no entity matches, or they say what the standard already says.",
     "cleanup_button": "Delete {count} rules",
-    "cleanup_confirm": "Delete {count} rules for good?"
+    "cleanup_confirm": "Delete {count} rules for good?",
+    "network_title": "Reachability",
+    "network_policy": "External access",
+    "network_policy_off": "Off — through Home Assistant only",
+    "network_policy_lan": "Local network only",
+    "network_policy_any": "From anywhere",
+    "network_policy_hint": "Change it in the add-on's configuration, field “external_access”.",
+    "network_port_closed": "The port is not published. The add-on is reachable through Home Assistant only.",
+    "network_port_open": "Port {port} is published as host port {host}.",
+    "network_warning_any": "The port is published and everyone is answered. If Home Assistant is reachable from the internet, so is this port, and the token is all that protects it.",
+    "network_warning_no_token": "The port is published but no token exists, so no one is served. Generate a token if the access is wanted.",
+    "network_ui_note": "The published port carries the token API only. The web interface is served through Home Assistant alone."
   },
   "type_mappings": {
     "light": "Light",
