@@ -112,7 +112,13 @@
     "drift_adopt_hint": "El nombre puesto en Home Assistant se convierte en una excepción para esta entidad.",
     "drift_overwrite": "Sobrescribir",
     "drift_overwrite_hint": "Escribir la propuesta de las reglas sobre el nombre cambiado.",
-    "drift_adopted": "“{value}” conservado como excepción"
+    "drift_adopted": "“{value}” conservado como excepción",
+    "blocked_badge": "numerada",
+    "blocked_hint": "“{wanted}” ya lo tiene {holder}, así que esta entidad recibe un número.",
+    "blocked_explain": "Esta entidad genera la misma dirección que {holder}: {wanted}. Por eso recibe un número. Un nombre de tipo propio dice mejor qué las diferencia.",
+    "ignore": "Dejar en paz",
+    "ignore_hint": "Sin más propuestas para esta entidad; se mantiene el nombre suministrado.",
+    "ignored": "Esta entidad se deja como está"
   },
   "virtual_devices": {
     "automations": "Automatizaciones",

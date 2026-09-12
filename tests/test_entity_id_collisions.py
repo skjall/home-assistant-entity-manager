@@ -102,3 +102,26 @@ def test_numbering_is_stable_across_runs(restructurer):
     second = restructurer.deduplicate_entity_ids(list(reversed(proposals)))
 
     assert {e: n for e, n, _ in first} == {e: n for e, n, _ in second}
+
+
+def test_a_numbered_proposal_says_who_holds_the_plain_id(restructurer):
+    """The number keeps the rename possible but says nothing about what the
+    two entities are; the case has to reach the interface to be decided."""
+    restructurer.deduplicate_entity_ids(
+        [
+            ("sensor.plug_energy", "sensor.wohnzimmer_steckdose_energie", "Energie"),
+            ("sensor.plug_energy_2", "sensor.wohnzimmer_steckdose_energie", "Energie"),
+        ]
+    )
+
+    assert "sensor.plug_energy" not in restructurer.last_numbering
+    numbered = restructurer.last_numbering["sensor.plug_energy_2"]
+    assert numbered["wanted"] == "sensor.wohnzimmer_steckdose_energie"
+    assert numbered["holder"] == "sensor.plug_energy"
+    assert numbered["suffix"] == 2
+
+
+def test_nothing_is_reported_when_every_proposal_fits(restructurer):
+    restructurer.deduplicate_entity_ids([("sensor.plug_energy", "sensor.kuche_energie", "Energie")])
+
+    assert restructurer.last_numbering == {}

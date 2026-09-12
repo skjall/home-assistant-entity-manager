@@ -112,7 +112,13 @@
     "drift_adopt_hint": "Der in Home Assistant gesetzte Name wird zur Ausnahme für diese eine Entität.",
     "drift_overwrite": "Überschreiben",
     "drift_overwrite_hint": "Den Vorschlag aus den Regeln über den geänderten Namen schreiben.",
-    "drift_adopted": "„{value}“ als Ausnahme übernommen"
+    "drift_adopted": "„{value}“ als Ausnahme übernommen",
+    "blocked_badge": "nummeriert",
+    "blocked_hint": "„{wanted}“ hält bereits {holder}, deshalb bekommt diese Entität eine Nummer.",
+    "blocked_explain": "Diese Entität rendert dieselbe Adresse wie {holder}: {wanted}. Sie bekommt deshalb eine Nummer. Ein eigener Typ-Name sagt besser, was sie unterscheidet.",
+    "ignore": "In Ruhe lassen",
+    "ignore_hint": "Kein Vorschlag mehr für diese Entität; der gelieferte Name bleibt.",
+    "ignored": "Diese Entität wird in Ruhe gelassen"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",

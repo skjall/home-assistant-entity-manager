@@ -1673,6 +1673,20 @@ def ownership_of(entity_data: dict, template_hash: str) -> dict:
     }
 
 
+def blocked_of(restructurer, entity_id: str):
+    """Why a proposal could not have the id it rendered, or None.
+
+    Two entities of one device often carry the same name from their
+    integration, so the template renders one id for both. Numbering keeps the
+    rename possible, but the number says nothing about what the two are; only
+    the user can say that, so the case is reported rather than hidden.
+    """
+    numbered = (getattr(restructurer, "last_numbering", None) or {}).get(entity_id)
+    if not numbered:
+        return None
+    return {"reason": "id_taken", "wanted": numbered["wanted"], "holder": numbered["holder"]}
+
+
 async def _get_hierarchy_async():
     """Async implementation of get_hierarchy."""
     try:
@@ -1851,6 +1865,9 @@ async def _get_hierarchy_async():
                     # Who the name in the registry belongs to right now, and
                     # whether it was changed outside this add-on since.
                     **ownership_of(entity_data, template_hash),
+                    # Set when the proposal only got an id by numbering away
+                    # from another entity that renders the same name.
+                    "blocked": blocked_of(restructurer, entity_id),
                 }
             )
 

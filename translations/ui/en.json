@@ -112,7 +112,13 @@
     "drift_adopt_hint": "The name set in Home Assistant becomes an exception for this one entity.",
     "drift_overwrite": "Overwrite",
     "drift_overwrite_hint": "Write the proposal from the rules over the changed name.",
-    "drift_adopted": "Kept “{value}” as an exception"
+    "drift_adopted": "Kept “{value}” as an exception",
+    "blocked_badge": "numbered",
+    "blocked_hint": "“{wanted}” is already held by {holder}, so this entity gets a number.",
+    "blocked_explain": "This entity renders the same address as {holder}: {wanted}. It gets a number instead. A type name of its own says better what tells them apart.",
+    "ignore": "Leave alone",
+    "ignore_hint": "No more proposals for this entity; the supplied name stays.",
+    "ignored": "This entity is left alone"
   },
   "virtual_devices": {
     "automations": "Automations",

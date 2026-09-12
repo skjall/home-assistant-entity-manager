@@ -104,6 +104,9 @@ class EntityRestructurer:
         # How the entity part of each name was decided, keyed by entity_id.
         # Filled by build_naming_context; read by the hierarchy endpoint.
         self.last_resolutions: Dict[str, Dict[str, Any]] = {}
+        # Which proposals only got an id by numbering away from another entity.
+        # Filled by deduplicate_entity_ids; read by the hierarchy endpoint.
+        self.last_numbering: Dict[str, Dict[str, Any]] = {}
 
         # Initialize type mappings for translations
         if type_mappings:
@@ -943,6 +946,11 @@ class EntityRestructurer:
                 if candidate != target:
                     logger.info("Entity ID %s already taken, using %s for %s", target, candidate, entity_id)
 
+        # Who ends up with the plain id of each target: the entity assigned it,
+        # or one that already holds it and is not being renamed.
+        holders = {candidate: entity_id for entity_id, (candidate, _) in assigned.items()}
+
+        self.last_numbering = {}
         resolved = []
         for entity_id, new_entity_id, friendly_name in proposals:
             candidate, suffix = assigned.get(entity_id, (new_entity_id, 1))
@@ -950,6 +958,15 @@ class EntityRestructurer:
             # tells the two entities apart in the UI.
             if suffix > 1 and friendly_name:
                 friendly_name = f"{friendly_name} {suffix}"
+            if suffix > 1:
+                # The number is a way out, not an answer: two entities of one
+                # device really do render the same name, and only the user can
+                # say what tells them apart.
+                self.last_numbering[entity_id] = {
+                    "wanted": new_entity_id,
+                    "holder": holders.get(new_entity_id) or (new_entity_id if new_entity_id in self.entities else None),
+                    "suffix": suffix,
+                }
             resolved.append((entity_id, candidate, friendly_name))
         return resolved
 
