@@ -40,6 +40,10 @@ logger = logging.getLogger(__name__)
 # A host name, an address or a hardware address identifies a machine and says
 # nothing about what an entity is. Integrations sometimes supply one as the
 # entity name; taken literally it would become the entity's name and its ID.
+# Matter numbers its endpoints and puts the number into the entity name, even
+# where a device has only one: "Identifizieren (1)".
+_ENDPOINT_NUMBER = re.compile(r"^(.*\S)\s*\((\d+)\)$")
+
 _IDENTIFIER = re.compile(
     r"^(?:"
     r"\d{1,3}(?:\.\d{1,3}){3}"  # 10.2.10.103
@@ -521,6 +525,29 @@ class EntityRestructurer:
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
 
+    def _split_endpoint_number(self, name: str, registry: Dict[str, Any]) -> Tuple[str, str]:
+        """Separate a Matter endpoint number from the name it is attached to.
+
+        Matter writes "Identifizieren (1)" even on a device with a single
+        endpoint. The number is worth keeping only where a sibling carries the
+        same name, and then it belongs at the end of whatever the name becomes.
+        """
+        match = _ENDPOINT_NUMBER.match(name)
+        if not match:
+            return name, ""
+        base = match.group(1)
+        device_id = registry.get("device_id")
+        if not device_id:
+            return base, ""
+        siblings = 0
+        for other in self.entities.values():
+            if other.get("device_id") != device_id:
+                continue
+            other_match = _ENDPOINT_NUMBER.match(other.get("original_name") or "")
+            if other_match and other_match.group(1) == base:
+                siblings += 1
+        return base, f"({match.group(2)})" if siblings > 1 else ""
+
     @staticmethod
     def _without_device_prefix(name: str, prefixes: Tuple[str, ...]) -> str:
         """Drop the device's own name from the front of an entity name.
@@ -662,13 +689,22 @@ class EntityRestructurer:
         name = next((candidate for candidate in native if candidate), None)
         if name:
             name = self._without_device_prefix(name, prefixes) or None
+        # The number goes before anything decides the name, so a rule and a name
+        # from Home Assistant both cover every endpoint; it comes back after.
+        keep_number = ""
+        if name:
+            name, keep_number = self._split_endpoint_number(name, registry)
         # A host name or a hardware address identifies the machine, not what the
         # entity is; the sources below know better than "WAP-001-230.h01.lh.lan".
         unnamed = name is not None and self.is_identifier(name)
         if unnamed:
             name = None
         if name is not None:
-            return self._resolve_supplied_name(name, entity_id, registry)
+            resolution = self._resolve_supplied_name(name, entity_id, registry)
+            if keep_number:
+                resolution = dict(resolution)
+                resolution["value"] = f"{resolution['value']} {keep_number}".strip()
+            return resolution
 
         # ``name`` fields may hold a name this add-on wrote on a previous run.
         # Unwind the entity template before reusing them, otherwise each run

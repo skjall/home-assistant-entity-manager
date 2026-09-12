@@ -391,3 +391,20 @@ def test_template_sample_falls_back_without_entities(client, monkeypatch):
 
     assert data["entity_id"] is None
     assert data["context"]["area"] == "Living room"
+
+
+def test_an_exception_is_saved_before_the_registry_is_loaded(client, monkeypatch):
+    """The route asks for the registry itself instead of reaching into an empty state."""
+    loaded = web_ui.renamer_state["restructurer"]
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", None)
+
+    async def load():
+        web_ui.renamer_state["restructurer"] = loaded
+
+    monkeypatch.setattr(web_ui, "_ensure_registry_loaded", load)
+
+    response = client.post("/api/set_entity_override", json={"registry_id": "reg-unknown", "override_name": "Taste 1"})
+
+    assert response.status_code == 200
+    assert "error" not in response.get_json()
+    assert web_ui.renamer_state["naming_overrides"].get_entity_override("reg-unknown") == {"name": "Taste 1"}
