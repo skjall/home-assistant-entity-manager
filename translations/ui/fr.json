@@ -419,7 +419,12 @@
     "network_port_open": "Le port {port} est publié sur le port {host} de l’hôte.",
     "network_warning_any": "Le port est publié et tout le monde obtient une réponse. Si Home Assistant est joignable depuis internet, ce port l’est aussi, et seul le jeton le protège.",
     "network_warning_no_token": "Le port est publié mais aucun jeton n’existe, personne n’est donc servi. Créez un jeton si cet accès est souhaité.",
-    "network_ui_note": "Le port publié ne porte que l’API avec jeton. L’interface n’est servie que via Home Assistant."
+    "network_ui_note": "Le port publié ne porte que l’API avec jeton. L’interface n’est servie que via Home Assistant.",
+    "mcp_label": "Interface d’outils (MCP)",
+    "mcp_off": "Désactivée",
+    "mcp_read": "Lecture seule",
+    "mcp_write": "Lecture et écriture",
+    "mcp_address": "Adresse"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

@@ -35,14 +35,16 @@
     "enable_disabled_entities": false,
     "enable_z2m_bridge": true,
     "z2m_base_topic": "zigbee2mqtt",
-    "external_access": "off"
+    "external_access": "off",
+    "mcp": "off"
   },
   "schema": {
     "log_level": "list(debug|info|warning|error)?",
     "enable_disabled_entities": "bool?",
     "enable_z2m_bridge": "bool?",
     "z2m_base_topic": "str?",
-    "external_access": "list(off|lan|any)?"
+    "external_access": "list(off|lan|any)?",
+    "mcp": "list(off|read|write)?"
   },
   "environment": {
     "HA_URL": "http://supervisor/core",

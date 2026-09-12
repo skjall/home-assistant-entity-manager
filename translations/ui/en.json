@@ -399,7 +399,12 @@
     "network_port_open": "Port {port} is published as host port {host}.",
     "network_warning_any": "The port is published and everyone is answered. If Home Assistant is reachable from the internet, so is this port, and the token is all that protects it.",
     "network_warning_no_token": "The port is published but no token exists, so no one is served. Generate a token if the access is wanted.",
-    "network_ui_note": "The published port carries the token API only. The web interface is served through Home Assistant alone."
+    "network_ui_note": "The published port carries the token API only. The web interface is served through Home Assistant alone.",
+    "mcp_label": "Tool interface (MCP)",
+    "mcp_off": "Off",
+    "mcp_read": "Reading only",
+    "mcp_write": "Reading and writing",
+    "mcp_address": "Address"
   },
   "type_mappings": {
     "light": "Light",

@@ -6,6 +6,7 @@ export ENABLE_DISABLED_ENTITIES=$(bashio::config 'enable_disabled_entities' || e
 export ENABLE_Z2M_BRIDGE=$(bashio::config 'enable_z2m_bridge' || echo 'true')
 export Z2M_BASE_TOPIC=$(bashio::config 'z2m_base_topic' || echo 'zigbee2mqtt')
 export EXTERNAL_ACCESS=$(bashio::config 'external_access' || echo 'off')
+export MCP=$(bashio::config 'mcp' || echo 'off')
 
 bashio::log.info "Starting Entity Manager..."
 
@@ -18,6 +19,7 @@ bashio::log.info "HA_URL: ${HA_URL}"
 bashio::log.info "LOG_LEVEL: ${LOG_LEVEL}"
 bashio::log.info "ENABLE_DISABLED_ENTITIES: ${ENABLE_DISABLED_ENTITIES}"
 bashio::log.info "EXTERNAL_ACCESS: ${EXTERNAL_ACCESS}"
+bashio::log.info "MCP: ${MCP}"
 
 # Check if web_ui.py exists
 if [ -f /app/web_ui.py ]; then

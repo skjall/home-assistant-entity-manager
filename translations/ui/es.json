@@ -419,7 +419,12 @@
     "network_port_open": "El puerto {port} está publicado como puerto {host} del anfitrión.",
     "network_warning_any": "El puerto está publicado y se responde a cualquiera. Si Home Assistant es accesible desde internet, este puerto también lo es, y solo el token lo protege.",
     "network_warning_no_token": "El puerto está publicado pero no hay ningún token, así que no se atiende a nadie. Genera un token si quieres ese acceso.",
-    "network_ui_note": "Por el puerto publicado solo va la API con token. La interfaz se sirve únicamente a través de Home Assistant."
+    "network_ui_note": "Por el puerto publicado solo va la API con token. La interfaz se sirve únicamente a través de Home Assistant.",
+    "mcp_label": "Interfaz de herramientas (MCP)",
+    "mcp_off": "Desactivada",
+    "mcp_read": "Solo lectura",
+    "mcp_write": "Lectura y escritura",
+    "mcp_address": "Dirección"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

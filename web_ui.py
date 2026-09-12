@@ -17,13 +17,14 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import access
 import asgi
+import mcp_server
 from z2m import sync_z2m_name
+from registry import sync_ha_language
 from routes_naming import (
     SETTINGS_SECTIONS,
     entity_model,
     entity_type_key,
     naming as naming_routes,
-    sync_ha_language,
     type_key_counts,
     type_key_integration_counts,
     type_key_model_counts,
@@ -1902,4 +1903,10 @@ if __name__ == "__main__":
         print(f"\nStarting Web UI (Werkzeug dev server) on port {port}\n")
         app.run(debug=False, host="0.0.0.0", port=port)
     else:
-        asgi.serve(asgi.build(app), port)
+        # The MCP server is off unless the mcp option says otherwise; when it is
+        # on it is mounted beside the web interface and guarded the same way.
+        server = mcp_server.build()
+        mcp_app = None
+        if server is not None:
+            mcp_app = access.Guard(server.http_app(path="/"), lambda: renamer_state["api_token_store"])
+        asgi.serve(asgi.build(app, mcp_app), port)
