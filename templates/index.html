@@ -1521,6 +1521,13 @@
             font-size: 0.75rem;
             color: #1d4ed8;
         }
+        .drift-bar.is-blocked {
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+        .drift-bar.is-blocked .drift-text {
+            color: #b91c1c;
+        }
         .drift-actions {
             display: flex;
             gap: 6px;
@@ -2118,6 +2125,10 @@
                                                       :class="resolutionBadgeClass(entity)"
                                                       :title="resolutionExplain(entity)"
                                                       x-text="resolutionBadge(entity)"></span>
+                                                <span x-show="entity.blocked"
+                                                      class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-red-100 text-red-700"
+                                                      :title="t('entity.blocked_hint', {wanted: entity.blocked?.wanted || '', holder: entity.blocked?.holder || ''})"
+                                                      x-text="t('entity.blocked_badge')">numbered</span>
                                                 <span x-show="entity.drift"
                                                       class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-blue-100 text-blue-700"
                                                       :title="t('entity.drift_hint', {applied: entity.applied_name || ''})"
@@ -2224,7 +2235,18 @@
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
                                             </span>
                                         </div>
-                                        <div x-show="entity.drift" class="drift-bar">
+                                        <div x-show="entity.blocked" class="drift-bar is-blocked">
+                                            <span class="drift-text"
+                                                  x-text="t('entity.blocked_explain', {wanted: entity.blocked?.wanted || '', holder: entity.blocked?.holder || ''})"></span>
+                                            <div class="drift-actions">
+                                                <button type="button" class="btn btn-secondary btn-sm"
+                                                        @click="ignoreEntity(entity)"
+                                                        :disabled="applyingEntityId === entity.id"
+                                                        :title="t('entity.ignore_hint')"
+                                                        x-text="t('entity.ignore')">Leave alone</button>
+                                            </div>
+                                        </div>
+                                        <div x-show="entity.drift" class="drift-bar"
                                             <span class="drift-text"
                                                   x-text="t('entity.drift_explain', {applied: entity.applied_name || ''})"></span>
                                             <div class="drift-actions">
@@ -4943,6 +4965,28 @@
                         entity.override_name = answer.name;
                         entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: answer.name};
                         this.showMessage(this.t('entity.drift_adopted', {value: answer.name}), 'success');
+                    } catch (error) {
+                        this.showMessage(error.message, 'error');
+                    } finally {
+                        this.applyingEntityId = null;
+                    }
+                },
+
+                // Leaving an entity alone is a decision that has to last, so it
+                // is stored rather than remembered for this page view.
+                async ignoreEntity(entity) {
+                    if (!entity || this.applyingEntityId) return;
+                    this.applyingEntityId = entity.id;
+                    try {
+                        const response = await fetch('api/naming/exceptions/ignore', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({registry_id: entity.registry_id})
+                        });
+                        const answer = await response.json();
+                        if (!response.ok || answer.error) throw new Error(answer.error || 'Not saved');
+                        this.showMessage(this.t('entity.ignored'), 'success');
+                        await this.loadHierarchy();
                     } catch (error) {
                         this.showMessage(error.message, 'error');
                     } finally {

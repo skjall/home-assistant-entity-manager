@@ -112,7 +112,13 @@
     "drift_adopt_hint": "Le nom défini dans Home Assistant devient une exception pour cette seule entité.",
     "drift_overwrite": "Remplacer",
     "drift_overwrite_hint": "Écrire la proposition des règles par-dessus le nom modifié.",
-    "drift_adopted": "« {value} » conservé comme exception"
+    "drift_adopted": "« {value} » conservé comme exception",
+    "blocked_badge": "numérotée",
+    "blocked_hint": "« {wanted} » est déjà pris par {holder}, cette entité reçoit donc un numéro.",
+    "blocked_explain": "Cette entité produit la même adresse que {holder} : {wanted}. Elle reçoit donc un numéro. Un nom de type propre dit mieux ce qui les distingue.",
+    "ignore": "Laisser tranquille",
+    "ignore_hint": "Plus aucune proposition pour cette entité ; le nom fourni reste.",
+    "ignored": "Cette entité est laissée telle quelle"
   },
   "virtual_devices": {
     "automations": "Automatisations",
