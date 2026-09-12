@@ -1103,7 +1103,17 @@
                     }
                 },
 
+                // Editing a template means it is no longer the preset it started from.
+                syncNamingPreset() {
+                    const current = JSON.stringify(this.namingTemplates);
+                    const match = Object.entries(this.namingPresets)
+                        .find(([, preset]) => JSON.stringify(preset.templates) === current);
+                    this.namingPreset = match ? match[0] : 'custom';
+                    if (this.$refs.namingPresetSelect) this.$refs.namingPresetSelect.value = this.namingPreset;
+                },
+
                 async previewNamingTemplates() {
+                    this.syncNamingPreset();
                     const context = this.namingSample;
                     try {
                         const response = await fetch('api/naming_templates/preview', {
