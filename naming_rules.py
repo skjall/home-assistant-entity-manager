@@ -26,9 +26,9 @@ import shutil
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 import uuid
 
+from json_store import atomically, guarded, new_lock
 from naming_canon import canon
 from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
-from json_store import atomically, guarded, new_lock
 
 logger = logging.getLogger(__name__)
 

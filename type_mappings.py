@@ -20,8 +20,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from naming_canon import canon
 from json_store import atomically, guarded, new_lock
+from naming_canon import canon
 
 logger = logging.getLogger(__name__)
 

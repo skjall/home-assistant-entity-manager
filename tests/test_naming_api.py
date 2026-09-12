@@ -6,9 +6,9 @@ from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
 from naming_rules import NamingRules
 from naming_templates import NamingTemplates
-from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
 import routes_entities
 import routes_naming
+from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
 import web_ui
 
 
@@ -409,4 +409,6 @@ def test_an_exception_is_saved_before_the_registry_is_loaded(client, monkeypatch
 
     assert response.status_code == 200
     assert "error" not in response.get_json()
-    assert web_ui.renamer_state["naming_overrides"].get_entity_override("reg-unknown") == {"name": "Taste 1"}
+    stored = web_ui.renamer_state["naming_overrides"].get_entity_override("reg-unknown")
+    assert stored["name"] == "Taste 1"
+    assert stored["source"] == "user"

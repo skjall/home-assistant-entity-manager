@@ -359,8 +359,15 @@ class EntityRestructurer:
 
         return "sensor"  # Default
 
-    def build_naming_context(self, entity_id: str, state_info: Dict[str, Any]) -> Dict[str, str]:
-        """Build the complete template context for an entity."""
+    def build_naming_context(
+        self, entity_id: str, state_info: Dict[str, Any], ignore_exception: bool = False
+    ) -> Dict[str, str]:
+        """Build the complete template context for an entity.
+
+        ``ignore_exception`` answers what the entity would be called if it had
+        no exception - the one question needed to tell an exception that still
+        changes something from one a rule has meanwhile caught up with.
+        """
         domain, _, object_id = entity_id.partition(".")
         entity_reg = self.entities.get(entity_id, {})
         device_id = entity_reg.get("device_id") or ""
@@ -378,7 +385,9 @@ class EntityRestructurer:
             or ""
         )
         registry_id = entity_reg.get("id", "")
-        entity_override = self.naming_overrides.get_entity_override(registry_id) if registry_id else None
+        entity_override = (
+            self.naming_overrides.get_entity_override(registry_id) if registry_id and not ignore_exception else None
+        )
 
         integration = entity_reg.get("platform") or ""
         if not integration and self.type_mappings:
@@ -404,6 +413,9 @@ class EntityRestructurer:
         }
         device_name = self._base_device_name(raw_device_name, partial_context)
         partial_context["device"] = device_name
+        # A hypothetical answer must not replace the real one that the entity
+        # list reads back out of last_resolutions.
+        previous = self.last_resolutions.get(entity_id) if ignore_exception else None
         partial_context["entity"] = self._base_entity_name(
             entity_id,
             entity_reg,
@@ -421,6 +433,11 @@ class EntityRestructurer:
             ),
             partial_context,
         )
+        if ignore_exception:
+            if previous is None:
+                self.last_resolutions.pop(entity_id, None)
+            else:
+                self.last_resolutions[entity_id] = previous
         return {key: str(value or "") for key, value in partial_context.items()}
 
     def _base_device_name(self, name: str, context: Dict[str, str]) -> str:
@@ -727,6 +744,15 @@ class EntityRestructurer:
                 "platform": registry.get("platform") or None,
                 "candidates": [{"won_by": won_by, "value": value}],
             }
+
+        if override and override.get("keep_original"):
+            # Somebody asked for this entity to be left alone: whatever the
+            # integration supplies stays, and no rule gets to say otherwise.
+            supplied = next(
+                (candidate for candidate in (registry.get("original_name"), state.get("original_name")) if candidate),
+                "",
+            )
+            return plain(self._without_device_prefix(supplied, prefixes) or supplied, "ignored")
 
         override_name = override.get("name") if override else None
         if override_name:
