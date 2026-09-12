@@ -957,7 +957,13 @@
                 <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;">
                     <span :style="'flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: ' + accessColor()"></span>
                     <div>
-                        <div style="font-weight: 600;" x-text="t('settings.access_state_' + (network.policy || 'off'))"></div>
+                        <div style="font-weight: 600;" x-text="t('settings.access_state_' + (network.state || 'off'))"></div>
+                        <div x-show="(network.networks || []).length" x-cloak
+                             style="font-size: 0.85rem; color: #374151; margin-top: 2px;">
+                            <template x-for="entry in (network.networks || [])" :key="entry">
+                                <code style="margin-right: 6px;" x-text="entry"></code>
+                            </template>
+                        </div>
                         <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;" x-text="accessDetail()"></div>
                     </div>
                 </div>
@@ -974,9 +980,11 @@
                             <span style="font-weight: 600;" x-text="t('settings.access_token')"></span>
                             <span> · </span>
                             <span x-text="apiToken.configured ? t('settings.api_token_status_active') : t('settings.api_token_status_none')"></span>
+                            <span> · </span>
+                            <span x-text="t('settings.access_mode_' + (network.api || 'read'))"></span>
                         </div>
                         <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;" x-text="tokenDetail()"></div>
-                        <div x-show="publishedPort()" x-cloak style="margin-top: 6px;">
+                        <div x-show="publishedPort() && (network.api || 'read') !== 'off'" x-cloak style="margin-top: 6px;">
                             <span style="font-size: 0.85rem; color: #6b7280;" x-text="t('settings.access_address')"></span>
                             <span style="font-size: 0.85rem; color: #6b7280;">: </span>
                             <code style="font-size: 0.85rem;" x-text="externalUrl('/api/rename_log')"></code>
@@ -1017,7 +1025,7 @@
                     <div style="font-size: 0.9rem; color: #374151;">
                         <span style="font-weight: 600;" x-text="t('settings.access_mcp')"></span>
                         <span> · </span>
-                        <span x-text="t('settings.mcp_' + (network.mcp || 'off'))"></span>
+                        <span x-text="t('settings.access_mode_' + (network.mcp || 'off'))"></span>
                     </div>
                     <div x-show="(network.mcp || 'off') !== 'off' && publishedPort()" x-cloak
                          style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;">
@@ -1117,7 +1125,7 @@
                 importExportText: '',
                 importResult: null,
                 apiToken: { configured: false, created_at: null, last_used_at: null },
-                network: { policy: 'off', published: {} },
+                network: { state: 'off', networks: [], published: {} },
                 newApiToken: '',
                 tokenCopied: false,
                 namingPreset: 'entity_manager',
@@ -1524,21 +1532,22 @@
                 networkWarning() {
                     if (!this.publishedPort()) return '';
                     if (!this.apiToken.configured) return this.t('settings.network_warning_no_token');
-                    if (this.network.policy === 'any') return this.t('settings.network_warning_any');
+                    if (this.network.state === 'any') return this.t('settings.network_warning_any');
                     return '';
                 },
 
                 // Grey when nothing gets in, amber when anyone may try, green
                 // for the deliberate middle: the local network only.
                 accessColor() {
-                    if (!this.publishedPort() || (this.network.policy || 'off') === 'off') return '#9ca3af';
-                    return this.network.policy === 'any' ? '#f59e0b' : '#10b981';
+                    if (!this.publishedPort() || (this.network.state || 'off') === 'off') return '#9ca3af';
+                    return this.network.state === 'any' ? '#f59e0b' : '#10b981';
                 },
 
                 // The line under the headline. A bare port number tells nobody
                 // where anything is, so the addresses below carry that job.
                 accessDetail() {
                     if (!this.publishedPort()) return this.t('settings.access_no_port');
+                    if ((this.network.state || 'off') === 'off') return '';
                     return this.t('settings.access_only_address');
                 },
 

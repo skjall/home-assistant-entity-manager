@@ -5,9 +5,10 @@ Ingress, so an Ingress request is trusted. Everything that reaches the add-on
 past Ingress does so over a published port, and who may be answered there is the
 external_access setting (see external_access.py), which refuses by default.
 
-Within what the setting allows, a generated token (see ApiTokenStore) opens one
-read-only route for scripts: GET /api/rename_log. The token is created on demand
-from the web UI, shown once and stored only as a hash.
+Within what the setting allows, a generated token (see ApiTokenStore) opens a
+named set of routes for scripts. How far that goes is the external_api setting:
+reading the state, or changing it as well. The token is created on demand from
+the web UI, shown once and stored only as a hash.
 """
 
 import json
@@ -17,8 +18,43 @@ from flask import abort, request
 
 import external_access
 
-# Paths a token opens over a directly-exposed port. Read-only.
-EXTERNAL_PATHS = frozenset({"/api/rename_log"})
+# What a token opens over a published port. Matched against the route's rule
+# rather than the request path, so a rule carrying a parameter is recognised
+# too, and a route that is not named here stays unreachable from outside no
+# matter what it does.
+READ_ROUTES = frozenset(
+    {
+        "/api/rename_log",
+        "/api/stats",
+        "/api/areas",
+        "/api/all_entities",
+        "/api/hierarchy",
+        "/api/naming/rules",
+        "/api/naming/settings",
+    }
+)
+
+# Only reachable with external_api set to write. These change the registry or
+# the rules behind it; everything else a browser can do stays Ingress-only.
+WRITE_ROUTES = frozenset(
+    {
+        "/api/naming/rules",
+        "/api/naming/rules/<rule_id>",
+        "/api/naming/settings",
+        "/api/set_entity_override",
+        "/api/rename_entity",
+        "/api/execute",
+    }
+)
+
+
+def route_allowed(rule: str, method: str, mode: str) -> bool:
+    """True when ``mode`` opens this route for a caller outside Ingress."""
+    if mode == external_access.API_OFF or not rule:
+        return False
+    if method in ("GET", "HEAD"):
+        return rule in READ_ROUTES
+    return mode == external_access.API_WRITE and rule in WRITE_ROUTES
 
 
 class CapturePeerIP:
@@ -70,16 +106,17 @@ def install(app: Any, token_store: Callable[[], Any]) -> None:
 
         An Ingress request passes untouched. A direct request over a published
         port has no authentication behind it, so three things must hold: the
-        external_access setting has to allow that caller, the route has to be
-        one of the few meant for callers outside, and a valid token has to be
-        presented. The web UI is not among them: it is served through Ingress
-        only.
+        external_access setting has to allow that caller, the external_api
+        setting has to open that route for that method, and a valid token has to
+        be presented. The web UI is never among the opened routes: it is served
+        through Ingress only.
         """
         if is_ingress_request():
             return None
         if not external_access.allows(peer_address()):
             abort(403)
-        if request.path not in EXTERNAL_PATHS or request.method != "GET":
+        rule = request.url_rule.rule if request.url_rule else ""
+        if not route_allowed(rule, request.method, external_access.api_mode()):
             abort(403)
         store = token_store()
         if not store.exists() or not store.verify(provided_token()):

@@ -2,8 +2,9 @@
 
 Home Assistant authenticates the user before it proxies a request through
 Ingress, so Ingress traffic is trusted. A direct request over a published port
-is answered only where the external_access setting allows that caller, and the
-API beyond the read-only rename log stays Ingress-only either way.
+is answered only where the external_access setting allows that caller, only on
+the routes external_api opens, and only with a valid token. Everything else -
+the web interface above all - stays Ingress-only either way.
 
 The real peer is simulated via REMOTE_ADDR, which the _CapturePeerIP middleware
 copies into the per-request peer address the gate reads.
@@ -30,6 +31,7 @@ def store():
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.delenv("EXTERNAL_ACCESS", raising=False)
+    monkeypatch.delenv("EXTERNAL_API", raising=False)
     web_ui.app.config["TESTING"] = True
     return web_ui.app.test_client()
 
@@ -180,3 +182,66 @@ def test_a_forwarded_header_cannot_claim_to_be_ingress(client, store):
         environ_overrides={"REMOTE_ADDR": INTERNET_IP},
     )
     assert resp.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# How far the token reaches is its own setting
+# --------------------------------------------------------------------------- #
+
+
+def test_reading_covers_more_than_the_rename_log(client, store, monkeypatch):
+    """A script that may read should not have to go through one keyhole."""
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
+    token = store.generate()
+
+    assert _req(client, "/api/naming/rules", DIRECT_IP, token=token).status_code == 200
+    assert _req(client, "/api/naming/settings", DIRECT_IP, token=token).status_code == 200
+
+
+def test_reading_does_not_include_changing(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
+    monkeypatch.setenv("EXTERNAL_API", "read")
+    token = store.generate()
+
+    assert _req(client, "/api/naming/rules", DIRECT_IP, token=token, method="POST").status_code == 403
+    assert _req(client, "/api/rename_entity", DIRECT_IP, token=token, method="POST").status_code == 403
+
+
+def test_writing_opens_the_routes_that_change_something(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
+    monkeypatch.setenv("EXTERNAL_API", "write")
+    token = store.generate()
+
+    # Reaching the route is what the gate decides; what the route then makes of
+    # an empty body is the route's business.
+    assert _req(client, "/api/naming/rules", DIRECT_IP, token=token, method="POST").status_code != 403
+    assert _req(client, "/api/rename_entity", DIRECT_IP, token=token, method="POST").status_code != 403
+
+
+def test_writing_still_leaves_everything_unnamed_closed(client, store, monkeypatch):
+    """Write means the named routes, not every route that takes a POST."""
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
+    monkeypatch.setenv("EXTERNAL_API", "write")
+    token = store.generate()
+
+    assert _req(client, "/api/api_token", DIRECT_IP, token=token, method="POST").status_code == 403
+    assert _req(client, "/api/execute_direct", DIRECT_IP, token=token, method="POST").status_code == 403
+    assert _req(client, "/", DIRECT_IP, token=token).status_code == 403
+
+
+def test_the_api_can_be_switched_off_while_the_network_stays_allowed(client, store, monkeypatch):
+    """Turning the API off must close it without touching who may connect."""
+    monkeypatch.setenv("EXTERNAL_ACCESS", "lan")
+    monkeypatch.setenv("EXTERNAL_API", "off")
+    token = store.generate()
+
+    assert _req(client, "/api/rename_log?entity_id=light.x", DIRECT_IP, token=token).status_code == 403
+    assert _req(client, "/api/naming/rules", DIRECT_IP, token=token).status_code == 403
+
+
+def test_a_named_network_decides_who_is_answered(client, store, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_ACCESS", "192.168.1.0/24")
+    token = store.generate()
+
+    assert _req(client, "/api/naming/rules", DIRECT_IP, token=token).status_code == 200
+    assert _req(client, "/api/naming/rules", "192.168.2.50", token=token).status_code == 403

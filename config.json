@@ -28,23 +28,27 @@
     "5000/tcp": null
   },
   "ports_description": {
-    "5000/tcp": "Web interface without Ingress. Only answers callers allowed by the 'external_access' option, which refuses everyone by default."
+    "5000/tcp": "The API and, if enabled, the MCP endpoint - never the web interface. Answers only callers from the networks listed in 'external_access' (empty by default, which refuses everyone) and only with a valid token."
   },
   "options": {
     "log_level": "info",
     "enable_disabled_entities": false,
     "enable_z2m_bridge": true,
     "z2m_base_topic": "zigbee2mqtt",
-    "external_access": "off",
-    "mcp": "off"
+    "external_access": [],
+    "mcp": "off",
+    "external_api": "read"
   },
   "schema": {
     "log_level": "list(debug|info|warning|error)?",
     "enable_disabled_entities": "bool?",
     "enable_z2m_bridge": "bool?",
     "z2m_base_topic": "str?",
-    "external_access": "list(off|lan|any)?",
-    "mcp": "list(off|read|write)?"
+    "external_access": [
+      "str?"
+    ],
+    "mcp": "list(off|read|write)?",
+    "external_api": "list(off|read|write)?"
   },
   "environment": {
     "HA_URL": "http://supervisor/core",
