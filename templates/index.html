@@ -848,8 +848,29 @@
             color: #374151;
             margin-bottom: 2px;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            /* Two lines rather than a cut end: the difference is often the last word. */
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow-wrap: anywhere;
+        }
+
+        /* What both names share steps back; what changes stands out. */
+        .diff-same {
+            color: #9ca3af;
+        }
+        .diff-old {
+            background: #fee2e2;
+            color: #b91c1c;
+            border-radius: 3px;
+            padding: 0 2px;
+            text-decoration: line-through;
+        }
+        .diff-new {
+            background: #dcfce7;
+            color: #15803d;
+            border-radius: 3px;
+            padding: 0 2px;
         }
 
         .entity-card-simple .new-state .friendly-name {
@@ -864,8 +885,10 @@
             border-radius: 4px;
             font-family: monospace;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow-wrap: anywhere;
             max-width: 100%;
             display: inline-block;
         }
@@ -2064,7 +2087,10 @@
                                     <div class="entity-names" @click="selectedArea !== '__no_area__' && toggleEntityExpand(entity)">
                                         <div class="current-state">
                                             <div class="friendly-name">
-                                                <span x-text="entity.original_name || t('entity.no_name')"></span>
+                                                <span :title="entity.original_name || ''"
+                                                      x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
+                                                              ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'old')
+                                                              : escapeHtml(entity.original_name || t('entity.no_name'))"></span>
                                                 <span x-show="selectedArea !== '__no_area__' && resolutionBadge(entity)"
                                                       class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle"
                                                       :class="resolutionBadgeClass(entity)"
@@ -2076,7 +2102,10 @@
                                                     <i class="ri-ghost-line"></i>
                                                 </span>
                                             </div>
-                                            <code class="entity-id" x-text="entity.id"></code>
+                                            <code class="entity-id" :title="entity.id"
+                                                  x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
+                                                          ? diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'old')
+                                                          : escapeHtml(entity.id)"></code>
                                         </div>
 
                                         <!-- Arrow and new state - hide in no-area mode -->
@@ -2088,8 +2117,10 @@
 
                                         <template x-if="selectedArea !== '__no_area__' && entityNeedsRename(entity)">
                                             <div class="new-state">
-                                                <div class="friendly-name" x-text="entity._previewName || getEntityFriendlyName(entity)"></div>
-                                                <code class="entity-id" x-text="entity._previewId || getNewEntityId(entity)"></code>
+                                                <div class="friendly-name" :title="entity._previewName || getEntityFriendlyName(entity)"
+                                                     x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'new')"></div>
+                                                <code class="entity-id" :title="entity._previewId || getNewEntityId(entity)"
+                                                      x-html="diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'new')"></code>
                                             </div>
                                         </template>
 
@@ -4207,6 +4238,37 @@
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'Failed to preview naming');
                     return data.rendered;
+                },
+
+                escapeHtml(text) {
+                    return String(text ?? '').replace(/[&<>"']/g, character => ({
+                        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+                    }[character]));
+                },
+
+                // What the two names share, and where they part: a shared start and
+                // a shared end leave the difference in the middle, which is where a
+                // hyphen turning into a space becomes visible.
+                diffHtml(before, after, side) {
+                    before = String(before ?? '');
+                    after = String(after ?? '');
+                    const text = side === 'old' ? before : after;
+                    if (!before || !after || before === after) return this.escapeHtml(text);
+                    let start = 0;
+                    const shortest = Math.min(before.length, after.length);
+                    while (start < shortest && before[start] === after[start]) start++;
+                    let end = 0;
+                    while (
+                        end < shortest - start &&
+                        before[before.length - 1 - end] === after[after.length - 1 - end]
+                    ) end++;
+                    const middle = text.slice(start, text.length - end);
+                    const mark = side === 'old' ? 'diff-old' : 'diff-new';
+                    return (
+                        '<span class="diff-same">' + this.escapeHtml(text.slice(0, start)) + '</span>' +
+                        (middle ? '<span class="' + mark + '">' + this.escapeHtml(middle) + '</span>' : '') +
+                        '<span class="diff-same">' + this.escapeHtml(text.slice(text.length - end)) + '</span>'
+                    );
                 },
 
                 // A badge marks what the user decided: a rule or an exception.
