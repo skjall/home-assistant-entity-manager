@@ -104,7 +104,15 @@
     "explain_rule_model": "Alle „{original}“-Entitäten von {model} heißen bei dir „{value}“",
     "explain_exception": "Nur diese Entität heißt „{value}“ statt „{original}“",
     "explain_supplied": "{source} liefert „{value}“",
-    "open_rule": "Regel ansehen"
+    "open_rule": "Regel ansehen",
+    "drift_badge": "in HA geändert",
+    "drift_hint": "Nach dem Übernehmen in Home Assistant geändert. Hier stand „{applied}“.",
+    "drift_explain": "Dieser Name wurde in Home Assistant geändert. Von hier stammte „{applied}“.",
+    "drift_adopt": "Namen behalten",
+    "drift_adopt_hint": "Der in Home Assistant gesetzte Name wird zur Ausnahme für diese eine Entität.",
+    "drift_overwrite": "Überschreiben",
+    "drift_overwrite_hint": "Den Vorschlag aus den Regeln über den geänderten Namen schreiben.",
+    "drift_adopted": "„{value}“ als Ausnahme übernommen"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",
@@ -406,7 +414,22 @@
     "access_mcp_howto_hint": "Diesen Abschnitt in die MCP-Konfiguration des Assistenten übernehmen und den Platzhalter durch den Token ersetzen. Der Token wird beim Erzeugen einmal angezeigt.",
     "access_mcp_token_placeholder": "Token",
     "access_docs": "API-Dokumentation öffnen",
-    "access_docs_hint": "Jede Route mit ihren Feldern, zum Nachlesen und Ausprobieren."
+    "access_docs_hint": "Jede Route mit ihren Feldern, zum Nachlesen und Ausprobieren.",
+    "exceptions": "Ausnahmen",
+    "exceptions_hint": "Entitäten, die von Hand benannt sind. Eine Ausnahme gilt vor jeder Regel.",
+    "exceptions_entity": "Entität",
+    "exceptions_name": "Name",
+    "exceptions_source": "Herkunft",
+    "exceptions_without": "Ohne die Ausnahme",
+    "exceptions_from_here": "hier gesetzt",
+    "exceptions_from_ha": "aus Home Assistant",
+    "exceptions_ignored": "wird in Ruhe gelassen",
+    "exceptions_orphan": "Entität fehlt",
+    "exceptions_redundant": "gleich",
+    "exceptions_remove": "Ausnahme entfernen",
+    "exceptions_none": "Keine Ausnahmen. Alle Namen kommen aus den Regeln.",
+    "exceptions_cleanup": "{count} aufräumen",
+    "exceptions_cleanup_hint": "Entfernt nur die Ausnahmen, die nichts mehr ändern, und die ohne Entität."
   },
   "type_mappings": {
     "light": "Licht",

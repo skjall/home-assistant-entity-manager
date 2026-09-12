@@ -104,7 +104,15 @@
     "explain_rule_model": "Toutes les entités « {original} » de {model} s’appellent « {value} » chez vous",
     "explain_exception": "Cette entité seule s’appelle « {value} » au lieu de « {original} »",
     "explain_supplied": "{source} fournit « {value} »",
-    "open_rule": "Voir la règle"
+    "open_rule": "Voir la règle",
+    "drift_badge": "modifié dans HA",
+    "drift_hint": "Modifié dans Home Assistant après l’application. C’était « {applied} ».",
+    "drift_explain": "Ce nom a été modifié dans Home Assistant. « {applied} » venait d’ici.",
+    "drift_adopt": "Garder ce nom",
+    "drift_adopt_hint": "Le nom défini dans Home Assistant devient une exception pour cette seule entité.",
+    "drift_overwrite": "Remplacer",
+    "drift_overwrite_hint": "Écrire la proposition des règles par-dessus le nom modifié.",
+    "drift_adopted": "« {value} » conservé comme exception"
   },
   "virtual_devices": {
     "automations": "Automatisations",
@@ -426,7 +434,22 @@
     "access_mcp_howto_hint": "Copiez ceci dans la configuration MCP de l'assistant et remplacez l'espace réservé par le jeton. Le jeton n'est affiché qu'une fois, à sa création.",
     "access_mcp_token_placeholder": "jeton",
     "access_docs": "Ouvrir la documentation de l'API",
-    "access_docs_hint": "Chaque route avec ses champs, à lire et à essayer."
+    "access_docs_hint": "Chaque route avec ses champs, à lire et à essayer.",
+    "exceptions": "Exceptions",
+    "exceptions_hint": "Entités nommées à la main. Une exception passe avant toute règle.",
+    "exceptions_entity": "Entité",
+    "exceptions_name": "Nom",
+    "exceptions_source": "Origine",
+    "exceptions_without": "Sans elle",
+    "exceptions_from_here": "définie ici",
+    "exceptions_from_ha": "depuis Home Assistant",
+    "exceptions_ignored": "laissée telle quelle",
+    "exceptions_orphan": "entité absente",
+    "exceptions_redundant": "identique",
+    "exceptions_remove": "Supprimer l’exception",
+    "exceptions_none": "Aucune exception. Tous les noms viennent des règles.",
+    "exceptions_cleanup": "Nettoyer {count}",
+    "exceptions_cleanup_hint": "Ne supprime que les exceptions qui ne changent plus rien et celles sans entité."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

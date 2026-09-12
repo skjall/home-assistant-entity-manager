@@ -886,6 +886,70 @@
             </div>
         </div>
 
+        <!-- Entities named by hand, past every rule -->
+        <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'rules'">
+            <div class="section-header">
+                <h2>
+                    <i class="ri-user-star-line"></i>
+                    <span x-text="t('settings.exceptions')">Exceptions</span>
+                </h2>
+                <button class="add-btn" @click="cleanUpExceptions()"
+                        x-show="tidyableExceptions.length > 0"
+                        :title="t('settings.exceptions_cleanup_hint')">
+                    <i class="ri-brush-line"></i>
+                    <span x-text="t('settings.exceptions_cleanup', {count: tidyableExceptions.length})">Clean up</span>
+                </button>
+            </div>
+            <p class="section-hint" x-text="t('settings.exceptions_hint')"></p>
+
+            <table class="mapping-table" x-show="exceptions.length > 0">
+                <thead>
+                    <tr>
+                        <th x-text="t('settings.exceptions_entity')">Entity</th>
+                        <th x-text="t('settings.exceptions_name')">Name</th>
+                        <th x-text="t('settings.exceptions_source')">From</th>
+                        <th x-text="t('settings.exceptions_without')">Without it</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="row in exceptions" :key="row.registry_id">
+                        <tr>
+                            <td>
+                                <code class="type-key" x-text="row.entity_id || row.registry_id"></code>
+                                <span x-show="row.orphan" class="badge badge-gray"
+                                      x-text="t('settings.exceptions_orphan')">gone</span>
+                            </td>
+                            <td>
+                                <span x-show="!row.keep_original" x-text="row.name"></span>
+                                <span x-show="row.keep_original" class="text-gray-500"
+                                      x-text="t('settings.exceptions_ignored')">ignored</span>
+                            </td>
+                            <td x-text="row.source === 'ha_ui' ? t('settings.exceptions_from_ha') : t('settings.exceptions_from_here')"></td>
+                            <td>
+                                <span x-text="row.would_be"></span>
+                                <span x-show="row.redundant" class="badge badge-gray"
+                                      x-text="t('settings.exceptions_redundant')">same</span>
+                            </td>
+                            <td>
+                                <div class="action-btns">
+                                    <button class="action-btn delete" @click="deleteException(row)"
+                                            :title="t('settings.exceptions_remove')">
+                                        <i class="ri-delete-bin-line"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+
+            <div class="empty-state" x-show="exceptions.length === 0">
+                <i class="ri-user-star-line"></i>
+                <p x-text="t('settings.exceptions_none')"></p>
+            </div>
+        </div>
+
         <!-- Names that came over with two spellings and need a decision -->
         <div class="mapping-section" style="margin-top: 24px;"
              x-show="section === 'rules' && migration?.conflicts?.length">
@@ -1135,6 +1199,7 @@
                 systemRules: [],
                 filteredRules: [],
                 originals: [],
+                exceptions: [],
                 migration: null,
                 filteredMappings: [],
                 userMappingCount: 0,
@@ -1224,6 +1289,38 @@
                     );
                     await this.loadNamingTemplates();
                     await this.loadSampleEntities();
+                    await this.loadExceptions();
+                },
+
+                // An exception is the last word on a name, so the list has to
+                // say which ones still change anything before offering to
+                // sweep any of them away.
+                get tidyableExceptions() {
+                    return this.exceptions.filter(row => row.redundant || row.orphan);
+                },
+
+                async loadExceptions() {
+                    try {
+                        const response = await fetch('api/naming/exceptions');
+                        const data = await response.json();
+                        this.exceptions = data.exceptions || [];
+                    } catch (error) {
+                        console.error('Could not load the exceptions:', error);
+                    }
+                },
+
+                async deleteException(row) {
+                    const response = await fetch('api/naming/exceptions/' + encodeURIComponent(row.registry_id), {
+                        method: 'DELETE'
+                    });
+                    if (!response.ok) return;
+                    await this.loadExceptions();
+                },
+
+                async cleanUpExceptions() {
+                    const response = await fetch('api/naming/exceptions/cleanup', {method: 'POST'});
+                    if (!response.ok) return;
+                    await this.loadExceptions();
                 },
 
                 // Rules are applied in one language; align it with the UI language
