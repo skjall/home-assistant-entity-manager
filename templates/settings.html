@@ -953,58 +953,45 @@
                 </h2>
             </div>
             <div style="padding: 20px;">
-                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 16px;" x-text="t('settings.api_access_hint')"></p>
-
-                <!-- Reachability: the setting and what is actually published, side by side -->
-                <div style="margin-bottom: 20px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
-                    <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;" x-text="t('settings.network_title')"></div>
-                    <div style="font-size: 0.9rem; color: #374151; margin-bottom: 4px;">
-                        <span x-text="t('settings.network_policy')"></span><span>: </span>
-                        <span style="font-weight: 600;" x-text="t('settings.network_policy_' + (network.policy || 'off'))"></span>
-                    </div>
-                    <div style="font-size: 0.85rem; color: #6b7280; margin-bottom: 8px;" x-text="t('settings.network_policy_hint')"></div>
-                    <div style="font-size: 0.9rem; color: #374151;">
-                        <span x-show="!publishedPort()" x-text="t('settings.network_port_closed')"></span>
-                        <template x-if="publishedPort()">
-                            <span x-text="t('settings.network_port_open', {port: publishedPort().port, host: publishedPort().host})"></span>
-                        </template>
-                    </div>
-                    <div x-show="networkWarning()" x-cloak
-                         style="margin-top: 10px; padding: 10px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px; color: #92400e; font-size: 0.85rem;">
-                        <i class="ri-alert-line"></i>
-                        <span x-text="networkWarning()"></span>
-                    </div>
-                    <div x-show="publishedPort()" x-cloak
-                         style="margin-top: 8px; font-size: 0.85rem; color: #6b7280;" x-text="t('settings.network_ui_note')"></div>
-                    <div style="margin-top: 10px; font-size: 0.9rem; color: #374151;">
-                        <span x-text="t('settings.mcp_label')"></span><span>: </span>
-                        <span style="font-weight: 600;" x-text="t('settings.mcp_' + (network.mcp || 'off'))"></span>
-                    </div>
-                    <div x-show="(network.mcp || 'off') !== 'off' && publishedPort()" x-cloak
-                         style="margin-top: 4px; font-size: 0.85rem; color: #6b7280;">
-                        <span x-text="t('settings.mcp_address')"></span><span>: </span>
-                        <code x-text="'http://&lt;home-assistant&gt;:' + publishedPort().host + '/mcp'"></code>
+                <!-- What is reachable, in one line; the details belong under it. -->
+                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;">
+                    <span :style="'flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: ' + accessColor()"></span>
+                    <div>
+                        <div style="font-weight: 600;" x-text="t('settings.access_state_' + (network.policy || 'off'))"></div>
+                        <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;" x-text="accessDetail()"></div>
                     </div>
                 </div>
 
-                <div style="margin-bottom: 16px; font-size: 0.9rem; color: #374151;">
-                    <span x-show="!apiToken.configured" x-text="t('settings.api_token_status_none')"></span>
-                    <template x-if="apiToken.configured">
-                        <span>
-                            <span style="font-weight: 600;" x-text="t('settings.api_token_status_active')"></span>
-                            <span> · </span>
-                            <span x-text="t('settings.api_token_created')"></span><span>: </span>
-                            <span x-text="formatTokenDate(apiToken.created_at)"></span>
-                            <span> · </span>
-                            <span x-text="t('settings.api_token_last_used')"></span><span>: </span>
-                            <span x-text="apiToken.last_used_at ? formatTokenDate(apiToken.last_used_at) : t('settings.api_token_never')"></span>
-                        </span>
-                    </template>
+                <div x-show="networkWarning()" x-cloak
+                     style="margin-bottom: 16px; padding: 10px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px; color: #92400e; font-size: 0.85rem;">
+                    <i class="ri-alert-line"></i>
+                    <span x-text="networkWarning()"></span>
                 </div>
 
-                <!-- One-time token reveal -->
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid #e5e7eb;">
+                    <div style="flex: 1; min-width: 220px;">
+                        <div style="font-size: 0.9rem; color: #374151;">
+                            <span style="font-weight: 600;" x-text="t('settings.access_token')"></span>
+                            <span> · </span>
+                            <span x-text="apiToken.configured ? t('settings.api_token_status_active') : t('settings.api_token_status_none')"></span>
+                        </div>
+                        <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;" x-text="tokenDetail()"></div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="add-btn" @click="generateApiToken()">
+                            <i class="ri-key-2-line"></i>
+                            <span x-text="apiToken.configured ? t('settings.api_token_regenerate') : t('settings.api_token_generate')">Generate token</span>
+                        </button>
+                        <button class="add-btn" x-show="apiToken.configured" @click="revokeApiToken()" style="background: #ef4444;">
+                            <i class="ri-delete-bin-line"></i>
+                            <span x-text="t('settings.api_token_revoke')">Revoke</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- One-time token reveal, right where the button that creates it is. -->
                 <div x-show="newApiToken" x-cloak
-                     style="margin-bottom: 16px; padding: 12px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px;">
+                     style="margin-bottom: 12px; padding: 12px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px;">
                     <p style="color: #92400e; font-size: 0.85rem; margin-bottom: 8px;" x-text="t('settings.api_token_show_once')"></p>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" readonly :value="newApiToken" x-ref="tokenField"
@@ -1016,16 +1003,19 @@
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 12px;">
-                    <button class="add-btn" @click="generateApiToken()">
-                        <i class="ri-key-2-line"></i>
-                        <span x-text="apiToken.configured ? t('settings.api_token_regenerate') : t('settings.api_token_generate')">Generate token</span>
-                    </button>
-                    <button class="add-btn" x-show="apiToken.configured" @click="revokeApiToken()" style="background: #ef4444;">
-                        <i class="ri-delete-bin-line"></i>
-                        <span x-text="t('settings.api_token_revoke')">Revoke</span>
-                    </button>
+                <div style="padding: 12px 0; border-top: 1px solid #e5e7eb;">
+                    <div style="font-size: 0.9rem; color: #374151;">
+                        <span style="font-weight: 600;" x-text="t('settings.access_mcp')"></span>
+                        <span> · </span>
+                        <span x-text="t('settings.mcp_' + (network.mcp || 'off'))"></span>
+                    </div>
+                    <div x-show="(network.mcp || 'off') !== 'off' && publishedPort()" x-cloak
+                         style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;">
+                        <code x-text="'http://&lt;home-assistant&gt;:' + (publishedPort() ? publishedPort().host : '') + '/mcp'"></code>
+                    </div>
                 </div>
+
+                <div style="margin-top: 12px; font-size: 0.85rem; color: #6b7280;" x-text="t('settings.access_change_note')"></div>
             </div>
         </div>
 
@@ -1520,6 +1510,30 @@
                     if (!this.apiToken.configured) return this.t('settings.network_warning_no_token');
                     if (this.network.policy === 'any') return this.t('settings.network_warning_any');
                     return '';
+                },
+
+                // Grey when nothing gets in, amber when anyone may try, green
+                // for the deliberate middle: the local network only.
+                accessColor() {
+                    if (!this.publishedPort() || (this.network.policy || 'off') === 'off') return '#9ca3af';
+                    return this.network.policy === 'any' ? '#f59e0b' : '#10b981';
+                },
+
+                // The line under the headline: which port, and what is not on it.
+                accessDetail() {
+                    const published = this.publishedPort();
+                    if (!published) return this.t('settings.access_no_port');
+                    return this.t('settings.access_port_note', { host: published.host });
+                },
+
+                tokenDetail() {
+                    if (!this.apiToken.configured) return this.t('settings.access_token_needed');
+                    return this.t('settings.access_token_meta', {
+                        created: this.formatTokenDate(this.apiToken.created_at),
+                        used: this.apiToken.last_used_at
+                            ? this.formatTokenDate(this.apiToken.last_used_at)
+                            : this.t('settings.api_token_never'),
+                    });
                 },
 
                 async loadApiToken() {
