@@ -204,9 +204,56 @@ class EntityRestructurer:
         if maintained_count:
             logger.info("Found %d entities with maintained label", maintained_count)
 
+        await self._load_device_classes(ws_client)
+
         # Populate hierarchy manager for cascade updates
         if self.hierarchy_manager:
             self._populate_hierarchy_manager()
+
+    async def _load_device_classes(self, ws_client: Any) -> None:
+        """Fill in the device class, which the registry list leaves out.
+
+        Home Assistant sends a shortened registry entry that carries no device
+        class at all. The states have it for every entity that is loaded; the
+        rest are asked for one by one, which is where disabled entities live.
+        """
+        if not self.entities or not hasattr(ws_client, "get_states"):
+            return
+        try:
+            states = await ws_client.get_states()
+        except Exception as error:
+            logger.warning("Could not read the states for the device classes: %s", error)
+            return
+
+        with_state = set()
+        for state in states or []:
+            entry = self.entities.get(state.get("entity_id") or "")
+            if entry is None:
+                continue
+            with_state.add(state["entity_id"])
+            device_class = (state.get("attributes") or {}).get("device_class")
+            if device_class:
+                entry["device_class"] = device_class
+
+        if not hasattr(ws_client, "get_entity_registry_entry"):
+            return
+        asked = 0
+        for entity_id, entry in self.entities.items():
+            if entity_id in with_state or entry.get("device_class"):
+                continue
+            try:
+                registry_entry = await ws_client.get_entity_registry_entry(entity_id)
+            except Exception:
+                continue
+            asked += 1
+            value = registry_entry.get("device_class") or registry_entry.get("original_device_class")
+            if value:
+                entry["device_class"] = value
+        logger.info(
+            "Device classes: %d from the states, %d entities asked for one by one",
+            len(with_state),
+            asked,
+        )
 
     def _populate_hierarchy_manager(self) -> None:
         """Populate the hierarchy manager with loaded data."""
