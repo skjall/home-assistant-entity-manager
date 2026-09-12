@@ -679,3 +679,39 @@ def test_an_endpoint_number_that_tells_siblings_apart_stays(restructurer):
     context = restructurer.build_naming_context("number.x_effect_speed", entity)
 
     assert context["entity"] == "Identifizieren (1)"
+
+
+def test_a_bracket_that_is_the_only_difference_stays(restructurer):
+    """devolo names one sensor per peer and puts the peer's serial in brackets."""
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "PLC uplink PHY rate (PWL-052-100)"
+    entity["device_id"] = "dev-plc"
+    restructurer.devices["dev-plc"] = {"id": "dev-plc", "name": "Powerline Adapter", "area_id": "office"}
+    restructurer.entities["number.x_peer"] = {
+        "id": "reg-peer",
+        "entity_id": "number.x_peer",
+        "device_id": "dev-plc",
+        "original_name": "PLC uplink PHY rate (PWL-052-102)",
+    }
+
+    context = restructurer.build_naming_context("number.x_effect_speed", entity)
+
+    assert context["entity"] == "PLC uplink PHY rate (PWL-052-100)"
+
+
+def test_a_bracket_that_repeats_on_the_device_is_left_alone(restructurer):
+    """Two entities whose names differ anyway need no discriminator appended."""
+    entity = restructurer.entities["number.x_effect_speed"]
+    entity["original_name"] = "Voltage (RMS)"
+    entity["device_id"] = "dev-meter"
+    restructurer.devices["dev-meter"] = {"id": "dev-meter", "name": "Zähler", "area_id": "office"}
+    restructurer.entities["number.x_current"] = {
+        "id": "reg-current",
+        "entity_id": "number.x_current",
+        "device_id": "dev-meter",
+        "original_name": "Current (RMS)",
+    }
+
+    context = restructurer.build_naming_context("number.x_effect_speed", entity)
+
+    assert context["entity"] == "Voltage (RMS)"
