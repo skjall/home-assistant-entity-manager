@@ -89,14 +89,23 @@ def network_status():
     )
 
 
+def _served_under() -> str:
+    """The path this add-on is reached under, with a trailing slash.
+
+    Home Assistant proxies Ingress under a long prefix and announces it in
+    X-Ingress-Path rather than the forwarded-prefix header Flask understands,
+    so without reading it every address in the document would be missing the
+    prefix and "try it out" would call a page that is not there. Over the
+    published port there is no prefix and the root is the answer.
+    """
+    prefix = request.headers.get("X-Ingress-Path") or request.script_root or ""
+    return prefix.rstrip("/") + "/"
+
+
 @system.route("/api/openapi.json", methods=["GET"])
 def openapi_document():
-    """The API description: what a token opens, in one machine-readable file.
-
-    The server address follows the path this request arrived on, so the page's
-    "try it out" works both through Ingress and over the published port.
-    """
-    return jsonify(api_spec.document(base_url=(request.script_root or "") + "/"))
+    """The API description: what a token opens, in one machine-readable file."""
+    return jsonify(api_spec.document(base_url=_served_under()))
 
 
 @system.route("/api/docs", methods=["GET"])
