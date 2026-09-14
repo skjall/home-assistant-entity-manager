@@ -459,19 +459,27 @@ class EntityRestructurer:
                 name = name[len(prefix) :].strip()
         return name
 
+    def _our_note(self, registry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """The note about this name, if the registry still holds the name it records.
+
+        None when there is no note, or when the registry holds something else
+        now - somebody renamed the entity elsewhere, and their wording is not
+        ours to take apart.
+        """
+        if self.naming_state is None:
+            return None
+        stored = self.naming_state.get(registry.get("id") or "")
+        if not stored or stored["applied_name"] != (registry.get("name") or ""):
+            return None
+        return stored
+
     def _remembered_type(self, registry: Dict[str, Any]) -> str:
         """The type part of a name this add-on wrote, if it is still that name.
 
-        Empty when there is no note, when the registry holds something else
-        now - somebody renamed the entity elsewhere, and their wording is not
-        ours to take apart - or when the note carries no type part.
+        Empty where there is no note to go by, and also where an older one
+        recorded the name without the type part that went into it.
         """
-        if self.naming_state is None:
-            return ""
-        stored = self.naming_state.get(registry.get("id") or "")
-        if not stored or stored["applied_name"] != (registry.get("name") or ""):
-            return ""
-        return stored["base_entity"] or ""
+        return (self._our_note(registry) or {}).get("base_entity") or ""
 
     def _strip_applied_entity_name(
         self,
@@ -788,6 +796,29 @@ class EntityRestructurer:
                 value = self.type_mappings.get_translation(canon(override_name), self.language)
             return plain(value, "override")
 
+        # A name this add-on wrote was noted along with the type part it was
+        # built from. Where the note is there and still matches what the
+        # registry holds, that type part is the answer, and a second run
+        # changes nothing by construction.
+        #
+        # It comes before the name the integration supplies because that one
+        # can carry the device name of the day the entity was created - helpers
+        # built in the interface are named that way. Stripping the device name
+        # off it works only until the device is renamed; afterwards the old one
+        # sits in the middle of every proposal. The note does not go stale that
+        # way, and rules still have their say on what it holds.
+        remembered = self._remembered_type(registry)
+        if remembered:
+            return self._resolve_supplied_name(remembered, entity_id, registry)
+        if self._our_note(registry) is not None:
+            # A note from before the type part was kept still settles whose name
+            # this is, and a name of ours was rendered by our own templates, so
+            # unwinding it gives the type part back. Better than the supplied
+            # name, which is what froze the old device name in the first place.
+            base = self._strip_applied_entity_name(registry.get("name") or "", prefixes, context)
+            if base:
+                return self._resolve_supplied_name(base, entity_id, registry, won_by="legacy_parse")
+
         native = (registry.get("original_name"), state.get("original_name"))
         name = next((candidate for candidate in native if candidate), None)
         if name:
@@ -817,13 +848,9 @@ class EntityRestructurer:
             None,
         )
         if applied is not None:
-            # A name this add-on wrote was noted along with the type part it was
-            # built from. Where that note is there and still matches, the type
-            # part comes back exactly; taking the rendered name apart is what is
-            # left for everything named before the note existed.
-            remembered = self._remembered_type(registry)
-            if remembered:
-                return self._resolve_supplied_name(remembered, entity_id, registry)
+            # No note, or one that no longer matches: taking the rendered name
+            # apart is what is left for everything named before the note
+            # existed.
             base = self._strip_applied_entity_name(applied, prefixes, context)
             if base:
                 return self._resolve_supplied_name(base, entity_id, registry, won_by="legacy_parse")
