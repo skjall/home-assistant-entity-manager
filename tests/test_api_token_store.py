@@ -15,7 +15,8 @@ def test_generate_returns_prefixed_token_and_marks_configured(tmp_path):
 
     token = store.generate()
     assert token.startswith(TOKEN_PREFIX)
-    assert len(token) > len(TOKEN_PREFIX) + 20
+    # A short token would be the weakest part of the whole arrangement.
+    assert len(token) > len(TOKEN_PREFIX) + 80
     assert store.exists() is True
 
 

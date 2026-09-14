@@ -1,6 +1,7 @@
 """Persistent, safe naming templates for devices and entities."""
 
 from copy import deepcopy
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -9,6 +10,7 @@ from string import Formatter
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
 from hierarchy_manager import normalize_name
+from json_store import atomically, guarded, new_lock
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ ALLOWED_FIELDS = frozenset(
     {
         "floor",
         "floor_id",
+        "floor_level",
         "area",
         "area_id",
         "device",
@@ -87,6 +90,8 @@ class NamingTemplates:
 
     def __init__(self, storage_path: str = "naming_templates.json") -> None:
         """Initialize naming templates from ``storage_path``."""
+        # One lock per store: a read-change-write stays one step.
+        self._lock = new_lock()
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self.data = self._load_data()
@@ -138,10 +143,7 @@ class NamingTemplates:
 
     def _write_data(self, data: Mapping[str, Any]) -> None:
         """Atomically write template data."""
-        temporary_path = self.storage_path.with_suffix(self.storage_path.suffix + ".tmp")
-        with temporary_path.open("w", encoding="utf-8") as file:
-            json.dump(data, file, indent=2, ensure_ascii=False)
-        temporary_path.replace(self.storage_path)
+        atomically(self.storage_path, data)
 
     def _save_data(self) -> None:
         """Atomically persist the current configuration."""
@@ -193,6 +195,17 @@ class NamingTemplates:
         """Return a copy of the active templates."""
         return deepcopy(self.data["templates"])
 
+    def fingerprint(self) -> str:
+        """A short mark for the templates as they are right now.
+
+        Stored alongside a name that was written, it lets a later read tell a
+        proposal that differs because the templates changed from one that
+        differs because somebody renamed the entity by hand.
+        """
+        active = self.get_templates()
+        material = "|".join(f"{key}={active.get(key, '')}" for key in sorted(active))
+        return hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
+
     def get_config(self) -> Dict[str, Any]:
         """Return the public configuration used by the Settings UI."""
         return {
@@ -202,6 +215,7 @@ class NamingTemplates:
             "allowed_fields": sorted(ALLOWED_FIELDS),
         }
 
+    @guarded
     def set_templates(self, templates: Mapping[str, str]) -> Dict[str, Any]:
         """Validate and save templates, detecting whether they match a preset."""
         # Validate before stripping: a non-string value would otherwise raise
@@ -224,6 +238,7 @@ class NamingTemplates:
         self._save_data()
         return self.get_config()
 
+    @guarded
     def apply_preset(self, preset: str) -> Dict[str, Any]:
         """Apply and persist a named preset."""
         if preset not in PRESETS:

@@ -11,15 +11,23 @@ Only entity suffix overrides are stored. Device and area names
 come directly from the Home Assistant API.
 """
 
+from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from json_store import atomically, guarded, new_lock
+
 logger = logging.getLogger(__name__)
 
 # Current schema version
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+# Where an exception came from. Both hold the same kind of value; the
+# difference only explains the entry to whoever reads the list later.
+USER = "user"  # typed into the entity card
+HA_UI = "ha_ui"  # adopted from a name set in Home Assistant itself
 
 
 class NamingOverrides:
@@ -37,6 +45,8 @@ class NamingOverrides:
         Args:
             storage_path: Path to the JSON storage file
         """
+        # One lock per store: a read-change-write stays one step.
+        self._lock = new_lock()
         self.storage_path = Path(storage_path)
         # Ensure directory exists
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,7 +76,9 @@ class NamingOverrides:
 
         if current_version < SCHEMA_VERSION:
             logger.info(f"Migrating naming overrides from v{current_version} to v{SCHEMA_VERSION}")
-            self._migrate_to_v3()
+            if current_version < 3:
+                self._migrate_to_v3()
+            self._migrate_to_v4()
             self.data["version"] = SCHEMA_VERSION
             self._save_data()
 
@@ -80,31 +92,68 @@ class NamingOverrides:
             del self.data["areas"]
             logger.info("Migration to v3: Removed area overrides")
 
+    def _migrate_to_v4(self) -> None:
+        """Migrate to v4 - every exception says where it came from.
+
+        Everything stored before this was typed by the user; an entry without a
+        source would otherwise read as one adopted from Home Assistant.
+        """
+        for entry in self.data.get("entities", {}).values():
+            if isinstance(entry, dict):
+                entry.setdefault("source", USER)
+                entry.setdefault("keep_original", False)
+
     def _save_data(self) -> None:
         """Speichere Overrides"""
         try:
-            with open(self.storage_path, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2, ensure_ascii=False)
+            atomically(self.storage_path, self.data)
             logger.info(f"Overrides gespeichert: {len(self.data['entities'])} entities")
         except Exception as e:
             logger.error(f"Fehler beim Speichern der Overrides: {e}")
 
     # === Entity Overrides ===
 
-    def set_entity_override(self, registry_id: str, name: str, type_override: Optional[str] = None) -> None:
-        """Setze Entity Name Override"""
+    @guarded
+    def set_entity_override(
+        self,
+        registry_id: str,
+        name: str,
+        type_override: Optional[str] = None,
+        source: str = USER,
+        keep_original: bool = False,
+    ) -> None:
+        """Setze Entity Name Override.
+
+        ``source`` sagt, wie die Ausnahme zustande kam: vom Nutzer getippt oder
+        aus einem Namen übernommen, den er in Home Assistant gesetzt hat. Die
+        Unterscheidung steht nur in der Liste der Ausnahmen; auf den Namen wirkt
+        sie nicht.
+        """
         if "entities" not in self.data:
             self.data["entities"] = {}
-        self.data["entities"][registry_id] = {"name": name}
+        entry = {
+            "name": name,
+            "source": source if source in (USER, HA_UI) else USER,
+            "keep_original": bool(keep_original),
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
         if type_override:
-            self.data["entities"][registry_id]["type"] = type_override
+            entry["type"] = type_override
+        self.data["entities"][registry_id] = entry
         self._save_data()
         logger.info(f"Entity override gesetzt: {registry_id} -> {name}")
+
+    @guarded
+    def ignore_entity(self, registry_id: str) -> None:
+        """Lass die Entität in Ruhe: kein Vorschlag, der gelieferte Name bleibt."""
+        self.set_entity_override(registry_id, "", keep_original=True)
+        logger.info(f"Entity wird ignoriert: {registry_id}")
 
     def get_entity_override(self, registry_id: str) -> Optional[Dict[str, str]]:
         """Hole Entity Override"""
         return self.data.get("entities", {}).get(registry_id)
 
+    @guarded
     def remove_entity_override(self, registry_id: str) -> None:
         """Entferne Entity Override"""
         if "entities" in self.data and registry_id in self.data["entities"]:
@@ -118,6 +167,7 @@ class NamingOverrides:
         """Hole alle Entity Overrides"""
         return self.data.get("entities", {}).copy()
 
+    @guarded
     def clear_all(self) -> None:
         """Clear all overrides while preserving schema version."""
         self.data = {"version": SCHEMA_VERSION, "entities": {}}

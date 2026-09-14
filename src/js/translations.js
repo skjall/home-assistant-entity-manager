@@ -1,6 +1,16 @@
 /**
  * Translation system for Entity Manager UI
  */
+/**
+ * Translation files live under a per-page-load version segment. Proxies in
+ * front of Home Assistant may cache by path and ignore query strings, so the
+ * path itself has to change.
+ */
+function translationUrl(lang) {
+    const version = window.assetVersion || Date.now();
+    return `static/translations/${version}/${lang}.json?v=${Date.now()}`;
+}
+
 class TranslationManager {
     constructor() {
         this.translations = {};
@@ -32,21 +42,22 @@ class TranslationManager {
      * Try to get Home Assistant's configured language
      */
     async getHALanguage() {
+        // Home Assistant is where a user sets their language; this app follows it.
+        // A lang parameter still wins, for trying a language out.
         try {
-            // Check if there's a lang parameter in the URL or localStorage
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlLang = urlParams.get('lang');
+            const urlLang = new URLSearchParams(window.location.search).get('lang');
             if (urlLang) return urlLang;
-
-            // Check localStorage
-            const storedLang = localStorage.getItem('entityManagerLang');
-            if (storedLang) return storedLang;
-
-            return null;
+        } catch (e) { /* no search params */ }
+        try {
+            const response = await fetch('api/ha/language');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.language) return data.language;
+            }
         } catch (e) {
-            console.error('Error getting HA language:', e);
-            return null;
+            console.warn('Could not read the Home Assistant language:', e);
         }
+        return null;
     }
 
     /**
@@ -54,13 +65,10 @@ class TranslationManager {
      */
     async loadLanguage(lang) {
         try {
-            const cacheBuster = Date.now();
-            const url = `static/translations/${lang}.json?v=${cacheBuster}`;
-            const response = await fetch(url);
+            const response = await fetch(translationUrl(lang));
             if (response.ok) {
                 this.translations = await response.json();
                 this.currentLang = lang;
-                localStorage.setItem('entityManagerLang', lang);
             } else {
                 await this.loadFallback();
             }
@@ -75,8 +83,7 @@ class TranslationManager {
      */
     async loadFallback() {
         try {
-            const cacheBuster = Date.now();
-            const response = await fetch(`static/translations/${this.fallbackLang}.json?v=${cacheBuster}`);
+            const response = await fetch(translationUrl(this.fallbackLang));
             if (response.ok) {
                 this.translations = await response.json();
                 this.currentLang = this.fallbackLang;

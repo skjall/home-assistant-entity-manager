@@ -12,6 +12,11 @@ class EntityRegistry:
     # at startup (see web_ui.py); stays None in contexts that don't wire it up.
     rename_log = None
 
+    # Optional shared record of which names this add-on wrote. Every write goes
+    # through update_entity, so noting it here is the one place that cannot be
+    # forgotten when a new rename path appears. Set once by app_state.
+    naming_state = None
+
     def __init__(self, websocket: HomeAssistantWebSocket):
         self.ws = websocket
         self.entities: Dict[str, Dict] = {}
@@ -38,6 +43,7 @@ class EntityRegistry:
         labels: Optional[List[str]] = None,
         disabled_by: Optional[str] = None,
         enable: bool = False,
+        provenance: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         message = {"type": "config/entity_registry/update", "entity_id": entity_id}
 
@@ -67,7 +73,52 @@ class EntityRegistry:
         if not response.get("success"):
             raise Exception(f"Failed to update entity {entity_id}: {response}")
 
-        return response.get("result", {})
+        result = response.get("result", {})
+        if name is not None:
+            self._note_applied_name(result, entity_id, new_entity_id, name, provenance)
+        return result
+
+    def _note_applied_name(
+        self,
+        result: Dict[str, Any],
+        entity_id: str,
+        new_entity_id: Optional[str],
+        name: Optional[str],
+        provenance: Optional[Dict[str, Any]],
+    ) -> None:
+        """Remember that this name came from here, so a later read can tell.
+
+        Home Assistant answers a successful update with the whole entry, which
+        carries the registry id - the one identifier that survives a change of
+        entity_id. Failing to note it must never fail the rename itself: the
+        name is already written, and a missing note only costs provenance.
+        """
+        if self.naming_state is None:
+            return
+        try:
+            entry = result.get("entity_entry") if isinstance(result, dict) else None
+            entry = entry if isinstance(entry, dict) else (result if isinstance(result, dict) else {})
+            registry_id = entry.get("id") or (self.entities.get(entity_id, {}) or {}).get("id")
+            if not registry_id:
+                logger.debug("No registry id for %s, not noting who named it", entity_id)
+                return
+            if not name:
+                # An empty name clears the override, so the integration's own
+                # name applies again and there is nothing of ours left to own.
+                self.naming_state.forget(registry_id)
+                return
+            details = dict(provenance or {})
+            self.naming_state.record(
+                registry_id,
+                applied_name=name or "",
+                applied_entity_id=new_entity_id or entity_id,
+                base_entity=details.get("base_entity", ""),
+                template_hash=details.get("template_hash", ""),
+                won_by=details.get("won_by", "") or "",
+                rule_id=details.get("rule_id"),
+            )
+        except Exception as error:  # noqa: BLE001 - provenance must not break renames
+            logger.warning("Could not note the applied name for %s: %s", entity_id, error)
 
     async def rename_entity(
         self,
@@ -75,9 +126,14 @@ class EntityRegistry:
         new_entity_id: str,
         friendly_name: Optional[str] = None,
         enable: bool = False,
+        provenance: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         result = await self.update_entity(
-            entity_id=old_entity_id, new_entity_id=new_entity_id, name=friendly_name, enable=enable
+            entity_id=old_entity_id,
+            new_entity_id=new_entity_id,
+            name=friendly_name,
+            enable=enable,
+            provenance=provenance,
         )
 
         # Record the successful rename in the audit log so external consumers can

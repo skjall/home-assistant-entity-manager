@@ -240,13 +240,30 @@ class FakeRegistryWebSocket:
                 "entity_id": "sensor.controller_temperature",
                 "device_id": "device-1",
                 "original_name": "Temperature",
-            }
+            },
+            {
+                "id": "registry-2",
+                "entity_id": "sensor.controller_power",
+                "device_id": "device-1",
+                "original_name": "Power",
+            },
         ],
     }
+
+    # Home Assistant sends the device class with the state, never with the
+    # registry list; a disabled entity has no state at all.
+    STATES = [
+        {
+            "entity_id": "sensor.controller_temperature",
+            "attributes": {"device_class": "temperature"},
+        }
+    ]
+    REGISTRY_ENTRIES = {"sensor.controller_power": {"original_device_class": "power"}}
 
     def __init__(self):
         self.message_id = 0
         self.responses = []
+        self.asked = []
 
     async def _send_message(self, message):
         self.message_id += 1
@@ -262,6 +279,13 @@ class FakeRegistryWebSocket:
     async def _receive_message(self):
         return self.responses.pop(0)
 
+    async def get_states(self):
+        return self.STATES
+
+    async def get_entity_registry_entry(self, entity_id):
+        self.asked.append(entity_id)
+        return self.REGISTRY_ENTRIES.get(entity_id, {})
+
 
 @pytest.mark.asyncio
 async def test_registry_loader_accepts_current_ha_identifier_fields(restructurer):
@@ -270,3 +294,25 @@ async def test_registry_loader_accepts_current_ha_identifier_fields(restructurer
     context = restructurer.build_naming_context("sensor.controller_temperature", {})
 
     assert (context["floor"], context["area"]) == ("Ground floor", "Living room")
+
+
+@pytest.mark.asyncio
+async def test_device_class_comes_from_the_state(restructurer):
+    """The registry list carries no device class, the state does."""
+    await restructurer.load_structure(FakeRegistryWebSocket())
+
+    context = restructurer.build_naming_context("sensor.controller_temperature", {})
+
+    assert context["device_class"] == "temperature"
+
+
+@pytest.mark.asyncio
+async def test_device_class_of_an_entity_without_a_state_is_asked_for(restructurer):
+    """A disabled entity has no state; its registry entry is read on its own."""
+    ws_client = FakeRegistryWebSocket()
+
+    await restructurer.load_structure(ws_client)
+    context = restructurer.build_naming_context("sensor.controller_power", {})
+
+    assert context["device_class"] == "power"
+    assert ws_client.asked == ["sensor.controller_power"]

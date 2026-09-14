@@ -1,0 +1,503 @@
+"""Type rules: what the entity-specific part of a name is called.
+
+A rule maps an entity's type — identified by its integration's
+``translation_key``, the canonical form of the name the integration supplies,
+or its ``device_class`` — to the wording the user wants, per language.
+
+Storage: ``/data/naming_rules.json``::
+
+    {"version": 1, "language": "de",
+     "rules": [{"id": "r_ab12cd34",
+                "match": {"kind": "name", "value": "linkquality", "integration": null},
+                "targets": {"de": "Verbindungsqualität"},
+                "source": "learned", "learned_from": "sensor.x", "created_at": "..."}],
+     "migration": {...}}
+
+The legacy store ``user_type_mappings.json`` is migrated on first load; its
+backup and a report stay next to it so nothing is lost silently.
+"""
+
+from copy import deepcopy
+from datetime import datetime, timezone
+import json
+import logging
+from pathlib import Path
+import shutil
+from typing import Any, Dict, Iterable, List, Mapping, Optional
+import uuid
+
+from json_store import atomically, guarded, new_lock
+from naming_canon import canon
+from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
+
+logger = logging.getLogger(__name__)
+
+SCHEMA_VERSION = 1
+KINDS = ("translation_key", "name", "device_class")
+# Lookup order: the most specific identity first.
+KIND_PRIORITY = {"translation_key": 0, "name": 1, "device_class": 2}
+
+
+class NamingRuleError(ValueError):
+    """Raised for an invalid rule."""
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _new_id() -> str:
+    return f"r_{uuid.uuid4().hex[:8]}"
+
+
+class NamingRules:
+    """Validate, resolve and persist type rules."""
+
+    def __init__(
+        self,
+        storage_path: str = "/data/naming_rules.json",
+        legacy_path: Optional[str] = None,
+        device_class_keys: Iterable[str] = (),
+        default_language: str = "en",
+    ) -> None:
+        # One lock per store: a read-change-write stays one step.
+        self._lock = new_lock()
+        self.storage_path = Path(storage_path)
+        self.legacy_path = Path(legacy_path) if legacy_path else None
+        self.device_class_keys = {canon(key) for key in device_class_keys}
+        self.default_language = default_language
+        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        self._rule_index = None
+        self.data = self._load()
+
+    # ------------------------------------------------------------------ storage
+
+    def _default_data(self) -> Dict[str, Any]:
+        return {
+            "version": SCHEMA_VERSION,
+            "language": self.default_language,
+            "display_case": DEFAULT_CASE,
+            "rules": [],
+            "migration": None,
+        }
+
+    def _load(self) -> Dict[str, Any]:
+        if self.storage_path.exists():
+            try:
+                with self.storage_path.open("r", encoding="utf-8") as file:
+                    data = json.load(file)
+                if not isinstance(data, dict) or not isinstance(data.get("rules"), list):
+                    raise NamingRuleError("Stored rules must be an object with a rules list")
+                data.setdefault("version", SCHEMA_VERSION)
+                data.setdefault("language", self.default_language)
+                data.setdefault("migration", None)
+                data.setdefault("display_case", DEFAULT_CASE)
+                for rule in data["rules"]:
+                    rule.get("match", {}).setdefault("model", None)
+                return data
+            except (OSError, json.JSONDecodeError, NamingRuleError) as error:
+                logger.error("Failed to load naming rules: %s", error)
+                return self._default_data()
+
+        data = self._default_data()
+        if self.legacy_path and self.legacy_path.exists():
+            self._migrate_legacy(data)
+            self._write(data)
+        return data
+
+    def _write(self, data: Mapping[str, Any]) -> None:
+        atomically(self.storage_path, data)
+
+    def _forget_index(self) -> None:
+        self._rule_index = None
+
+    @guarded
+    def save(self) -> None:
+        self._forget_index()
+        self._write(self.data)
+
+    # ---------------------------------------------------------------- migration
+
+    def _migrate_legacy(self, data: Dict[str, Any]) -> None:
+        """Turn ``{"user_mappings": {key: value}}`` into rules, with a report."""
+        try:
+            with self.legacy_path.open("r", encoding="utf-8") as file:
+                legacy = json.load(file)
+            mappings = legacy.get("user_mappings", {}) if isinstance(legacy, dict) else {}
+        except (OSError, json.JSONDecodeError) as error:
+            logger.error("Failed to read legacy type mappings: %s", error)
+            return
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_dir = self.storage_path.parent / "migrations" / stamp
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.legacy_path, backup_dir / self.legacy_path.name)
+
+        language = data["language"]
+        grouped: Dict[tuple, Dict[str, Any]] = {}
+        for raw_key, value in mappings.items():
+            key = canon(raw_key)
+            if not key or not isinstance(value, str) or not value.strip():
+                continue
+            kind = "device_class" if key in self.device_class_keys else "name"
+            group = grouped.setdefault((kind, key), {"values": {}, "legacy_keys": []})
+            group["legacy_keys"].append(raw_key)
+            group["values"].setdefault(value.strip(), []).append(raw_key)
+
+        rules: List[Dict[str, Any]] = []
+        report = {
+            "at": _now(),
+            "backup": str(backup_dir),
+            "imported": 0,
+            "merged": [],
+            "conflicts": [],
+            "reclassified": [],
+            "skipped": [],
+        }
+        for (kind, key), group in sorted(grouped.items()):
+            values = list(group["values"])
+            # A mapping that only repeats the original in another spelling
+            # ("firmware" -> "Firmware") is what the display spelling does anyway.
+            if len(values) == 1 and canon(values[0]) == key:
+                report["skipped"].append({"key": key, "value": values[0], "legacy_keys": group["legacy_keys"]})
+                continue
+            # Several legacy spellings with one value collapse into one rule.
+            # Different values for one key are kept as alternatives and reported.
+            winner = values[-1]
+            rule = self._make_rule(kind, key, None, {language: winner}, source="migrated")
+            rule["legacy_keys"] = group["legacy_keys"]
+            if len(values) > 1:
+                rule["alternatives"] = [value for value in values if value != winner]
+                report["conflicts"].append({"rule_id": rule["id"], "key": key, "values": values, "chosen": winner})
+            if len(group["legacy_keys"]) > 1:
+                report["merged"].append({"rule_id": rule["id"], "key": key, "legacy_keys": group["legacy_keys"]})
+            if kind == "device_class":
+                report["reclassified"].append({"rule_id": rule["id"], "key": key})
+            rules.append(rule)
+            report["imported"] += 1
+
+        data["rules"] = rules
+        data["migration"] = report
+        logger.info(
+            "Migrated %d legacy type mappings into %d rules (%d merged, %d conflicts)",
+            len(mappings),
+            len(rules),
+            len(report["merged"]),
+            len(report["conflicts"]),
+        )
+
+    @guarded
+    def repair_kinds(
+        self,
+        translation_keys: Iterable[str],
+        names: Iterable[str],
+        device_classes: Iterable[str] = (),
+    ) -> Optional[Dict[str, Any]]:
+        """Move rules that are stored under the wrong kind, once.
+
+        Older versions filed every rule under the entity's name. A value that is
+        in truth a device class or an integration's translation key never equals
+        a display name, so such a rule can never match anything.
+        """
+        if self.data.get("repair"):
+            return None
+        known_names = {canon(name) for name in names if name}
+        known_keys = {key for key in translation_keys if key}
+        # A home can use classes the built-in list does not name.
+        known_classes = self.device_class_keys | {canon(value) for value in device_classes if value}
+        moved = []
+        for rule in self.rules:
+            match = rule["match"]
+            if match["kind"] != "name":
+                continue
+            value = canon(match["value"])
+            if not value or value in known_names:
+                continue
+            if value in known_classes:
+                kind = "device_class"
+            elif match["value"] in known_keys or value in known_keys:
+                kind = "translation_key"
+            else:
+                continue
+            match["kind"] = kind
+            rule["updated_at"] = _now()
+            moved.append({"rule_id": rule["id"], "value": match["value"], "kind": kind})
+
+        if moved:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            backup_dir = self.storage_path.parent / "migrations" / stamp
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            if self.storage_path.exists():
+                shutil.copy2(self.storage_path, backup_dir / self.storage_path.name)
+            report = {"at": _now(), "backup": str(backup_dir), "moved": moved}
+        else:
+            report = {"at": _now(), "backup": None, "moved": []}
+        self.data["repair"] = report
+        self.save()
+        logger.info("Repaired %d rules that were filed under the wrong kind", len(moved))
+        return report
+
+    def unused(
+        self, counts: Mapping[str, int], language: str = "", builtins: Mapping[str, str] = {}
+    ) -> List[Dict[str, Any]]:
+        """Rules that change nothing: no entity matches, or the name is the standard."""
+        language = language or self.language
+        useless = []
+        for rule in self.rules:
+            if not counts.get(rule["id"]):
+                useless.append(rule)
+            elif self.is_redundant(rule, language, builtins.get(rule["id"])):
+                useless.append(rule)
+        return useless
+
+    @guarded
+    def delete_many(self, rule_ids: Iterable[str]) -> int:
+        """Remove several rules at once, reporting how many went."""
+        wanted = set(rule_ids)
+        before = len(self.rules)
+        self.data["rules"] = [rule for rule in self.rules if rule["id"] not in wanted]
+        removed = before - len(self.rules)
+        if removed:
+            self.save()
+        return removed
+
+    # ------------------------------------------------------------------- rules
+
+    @staticmethod
+    def _make_rule(
+        kind: str,
+        value: str,
+        integration: Optional[str],
+        targets: Mapping[str, str],
+        source: str = "user",
+        learned_from: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if kind not in KINDS:
+            raise NamingRuleError(f"Unknown rule kind: {kind}")
+        if not value:
+            raise NamingRuleError("A rule needs a match value")
+        clean_targets = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
+        if not clean_targets:
+            raise NamingRuleError("A rule needs at least one target")
+        rule = {
+            "id": _new_id(),
+            "match": {"kind": kind, "value": value, "integration": integration or None, "model": model or None},
+            "targets": clean_targets,
+            "source": source,
+            "created_at": _now(),
+        }
+        if learned_from:
+            rule["learned_from"] = learned_from
+        return rule
+
+    @property
+    def language(self) -> str:
+        return self.data.get("language") or self.default_language
+
+    @property
+    def display_case(self) -> str:
+        return self.data.get("display_case") or DEFAULT_CASE
+
+    @guarded
+    def set_display_case(self, mode: str) -> None:
+        if mode not in CASE_MODES:
+            raise NamingRuleError(f"Unknown display case: {mode}")
+        self.data["display_case"] = mode
+        self.save()
+
+    def is_redundant(self, rule: Dict[str, Any], language: str, builtin: Optional[str] = None) -> bool:
+        """A rule whose target is what the display spelling or the built-in default yields anyway."""
+        target = rule["targets"].get(language)
+        if not target:
+            return False
+        if builtin is not None and target == builtin:
+            return True
+        key = rule["match"]["value"]
+        return canon(target) == key and target == normalize_display(key.replace("_", " "), self.display_case)
+
+    @guarded
+    def set_language(self, language: str) -> None:
+        """Switch the active language.
+
+        Migrated rules carry one target that was recorded under whatever
+        language was active at migration time; it belongs to the language the
+        user actually works in, so it moves along the first time that is set.
+        """
+        previous = self.language
+        if language != previous:
+            for rule in self.rules:
+                targets = rule["targets"]
+                if rule.get("source") == "migrated" and list(targets) == [previous]:
+                    targets[language] = targets.pop(previous)
+        self.data["language"] = language
+        self.save()
+
+    @property
+    def rules(self) -> List[Dict[str, Any]]:
+        return self.data["rules"]
+
+    @property
+    def migration_report(self) -> Optional[Dict[str, Any]]:
+        return self.data.get("migration")
+
+    def get(self, rule_id: str) -> Optional[Dict[str, Any]]:
+        return next((rule for rule in self.rules if rule["id"] == rule_id), None)
+
+    @staticmethod
+    def _index_key(kind: str, value: str, integration: Optional[str], model: Optional[str]):
+        return (kind, value, integration or None, canon(model or ""))
+
+    def _index(self) -> Dict[tuple, Dict[str, Any]]:
+        """Rules by what they match on.
+
+        Resolution asks for a rule twice per entity, so a scan over every rule
+        would be thousands of comparisons per entity on a large installation.
+        """
+        if self._rule_index is None:
+            self._rule_index = {
+                self._index_key(
+                    rule["match"]["kind"],
+                    rule["match"]["value"],
+                    rule["match"].get("integration"),
+                    rule["match"].get("model"),
+                ): rule
+                for rule in self.rules
+            }
+        return self._rule_index
+
+    def _matching(
+        self, kind: str, value: str, integration: Optional[str], model: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        return self._index().get(self._index_key(kind, value, integration, model))
+
+    @staticmethod
+    def _scopes(integration: Optional[str], model: Optional[str]):
+        """Scopes from narrow to wide: this model, then this integration, then everywhere."""
+        candidates = [(integration, model), (None, model), (integration, None), (None, None)]
+        seen = []
+        for scope in candidates:
+            if scope not in seen:
+                seen.append(scope)
+        return seen
+
+    def find(
+        self,
+        kind: str,
+        value: Optional[str],
+        integration: Optional[str],
+        language: str,
+        model: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the rule for ``kind``/``value``, the narrowest scope first."""
+        if not value:
+            return None
+        key = value if kind == "translation_key" else canon(value)
+        if not key:
+            return None
+        for scope_integration, scope_model in self._scopes(integration or None, model or None):
+            rule = self._matching(kind, key, scope_integration, scope_model)
+            if rule and rule["targets"].get(language):
+                return rule
+        return None
+
+    @guarded
+    def upsert(
+        self,
+        kind: str,
+        value: str,
+        integration: Optional[str],
+        language: str,
+        target: str,
+        source: str = "user",
+        learned_from: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create or update the rule for one match, setting its target for ``language``."""
+        key = value if kind == "translation_key" else canon(value)
+        rule = self._matching(kind, key, integration or None, model or None)
+        if rule is None:
+            rule = self._make_rule(kind, key, integration, {language: target}, source, learned_from, model)
+            self.rules.append(rule)
+        else:
+            if not target.strip():
+                raise NamingRuleError("A rule needs a target")
+            rule["targets"][language] = target.strip()
+            rule["updated_at"] = _now()
+            if learned_from:
+                rule["learned_from"] = learned_from
+        self.save()
+        return rule
+
+    @guarded
+    def update(
+        self,
+        rule_id: str,
+        targets: Optional[Mapping[str, str]] = None,
+        integration: Any = ...,
+        model: Any = ...,
+    ) -> Dict[str, Any]:
+        rule = self.get(rule_id)
+        if rule is None:
+            raise NamingRuleError(f"Unknown rule: {rule_id}")
+        if targets is not None:
+            clean = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
+            if not clean:
+                raise NamingRuleError("A rule needs at least one target")
+            rule["targets"] = clean
+        if integration is not ...:
+            rule["match"]["integration"] = integration or None
+        if model is not ...:
+            rule["match"]["model"] = model or None
+        rule["updated_at"] = _now()
+        self.save()
+        return rule
+
+    @guarded
+    def delete(self, rule_id: str) -> bool:
+        before = len(self.rules)
+        self.data["rules"] = [rule for rule in self.rules if rule["id"] != rule_id]
+        if len(self.rules) == before:
+            return False
+        self.save()
+        return True
+
+    @guarded
+    def choose_alternative(self, rule_id: str, value: str, language: Optional[str] = None) -> Dict[str, Any]:
+        """Resolve a migration conflict by promoting one of the alternatives."""
+        rule = self.get(rule_id)
+        if rule is None:
+            raise NamingRuleError(f"Unknown rule: {rule_id}")
+        language = language or self.language
+        current = rule["targets"].get(language)
+        options = set(rule.get("alternatives", []))
+        if current:
+            options.add(current)
+        if value not in options:
+            raise NamingRuleError("Value is not one of the recorded alternatives")
+        rule["targets"][language] = value
+        rule["alternatives"] = sorted(options - {value})
+        report = self.data.get("migration") or {}
+        for conflict in report.get("conflicts", []):
+            if conflict["rule_id"] == rule_id:
+                conflict["chosen"] = value
+                conflict["resolved"] = True
+        self.save()
+        return rule
+
+    # ------------------------------------------------------- legacy compatibility
+
+    def legacy_user_mappings(self, language: Optional[str] = None) -> Dict[str, str]:
+        """Flat ``{canonical key: target}`` view for callers that still think in mappings."""
+        language = language or self.language
+        view: Dict[str, str] = {}
+        for rule in self.rules:
+            if rule["match"].get("integration"):
+                continue
+            target = rule["targets"].get(language)
+            if target:
+                view[rule["match"]["value"]] = target
+        return view
+
+    def snapshot(self) -> Dict[str, Any]:
+        return deepcopy(self.data)

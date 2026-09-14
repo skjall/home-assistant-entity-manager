@@ -144,34 +144,90 @@ GET /api/rename_log?entity_id=light.kitchen_old
 The lookup follows multi-hop rename chains (`a → b → c`) and returns
 `"found": false` when the id was never renamed.
 
-#### External access (API token)
+#### External access: the API and assistants
 
-By default the web UI and API are reachable **only through Home Assistant
-Ingress** (i.e. only for logged-in HA users); the add-on's port is not exposed.
+By default the web interface and the API are reachable **only through Home
+Assistant Ingress**, that is only for users already logged into Home Assistant.
+Three settings open that up, and each does one job:
 
-To let an **external** tool read the rename log:
+| Option | What it decides | Default |
+| --- | --- | --- |
+| `external_access` | Which networks are answered at all. One entry per line: a CIDR such as `192.168.1.0/24`, a single address, or the shorthands `lan` and `any`. Empty means nobody. | empty |
+| `external_api` | How far the API token reaches: `off`, `read` (the GET routes) or `write` (everything). | `read` |
+| `mcp` | Whether assistants get an MCP endpoint, and whether it may write: `off`, `read`, `write`. | `off` |
 
-1. Open the add-on's web UI → **Settings → External API access** and click
-   **Generate token**. The token is shown **once** — copy it now. Only a hash of
-   it is stored; it cannot be retrieved again (regenerate to get a new one).
+Two things always stay closed over the published port, whatever the settings
+say: the **web interface** and the **token management**.
+
+A published port always listens on every address of the host — an add-on cannot
+bind it to one interface. That is why the add-on decides for itself who it
+answers. **Behind a reverse proxy this matters:** the add-on sees the proxy's
+address, not the browser's, so `external_access` then only says "this proxy may
+talk to me". Whoever can reach the proxy can reach the API, and only the token
+stands in the way. Limit it on the proxy.
+
+Every refusal is logged with the address, the route and the reason, so a wrong
+entry in `external_access` is a look at the add-on log rather than guesswork.
+
+##### Getting a token
+
+1. Open the add-on's web interface → **Settings → Access from outside** →
+   **Generate token**. It is shown **once**: copy it now. Only a hash is kept.
 2. Map the add-on's port (Configuration → Network) to a host port.
-
-With a token generated:
-
-- **Ingress** traffic (the web UI) keeps working unchanged, no token needed.
-- **Direct** (non-Ingress) requests are accepted **only** for
-  `GET /api/rename_log` and **only** with a matching bearer token. Every other
-  endpoint — including token management and all renaming/write operations —
-  stays Ingress-exclusive, so an exposed port never grants write access.
+3. Set `external_access` to the network the caller comes from.
 
 ```bash
 curl -H "Authorization: Bearer em_…" \
-  "http://<ha-host>:<mapped-port>/api/rename_log?entity_id=light.kitchen_old"
+  "http://<ha-host>:<port>/api/rename_log?entity_id=light.kitchen_old"
 ```
 
-Without a generated token, direct access stays closed and behaviour is
-unchanged. Generating a new token or revoking it (Settings) immediately
-invalidates the previous one.
+`X-API-Key: em_…` works as well. Generating a new token or revoking it makes the
+previous one invalid at once.
+
+##### The API documentation
+
+Every route, with its fields and a way to try it out, is at **Settings →
+Access from outside → Open the API documentation**, or directly at `/api/docs`
+through Ingress. The machine-readable description is at `/api/openapi.json`.
+
+Both are generated from `api_spec.py`, which is also what the access gate and
+the assistant tools are built from — so a route cannot be reachable without
+being documented, or documented without existing.
+
+##### Connecting an assistant (MCP)
+
+Set the add-on option `mcp` to `read` or `write` and generate a token. The
+endpoint is then at `http://<ha-host>:<port>/mcp`, and the settings page shows
+the exact address along with a snippet to copy.
+
+Most clients take a configuration like this:
+
+```json
+{
+  "mcpServers": {
+    "entity-manager": {
+      "url": "http://<ha-host>:<port>/mcp",
+      "headers": { "Authorization": "Bearer em_…" }
+    }
+  }
+}
+```
+
+Claude Code adds it in one line:
+
+```bash
+claude mcp add --transport http entity-manager http://<ha-host>:<port>/mcp \
+  --header "Authorization: Bearer em_…"
+```
+
+What the assistant can then do is exactly what the API offers: in `read` mode
+the questions (what is this entity called, what would a rule change, what refers
+to it), in `write` mode the changes as well (rules, exceptions, renaming, device
+swaps). The tools carry the same descriptions as the documentation, so an
+assistant reads what a person reads.
+
+Both settings still apply on top: `external_access` decides whether the
+assistant's machine is answered, and the token is required either way.
 
 ## Safety Features
 
