@@ -33,6 +33,7 @@ from ha_websocket import HomeAssistantWebSocket
 from hierarchy_manager import normalize_name
 from jobs import new_job
 import mcp_server
+import naming_service
 from reference_cache import get_reference_checker, invalidate_reference_checker_cache
 from registry import sync_ha_language
 from routes_entities import entities as entity_routes
@@ -882,7 +883,11 @@ async def _execute_changes_async():
 
                                 # Rename entity and enable if needed
                                 await entity_registry.rename_entity(
-                                    entity_id, new_entity_id, new_friendly_name, enable=should_enable
+                                    entity_id,
+                                    new_entity_id,
+                                    new_friendly_name,
+                                    enable=should_enable,
+                                    provenance=naming_service.provenance_for(entity_id),
                                 )
 
                                 if should_enable:

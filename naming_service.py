@@ -139,6 +139,25 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
     }
 
 
+def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
+    """The note for a name the restructurer has just worked out.
+
+    Written names are only worth a note where the caller can say what type part
+    went into them; a caller working from a proposal made earlier cannot, and
+    gets None rather than a claim that may since have gone stale.
+    """
+    restructurer = renamer_state.get("restructurer")
+    resolution = (getattr(restructurer, "last_resolutions", None) or {}).get(entity_id)
+    if not resolution:
+        return None
+    return {
+        "base_entity": resolution.get("value") or "",
+        "won_by": resolution.get("won_by") or "",
+        "rule_id": resolution.get("rule_id"),
+        "template_hash": renamer_state["naming_templates"].fingerprint(),
+    }
+
+
 def provenance_of(proposed: Dict[str, Any]) -> Dict[str, Any]:
     """Turn a proposal into the note that is kept with the written name."""
     return {
