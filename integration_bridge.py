@@ -79,25 +79,6 @@ def extract_z2m_ieee(device_data: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def extract_config_entry_id(device_data: Dict[str, Any]) -> Optional[str]:
-    """Liefert eine Config-Entry-ID des Geräts (für remove_config_entry).
-
-    Die meisten Geräte haben genau einen Config-Entry. Bei mehreren wird der
-    erste genommen und eine Warnung geloggt - die Domain-genaue Auflösung
-    (config/config_entries/get) ist hier bewusst noch nicht implementiert.
-    """
-    config_entries = device_data.get("config_entries") or []
-    if not config_entries:
-        return None
-    if len(config_entries) > 1:
-        logger.warning(
-            "Device %s has multiple config_entries %s - using the first one for removal",
-            device_data.get("id"),
-            config_entries,
-        )
-    return config_entries[0]
-
-
 class IntegrationBridgeAdapter(ABC):
     """Basis für integrationsspezifische Geräte-Operationen."""
 
