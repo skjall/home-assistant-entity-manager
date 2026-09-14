@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.2.0...v1.3.0) (2026-09-14)
+
+
+### Features
+
+* add configurable naming templates ([#95](https://github.com/skjall/home-assistant-entity-manager/issues/95)) ([2246839](https://github.com/skjall/home-assistant-entity-manager/commit/224683911e6c34731d1ba7a5e43907b8987d55df))
+* name entities from rules and templates, with provenance, an API and an MCP server ([#109](https://github.com/skjall/home-assistant-entity-manager/issues/109)) ([2cb79f7](https://github.com/skjall/home-assistant-entity-manager/commit/2cb79f74646191c312f5b6321f83f26758e9dbbc))
+
+
+### Bug Fixes
+
+* apply configured type mappings to entity names ([#105](https://github.com/skjall/home-assistant-entity-manager/issues/105)) ([1597fcf](https://github.com/skjall/home-assistant-entity-manager/commit/1597fcf2e664fce92db03b129fcaec80b044e9a9))
+* carry the area over and remove the old device completely when swapping ([#108](https://github.com/skjall/home-assistant-entity-manager/issues/108)) ([d80ffc3](https://github.com/skjall/home-assistant-entity-manager/commit/d80ffc3f22c580880be119750be7fe8893e39c16))
+* give every proposed entity ID a unique target ([#106](https://github.com/skjall/home-assistant-entity-manager/issues/106)) ([fc2f89d](https://github.com/skjall/home-assistant-entity-manager/commit/fc2f89d2be8cab1b30b027a780c052227e2220a3))
+* keep job failures and modal content on screen ([#102](https://github.com/skjall/home-assistant-entity-manager/issues/102)) ([32f92bc](https://github.com/skjall/home-assistant-entity-manager/commit/32f92bccf5753ac538699de6ba8489f9daa66f93))
+* skip Claude review jobs on pull requests from forks ([#98](https://github.com/skjall/home-assistant-entity-manager/issues/98)) ([65bef5b](https://github.com/skjall/home-assistant-entity-manager/commit/65bef5b8c187e9bbe8d67d227d140f306dabaadb))
+
 ## [1.2.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.1.0...v1.2.0) (2026-07-02)
 
 
