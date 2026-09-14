@@ -656,8 +656,12 @@ renamer_state["worker"].register("rename_device", rename_device_handler)
 
 
 @entities.route("/api/sync_z2m_name", methods=["POST"])
-def sync_z2m_name():
-    """Gleicht den Z2M-friendly_name eines Geräts an seinen HA-Namen an (kein HA-Rename)."""
+def sync_z2m_name_request():
+    """Gleicht den Z2M-friendly_name eines Geräts an seinen HA-Namen an (kein HA-Rename).
+
+    Heißt nicht wie die Funktion aus ``z2m``: gleiche Namen würden den Import
+    für das ganze Modul überdecken, und jeder Aufruf landete bei dieser View.
+    """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
