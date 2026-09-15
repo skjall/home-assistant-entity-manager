@@ -1414,6 +1414,35 @@
                 margin-left: 8px;
             }
 
+            /* The row an area or a virtual device puts inside itself carries
+               its own left-and-right layout. Without a share of the width it
+               shrinks to its text, and the count ends up glued to the name
+               instead of sitting at the edge. */
+            .hierarchy-item:not(.device-item) > * {
+                flex: 1;
+                min-width: 0;
+            }
+
+            /* A device row stacks its parts in a column of its own, and
+               centring across a column is centring sideways - which put every
+               name in the middle of the screen. Stretch leaves them where they
+               belong, and the chevron sits at the right edge instead of
+               claiming a line under them. */
+            .hierarchy-item.device-item {
+                align-items: stretch;
+                justify-content: flex-start;
+                position: relative;
+                padding-right: 38px;
+            }
+
+            .hierarchy-item.device-item::after {
+                position: absolute;
+                right: 12px;
+                top: 50%;
+                transform: translateY(-50%);
+                margin-left: 0;
+            }
+
             /* Entity cards */
             .entity-card-simple .entity-names {
                 padding: 14px 16px;
