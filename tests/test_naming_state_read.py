@@ -86,3 +86,54 @@ def test_a_second_run_proposes_what_is_already_there(restructurer, state):
 
     assert first == second
     assert first[1] == APPLIED
+
+
+def test_a_name_the_integration_froze_does_not_come_back_to_haunt_the_proposal(restructurer, state):
+    """Helpers built in the interface carry the device name of their creation day.
+
+    Home Assistant names such an entity once, in full - "Vorrat Steckdose Kosten"
+    - and never again. Stripping the device name off that works only while the
+    device is still called what it was called then; afterwards the old name sits
+    in the middle of every proposal. The note says what the type part was, and
+    is therefore asked before the name the integration supplies.
+    """
+    restructurer.entities["sensor.a"]["original_name"] = "Vorrat Steckdose Kosten"
+    restructurer.entities["sensor.a"]["name"] = "Küche Deckenleuchte Kosten"
+    state.record(
+        "reg-a",
+        applied_name="Küche Deckenleuchte Kosten",
+        applied_entity_id="sensor.a",
+        base_entity="Kosten",
+    )
+
+    new_id, name = restructurer.generate_new_entity_id("sensor.a", restructurer.entities["sensor.a"])
+
+    assert name == "Küche Deckenleuchte Kosten"
+    assert new_id == "sensor.kuche_deckenleuchte_kosten"
+
+
+def test_without_the_note_the_frozen_name_does_come_back(restructurer):
+    """What the case above looks like unrecorded - and why the note is asked first."""
+    restructurer.entities["sensor.a"]["original_name"] = "Vorrat Steckdose Kosten"
+    restructurer.entities["sensor.a"]["name"] = "Küche Deckenleuchte Kosten"
+
+    _, name = restructurer.generate_new_entity_id("sensor.a", restructurer.entities["sensor.a"])
+
+    assert name == "Küche Deckenleuchte Vorrat Steckdose Kosten"
+
+
+def test_an_older_note_without_a_type_part_still_says_whose_name_it_is(restructurer, state):
+    """Notes written before the type part was kept can still be read back.
+
+    The name was rendered by our own templates, so unwinding it gives the type
+    part - and it beats the supplied name, which is where the stale device name
+    comes from.
+    """
+    restructurer.entities["sensor.a"]["original_name"] = "Vorrat Steckdose Kosten"
+    restructurer.entities["sensor.a"]["name"] = "Küche Deckenleuchte Kosten"
+    state.record("reg-a", applied_name="Küche Deckenleuchte Kosten", applied_entity_id="sensor.a")
+
+    _, name = restructurer.generate_new_entity_id("sensor.a", restructurer.entities["sensor.a"])
+
+    assert name == "Küche Deckenleuchte Kosten"
+    assert restructurer.last_resolutions["sensor.a"]["won_by"] == "legacy_parse"

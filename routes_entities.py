@@ -105,7 +105,11 @@ async def _set_entity_override_async():
                 try:
                     entity_registry = EntityRegistry(ws)
                     # Update nur den Friendly Name, nicht die Entity ID
-                    await entity_registry.update_entity(entity_id=entity_id, name=new_friendly_name)
+                    await entity_registry.update_entity(
+                        entity_id=entity_id,
+                        name=new_friendly_name,
+                        provenance=naming_service.provenance_for(entity_id),
+                    )
                     logger.info(f"Entity {entity_id} Friendly Name aktualisiert zu: {new_friendly_name}")
                 finally:
                     await ws.disconnect()
@@ -475,25 +479,40 @@ def rename_device():
     return jsonify(job), 202
 
 
-def _capture_device_entity_names(
+def _capture_device_entity_naming(
     restructurer: EntityRestructurer,
     device_id: str,
     states: list[dict[str, Any]],
-) -> dict[str, str]:
-    """Capture entity-specific names before changing their device name."""
+) -> dict[str, dict[str, Any]]:
+    """Capture the type part of every entity name, and where it came from.
+
+    Taken before the device is renamed, because the type part is what the
+    device name is stripped off of: a helper built in the interface carries the
+    device name of its creation day inside the name the integration supplies,
+    and once the device is called something else, that name can no longer be
+    told from the type part. This is also what the note kept with a written
+    name holds, so both come from the same reading.
+    """
     states_by_id = {state["entity_id"]: state for state in states}
-    return {
-        entity_id: restructurer.build_naming_context(entity_id, states_by_id.get(entity_id, {}))["entity"]
-        for entity_id, entity_info in restructurer.entities.items()
-        if entity_info.get("device_id") == device_id
-    }
+    captured: dict[str, dict[str, Any]] = {}
+    for entity_id, entity_info in restructurer.entities.items():
+        if entity_info.get("device_id") != device_id:
+            continue
+        name = restructurer.build_naming_context(entity_id, states_by_id.get(entity_id, {}))["entity"]
+        resolution = restructurer.last_resolutions.get(entity_id) or {}
+        captured[entity_id] = {
+            "base_entity": name,
+            "won_by": resolution.get("won_by") or "",
+            "rule_id": resolution.get("rule_id"),
+        }
+    return captured
 
 
 def _plan_device_entity_changes(
     restructurer: EntityRestructurer,
     device_id: str,
     states: list[dict[str, Any]],
-    entity_names: dict[str, str],
+    captured: dict[str, dict[str, Any]],
 ) -> list[tuple[str, str, str]]:
     """Generate entity changes for a renamed device with the active templates."""
     states_by_id = {state["entity_id"]: state for state in states}
@@ -503,7 +522,7 @@ def _plan_device_entity_changes(
             *restructurer.generate_new_entity_id(
                 entity_id,
                 states_by_id.get(entity_id, {}),
-                entity_names.get(entity_id),
+                (captured.get(entity_id) or {}).get("base_entity"),
             ),
         )
         for entity_id, entity_info in restructurer.entities.items()
@@ -538,7 +557,7 @@ async def rename_device_handler(job, ctx):
 
         dependency_updater = DependencyUpdater(base_url, token)
         cached_states = await dependency_updater.get_states()
-        entity_names = _capture_device_entity_names(
+        captured = _capture_device_entity_naming(
             renamer_state["restructurer"],
             device_id,
             cached_states,
@@ -573,8 +592,10 @@ async def rename_device_handler(job, ctx):
             renamer_state["restructurer"],
             device_id,
             cached_states,
-            entity_names,
+            captured,
         )
+        # The templates are read once: they cannot change while the job runs.
+        template_hash = renamer_state["naming_templates"].fingerprint()
         total = len(entity_changes)
         logger.info(f"Found {total} entities for device {device_id}")
         ctx.progress(0, total)
@@ -596,7 +617,10 @@ async def rename_device_handler(job, ctx):
                 # Rename entity (ID + friendly name)
                 id_changed = new_entity_id != old_entity_id
                 await entity_registry.rename_entity(
-                    old_entity_id, new_entity_id if id_changed else None, new_friendly_name
+                    old_entity_id,
+                    new_entity_id if id_changed else None,
+                    new_friendly_name,
+                    provenance={**(captured.get(old_entity_id) or {}), "template_hash": template_hash},
                 )
                 entities_updated += 1
                 logger.info("  SUCCESS: Renamed entity")
@@ -656,8 +680,12 @@ renamer_state["worker"].register("rename_device", rename_device_handler)
 
 
 @entities.route("/api/sync_z2m_name", methods=["POST"])
-def sync_z2m_name():
-    """Gleicht den Z2M-friendly_name eines Geräts an seinen HA-Namen an (kein HA-Rename)."""
+def sync_z2m_name_request():
+    """Gleicht den Z2M-friendly_name eines Geräts an seinen HA-Namen an (kein HA-Rename).
+
+    Heißt nicht wie die Funktion aus ``z2m``: gleiche Namen würden den Import
+    für das ganze Modul überdecken, und jeder Aufruf landete bei dieser View.
+    """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
