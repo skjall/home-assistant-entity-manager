@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import aiohttp
 from dotenv import load_dotenv
 
+from helper_options import HelperOptions
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ load_dotenv()
 class BrokenReference:
     """Eine verwaiste Entity-Referenz."""
 
-    config_type: str  # "automation" | "scene" | "script"
+    config_type: str  # "automation" | "scene" | "script" | "helper"
     config_id: str  # automation.xyz
     config_name: str  # Friendly name
     missing_entity_id: str  # light.schlafzimmer_2
@@ -50,7 +52,7 @@ class Suggestion:
 
 
 class ReferenceChecker:
-    """Prüft Automations/Scenes/Scripts auf verwaiste Entity-Referenzen."""
+    """Prüft Automations/Scenes/Scripts/Helfer auf verwaiste Entity-Referenzen."""
 
     # Entity-ID Pattern für Extraktion
     ENTITY_ID_PATTERN = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
@@ -153,6 +155,10 @@ class ReferenceChecker:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
         }
+        # Helpers built in the interface: their templates name entities in
+        # prose, so nothing carries a rename into them and a dead reference
+        # sits there silently.
+        self.helpers = HelperOptions(self.base_url, self.token)
         # Cache
         self._existing_entities: Optional[Set[str]] = None
         self._entity_details: Optional[Dict[str, Dict]] = None
@@ -478,6 +484,23 @@ class ReferenceChecker:
                             yaml_path=yaml_path,
                         )
                     )
+
+        # Scan helpers built in the interface
+        logger.info("Scanning helpers...")
+        try:
+            for helper in await self.helpers.broken(existing):
+                broken_refs.append(
+                    BrokenReference(
+                        config_type="helper",
+                        config_id=helper["entry_id"],
+                        config_name=helper["title"],
+                        missing_entity_id=helper["missing_entity_id"],
+                        context="template",
+                        yaml_path=helper["field"],
+                    )
+                )
+        except Exception as error:  # noqa: BLE001 - the other findings still stand
+            logger.error("Could not scan the helpers: %s", error)
 
         logger.info(f"Found {len(broken_refs)} broken references")
         self._broken_refs_cache = broken_refs
