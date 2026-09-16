@@ -450,7 +450,17 @@
     "exceptions_remove": "Remove exception",
     "exceptions_none": "No exceptions. Every name comes from the rules.",
     "exceptions_cleanup": "Clean up {count}",
-    "exceptions_cleanup_hint": "Removes only the exceptions that change nothing any more, and those without an entity."
+    "exceptions_cleanup_hint": "Removes only the exceptions that change nothing any more, and those without an entity.",
+    "sort_name": "By name",
+    "sort_reach": "By reach",
+    "sort_recent": "Recently changed",
+    "group_builtin": "Built-in",
+    "group_unused": "Without effect",
+    "group_single": "One entity",
+    "group_many": "Several entities",
+    "group_undated": "Undated",
+    "filter_everywhere": "Everywhere",
+    "filter_replaces_everywhere": "The rule applies everywhere so far. With this filter, “{name}” applies only there."
   },
   "type_mappings": {
     "light": "Light",
@@ -482,6 +492,15 @@
     "failed": "Failed",
     "close": "Close",
     "show_log": "Show log",
-    "hide_log": "Hide log"
+    "hide_log": "Hide log",
+    "step_renamed": "Renamed",
+    "step_carried": "Carried along",
+    "step_not_carried": "Not carried along",
+    "step_unreachable": "Needs you",
+    "step_error": "Error",
+    "follow_up": "This part is left to you",
+    "follow_up_hint": "These references still name the old entity and cannot be changed from here.",
+    "search_log": "Search the log …",
+    "log_empty": "No entries"
   }
 }

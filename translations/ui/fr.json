@@ -470,7 +470,17 @@
     "exceptions_remove": "Supprimer l’exception",
     "exceptions_none": "Aucune exception. Tous les noms viennent des règles.",
     "exceptions_cleanup": "Nettoyer {count}",
-    "exceptions_cleanup_hint": "Ne supprime que les exceptions qui ne changent plus rien et celles sans entité."
+    "exceptions_cleanup_hint": "Ne supprime que les exceptions qui ne changent plus rien et celles sans entité.",
+    "sort_name": "Par nom",
+    "sort_reach": "Par portée",
+    "sort_recent": "Modifié récemment",
+    "group_builtin": "Intégré",
+    "group_unused": "Sans effet",
+    "group_single": "Une entité",
+    "group_many": "Plusieurs entités",
+    "group_undated": "Sans date",
+    "filter_everywhere": "Partout",
+    "filter_replaces_everywhere": "La règle s'applique partout pour l'instant. Avec ce filtre, « {name} » ne s'applique plus qu'à cela."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",
@@ -482,6 +492,15 @@
     "failed": "Échec",
     "close": "Fermer",
     "show_log": "Afficher le journal",
-    "hide_log": "Masquer le journal"
+    "hide_log": "Masquer le journal",
+    "step_renamed": "Renommé",
+    "step_carried": "Reporté",
+    "step_not_carried": "Non reporté",
+    "step_unreachable": "À reprendre",
+    "step_error": "Erreur",
+    "follow_up": "Cette partie vous revient",
+    "follow_up_hint": "Ces références nomment toujours l'ancienne entité et ne peuvent pas être modifiées d'ici.",
+    "search_log": "Rechercher dans le journal …",
+    "log_empty": "Aucune entrée"
   }
 }

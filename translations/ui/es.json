@@ -470,7 +470,17 @@
     "exceptions_remove": "Quitar excepción",
     "exceptions_none": "Sin excepciones. Todos los nombres vienen de las reglas.",
     "exceptions_cleanup": "Limpiar {count}",
-    "exceptions_cleanup_hint": "Quita solo las excepciones que ya no cambian nada y las que no tienen entidad."
+    "exceptions_cleanup_hint": "Quita solo las excepciones que ya no cambian nada y las que no tienen entidad.",
+    "sort_name": "Por nombre",
+    "sort_reach": "Por alcance",
+    "sort_recent": "Cambiado hace poco",
+    "group_builtin": "Incluido",
+    "group_unused": "Sin efecto",
+    "group_single": "Una entidad",
+    "group_many": "Varias entidades",
+    "group_undated": "Sin fecha",
+    "filter_everywhere": "En todas partes",
+    "filter_replaces_everywhere": "La regla se aplica en todas partes hasta ahora. Con este filtro, «{name}» se aplica solo ahí."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",
@@ -482,6 +492,15 @@
     "failed": "Fallido",
     "close": "Cerrar",
     "show_log": "Mostrar registro",
-    "hide_log": "Ocultar registro"
+    "hide_log": "Ocultar registro",
+    "step_renamed": "Renombrado",
+    "step_carried": "Actualizado",
+    "step_not_carried": "Sin actualizar",
+    "step_unreachable": "Requiere tu mano",
+    "step_error": "Error",
+    "follow_up": "Esta parte te toca a ti",
+    "follow_up_hint": "Estas referencias siguen nombrando la entidad antigua y no se pueden cambiar desde aquí.",
+    "search_log": "Buscar en el registro …",
+    "log_empty": "Sin entradas"
   }
 }

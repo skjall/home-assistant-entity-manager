@@ -450,7 +450,17 @@
     "exceptions_remove": "Ausnahme entfernen",
     "exceptions_none": "Keine Ausnahmen. Alle Namen kommen aus den Regeln.",
     "exceptions_cleanup": "{count} aufräumen",
-    "exceptions_cleanup_hint": "Entfernt nur die Ausnahmen, die nichts mehr ändern, und die ohne Entität."
+    "exceptions_cleanup_hint": "Entfernt nur die Ausnahmen, die nichts mehr ändern, und die ohne Entität.",
+    "sort_name": "Nach Name",
+    "sort_reach": "Nach Reichweite",
+    "sort_recent": "Zuletzt geändert",
+    "group_builtin": "Mitgeliefert",
+    "group_unused": "Ohne Wirkung",
+    "group_single": "Eine Entität",
+    "group_many": "Mehrere Entitäten",
+    "group_undated": "Ohne Datum",
+    "filter_everywhere": "Überall",
+    "filter_replaces_everywhere": "Die Regel gilt bisher überall. Mit diesem Filter gilt „{name}“ nur noch dafür."
   },
   "type_mappings": {
     "light": "Licht",
@@ -482,6 +492,15 @@
     "failed": "Fehlgeschlagen",
     "close": "Schließen",
     "show_log": "Log anzeigen",
-    "hide_log": "Log ausblenden"
+    "hide_log": "Log ausblenden",
+    "step_renamed": "Umbenannt",
+    "step_carried": "Mitgezogen",
+    "step_not_carried": "Nicht mitgezogen",
+    "step_unreachable": "Nachziehen",
+    "step_error": "Fehler",
+    "follow_up": "Hier musst du selbst nachziehen",
+    "follow_up_hint": "Diese Verweise nennen weiterhin den alten Namen und lassen sich von hier aus nicht ändern.",
+    "search_log": "Im Protokoll suchen …",
+    "log_empty": "Keine Einträge"
   }
 }

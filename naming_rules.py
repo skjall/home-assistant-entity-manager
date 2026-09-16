@@ -700,9 +700,8 @@ class NamingRules:
         """Make this wording apply in one more place.
 
         The rule that already says it gains a filter; if none does, one is
-        written. A rule that says it and carries no filter already applies
-        everywhere, so it is answered with unchanged - narrowing it to the one
-        place just asked about would take the wording away from everywhere else.
+        written. Carrying no filter is not a place of its own but the default a
+        rule starts out with, so the first real filter replaces it.
         """
         if not (target or "").strip():
             raise NamingRuleError("A rule needs a target")
@@ -736,9 +735,11 @@ class NamingRules:
             rule["filters"] = merged
             rule["updated_at"] = _now()
         else:
-            # It already applies everywhere; narrowing it to the one place just
-            # asked about would take the wording away from everywhere else.
-            return rule
+            # Everywhere is where a rule starts, not somewhere it was put: the
+            # first filter takes its place instead of being swallowed by it.
+            self._refuse_collision({**rule, "filters": [wanted]})
+            rule["filters"] = [wanted]
+            rule["updated_at"] = _now()
         self._forget_index()
         return rule
 

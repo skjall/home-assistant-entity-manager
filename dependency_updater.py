@@ -168,9 +168,18 @@ class DependencyUpdater:
             async with session.post(url, headers=self.headers, json=config) as response:
                 if response.status == 200:
                     result = await response.json()
-                    return result.get("result") == "ok"
+                    if result.get("result") == "ok":
+                        return True
+                    # A 200 that does not say "ok" used to leave no trace at
+                    # all, which is the worst of both: the write did not take
+                    # and nothing said why.
+                    logger.error(f"Automation {automation_numeric_id} nicht geschrieben: {result}")
+                    return False
                 else:
-                    logger.error(f"Fehler beim Update der Automation: {response.status}")
+                    text = await response.text()
+                    logger.error(
+                        f"Fehler beim Update der Automation {automation_numeric_id}: {response.status}, {text}"
+                    )
                     return False
 
     async def update_automation_entities(
@@ -193,7 +202,21 @@ class DependencyUpdater:
 
         if changed:
             logger.info(f"Aktualisiere Automation {automation_id}: {old_entity_id} -> {new_entity_id}")
-            return await self.update_automation_config(automation_numeric_id, config)
+            if not await self.update_automation_config(automation_numeric_id, config):
+                return False
+            # Home Assistant answering "ok" is not evidence that the old id is
+            # gone: a write that reported success and changed nothing looks
+            # exactly like one that worked. Reading it back is the only proof,
+            # and without it a rename silently leaves an automation broken.
+            written = await self.get_automation_config(automation_numeric_id)
+            if written is None:
+                logger.error(f"Konnte Automation {automation_id} nach dem Schreiben nicht wieder lesen")
+                return False
+            if old_entity_id in json.dumps(written):
+                logger.error(f"Automation {automation_id} nennt {old_entity_id} nach dem Schreiben weiterhin")
+                return False
+            logger.info(f"Automation {automation_id} nennt jetzt {new_entity_id}")
+            return True
         else:
             logger.debug(f"No changes needed for automation {automation_id}")
 
@@ -210,9 +233,15 @@ class DependencyUpdater:
         results = {
             "scenes": {"success": [], "failed": []},
             "scripts": {"success": [], "failed": []},
-            "automations": {"success": [], "failed": []},
+            # "unreachable" is neither: the automation names the old id and
+            # nothing here can rewrite it, so only the user can.
+            "automations": {"success": [], "failed": [], "unreachable": []},
             "total_success": 0,
             "total_failed": 0,
+            "total_unreachable": 0,
+            # Automations the config API cannot read at all, whether or not
+            # they are about this entity. Worth saying once, not per rename.
+            "unreachable_configs": [],
         }
 
         # Use cached states if provided, otherwise fetch
@@ -295,7 +324,16 @@ class DependencyUpdater:
                             results["automations"]["failed"].append(automation_entity_id)
                             results["total_failed"] += 1
                 else:
-                    logger.debug(f"Could not fetch config for automation {automation_entity_id}")
+                    # Automations outside automations.yaml - packages, or files
+                    # included from elsewhere - cannot be read or written
+                    # through the config API. If one of them names the old id,
+                    # nothing here will ever change it, so say so rather than
+                    # leaving a line in the debug log.
+                    if old_entity_id in json.dumps(automation_state):
+                        results["automations"]["unreachable"].append(automation_entity_id)
+                        results["total_unreachable"] += 1
+                    else:
+                        results["unreachable_configs"].append(automation_entity_id)
             else:
                 logger.debug(f"Automation {automation_entity_id} has no numeric ID")
 
