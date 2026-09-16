@@ -546,6 +546,7 @@
     "count_done": "{count} renombradas",
     "count_failed": "{count} fallidas",
     "count_unreachable": "{count} a tu cargo",
-    "count_enabled": "{count} activadas"
+    "count_enabled": "{count} activadas",
+    "step_unverified": "Sin confirmar"
   }
 }

@@ -783,6 +783,16 @@ async def _preview_changes_async():
 _note_for = naming_service.note_for
 
 
+def _unconfirmed(old_id: str, new_id: str) -> str:
+    """The line for a write the registry could not be asked about.
+
+    The name is written; what is missing is the confirmation. Saying so is
+    what keeps a run with one of these from counting as flawless - and what
+    stops the window from closing on a result nobody checked.
+    """
+    return f"{old_id} -> {new_id or old_id}: written, not read back"
+
+
 def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_results: dict) -> None:
     """Record what the rename could not carry along, so the user can.
 
@@ -960,13 +970,22 @@ async def _execute_changes_async():
                                 )
 
                                 # Rename entity and enable if needed
-                                await entity_registry.rename_entity(
+                                written = await entity_registry.rename_entity(
                                     entity_id,
                                     new_entity_id,
                                     new_friendly_name,
                                     enable=should_enable,
                                     provenance=_note_for(entity_id, states_by_id.get(entity_id), new_friendly_name),
                                 )
+                                if not (written or {}).get("verified"):
+                                    results["dependency_warnings"].append(
+                                        {
+                                            "entity_id": new_entity_id,
+                                            "old_id": entity_id,
+                                            "unverified": True,
+                                            "warning": _unconfirmed(entity_id, new_entity_id),
+                                        }
+                                    )
 
                                 if should_enable:
                                     logger.info(f"Enabled and renamed disabled entity: {entity_id} -> {new_entity_id}")
@@ -1227,13 +1246,15 @@ async def execute_direct_handler(job, ctx):
                 should_enable = is_disabled and os.getenv("ENABLE_DISABLED_ENTITIES", "false").lower() == "true"
 
                 # Rename entity
-                await entity_registry.rename_entity(
+                written = await entity_registry.rename_entity(
                     old_id,
                     new_id,
                     friendly_name,
                     enable=should_enable,
                     provenance=_note_for(old_id, states_by_id.get(old_id), friendly_name),
                 )
+                if not (written or {}).get("verified"):
+                    ctx.log("UNVERIFIED", _unconfirmed(old_id, new_id))
 
                 if should_enable:
                     logger.info(f"Enabled and renamed disabled entity: {old_id} -> {new_id}")

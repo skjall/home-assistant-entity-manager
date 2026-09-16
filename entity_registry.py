@@ -75,8 +75,12 @@ class EntityRegistry:
 
         result = response.get("result", {})
         stored = await self._read_back(result, new_entity_id or entity_id)
+        # Whether the registry confirmed this, not just accepted it. A write
+        # that could not be read back still stands - the name is there - but
+        # nothing may call it certain afterwards.
+        result = {**result, "verified": stored is not None}
         if stored is not None:
-            result = {**result, "entity_entry": stored}
+            result["entity_entry"] = stored
             self._check_what_was_stored(stored, new_entity_id or entity_id, name)
         if name is not None:
             self._note_applied_name(result, entity_id, new_entity_id, name, provenance)

@@ -99,3 +99,26 @@ async def test_a_read_that_fails_does_not_undo_the_write(registry):
     result = await registry(socket).update_entity("sensor.old", new_entity_id="sensor.new", name="Küche Herd")
 
     assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_a_confirmed_write_says_so(registry):
+    socket = FakeSocket({"entity_id": "sensor.new", "name": "Küche Herd"})
+
+    result = await registry(socket).update_entity("sensor.old", new_entity_id="sensor.new", name="Küche Herd")
+
+    assert result["verified"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_write_nobody_could_confirm_says_that_too(registry):
+    """The name is written; what is missing is knowing it for certain.
+
+    A run carrying one of these is not flawless, so the window does not close
+    on a result nobody checked.
+    """
+    socket = FakeSocket({"entity_id": "sensor.new", "name": "Küche Herd"}, get_fails=True)
+
+    result = await registry(socket).update_entity("sensor.old", new_entity_id="sensor.new", name="Küche Herd")
+
+    assert result["verified"] is False

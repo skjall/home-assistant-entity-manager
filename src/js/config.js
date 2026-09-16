@@ -28,6 +28,7 @@ window.EntityManagerConfig = {
         CARRIED:     {label: "step_carried",     icon: "ri-links-line",           colour: "carried"},
         NOT_CARRIED: {label: "step_not_carried", icon: "ri-link-unlink",          colour: "not-carried"},
         UNREACHABLE: {label: "step_unreachable", icon: "ri-error-warning-line",   colour: "unreachable"},
+        UNVERIFIED:  {label: "step_unverified",  icon: "ri-question-line",        colour: "unreachable"},
         ERROR:       {label: "step_error",       icon: "ri-close-circle-line",    colour: "error"}
     }
 };

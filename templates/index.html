@@ -5281,7 +5281,7 @@
                 // only place the per-target outcome exists.
                 jobFlawless(job) {
                     if (!this.isJobTerminal(job) || this.jobUnsuccessful(job)) return false;
-                    for (const step of ['ERROR', 'UNREACHABLE', 'NOT_CARRIED']) {
+                    for (const step of ['ERROR', 'UNREACHABLE', 'NOT_CARRIED', 'UNVERIFIED']) {
                         if (this.jobLogCount(step)) return false;
                     }
                     const progress = (job && job.progress) || {};

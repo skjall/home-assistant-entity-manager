@@ -397,11 +397,16 @@ async def _rename_entity_async():
         _record_single_rename(old_entity_id, new_entity_id, new_friendly_name, error=error)
         return jsonify({"error": str(error)}), 500
     if not result.get("skipped"):
-        _record_single_rename(old_entity_id, new_entity_id, new_friendly_name)
+        _record_single_rename(
+            old_entity_id,
+            result.get("new_entity_id") or new_entity_id,
+            result.get("new_friendly_name") or new_friendly_name,
+            verified=result.get("verified", False),
+        )
     return jsonify(result)
 
 
-def _record_single_rename(old_id, new_id, name, error=None):
+def _record_single_rename(old_id, new_id, name, error=None, verified=True):
     """Put a rename of one entity in the log, where every run already is.
 
     Renaming from the list wrote nothing down: it happened, the toast faded,
@@ -419,6 +424,10 @@ def _record_single_rename(old_id, new_id, name, error=None):
         job["state"] = STATE_COMPLETED
         job["result"] = {"success": [written]}
         job["log"] = [{"ts": iso_now(), "step": "RENAME", "message": f"{old_id} -> {written} ({name})"}]
+        if not verified:
+            job["log"].append(
+                {"ts": iso_now(), "step": "UNVERIFIED", "message": f"{old_id} -> {written}: written, not read back"}
+            )
     else:
         job["state"] = STATE_FAILED
         job["error"] = str(error)
@@ -676,12 +685,14 @@ async def rename_device_handler(job, ctx):
             try:
                 # Rename entity (ID + friendly name)
                 id_changed = new_entity_id != old_entity_id
-                await entity_registry.rename_entity(
+                written = await entity_registry.rename_entity(
                     old_entity_id,
                     new_entity_id if id_changed else None,
                     new_friendly_name,
                     provenance={**(captured.get(old_entity_id) or {}), "template_hash": template_hash},
                 )
+                if not (written or {}).get("verified"):
+                    ctx.log("UNVERIFIED", f"{old_entity_id} -> {new_entity_id}: written, not read back")
                 entities_updated += 1
                 logger.info("  SUCCESS: Renamed entity")
                 ctx.log("RENAME", f"{old_entity_id} -> {new_entity_id}")
