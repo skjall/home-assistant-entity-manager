@@ -493,7 +493,8 @@
     "kind_swap": "Geräteaustausch",
     "page_back": "Zurück",
     "page_next": "Weiter",
-    "page_of": "Seite {page} von {pages} — {total} Einträge"
+    "page_of": "Seite {page} von {pages} — {total} Einträge",
+    "filters_apply_log": "{count} Einträge anzeigen"
   },
   "type_mappings": {
     "light": "Licht",
