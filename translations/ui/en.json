@@ -536,6 +536,9 @@
     "follow_up_hint": "These references still name the old entity and cannot be changed from here.",
     "search_log": "Search the log …",
     "log_empty": "No entries",
-    "step_enabled": "Enabled"
+    "step_enabled": "Enabled",
+    "count_done": "{count} renamed",
+    "count_failed": "{count} failed",
+    "count_unreachable": "{count} left to you"
   }
 }

@@ -318,6 +318,28 @@
         }
 
         /* Broken References - Suggestion List */
+        /* The panel asked for these three from the start and nothing ever defined
+           them, so its only button rendered as bare text. */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 18px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+
+        .btn-ghost { background: white; border-color: #d1d5db; color: #374151; }
+        .btn-ghost:hover { border-color: #9ca3af; }
+
         .suggestion-list {
             display: flex;
             flex-direction: column;
@@ -2412,11 +2434,11 @@
                             <i class="text-xl"
                                :class="!isJobTerminal(jobPanel.job) ? 'ri-loader-4-line animate-spin text-blue-600' : (jobUnsuccessful(jobPanel.job) ? 'ri-error-warning-line text-red-600' : 'ri-check-line text-green-600')"></i>
                         </div>
-                        <h3 class="text-lg font-semibold" x-text="jobPanel.titleKey ? t(jobPanel.titleKey) : t('jobs.working')"></h3>
+                        <h3 class="text-lg font-semibold" x-text="jobTitle()"></h3>
                     </div>
 
                     <!-- Progress bar (shown while a total is known) -->
-                    <template x-if="jobPanel.job && jobPanel.job.progress && jobPanel.job.progress.total > 0">
+                    <template x-if="!isJobTerminal(jobPanel.job) && jobPanel.job && jobPanel.job.progress && jobPanel.job.progress.total > 0">
                         <div class="mb-3">
                             <div class="flex justify-between text-sm text-gray-500 mb-1">
                                 <span x-text="`${jobPanel.job.progress.done}/${jobPanel.job.progress.total}`"></span>
@@ -2430,8 +2452,7 @@
                     </template>
 
                     <!-- Current item / final message -->
-                    <p class="text-sm text-gray-600 mb-3 truncate"
-                       x-text="isJobTerminal(jobPanel.job) ? (jobFailed(jobPanel.job) ? (jobPanel.job.error || t('jobs.failed')) : ((jobPanel.job.result && jobPanel.job.result.message) || t('jobs.completed'))) : (jobPanel.job && jobPanel.job.progress && jobPanel.job.progress.current) || t('jobs.working')"></p>
+                    <p class="text-sm text-gray-600 mb-3 truncate" x-text="jobOutcome()"></p>
 
                     <!-- What the run did, sorted by outcome. The counts double as
                          the filter, so the one line that needs the user is one
@@ -5357,6 +5378,36 @@
                         return (entry.message || '').toLowerCase().includes(needle)
                             || (entry.step || '').toLowerCase().includes(needle);
                     });
+                },
+
+                // While it runs, what it is doing; once it is done, what it did.
+                jobTitle() {
+                    const job = this.jobPanel.job;
+                    if (this.isJobTerminal(job)) {
+                        return this.jobFailed(job) ? this.t('jobs.failed') : this.t('jobs.completed');
+                    }
+                    return this.jobPanel.titleKey ? this.t(this.jobPanel.titleKey) : this.t('jobs.working');
+                },
+
+                // The handlers answer with an English sentence meant for the API;
+                // the panel counts what they did and says it in the user's own
+                // language instead.
+                jobOutcome() {
+                    const job = this.jobPanel.job;
+                    if (!this.isJobTerminal(job)) {
+                        return (job && job.progress && job.progress.current) || this.t('jobs.working');
+                    }
+                    if (this.jobFailed(job)) return (job && job.error) || this.t('jobs.failed');
+                    const result = (job && job.result) || {};
+                    const done = (result.success || []).length || result.entities_renamed || 0;
+                    const failed = (result.failed || []).length || result.entities_failed || 0;
+                    const parts = [];
+                    if (done) parts.push(this.t('jobs.count_done', {count: done}));
+                    if (failed) parts.push(this.t('jobs.count_failed', {count: failed}));
+                    if (this.jobLogCount('UNREACHABLE')) {
+                        parts.push(this.t('jobs.count_unreachable', {count: this.jobLogCount('UNREACHABLE')}));
+                    }
+                    return parts.length ? parts.join(' · ') : (result.message || this.t('jobs.completed'));
                 },
 
                 jobProgressPercent() {

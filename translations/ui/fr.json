@@ -536,6 +536,9 @@
     "follow_up_hint": "Ces références nomment toujours l'ancienne entité et ne peuvent pas être modifiées d'ici.",
     "search_log": "Rechercher dans le journal …",
     "log_empty": "Aucune entrée",
-    "step_enabled": "Activé"
+    "step_enabled": "Activé",
+    "count_done": "{count} renommées",
+    "count_failed": "{count} en échec",
+    "count_unreachable": "{count} à reprendre"
   }
 }
