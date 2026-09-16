@@ -24,7 +24,8 @@
     "no_area": "Sans Zone",
     "assign_area": "Assigner une Zone",
     "select_area": "Sélectionner une zone...",
-    "area_assigned": "Appareil assigné à la zone"
+    "area_assigned": "Appareil assigné à la zone",
+    "open_in_ha": "Ouvrir la zone dans Home Assistant"
   },
   "summary": {
     "entities": "Entités",
@@ -516,7 +517,10 @@
     "page_back": "Précédent",
     "page_next": "Suivant",
     "page_of": "Page {page} sur {pages} — {total} entrées",
-    "filters_apply_log": "Afficher {count} entrées"
+    "filters_apply_log": "Afficher {count} entrées",
+    "behaviour": "Comportement",
+    "auto_close": "Fermer la fenêtre en cas de succès complet",
+    "auto_close_hint": "La fenêtre de progression se ferme d'elle-même lorsqu'une exécution s'est terminée sans échec et n'a rien laissé à reprendre. Sinon elle reste ouverte."
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

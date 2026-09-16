@@ -24,7 +24,8 @@
     "no_area": "Kein Bereich",
     "assign_area": "Bereich zuweisen",
     "select_area": "Bereich wählen...",
-    "area_assigned": "Gerät wurde Bereich zugewiesen"
+    "area_assigned": "Gerät wurde Bereich zugewiesen",
+    "open_in_ha": "Bereich in Home Assistant öffnen"
   },
   "summary": {
     "entities": "Entitäten",
@@ -496,7 +497,10 @@
     "page_back": "Zurück",
     "page_next": "Weiter",
     "page_of": "Seite {page} von {pages} — {total} Einträge",
-    "filters_apply_log": "{count} Einträge anzeigen"
+    "filters_apply_log": "{count} Einträge anzeigen",
+    "behaviour": "Verhalten",
+    "auto_close": "Fenster bei vollständigem Erfolg schließen",
+    "auto_close_hint": "Der Fortschrittsdialog schließt sich von selbst, wenn ein Lauf ohne Fehler durchlief und nichts zum Nachziehen übrig blieb. Sonst bleibt er offen."
   },
   "type_mappings": {
     "light": "Licht",

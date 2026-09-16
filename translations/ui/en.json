@@ -24,7 +24,8 @@
     "no_area": "No Area",
     "assign_area": "Assign Area",
     "select_area": "Select area...",
-    "area_assigned": "Device assigned to area"
+    "area_assigned": "Device assigned to area",
+    "open_in_ha": "Open area in Home Assistant"
   },
   "summary": {
     "entities": "Entities",
@@ -496,7 +497,10 @@
     "page_back": "Back",
     "page_next": "Next",
     "page_of": "Page {page} of {pages} — {total} entries",
-    "filters_apply_log": "Show {count} entries"
+    "filters_apply_log": "Show {count} entries",
+    "behaviour": "Behaviour",
+    "auto_close": "Close the window when everything succeeded",
+    "auto_close_hint": "The progress dialog closes by itself when a run finished without a failure and left nothing to follow up. Otherwise it stays open."
   },
   "type_mappings": {
     "light": "Light",

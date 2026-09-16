@@ -5275,6 +5275,28 @@
                     }
                 },
 
+                // Nothing to look at: it finished, every target succeeded, and no
+                // line asks the user to go and do something himself. Anything
+                // less than that keeps the panel open, because the log is the
+                // only place the per-target outcome exists.
+                jobFlawless(job) {
+                    if (!this.isJobTerminal(job) || this.jobUnsuccessful(job)) return false;
+                    for (const step of ['ERROR', 'UNREACHABLE', 'NOT_CARRIED']) {
+                        if (this.jobLogCount(step)) return false;
+                    }
+                    const progress = (job && job.progress) || {};
+                    if (progress.total > 0 && progress.done < progress.total) return false;
+                    return true;
+                },
+
+                autoCloseWanted() {
+                    try {
+                        return !!JSON.parse(localStorage.getItem('entityManagerSettings') || '{}').autoCloseOnSuccess;
+                    } catch (error) {
+                        return false;
+                    }
+                },
+
                 async finishJob() {
                     this.stopJobPolling();
                     const finished = this.jobPanel.job;
@@ -5293,6 +5315,13 @@
                         }
                     }
                     if (cb) await cb(finished);
+                    // Long enough to read the green tick, short enough not to wait
+                    // for it. Only when the run left nothing to look at.
+                    if (this.autoCloseWanted() && this.jobFlawless(finished)) {
+                        setTimeout(() => {
+                            if (this.jobPanel.job === finished) this.closeJobPanel();
+                        }, 1200);
+                    }
                 },
 
                 stopJobPolling() {

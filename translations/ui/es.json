@@ -24,7 +24,8 @@
     "no_area": "Sin Área",
     "assign_area": "Asignar Área",
     "select_area": "Seleccionar área...",
-    "area_assigned": "Dispositivo asignado al área"
+    "area_assigned": "Dispositivo asignado al área",
+    "open_in_ha": "Abrir el área en Home Assistant"
   },
   "summary": {
     "entities": "Entidades",
@@ -516,7 +517,10 @@
     "page_back": "Atrás",
     "page_next": "Siguiente",
     "page_of": "Página {page} de {pages} — {total} entradas",
-    "filters_apply_log": "Mostrar {count} entradas"
+    "filters_apply_log": "Mostrar {count} entradas",
+    "behaviour": "Comportamiento",
+    "auto_close": "Cerrar la ventana si todo salió bien",
+    "auto_close_hint": "El diálogo de progreso se cierra solo cuando una ejecución terminó sin fallos y no dejó nada pendiente. En caso contrario permanece abierto."
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

@@ -1530,6 +1530,26 @@
         <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'system'">
             <div class="section-header">
                 <h2>
+                    <i class="ri-window-line"></i>
+                    <span x-text="t('settings.behaviour')">Behaviour</span>
+                </h2>
+            </div>
+            <div style="padding: 20px;">
+                <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                    <input type="checkbox" x-model="autoCloseOnSuccess" @change="saveAutoClose()"
+                           style="margin-top: 3px; width: 16px; height: 16px; cursor: pointer;">
+                    <span>
+                        <span style="font-weight: 600;" x-text="t('settings.auto_close')">Close on success</span>
+                        <span style="display: block; color: #6b7280; font-size: 0.9rem; margin-top: 2px;"
+                              x-text="t('settings.auto_close_hint')"></span>
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'system'">
+            <div class="section-header">
+                <h2>
                     <i class="ri-upload-download-line"></i>
                     <span x-text="t('settings.import_export')">Import / Export</span>
                 </h2>
@@ -1921,6 +1941,7 @@
                 language: 'de',
                 searchQuery: '',
                 section: '{{ section }}',
+                autoCloseOnSuccess: false,
                 sortBy: 'name',
                 filterModal: false,
                 // The log is answered by the server a page at a time, so what is
@@ -2002,6 +2023,7 @@
                     // so the state has to survive in storage, as on the main page.
                     // The address still wins when it carries something, for links.
                     this.restoreState();
+                    this.readAutoClose();
                     const params = new URLSearchParams(window.location.search);
                     const wanted = params.get('rule');
                     if (wanted) {
@@ -2917,6 +2939,27 @@
                     const when = new Date(ts);
                     if (isNaN(when)) return ts;
                     return when.toLocaleString(this.language);
+                },
+
+                // Shared with the main page through the same key, so the switch
+                // set here is the one the panel reads there.
+                saveAutoClose() {
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        saved.autoCloseOnSuccess = this.autoCloseOnSuccess;
+                        localStorage.setItem('entityManagerSettings', JSON.stringify(saved));
+                    } catch (error) {
+                        // Storage can be unavailable; the switch then lasts this visit.
+                    }
+                },
+
+                readAutoClose() {
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        this.autoCloseOnSuccess = !!saved.autoCloseOnSuccess;
+                    } catch (error) {
+                        this.autoCloseOnSuccess = false;
+                    }
                 },
 
                 async loadLog() {
