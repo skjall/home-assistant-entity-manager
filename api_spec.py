@@ -220,6 +220,20 @@ OPERATIONS: List[Operation] = [
         tag="Naming",
     ),
     Operation(
+        "/api/log",
+        "get",
+        "run_log",
+        "What every run did, newest first: searchable with q, narrowed by step and type, paged.",
+        query={
+            "q": text("Search the message and the step."),
+            "step": text("Keep only these steps, comma-separated (RENAME, CARRIED, NOT_CARRIED, UNREACHABLE, ERROR)."),
+            "type": text("Keep only these kinds of run, comma-separated."),
+            "page": text("Which page to answer, from 1."),
+            "per_page": text("Lines per page, at most 200."),
+        },
+        tag="Jobs",
+    ),
+    Operation(
         "/api/naming/filters",
         "get",
         "available_filters",

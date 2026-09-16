@@ -499,7 +499,22 @@
     "pick_translation_key": "Clave de traducción",
     "filter_search_integration": "Buscar integración …",
     "model_count": "{count} modelos",
-    "more_matches": "… {count} más — acota la búsqueda"
+    "more_matches": "… {count} más — acota la búsqueda",
+    "tab_log": "Registro",
+    "log_title": "Registro",
+    "log_hint": "Lo que hizo cada ejecución — la más reciente primero.",
+    "log_search": "Buscar en el registro …",
+    "log_empty": "Aún no hay registro",
+    "refresh": "Actualizar",
+    "group_step": "Qué ocurrió",
+    "group_run": "Tipo de ejecución",
+    "kind_rename": "Renombrado",
+    "kind_device": "Dispositivo renombrado",
+    "kind_enable": "Activación",
+    "kind_swap": "Sustitución de dispositivo",
+    "page_back": "Atrás",
+    "page_next": "Siguiente",
+    "page_of": "Página {page} de {pages} — {total} entradas"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",
@@ -520,6 +535,7 @@
     "follow_up": "Esta parte te toca a ti",
     "follow_up_hint": "Estas referencias siguen nombrando la entidad antigua y no se pueden cambiar desde aquí.",
     "search_log": "Buscar en el registro …",
-    "log_empty": "Sin entradas"
+    "log_empty": "Sin entradas",
+    "step_enabled": "Activado"
   }
 }

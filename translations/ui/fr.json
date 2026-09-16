@@ -499,7 +499,22 @@
     "pick_translation_key": "Clé de traduction",
     "filter_search_integration": "Rechercher une intégration …",
     "model_count": "{count} modèles",
-    "more_matches": "… {count} de plus — affinez la recherche"
+    "more_matches": "… {count} de plus — affinez la recherche",
+    "tab_log": "Journal",
+    "log_title": "Journal",
+    "log_hint": "Ce que chaque exécution a fait — la plus récente en premier.",
+    "log_search": "Rechercher dans le journal …",
+    "log_empty": "Rien encore journalisé",
+    "refresh": "Actualiser",
+    "group_step": "Ce qui s'est passé",
+    "group_run": "Type d'exécution",
+    "kind_rename": "Renommage",
+    "kind_device": "Appareil renommé",
+    "kind_enable": "Activation",
+    "kind_swap": "Remplacement d'appareil",
+    "page_back": "Précédent",
+    "page_next": "Suivant",
+    "page_of": "Page {page} sur {pages} — {total} entrées"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",
@@ -520,6 +535,7 @@
     "follow_up": "Cette partie vous revient",
     "follow_up_hint": "Ces références nomment toujours l'ancienne entité et ne peuvent pas être modifiées d'ici.",
     "search_log": "Rechercher dans le journal …",
-    "log_empty": "Aucune entrée"
+    "log_empty": "Aucune entrée",
+    "step_enabled": "Activé"
   }
 }

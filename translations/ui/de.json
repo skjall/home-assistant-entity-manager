@@ -479,7 +479,22 @@
     "pick_translation_key": "Übersetzungsschlüssel",
     "filter_search_integration": "Integration suchen …",
     "model_count": "{count} Modelle",
-    "more_matches": "… {count} weitere — Suche eingrenzen"
+    "more_matches": "… {count} weitere — Suche eingrenzen",
+    "tab_log": "Protokoll",
+    "log_title": "Protokoll",
+    "log_hint": "Was jeder Lauf getan hat — neueste zuerst.",
+    "log_search": "Im Protokoll suchen …",
+    "log_empty": "Noch nichts protokolliert",
+    "refresh": "Aktualisieren",
+    "group_step": "Was passiert ist",
+    "group_run": "Art des Laufs",
+    "kind_rename": "Umbenennung",
+    "kind_device": "Gerät umbenannt",
+    "kind_enable": "Aktivierung",
+    "kind_swap": "Geräteaustausch",
+    "page_back": "Zurück",
+    "page_next": "Weiter",
+    "page_of": "Seite {page} von {pages} — {total} Einträge"
   },
   "type_mappings": {
     "light": "Licht",
@@ -520,6 +535,7 @@
     "follow_up": "Hier musst du selbst nachziehen",
     "follow_up_hint": "Diese Verweise nennen weiterhin den alten Namen und lassen sich von hier aus nicht ändern.",
     "search_log": "Im Protokoll suchen …",
-    "log_empty": "Keine Einträge"
+    "log_empty": "Keine Einträge",
+    "step_enabled": "Aktiviert"
   }
 }

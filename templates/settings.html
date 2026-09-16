@@ -625,6 +625,59 @@
 
         .clear-filters:hover { color: #374151; }
 
+        .log-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+
+        .log-step {
+            flex: none;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .log-message { color: #111827; font-size: 0.92rem; overflow-wrap: anywhere; }
+
+        .step-renamed { background: #e0e7ff; color: #4338ca; }
+        .step-carried { background: #d1fae5; color: #047857; }
+        .step-not-carried { background: #fee2e2; color: #b91c1c; }
+        .step-unreachable { background: #fef3c7; color: #b45309; }
+        .step-error { background: #fee2e2; color: #b91c1c; }
+        .step-other { background: #f3f4f6; color: #6b7280; }
+
+        .row-renamed { border-left-color: #6366f1; }
+        .row-carried { border-left-color: #10b981; }
+        .row-not-carried, .row-error { border-left-color: #ef4444; }
+        .row-unreachable { border-left-color: #f59e0b; }
+        .row-other { border-left-color: #d1d5db; }
+
+        .pager {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 16px 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .pager-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: white;
+            color: #374151;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .pager-btn:hover:not(:disabled) { border-color: #3b82f6; color: #1d4ed8; }
+        .pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .pager-where { color: #6b7280; font-size: 0.85rem; }
+
         /* A list of integrations or models is far too long to scroll through in
            a dropdown, so it is typed into and narrowed as you type, the way
            devices are picked when one is swapped. */
@@ -1034,6 +1087,10 @@
                @click.prevent="showSection('rules')">
                 <i class="ri-translate-2"></i> <span x-text="t('settings.tab_rules')">Type rules</span>
             </a>
+            <a href="settings/log" class="settings-tab" :class="section === 'log' ? 'is-active' : ''"
+               @click.prevent="showSection('log')">
+                <i class="ri-file-list-3-line"></i> <span x-text="t('settings.tab_log')">Log</span>
+            </a>
             <a href="settings/system" class="settings-tab" :class="section === 'system' ? 'is-active' : ''"
                @click.prevent="showSection('system')">
                 <i class="ri-settings-3-line"></i> <span x-text="t('settings.tab_system')">System</span>
@@ -1329,6 +1386,88 @@
             </div>
         </div>
 
+        <!-- What every run did. It used to exist only inside the panel that was
+             open while it ran; here it survives the panel being closed. -->
+        <div class="mapping-section" x-show="section === 'log'">
+            <div class="section-header">
+                <h2>
+                    <i class="ri-file-list-3-line"></i>
+                    <span x-text="t('settings.log_title')">Log</span>
+                </h2>
+                <button class="add-btn" @click="loadLog()" :disabled="logBusy">
+                    <i class="ri-refresh-line" :class="logBusy ? 'ri-spin' : ''"></i>
+                    <span x-text="t('settings.refresh')">Refresh</span>
+                </button>
+            </div>
+            <p class="section-hint" x-text="t('settings.log_hint')"></p>
+
+            <div class="filter-bar">
+                <div class="search-wrap">
+                    <i class="ri-search-line"></i>
+                    <input type="text" class="search-input"
+                           :placeholder="t('settings.log_search')"
+                           x-model="logQuery"
+                           @input="logSearchLater()">
+                </div>
+                <button class="filter-btn" :class="logPickedCount() ? 'on' : ''" @click="logModal = true">
+                    <i class="ri-equalizer-line"></i>
+                    <span x-text="t('settings.filters')">Filters</span>
+                    <span class="filter-count" x-show="logPickedCount()" x-text="logPickedCount()"></span>
+                </button>
+            </div>
+
+            <div class="active-filters" x-show="logPickedCount() > 0">
+                <template x-for="chip in logChips()" :key="chip.group + ':' + chip.value">
+                    <span class="active-chip">
+                        <span x-text="chip.label"></span>
+                        <button @click="toggleLogPick(chip.group, chip.value)"
+                                :title="t('settings.filter_remove')">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </span>
+                </template>
+                <button class="clear-filters" @click="clearLogPicks()" x-text="t('settings.filters_clear')"></button>
+            </div>
+
+            <div class="rule-list" x-show="logEntries.length > 0">
+                <template x-for="(entry, at) in logEntries" :key="entry.job_id + ':' + at">
+                    <div class="rule-row" :class="logRowClass(entry.step)">
+                        <div class="rule-body">
+                            <div class="log-head">
+                                <span class="log-step" :class="logStepClass(entry.step)"
+                                      x-text="logStepLabel(entry.step)"></span>
+                                <span class="log-message" x-text="entry.message"></span>
+                            </div>
+                            <div class="rule-reach">
+                                <span x-text="logWhen(entry.ts)"></span>
+                                <span class="kind-badge muted" x-text="logKindLabel(entry.job_type)"></span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="empty-state" x-show="!logEntries.length && !logBusy">
+                <i class="ri-file-list-3-line"></i>
+                <p x-text="logQuery || logPickedCount() ? t('settings.no_results') : t('settings.log_empty')"></p>
+            </div>
+
+            <!-- One page at a time: a home that has been renamed a few times has
+                 thousands of these lines. -->
+            <div class="pager" x-show="logPages > 1">
+                <button class="pager-btn" @click="goToLogPage(logPage - 1)" :disabled="logPage <= 1">
+                    <i class="ri-arrow-left-s-line"></i>
+                    <span x-text="t('settings.page_back')">Back</span>
+                </button>
+                <span class="pager-where"
+                      x-text="t('settings.page_of', {page: logPage, pages: logPages, total: logTotal})"></span>
+                <button class="pager-btn" @click="goToLogPage(logPage + 1)" :disabled="logPage >= logPages">
+                    <span x-text="t('settings.page_next')">Next</span>
+                    <i class="ri-arrow-right-s-line"></i>
+                </button>
+            </div>
+        </div>
+
         <!-- Entities the user asked to be left alone. Not a name, so not a rule. -->
         <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'rules' && ignored.length > 0">
             <div class="section-header">
@@ -1594,6 +1733,36 @@
         </div>
 
         <!-- One more place for a rule to apply -->
+        <div class="modal-overlay" x-show="logModal" x-cloak @click.self="logModal = false">
+            <div class="modal modal-wide">
+                <h3>
+                    <i class="ri-equalizer-line"></i>
+                    <span x-text="t('settings.filters_title')">Narrow the list</span>
+                </h3>
+                <template x-for="group in logGroups()" :key="group.key">
+                    <div class="filter-group" x-show="group.options.length">
+                        <h4 x-text="group.label"></h4>
+                        <div class="option-grid">
+                            <template x-for="option in group.options" :key="option.value">
+                                <button class="option-chip"
+                                        :class="logPicked(group.key, option.value) ? 'picked' : ''"
+                                        @click="toggleLogPick(group.key, option.value)">
+                                    <i :class="logPicked(group.key, option.value) ? 'ri-check-line' : option.icon"></i>
+                                    <span x-text="option.label"></span>
+                                    <span class="tally" x-text="option.count"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <div class="modal-actions">
+                    <button class="btn-secondary" @click="clearLogPicks()" x-text="t('settings.filters_clear')"></button>
+                    <button class="btn-primary" @click="logModal = false"
+                            x-text="t('settings.filters_apply', {count: logTotal})"></button>
+                </div>
+            </div>
+        </div>
+
         <!-- Narrowing the list: several choices at once, grouped by the question
              they answer. Picking within a group widens, picking across groups
              narrows, which is the only arrangement that reads the way people
@@ -1754,6 +1923,18 @@
                 section: '{{ section }}',
                 sortBy: 'name',
                 filterModal: false,
+                // The log is answered by the server a page at a time, so what is
+                // held here is one page plus what was asked for.
+                logEntries: [],
+                logFacets: {step: {}, type: {}},
+                logPicks: {step: [], type: []},
+                logQuery: '',
+                logPage: 1,
+                logPages: 1,
+                logTotal: 0,
+                logBusy: false,
+                logModal: false,
+                logTimer: null,
                 // Several answers per question, kept apart by the question they
                 // answer: within a group they widen, across groups they narrow.
                 picked: { status: [], reach: [], kind: [], integration: [], model: [] },
@@ -1833,10 +2014,11 @@
                     // Back and forward move between sections without a page load.
                     window.addEventListener('popstate', () => {
                         const last = window.location.pathname.split('/').pop();
-                        this.section = ['naming', 'rules', 'system'].includes(last) ? last : 'naming';
+                        this.section = ['naming', 'rules', 'log', 'system'].includes(last) ? last : 'naming';
                         this.rememberState();
                     });
                     await this.loadMappings();
+                    if (this.section === 'log') this.loadLog();
                     await this.syncRuleLanguage();
                     if (this.highlightRuleId) this.focusHighlightedRule();
                     await this.loadApiToken();
@@ -2546,6 +2728,7 @@
                     this.section = name;
                     this.rememberState();
                     this.rememberQuery(name);
+                    if (name === 'log' && !this.logEntries.length) this.loadLog();
                 },
 
                 // The main page is where the user wants to be next; do not bounce back.
@@ -2695,10 +2878,147 @@
 
                 openFilters() { this.filterModal = true; },
 
+                // What the steps are called and how they are worn. A step no one
+                // has named yet keeps its own name rather than vanishing.
+                LOG_STEPS: {
+                    RENAME:      {key: 'renamed',     icon: 'ri-price-tag-3-line'},
+                    CARRIED:     {key: 'carried',     icon: 'ri-links-line'},
+                    NOT_CARRIED: {key: 'not_carried', icon: 'ri-link-unlink'},
+                    UNREACHABLE: {key: 'unreachable', icon: 'ri-error-warning-line'},
+                    ERROR:       {key: 'error',       icon: 'ri-close-circle-line'},
+                    ENABLE:      {key: 'enabled',     icon: 'ri-toggle-line'},
+                },
+
+                LOG_KINDS: {
+                    execute_direct: 'kind_rename',
+                    rename_device: 'kind_device',
+                    enable_all: 'kind_enable',
+                    swap: 'kind_swap',
+                },
+
+                logStepLabel(step) {
+                    const known = this.LOG_STEPS[step];
+                    return known ? this.t('jobs.step_' + known.key) : step;
+                },
+
+                logStepClass(step) {
+                    const known = this.LOG_STEPS[step];
+                    return 'step-' + (known ? known.key.replace(/_/g, '-') : 'other');
+                },
+
+                logRowClass(step) {
+                    const known = this.LOG_STEPS[step];
+                    return 'row-' + (known ? known.key.replace(/_/g, '-') : 'other');
+                },
+
+                logKindLabel(type) {
+                    const known = this.LOG_KINDS[type];
+                    return known ? this.t('settings.' + known) : type;
+                },
+
+                logWhen(ts) {
+                    if (!ts) return '';
+                    const when = new Date(ts);
+                    if (isNaN(when)) return ts;
+                    return when.toLocaleString(this.language);
+                },
+
+                async loadLog() {
+                    this.logBusy = true;
+                    const params = new URLSearchParams();
+                    if (this.logQuery.trim()) params.set('q', this.logQuery.trim());
+                    if (this.logPicks.step.length) params.set('step', this.logPicks.step.join(','));
+                    if (this.logPicks.type.length) params.set('type', this.logPicks.type.join(','));
+                    params.set('page', this.logPage);
+                    try {
+                        const answer = await fetch('api/log?' + params.toString()).then(r => r.json());
+                        this.logEntries = answer.entries || [];
+                        this.logFacets = answer.facets || {step: {}, type: {}};
+                        this.logPage = answer.page || 1;
+                        this.logPages = answer.pages || 1;
+                        this.logTotal = answer.total || 0;
+                    } catch (error) {
+                        console.error('Could not load the log:', error);
+                        this.logEntries = [];
+                    } finally {
+                        this.logBusy = false;
+                    }
+                },
+
+                // Typing should not ask the server per keystroke.
+                logSearchLater() {
+                    clearTimeout(this.logTimer);
+                    this.logTimer = setTimeout(() => { this.logPage = 1; this.loadLog(); }, 250);
+                },
+
+                logGroups() {
+                    const counted = (where, value) => (this.logFacets[where] || {})[value] || 0;
+                    const steps = Object.keys(this.logFacets.step || {}).sort((a, b) =>
+                        counted('step', b) - counted('step', a));
+                    const kinds = Object.keys(this.logFacets.type || {}).sort((a, b) =>
+                        counted('type', b) - counted('type', a));
+                    return [
+                        {
+                            key: 'step',
+                            label: this.t('settings.group_step'),
+                            options: steps.map(step => ({
+                                value: step,
+                                label: this.logStepLabel(step),
+                                icon: (this.LOG_STEPS[step] || {}).icon || 'ri-hashtag',
+                                count: counted('step', step),
+                            })),
+                        },
+                        {
+                            key: 'type',
+                            label: this.t('settings.group_run'),
+                            options: kinds.map(kind => ({
+                                value: kind,
+                                label: this.logKindLabel(kind),
+                                icon: 'ri-play-circle-line',
+                                count: counted('type', kind),
+                            })),
+                        },
+                    ];
+                },
+
+                logPicked(group, value) { return this.logPicks[group].includes(value); },
+
+                toggleLogPick(group, value) {
+                    const picks = this.logPicks[group];
+                    const at = picks.indexOf(value);
+                    if (at < 0) picks.push(value); else picks.splice(at, 1);
+                    this.logPage = 1;
+                    this.loadLog();
+                },
+
+                logPickedCount() {
+                    return this.logPicks.step.length + this.logPicks.type.length;
+                },
+
+                logChips() {
+                    return [
+                        ...this.logPicks.step.map(value => ({group: 'step', value, label: this.logStepLabel(value)})),
+                        ...this.logPicks.type.map(value => ({group: 'type', value, label: this.logKindLabel(value)})),
+                    ];
+                },
+
+                clearLogPicks() {
+                    this.logPicks = {step: [], type: []};
+                    this.logPage = 1;
+                    this.loadLog();
+                },
+
+                goToLogPage(page) {
+                    if (page < 1 || page > this.logPages) return;
+                    this.logPage = page;
+                    this.loadLog();
+                    window.scrollTo({top: 0, behavior: 'smooth'});
+                },
+
                 // Any dialog covering the page. Kept in one place so a new one
                 // only has to be named here to hold the page still as well.
                 modalOpen() {
-                    return !!(this.filterModal || this.filterFor || this.showAddModal || this.loading);
+                    return !!(this.filterModal || this.logModal || this.filterFor || this.showAddModal || this.loading);
                 },
 
                 isPicked(group, value) { return this.picked[group].includes(value); },
