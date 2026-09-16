@@ -331,20 +331,35 @@ def test():
     return send_from_directory("static", "test.html")
 
 
+def _no_stale_copies(response):
+    """Say that this file must be fetched, not remembered.
+
+    The UI asks for its stylesheet and scripts with a cache-busting query, but
+    the service worker Home Assistant puts in front of an add-on keys on the
+    path alone. Without this, a deploy leaves the browser on yesterday's CSS
+    while the page itself is new - a chip with no padding, a step still called
+    "ENABLE" - and nothing about it looks like a caching problem.
+    """
+    response.headers["Cache-Control"] = "no-store, must-revalidate"
+    return response
+
+
 @app.route("/static/css/<path:filename>")
 def serve_font_workaround(filename):
     """Workaround to serve font files from fonts directory when requested from css directory"""
     if filename.startswith("remixicon.") and filename.endswith((".woff", ".woff2", ".ttf", ".eot", ".svg")):
         # Strip query parameters
         filename = filename.split("?")[0]
+        # A font file is named after its content and never changes under its
+        # own name, so it may be kept.
         return send_from_directory("static/fonts", filename)
-    return send_from_directory("static/css", filename)
+    return _no_stale_copies(send_from_directory("static/css", filename))
 
 
 @app.route("/static/js/<path:filename>")
 def serve_js(filename):
     """Serve JavaScript files"""
-    return send_from_directory("static/js", filename)
+    return _no_stale_copies(send_from_directory("static/js", filename))
 
 
 @app.route("/static/translations/<path:filename>")
