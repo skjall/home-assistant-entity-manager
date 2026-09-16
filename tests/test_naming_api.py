@@ -515,6 +515,18 @@ def test_the_filters_on_offer_are_the_ones_this_home_has(client):
     assert response.get_json()["integrations"] == [{"integration": "mqtt", "models": []}]
 
 
+def test_a_model_is_offered_with_its_maker(client):
+    """ "Zigbee smart water valve" is not what anyone looks for - "SONOFF" is."""
+    restructurer = web_ui.renamer_state["restructurer"]
+    restructurer.devices["d"]["model"] = "Zigbee smart water valve"
+    restructurer.devices["d"]["manufacturer"] = "SONOFF"
+
+    response = client.get("/api/naming/filters")
+
+    models = response.get_json()["integrations"][0]["models"]
+    assert models == [{"model": "Zigbee smart water valve", "manufacturer": "SONOFF", "count": 2}]
+
+
 def test_a_rules_wording_can_be_changed_without_touching_where_it_applies(client):
     rules = web_ui.renamer_state["naming_rules"]
     rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
