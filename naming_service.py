@@ -145,15 +145,18 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
 def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
     """The note for a name the restructurer has just worked out.
 
-    Written names are only worth a note where the caller can say what type part
-    went into them; a caller working from a proposal made earlier cannot, and
-    gets None rather than a claim that may since have gone stale.
+    It reads the resolution left behind by the last naming of this entity, so
+    the caller has to have named it just now; one working from a proposal made
+    earlier gets None rather than a claim that may since have gone stale.
     """
     restructurer = renamer_state.get("restructurer")
     resolution = (getattr(restructurer, "last_resolutions", None) or {}).get(entity_id)
     if not resolution:
         return None
     return {
+        # What went into the name, not what came out of it: a rule the user
+        # edits afterwards only reaches this entity again if the note hands it
+        # back the word the rule matches on.
         "base_entity": resolution.get("input") or resolution.get("value") or "",
         "won_by": resolution.get("won_by") or "",
         "rule_id": resolution.get("rule_id"),
