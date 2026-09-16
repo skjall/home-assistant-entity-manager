@@ -463,6 +463,14 @@ def _rule_affected_counts(restructurer, rules):
         )
         if rule:
             counts[rule["id"]] = counts.get(rule["id"], 0) + size
+    # A rule written for one entity is found by that entity, not by what the
+    # integration supplies, so the grouping above never reaches it. Counted
+    # here, or every such rule would look like one that changes nothing.
+    known = {entity["id"] for entity in restructurer.entities.values() if entity.get("id")}
+    for rule in rules.rules:
+        for registry_id in rules._entities_of(rule):
+            if registry_id in known:
+                counts[rule["id"]] = counts.get(rule["id"], 0) + 1
     return counts
 
 
@@ -561,7 +569,7 @@ def naming_rules_collection():
             return jsonify({"error": str(error)}), 400
         renamer_state["type_mappings"]._refresh_user_view()
         affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
-        return jsonify({"rule": _rule_payload(rule, affected)})
+        return jsonify({"rule": _rule_payload(rule, affected, _entity_ids_by_registry_id())})
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -608,7 +616,8 @@ def naming_rules_unused():
         return jsonify({"error": "the entities are not loaded yet"}), 409
     unused = rules.unused(affected, rules.language, _rule_builtins(rules))
     if request.method == "GET":
-        return jsonify({"rules": [_rule_payload(rule, affected) for rule in unused]})
+        entity_ids = _entity_ids_by_registry_id()
+        return jsonify({"rules": [_rule_payload(rule, affected, entity_ids) for rule in unused]})
     removed = rules.delete_many(rule["id"] for rule in unused)
     renamer_state["type_mappings"]._refresh_user_view()
     return jsonify({"removed": removed})
@@ -636,7 +645,7 @@ def naming_rule_item(rule_id):
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()
     affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
-    return jsonify({"rule": _rule_payload(rule, affected)})
+    return jsonify({"rule": _rule_payload(rule, affected, _entity_ids_by_registry_id())})
 
 
 @naming.route("/api/naming/learn", methods=["POST"])
@@ -669,7 +678,7 @@ def naming_learn():
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()
     affected = _rule_affected_counts(restructurer, rules)
-    return jsonify({"rule": _rule_payload(rule, affected)})
+    return jsonify({"rule": _rule_payload(rule, affected, _entity_ids_by_registry_id())})
 
 
 @naming.route("/api/naming/originals")
