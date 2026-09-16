@@ -536,6 +536,9 @@
     "follow_up_hint": "Diese Verweise nennen weiterhin den alten Namen und lassen sich von hier aus nicht ändern.",
     "search_log": "Im Protokoll suchen …",
     "log_empty": "Keine Einträge",
-    "step_enabled": "Aktiviert"
+    "step_enabled": "Aktiviert",
+    "count_done": "{count} umbenannt",
+    "count_failed": "{count} fehlgeschlagen",
+    "count_unreachable": "{count} zum Nachziehen"
   }
 }

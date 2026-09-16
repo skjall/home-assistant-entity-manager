@@ -536,6 +536,9 @@
     "follow_up_hint": "Estas referencias siguen nombrando la entidad antigua y no se pueden cambiar desde aquí.",
     "search_log": "Buscar en el registro …",
     "log_empty": "Sin entradas",
-    "step_enabled": "Activado"
+    "step_enabled": "Activado",
+    "count_done": "{count} renombradas",
+    "count_failed": "{count} fallidas",
+    "count_unreachable": "{count} a tu cargo"
   }
 }
