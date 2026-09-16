@@ -686,47 +686,36 @@ class EntityRestructurer:
         """The name Home Assistant itself uses for this entity's type, if it has one.
 
         Two things can answer: the word the integration picked for this kind of
-        entity, and the device class. Whichever says more wins, and neither may
-        overwrite a name that already says something else - "CPU temperature"
-        and "Temperature" on one device would otherwise become the same name,
-        and an outlet already called "Steckdose" would turn back into the
-        "Schalter" its integration calls every switch.
+        entity, and the device class. The word usually says more and wins - but
+        one that only repeats the domain, "switch" on a switch entity, says
+        nothing the id does not already say, and there the device class knows
+        better: an outlet is an outlet, not a switch.
+
+        The device class is the widest answer there is and says only what an
+        entity measures. It translates a name that means the class already, as
+        "Temperature" does; it must not overwrite one that says more, or
+        "CPU temperature" and "Temperature" on one device become the same name.
         """
         if not self.ha_translations:
             return None
         domain = entity_id.partition(".")[0]
         platform = registry.get("platform") or ""
         device_class = registry.get("device_class") or registry.get("original_device_class")
+        by_class = self.ha_translations.device_class_name(domain, device_class, language) if device_class else None
         translation_key = registry.get("translation_key")
-        # A key that only repeats the domain - "switch" on a switch entity -
-        # names nothing the id does not already say, so the device class gets
-        # the question instead. With no device class it is still the best there
-        # is, and answers as before.
-        says_nothing = bool(device_class) and canon(translation_key or "") == canon(domain)
+        # Only a device class that can actually be put into words takes the
+        # question off a domain-repeating key; where it cannot, that key is
+        # still the best answer there is.
+        says_nothing = bool(by_class) and canon(translation_key or "") == canon(domain)
         if translation_key and not says_nothing:
-            localized = self.ha_translations.translation_key_name(platform, domain, translation_key, language)
-            if localized:
-                english = self.ha_translations.translation_key_name(platform, domain, translation_key, "en") or ""
-                if self._means_the_same(supplied, (translation_key, english, localized)):
-                    return localized
-        if not device_class:
-            return None
-        localized = self.ha_translations.device_class_name(domain, device_class, language)
-        if not localized:
-            return None
+            by_key = self.ha_translations.translation_key_name(platform, domain, translation_key, language)
+            if by_key:
+                return by_key
+        if not by_class or not supplied:
+            return by_class
         english = self.ha_translations.device_class_name(domain, device_class, "en") or ""
-        return localized if self._means_the_same(supplied, (device_class, english, localized)) else None
-
-    @staticmethod
-    def _means_the_same(supplied: str, names: Tuple[str, ...]) -> bool:
-        """Whether Home Assistant's name may replace the one already supplied.
-
-        With nothing supplied there is nothing to lose, so it may. With a name
-        in hand it may only be restated, never replaced by a different meaning.
-        """
-        if not supplied:
-            return True
-        return canon(supplied) in {canon(name) for name in names if name}
+        same_meaning = {canon(device_class), canon(english), canon(by_class)}
+        return by_class if canon(supplied) in same_meaning else None
 
     # Technical values read as words in a name, but stay slugs in an entity ID.
     SPELLED_OUT_FIELDS = ("domain", "device_class")
