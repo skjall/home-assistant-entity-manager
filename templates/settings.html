@@ -1621,7 +1621,8 @@
                             : t('settings.filter_replaces_everywhere', {name: filterFor.value}))"></p>
                 <div class="form-group">
                     <label for="filterIntegration" x-text="t('settings.filter_integration')">Integration</label>
-                    <div class="combo" @click.away="comboOpen = ''" @keydown.escape.stop="comboOpen = ''">
+                    <div class="combo" @click.away="closeCombo('integration')"
+                         @keydown.escape.stop="closeCombo('integration')">
                         <div class="combo-field">
                             <i class="ri-search-line"></i>
                             <input id="filterIntegration" type="text" class="combo-input" autocomplete="off"
@@ -1651,7 +1652,8 @@
                 </div>
                 <div class="form-group" x-show="modelsOf(newFilter.integration).length">
                     <label for="filterModel" x-text="t('settings.filter_model')">Model</label>
-                    <div class="combo" @click.away="comboOpen = ''" @keydown.escape.stop="comboOpen = ''">
+                    <div class="combo" @click.away="closeCombo('model')"
+                         @keydown.escape.stop="closeCombo('model')">
                         <div class="combo-field">
                             <i class="ri-search-line"></i>
                             <input id="filterModel" type="text" class="combo-input" autocomplete="off"
@@ -2346,6 +2348,10 @@
                 matchingModels() { return this._modelsFound().slice(0, this.COMBO_LIMIT); },
 
                 modelOverflow() { return Math.max(0, this._modelsFound().length - this.COMBO_LIMIT); },
+
+                closeCombo(which) {
+                    if (this.comboOpen === which) this.comboOpen = '';
+                },
 
                 pickIntegration(row) {
                     this.newFilter.integration = row.integration;
