@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home Assistant Entity Manager</title>
-    <link href="static/css/styles.css?v={{ version }}" rel="stylesheet">
+    <link href="static/css/v{{ version }}/styles.css" rel="stylesheet">
     <link href="static/css/remixicon.css?v={{ version }}" rel="stylesheet">
     <script>window.assetVersion = "{{ version }}";</script>
-    <script src="static/js/translations.js?v={{ version }}"></script>
-    <script src="static/js/config.js?v={{ version }}"></script>
+    <script src="static/js/v{{ version }}/translations.js"></script>
+    <script src="static/js/v{{ version }}/config.js"></script>
     <script src="static/js/alpine.min.js" defer></script>
     <style>
         /* Hide elements until Alpine.js initializes */
@@ -2423,11 +2423,12 @@
              x-transition:enter-start="opacity-0"
              x-transition:enter-end="opacity-100"
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-xl shadow-xl max-w-xl w-full max-h-[85vh] overflow-y-auto"
+            <div class="bg-white rounded-xl shadow-xl max-w-xl w-full overflow-y-auto"
+                 style="max-height: 85vh"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100">
-                <div class="p-5">
+                <div style="padding: 20px">
                     <div class="flex items-center gap-3 mb-3">
                         <div class="w-10 h-10 rounded-full flex items-center justify-center"
                              :class="isJobTerminal(jobPanel.job) ? (jobUnsuccessful(jobPanel.job) ? 'bg-red-100' : 'bg-green-100') : 'bg-blue-100'">

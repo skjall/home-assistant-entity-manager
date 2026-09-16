@@ -7,7 +7,6 @@ import asyncio
 import json
 import logging
 import os
-import time
 from typing import Any, Dict, Optional
 import uuid
 
@@ -317,7 +316,7 @@ async def load_areas_and_entities():
 def index():
     """Hauptseite"""
     # Use timestamp for cache busting
-    version = str(int(time.time()))
+    version = asset_version()
     response = make_response(render_template("index.html", version=version))
     # Prevent browser from caching the HTML page
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -330,6 +329,26 @@ def index():
 def test():
     """Test page for CSS"""
     return send_from_directory("static", "test.html")
+
+
+def asset_version() -> str:
+    """A number that changes when the shipped files change, and only then.
+
+    It goes into the URL of every stylesheet and script, so a deploy asks for
+    a path the browser has never seen. A query string would not do: the
+    service worker Home Assistant puts in front of an add-on keys on the path
+    alone, and would keep answering with yesterday's file.
+    """
+    newest = 0.0
+    here = os.path.dirname(os.path.abspath(__file__))
+    for folder in ("static/css", "static/js", "translations/ui"):
+        for root, _, names in os.walk(os.path.join(here, folder)):
+            for name in names:
+                try:
+                    newest = max(newest, os.path.getmtime(os.path.join(root, name)))
+                except OSError:  # a file that went away mid-walk tells us nothing
+                    continue
+    return str(int(newest))
 
 
 def _no_stale_copies(response):
@@ -346,7 +365,8 @@ def _no_stale_copies(response):
 
 
 @app.route("/static/css/<path:filename>")
-def serve_font_workaround(filename):
+@app.route("/static/css/v<version>/<path:filename>")
+def serve_font_workaround(filename, version=None):
     """Workaround to serve font files from fonts directory when requested from css directory"""
     if filename.startswith("remixicon.") and filename.endswith((".woff", ".woff2", ".ttf", ".eot", ".svg")):
         # Strip query parameters
@@ -358,7 +378,8 @@ def serve_font_workaround(filename):
 
 
 @app.route("/static/js/<path:filename>")
-def serve_js(filename):
+@app.route("/static/js/v<version>/<path:filename>")
+def serve_js(filename, version=None):
     """Serve JavaScript files"""
     return _no_stale_copies(send_from_directory("static/js", filename))
 
@@ -2055,7 +2076,7 @@ def settings_page(section: str = "naming"):
     if section not in SETTINGS_SECTIONS:
         section = "naming"
     base_href = "../"
-    version = str(int(time.time()))
+    version = asset_version()
     response = make_response(render_template("settings.html", version=version, section=section, base_href=base_href))
     # Prevent browser from caching the HTML page
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
