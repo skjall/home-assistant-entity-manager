@@ -2472,7 +2472,7 @@
                                         <span class="font-semibold" x-text="group.count"></span>
                                     </button>
                                 </template>
-                                <button @click="jobPanel.showLog = !jobPanel.showLog"
+                                <button @click="jobPanel.showLog = !jobPanel.showLog; stopClosing()"
                                         class="ml-auto text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 shrink-0">
                                     <i :class="jobPanel.showLog ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
                                     <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
@@ -2521,7 +2521,9 @@
                                 :disabled="!isJobTerminal(jobPanel.job)"
                                 class="btn"
                                 :class="isJobTerminal(jobPanel.job) ? 'btn-primary' : 'btn-ghost opacity-50 cursor-not-allowed'"
-                                x-text="isJobTerminal(jobPanel.job) ? t('jobs.close') : t('jobs.running')"></button>
+                                x-text="isJobTerminal(jobPanel.job)
+                                        ? t('jobs.close') + (jobPanel.closing ? ' (' + jobPanel.closing + ')' : '')
+                                        : t('jobs.running')"></button>
                     </div>
                 </div>
             </div>
@@ -2896,6 +2898,8 @@
                     filter: '',       // one step name, or '' for everything
                     search: '',
                     timer: null,
+                    closing: null,    // seconds left before it closes itself
+                    closingTimer: null,
                     onDone: null,
                 },
 
@@ -5329,10 +5333,34 @@
                     // Long enough to read the green tick, short enough not to wait
                     // for it. Only when the run left nothing to look at.
                     if (this.autoCloseWanted() && this.jobFlawless(finished)) {
-                        setTimeout(() => {
-                            if (this.jobPanel.job === finished) this.closeJobPanel();
-                        }, 1200);
+                        this.startClosing(finished);
                     }
+                },
+
+                // Counted down on the button rather than closed out of hand, so
+                // the panel says how long is left and can be kept open.
+                startClosing(finished) {
+                    this.stopClosing();
+                    this.jobPanel.closing = 3;
+                    this.jobPanel.closingTimer = setInterval(() => {
+                        if (this.jobPanel.job !== finished) {
+                            this.stopClosing();
+                            return;
+                        }
+                        this.jobPanel.closing -= 1;
+                        if (this.jobPanel.closing <= 0) {
+                            this.stopClosing();
+                            this.closeJobPanel();
+                        }
+                    }, 1000);
+                },
+
+                stopClosing() {
+                    if (this.jobPanel.closingTimer) {
+                        clearInterval(this.jobPanel.closingTimer);
+                        this.jobPanel.closingTimer = null;
+                    }
+                    this.jobPanel.closing = null;
                 },
 
                 stopJobPolling() {
@@ -5341,6 +5369,7 @@
 
                 closeJobPanel() {
                     this.stopJobPolling();
+                    this.stopClosing();
                     this.jobPanel.show = false;
                     this.jobPanel.job = null;
                     this.jobPanel.pollUrl = null;
