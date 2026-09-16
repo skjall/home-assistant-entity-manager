@@ -2149,11 +2149,6 @@
                                                       x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
                                                               ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'old')
                                                               : escapeHtml(entity.original_name || t('entity.no_name'))"></span>
-                                                <span x-show="selectedArea !== '__no_area__' && resolutionBadge(entity)"
-                                                      class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle"
-                                                      :class="resolutionBadgeClass(entity)"
-                                                      :title="resolutionExplain(entity)"
-                                                      x-text="resolutionBadge(entity)"></span>
                                                 <span x-show="entity.blocked"
                                                       class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-red-100 text-red-700"
                                                       :title="t('entity.blocked_hint', {wanted: entity.blocked?.wanted || '', holder: entity.blocked?.holder || ''})"
@@ -2311,7 +2306,7 @@
                                                     <span class="scope-count" x-text="entity.type_count || 1"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
-                                                        x-show="entity.platform && entity.type_integration_count && entity.type_integration_count < (entity.type_count || 0)"
+                                                        x-show="entity.platform && entity.type_integration_count"
                                                         :class="entity._ruleScope === 'integration' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'integration'"
                                                         :title="t('entity.scope_integration_hint', {integration: entity.platform, count: entity.type_integration_count || 0})">
@@ -2319,7 +2314,7 @@
                                                     <span class="scope-count" x-text="entity.type_integration_count || 0"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
-                                                        x-show="entity.device_model && entity.type_model_count && entity.type_model_count < (entity.type_integration_count || entity.type_count || 0)"
+                                                        x-show="entity.device_model && entity.type_model_count"
                                                         :class="entity._ruleScope === 'model' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'model'"
                                                         :title="t('entity.scope_model_hint', {model: entity.device_model, count: entity.type_model_count || 0})">
@@ -4367,24 +4362,6 @@
                         (middle ? '<span class="' + mark + '">' + this.escapeHtml(middle) + '</span>' : '') +
                         '<span class="diff-same">' + this.escapeHtml(text.slice(text.length - end)) + '</span>'
                     );
-                },
-
-                // A badge marks what the user decided: a rule or an exception.
-                // Everything else is the standard and needs no mark.
-                resolutionBadge(entity) {
-                    const _ = this.translationsReady;
-                    const won = entity?.resolution?.won_by;
-                    if (won !== 'override' && won !== 'rule:user') return '';
-                    const key = 'entity.source_' + won.replace(':', '_');
-                    const label = this.t(key);
-                    return label === key ? won : label;
-                },
-
-                resolutionBadgeClass(entity) {
-                    const won = entity?.resolution?.won_by || '';
-                    if (won === 'override') return 'bg-violet-100 text-violet-700';
-                    if (won === 'rule:user') return 'bg-amber-100 text-amber-700';
-                    return '';
                 },
 
                 // One plain statement: what it is called, where that holds, for how many.

@@ -526,7 +526,7 @@ class EntityRestructurer:
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": dict(rule["match"]),
+                            "matched_on": rules.why(rule, integration, model),
                         }
                     )
                 rule = rules.find("name", name, integration, language, model)
@@ -536,7 +536,7 @@ class EntityRestructurer:
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": dict(rule["match"]),
+                            "matched_on": rules.why(rule, integration, model),
                         }
                     )
                 # The device class is the widest anchor: it says what a value
@@ -549,7 +549,7 @@ class EntityRestructurer:
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": dict(rule["match"]),
+                            "matched_on": rules.why(rule, integration, model),
                         }
                     )
             # Home Assistant knows its own entities in every language it speaks,

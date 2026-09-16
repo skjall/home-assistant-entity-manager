@@ -81,8 +81,6 @@
     "type_label": "Type:",
     "apply": "Apply",
     "scope_here": "Here only",
-    "source_override": "Exception",
-    "source_rule_user": "Rule",
     "source_rule_system": "Built-in",
     "source_legacy_parse": "derived",
     "source_device_class": "Device class",
