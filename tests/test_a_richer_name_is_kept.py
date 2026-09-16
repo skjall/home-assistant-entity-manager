@@ -35,7 +35,7 @@ def test_a_shorter_name_says_less(restructurer):
 
 
 def test_a_bare_counter_is_not_a_word(restructurer):
-    """"Temperaturzone 2" numbers what it cannot name; the zone names it."""
+    """ "Temperaturzone 2" numbers what it cannot name; the zone names it."""
     assert restructurer._says_more("Temperaturzone Gefrierzone", "Temperaturzone 2") is True
 
 
