@@ -116,7 +116,9 @@
     "blocked_explain": "Diese Entität rendert dieselbe Adresse wie {holder}: {wanted}. Sie bekommt deshalb eine Nummer. Ein eigener Typ-Name sagt besser, was sie unterscheidet.",
     "ignore": "In Ruhe lassen",
     "ignore_hint": "Kein Vorschlag mehr für diese Entität; der gelieferte Name bleibt.",
-    "ignored": "Diese Entität wird in Ruhe gelassen"
+    "ignored": "Diese Entität wird in Ruhe gelassen",
+    "renamed_to": "Umbenannt in „{name}“",
+    "renamed_differently": "Home Assistant hat „{name}“ gespeichert"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",

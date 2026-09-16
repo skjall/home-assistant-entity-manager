@@ -74,9 +74,60 @@ class EntityRegistry:
             raise Exception(f"Failed to update entity {entity_id}: {response}")
 
         result = response.get("result", {})
+        stored = await self._read_back(result, new_entity_id or entity_id)
+        if stored is not None:
+            result = {**result, "entity_entry": stored}
+            self._check_what_was_stored(stored, new_entity_id or entity_id, name)
         if name is not None:
             self._note_applied_name(result, entity_id, new_entity_id, name, provenance)
         return result
+
+    async def _read_back(self, result: Dict[str, Any], wanted_id: str) -> Optional[Dict[str, Any]]:
+        """Ask Home Assistant what it actually stored, after saying it stored it.
+
+        A write that is acknowledged is not a write that landed as asked. Home
+        Assistant numbers an entity_id that collides, cuts a name that is too
+        long, and stores whatever string it is handed - including one that was
+        mangled on the way in. Reading the entry back is the only way the add-on
+        learns any of that; without it the list shows what was requested and the
+        registry holds something else, which is how "Calc'n'Clean in 5 Tassen"
+        could sit in the interface while the registry said
+        "Calc&#x27;n&#x27;Clean in 5 Tassen" until the next reload.
+        """
+        entry = result.get("entity_entry") if isinstance(result, dict) else None
+        entity_id = (entry or {}).get("entity_id") or wanted_id
+        try:
+            msg_id = await self.ws._send_message({"type": "config/entity_registry/get", "entity_id": entity_id})
+            response = await self.ws._receive_message()
+            while response.get("id") != msg_id:
+                response = await self.ws._receive_message()
+        except Exception as error:  # noqa: BLE001 - the write already happened
+            logger.warning("Could not read %s back: %s", entity_id, error)
+            return None
+        if not response.get("success"):
+            logger.warning("Could not read %s back: %s", entity_id, response.get("error"))
+            return None
+        stored = response.get("result")
+        if not isinstance(stored, dict):
+            return None
+        # A get answers with the entry; an update wraps it. Take either.
+        inner = stored.get("entity_entry")
+        return inner if isinstance(inner, dict) else stored
+
+    def _check_what_was_stored(self, stored: Dict[str, Any], wanted_id: str, wanted_name: Optional[str]) -> None:
+        """Refuse to call a rename done when the registry says something else."""
+        differences = []
+        got_id = stored.get("entity_id")
+        if wanted_id and got_id and got_id != wanted_id:
+            differences.append(f"id {wanted_id!r} -> {got_id!r}")
+        if wanted_name is not None:
+            got_name = stored.get("name")
+            # An empty name clears the override, and Home Assistant answers with
+            # None for it - that is the write landing, not a difference.
+            if (wanted_name or None) != got_name:
+                differences.append(f"name {(wanted_name or None)!r} -> {got_name!r}")
+        if differences:
+            raise Exception("Home Assistant stored something else for " + wanted_id + ": " + ", ".join(differences))
 
     def _note_applied_name(
         self,

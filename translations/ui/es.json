@@ -116,7 +116,9 @@
     "blocked_explain": "Esta entidad genera la misma dirección que {holder}: {wanted}. Por eso recibe un número. Un nombre de tipo propio dice mejor qué las diferencia.",
     "ignore": "Dejar en paz",
     "ignore_hint": "Sin más propuestas para esta entidad; se mantiene el nombre suministrado.",
-    "ignored": "Esta entidad se deja como está"
+    "ignored": "Esta entidad se deja como está",
+    "renamed_to": "Renombrado a «{name}»",
+    "renamed_differently": "Home Assistant guardó «{name}»"
   },
   "virtual_devices": {
     "automations": "Automatizaciones",

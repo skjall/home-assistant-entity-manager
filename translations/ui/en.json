@@ -116,7 +116,9 @@
     "blocked_explain": "This entity renders the same address as {holder}: {wanted}. It gets a number instead. A type name of its own says better what tells them apart.",
     "ignore": "Leave alone",
     "ignore_hint": "No more proposals for this entity; the supplied name stays.",
-    "ignored": "This entity is left alone"
+    "ignored": "This entity is left alone",
+    "renamed_to": "Renamed to “{name}”",
+    "renamed_differently": "Home Assistant stored “{name}”"
   },
   "virtual_devices": {
     "automations": "Automations",

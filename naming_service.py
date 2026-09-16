@@ -98,13 +98,29 @@ async def rename_entity(
     if not renamed:
         raise RuntimeError(f"Home Assistant refused to rename {old_entity_id}")
 
-    logger.info("Renamed entity: %s -> %s (%s)", old_entity_id, new_entity_id or old_entity_id, friendly_name)
+    # What the registry holds now, read back after the write - not what was
+    # asked for. Home Assistant numbers a colliding id and cuts a long name,
+    # and the caller has to show what is true, not what it wanted.
+    stored = renamed.get("entity_entry") if isinstance(renamed, dict) else None
+    stored = stored if isinstance(stored, dict) else {}
+    written_id = stored.get("entity_id") or new_entity_id or old_entity_id
+    written_name = stored.get("name") if stored else friendly_name
+    if stored and written_name is None:
+        # No override left, so the integration's own name applies again.
+        written_name = stored.get("original_name") or ""
+
+    logger.info("Renamed entity: %s -> %s (%s)", old_entity_id, written_id, written_name)
     result: Dict[str, Any] = {
         "success": True,
         "old_entity_id": old_entity_id,
-        "new_entity_id": new_entity_id or old_entity_id,
-        "new_friendly_name": friendly_name,
+        "new_entity_id": written_id,
+        "new_friendly_name": written_name,
+        # The rename was read back out of the registry, not just acknowledged.
+        "verified": bool(stored),
     }
+
+    # What follows depends on the id that is really there, not the one asked for.
+    id_changed = written_id != old_entity_id
 
     if not id_changed:
         result["dependencies_checked"] = False
@@ -116,7 +132,7 @@ async def rename_entity(
     # the old one pointing at nothing.
     try:
         updater = DependencyUpdater(os.getenv("HA_URL"), token)
-        updated = await updater.update_all_dependencies(old_entity_id, new_entity_id)
+        updated = await updater.update_all_dependencies(old_entity_id, written_id)
         result["dependencies_checked"] = True
         result["dependencies_updated"] = {
             "total": updated["total_success"],

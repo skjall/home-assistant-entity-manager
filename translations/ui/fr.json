@@ -116,7 +116,9 @@
     "blocked_explain": "Cette entité produit la même adresse que {holder} : {wanted}. Elle reçoit donc un numéro. Un nom de type propre dit mieux ce qui les distingue.",
     "ignore": "Laisser tranquille",
     "ignore_hint": "Plus aucune proposition pour cette entité ; le nom fourni reste.",
-    "ignored": "Cette entité est laissée telle quelle"
+    "ignored": "Cette entité est laissée telle quelle",
+    "renamed_to": "Renommé en « {name} »",
+    "renamed_differently": "Home Assistant a enregistré « {name} »"
   },
   "virtual_devices": {
     "automations": "Automatisations",

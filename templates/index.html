@@ -4735,9 +4735,14 @@
 
                         const data = await response.json();
                         if (data.success) {
-                            // Update local entity data
-                            entity.id = newId;
-                            entity.original_name = newName;
+                            // What the registry holds now, read back after the write.
+                            // Taking the requested values here is what let a name
+                            // look right in the list and be something else in Home
+                            // Assistant until the next reload.
+                            const storedId = data.new_entity_id || newId;
+                            const storedName = data.new_friendly_name ?? newName;
+                            entity.id = storedId;
+                            entity.original_name = storedName;
                             // Update base_name to the new suffix so input field shows correct value
                             if (entity._currentSuffix !== undefined) {
                                 entity.base_name = entity._currentSuffix;
@@ -4751,7 +4756,13 @@
                             // Recompute previews for other entities (IDs may have changed)
                             this.invalidateEntityPreviews();
 
-                            this.showMessage(`Renamed to "${newName}"`, 'success');
+                            // A name Home Assistant changed on the way in is said
+                            // out loud, rather than quietly showing the wish.
+                            if (storedName !== newName || storedId !== newId) {
+                                this.showMessage(this.t('entity.renamed_differently', {name: storedName}), 'info');
+                            } else {
+                                this.showMessage(this.t('entity.renamed_to', {name: storedName}), 'success');
+                            }
                         } else {
                             throw new Error(data.error || 'Rename failed');
                         }
