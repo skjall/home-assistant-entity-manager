@@ -794,6 +794,17 @@ class EntityRestructurer:
             )
             return plain(self._without_device_prefix(supplied, prefixes) or supplied, "ignored")
 
+        # A rule written for this one entity answers whatever the integration
+        # supplies: the user looked at this entity and said what it is called.
+        # It is the narrowest filter there is, so nothing else gets a say.
+        rules = getattr(self.type_mappings, "rules", None) if self.type_mappings else None
+        entity_rule = rules.for_entity(registry.get("id") or "", self.language) if rules is not None else None
+        if entity_rule is not None:
+            resolution = plain(entity_rule["targets"][self.language], "rule:user")
+            resolution["rule_id"] = entity_rule["id"]
+            resolution["matched_on"] = rules.why(entity_rule)
+            return resolution
+
         override_name = override.get("name") if override else None
         if override_name:
             # An exception is the user's own wording and stays as typed — unless
