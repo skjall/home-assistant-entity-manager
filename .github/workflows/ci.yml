@@ -54,6 +54,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-test.txt
 
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # static/ is built, not committed, and the asset tests read what is
+      # served from it - without this they fail on a file that is simply
+      # not there yet.
+      - name: Build the assets the tests serve
+        run: |
+          npm ci
+          npm run build
+
       - name: Run pytest
         run: pytest
 
