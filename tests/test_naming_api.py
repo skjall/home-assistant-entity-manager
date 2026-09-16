@@ -63,7 +63,8 @@ def test_learn_derives_the_key_server_side(client):
 
     assert response.status_code == 200
     rule = response.get_json()["rule"]
-    assert rule["match"] == {"kind": "name", "value": "effect_speed", "integration": None, "model": None}
+    assert rule["match"] == {"kind": "name", "value": "effect_speed"}
+    assert rule["filters"] == []
     assert rule["targets"] == {"de": "Effektgeschwindigkeit"}
     # Both spellings of the supplied name are covered by the one rule.
     assert rule["affected"] == 2
@@ -110,7 +111,7 @@ def test_learn_scoped_to_integration(client):
         json={"entity_id": "number.a_effect_speed", "value": "Effekt-Tempo", "scope": "integration"},
     )
 
-    assert response.get_json()["rule"]["match"]["integration"] == "mqtt"
+    assert response.get_json()["rule"]["filters"] == [{"integration": "mqtt"}]
 
 
 def test_preview_uses_rule_and_reports_provenance(client):
@@ -206,7 +207,7 @@ def test_learning_for_one_integration_leaves_the_others_alone(client):
     )
 
     assert response.status_code == 200
-    assert response.get_json()["rule"]["match"]["integration"] == "matter"
+    assert response.get_json()["rule"]["filters"] == [{"integration": "matter"}]
     assert response.get_json()["rule"]["affected"] == 2
     restructurer.build_naming_context("binary_sensor.reg-c_tur", restructurer.entities["binary_sensor.reg-c_tur"])
     assert restructurer.last_resolutions["binary_sensor.reg-c_tur"]["value"] == "Zustand"
@@ -237,9 +238,7 @@ def test_learning_for_one_model_leaves_the_other_models_alone(client):
     )
 
     assert response.status_code == 200
-    match = response.get_json()["rule"]["match"]
-    assert match["integration"] == "matter"
-    assert match["model"] == "MYGGBETT door/window sensor"
+    assert response.get_json()["rule"]["filters"] == [{"integration": "matter", "model": "MYGGBETT door/window sensor"}]
     assert response.get_json()["rule"]["affected"] == 1
     assert routes_naming.type_key_model_counts(restructurer)[("name:tuer", "MYGGBETT door/window sensor")] == 1
 

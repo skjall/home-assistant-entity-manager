@@ -474,7 +474,7 @@ def _rule_builtins(rules) -> dict:
     for rule in rules.rules:
         if rule["match"]["kind"] == "translation_key":
             continue
-        builtin = mappings.find_system_translation(rule["match"]["value"], language, rule["match"].get("integration"))
+        builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
         if builtin is not None:
             builtins[rule["id"]] = builtin
     return builtins
@@ -486,7 +486,7 @@ def _rule_payload(rule: dict, affected: dict) -> dict:
     language = rules.language
     builtin = None
     if rule["match"]["kind"] != "translation_key":
-        builtin = mappings.find_system_translation(rule["match"]["value"], language, rule["match"].get("integration"))
+        builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
     return {
         **rule,
         "affected": affected.get(rule["id"], 0) if affected is not None else None,

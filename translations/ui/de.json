@@ -81,8 +81,6 @@
     "type_label": "Typ:",
     "apply": "Übernehmen",
     "scope_here": "Nur hier",
-    "source_override": "Ausnahme",
-    "source_rule_user": "Regel",
     "source_rule_system": "Standard",
     "source_legacy_parse": "abgeleitet",
     "source_device_class": "Geräteklasse",
