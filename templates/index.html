@@ -2304,6 +2304,21 @@
                                                         x-text="t('entity.drift_overwrite')">Overwrite</button>
                                             </div>
                                         </div>
+                                        <div x-show="entity.supplied_correctable" class="drift-bar">
+                                            <span class="drift-text"
+                                                  x-text="t('entity.supplied_stale', {
+                                                      supplied: entity.supplied_correctable?.supplied || '',
+                                                      wanted: entity.supplied_correctable?.title_should_be || ''
+                                                  })"></span>
+                                            <div class="drift-actions">
+                                                <button type="button" class="btn btn-secondary btn-sm"
+                                                        @click="correctSuppliedName(entity)"
+                                                        :disabled="applyingEntityId === entity.id"
+                                                        :title="t('entity.supplied_fix_hint')"
+                                                        x-text="applyingEntityId === entity.id
+                                                                ? t('entity.applying') : t('entity.supplied_fix')">Fix</button>
+                                            </div>
+                                        </div>
                                         <p class="text-xs text-gray-500 mt-1">
                                             <span x-text="resolutionExplain(entity)"></span>
                                             <a x-show="entity.resolution?.rule_id"
@@ -4689,6 +4704,31 @@
                 },
 
                 // Accept suggestion - just select the entity for renaming (no overrides needed)
+                // Writes the entity's own name into the title its helper is
+                // named by. Follow-up work, not part of a rename: Home
+                // Assistant keeps that name where this add-on cannot see it.
+                async correctSuppliedName(entity) {
+                    if (!entity?.supplied_correctable || this.applyingEntityId) return;
+                    this.applyingEntityId = entity.id;
+                    try {
+                        const response = await fetch('api/correct_supplied_name', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({entity_id: entity.id})
+                        });
+                        const data = await response.json();
+                        if (!response.ok || !data.success) throw new Error(data.error || 'failed');
+                        entity.supplied_correctable = null;
+                        this.showMessage(this.t('entity.supplied_fixed', {name: data.now}), 'success');
+                        if (!data.reloaded) this.showMessage(this.t('entity.supplied_needs_restart'), 'info');
+                        await this.loadHierarchy();
+                    } catch (error) {
+                        this.showMessage('Error: ' + error.message, 'error');
+                    } finally {
+                        this.applyingEntityId = null;
+                    }
+                },
+
                 acceptSuggestion(entity) {
                     entity.selected = true;
                 },

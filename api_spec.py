@@ -608,6 +608,19 @@ OPERATIONS: List[Operation] = [
         tag="Devices",
     ),
     Operation(
+        "/api/correct_supplied_name",
+        "post",
+        "correct_supplied_name",
+        "Write the entity's own name back into what supplies it.",
+        "A helper built in the Home Assistant interface is named by the title of its config entry, "
+        "and that title keeps the name of the day it was made - after a move it names a room the "
+        "entity has left. Only offered where the supplied name is word for word that title, the "
+        "entry has this one entity, and the entity is called something else today.",
+        body={"entity_id": text("The entity whose supplied name should be brought up to date.")},
+        required=("entity_id",),
+        tag="Devices",
+    ),
+    Operation(
         "/api/bridge/status",
         "get",
         "bridge_status",

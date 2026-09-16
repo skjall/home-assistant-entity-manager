@@ -54,6 +54,7 @@ from sanitize import (
     sanitize_string,
     validate_json_input,
 )
+import supplied_names
 from z2m import sync_z2m_name
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
@@ -1858,6 +1859,25 @@ async def _get_hierarchy_async():
         await load_areas_and_entities()
         restructurer = renamer_state["restructurer"]
 
+        # Config entries, for the one supplied name that can be corrected from
+        # here: a helper is named by its entry's title. Never fatal - without
+        # them the list is the same list, only without that offer.
+        config_entries = {}
+        try:
+            reader = supplied_names.SuppliedNames(os.getenv("HA_URL"), os.getenv("HA_TOKEN"))
+            config_entries = await reader.entries()
+        except Exception as error:  # noqa: BLE001 - the hierarchy must still load
+            logger.warning("Could not read the config entries: %s", error)
+
+        per_entry = {}
+        for one in restructurer.entities.values():
+            entry_id = one.get("config_entry_id")
+            if entry_id:
+                per_entry[entry_id] = per_entry.get(entry_id, 0) + 1
+
+        def entries_with(entry_id):
+            return per_entry.get(entry_id, 0)
+
         # Build orphan lookup from entities_by_area (where is_orphan is detected)
         orphan_entities = set()
         for area_data in renamer_state.get("entities_by_area", {}).values():
@@ -2033,6 +2053,13 @@ async def _get_hierarchy_async():
                     # Set when the proposal only got an id by numbering away
                     # from another entity that renders the same name.
                     "blocked": blocked_of(restructurer, entity_id),
+                    # Set when the name the integration supplies is the title
+                    # of this entity's own config entry, and has gone stale.
+                    "supplied_correctable": supplied_names.what_to_correct(
+                        entity_data,
+                        config_entries.get(entity_data.get("config_entry_id")),
+                        entries_with(entity_data.get("config_entry_id")),
+                    ),
                 }
             )
 

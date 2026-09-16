@@ -30,6 +30,7 @@ from sanitize import (
     sanitize_registry_id,
     validate_json_input,
 )
+import supplied_names
 from z2m import sync_z2m_name
 
 logger = logging.getLogger(__name__)
@@ -459,6 +460,77 @@ async def _apply_naming_async():
         return jsonify(await naming_service.apply_naming(entity_ids))
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
+
+
+@entities.route("/api/correct_supplied_name", methods=["POST"])
+def correct_supplied_name():
+    """Write the name this add-on gave an entity back into what supplies it."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_correct_supplied_name_async())
+    finally:
+        loop.close()
+
+
+async def _correct_supplied_name_async():
+    """Retitle the config entry a helper is named after, and load it again.
+
+    A helper built in the interface takes its entity name from the title of its
+    config entry, and that title keeps the name of the day it was made. After a
+    move it names a room the entity has left, and every proposal built from it
+    carries that room along. Writing the name the entity has today into the
+    title is the only place where that can be put right - and it is the entity's
+    own name, so nothing is invented.
+    """
+    data = request.json or {}
+    entity_id = sanitize_entity_id(data.get("entity_id"))
+    if not entity_id:
+        return jsonify({"error": "Invalid entity_id"}), 400
+
+    restructurer = renamer_state.get("restructurer")
+    entity = (restructurer.entities.get(entity_id) if restructurer else None) or {}
+    if not entity:
+        return jsonify({"error": "unknown entity"}), 404
+
+    base_url = os.getenv("HA_URL")
+    token = os.getenv("HA_TOKEN")
+    reader = supplied_names.SuppliedNames(base_url, token)
+    try:
+        entries = await reader.entries()
+    except Exception as error:  # noqa: BLE001 - answered as a failure, not a crash
+        logger.error("Could not read the config entries: %s", error)
+        return jsonify({"error": str(error)}), 502
+
+    siblings = sum(
+        1 for one in restructurer.entities.values() if one.get("config_entry_id") == entity.get("config_entry_id")
+    )
+    wanted = supplied_names.what_to_correct(entity, entries.get(entity.get("config_entry_id")), siblings)
+    if not wanted:
+        return jsonify({"error": "the supplied name of this entity is not ours to correct"}), 409
+
+    ws = HomeAssistantWebSocket(ws_url(), token)
+    await ws.connect()
+    try:
+        await supplied_names.SuppliedNames.write_title(ws, wanted["entry_id"], wanted["title_should_be"])
+    except Exception as error:  # noqa: BLE001
+        logger.error("Could not retitle %s: %s", wanted["entry_id"], error)
+        return jsonify({"error": str(error)}), 502
+    finally:
+        await ws.disconnect()
+
+    # The title is written; the entity only reads it again on a reload.
+    reloaded = await reader.reload(wanted["entry_id"])
+    logger.info("Retitled %s to %r (reloaded: %s)", wanted["entry_id"], wanted["title_should_be"], reloaded)
+    return jsonify(
+        {
+            "success": True,
+            "entity_id": entity_id,
+            "was": wanted["supplied"],
+            "now": wanted["title_should_be"],
+            "reloaded": reloaded,
+        }
+    )
 
 
 @entities.route("/api/delete_entity", methods=["POST"])

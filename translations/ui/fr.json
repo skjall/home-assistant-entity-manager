@@ -119,7 +119,12 @@
     "renamed_to": "Renommé en « {name} »",
     "renamed_differently": "Home Assistant a enregistré « {name} »",
     "explain_translation_key": "{integration} nomme ce type « {value} » ({key}) — depuis l'intégration",
-    "explain_builtin_class": "Home Assistant nomme la classe d'appareil {device_class} « {value} »"
+    "explain_builtin_class": "Home Assistant nomme la classe d'appareil {device_class} « {value} »",
+    "supplied_stale": "L'intégration fournit encore « {supplied} » — peut être mise à « {wanted} »",
+    "supplied_fix": "Mettre à jour",
+    "supplied_fixed": "Le nom fourni est maintenant « {name} »",
+    "supplied_fix_hint": "Écrit le nom actuel là où l'intégration le lit. Travail de reprise : Home Assistant gère ce nom lui-même.",
+    "supplied_needs_restart": "Effectif après un redémarrage de Home Assistant"
   },
   "virtual_devices": {
     "automations": "Automatisations",
