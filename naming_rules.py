@@ -149,6 +149,7 @@ class NamingRules:
         self.default_language = default_language
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._rule_index = None
+        self._by_entity = None
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -213,6 +214,7 @@ class NamingRules:
 
     def _forget_index(self) -> None:
         self._rule_index = None
+        self._by_entity = None
 
     @guarded
     def save(self) -> None:
@@ -466,15 +468,21 @@ class NamingRules:
         """Every place this rule has to be found under.
 
         One key per filter, because a rule with two filters answers to both. A
-        rule without filters gets the one key that stands for everywhere.
+        rule without filters gets the one key that stands for everywhere. A
+        filter naming one entity is not a type key at all - see _entities_of.
         """
         match = rule["match"]
-        filters = rule.get("filters") or [{}]
+        filters = [one for one in (rule.get("filters") or []) if not one.get("registry_id")]
+        if not filters and not cls._entities_of(rule):
+            filters = [{}]
         return [
-            cls._index_key(match["kind"], match["value"], one.get("integration"), one.get("model"))
-            for one in filters
-            if not one.get("registry_id")
+            cls._index_key(match["kind"], match["value"], one.get("integration"), one.get("model")) for one in filters
         ]
+
+    @staticmethod
+    def _entities_of(rule: Mapping[str, Any]) -> List[str]:
+        """The single entities this rule names, by registry id."""
+        return [one["registry_id"] for one in (rule.get("filters") or []) if one.get("registry_id")]
 
     def _index(self) -> Dict[tuple, Dict[str, Any]]:
         """Rules by what they match on.
@@ -490,6 +498,30 @@ class NamingRules:
             self._rule_index = index
         return self._rule_index
 
+    def _entity_index(self) -> Dict[str, Dict[str, Any]]:
+        """Rules that name one entity, by that entity's registry id."""
+        if self._by_entity is None:
+            index: Dict[str, Dict[str, Any]] = {}
+            for rule in self.rules:
+                for registry_id in self._entities_of(rule):
+                    index.setdefault(registry_id, rule)
+            self._by_entity = index
+        return self._by_entity
+
+    def for_entity(self, registry_id: str, language: str = "") -> Optional[Dict[str, Any]]:
+        """The rule written for this one entity, if there is one.
+
+        It answers whatever the integration supplies, because that is what
+        being written for one entity means: the user looked at this entity and
+        said what it is called. No type rule gets a say where one exists.
+        """
+        if not registry_id:
+            return None
+        rule = self._entity_index().get(registry_id)
+        if rule is None:
+            return None
+        return rule if rule["targets"].get(language or self.language) else None
+
     def claimed_by(self, rule: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
         """The rule that already answers to one of these filters, if any.
 
@@ -499,6 +531,11 @@ class NamingRules:
         index = self._index()
         for key in self._keys_of(rule):
             other = index.get(key)
+            if other is not None and other["id"] != rule.get("id"):
+                return other
+        by_entity = self._entity_index()
+        for registry_id in self._entities_of(rule):
+            other = by_entity.get(registry_id)
             if other is not None and other["id"] != rule.get("id"):
                 return other
         return None
@@ -614,6 +651,43 @@ class NamingRules:
             rule["updated_at"] = _now()
             if learned_from:
                 rule["learned_from"] = learned_from
+        self.save()
+        return rule
+
+    @guarded
+    def upsert_for_entity(
+        self,
+        registry_id: str,
+        value: str,
+        language: str,
+        target: str,
+        learned_from: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create or update the rule that names one entity.
+
+        The entity is what such a rule is found by, so a second call for the
+        same entity changes that rule rather than adding one beside it, which
+        would leave the answer to whichever came first.
+        """
+        if not registry_id:
+            raise NamingRuleError("A rule for one entity needs its registry id")
+        rule = self._entity_index().get(registry_id)
+        if rule is None:
+            rule = self._make_rule(
+                "name",
+                value,
+                None,
+                {language: target},
+                source="user",
+                learned_from=learned_from,
+                filters=[{"registry_id": registry_id}],
+            )
+            self.rules.append(rule)
+        else:
+            if not target.strip():
+                raise NamingRuleError("A rule needs a target")
+            rule["targets"][language] = target.strip()
+            rule["updated_at"] = _now()
         self.save()
         return rule
 

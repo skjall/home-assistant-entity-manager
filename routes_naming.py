@@ -480,7 +480,21 @@ def _rule_builtins(rules) -> dict:
     return builtins
 
 
-def _rule_payload(rule: dict, affected: dict) -> dict:
+def _entity_ids_by_registry_id() -> dict:
+    """registry id -> entity_id, built once for a whole list of rules.
+
+    Looking each one up on its own would walk every entity again per rule,
+    which on a large home is a hundred scans of several thousand entries.
+    """
+    restructurer = renamer_state.get("restructurer")
+    return {
+        entity["id"]: entity_id
+        for entity_id, entity in (restructurer.entities if restructurer else {}).items()
+        if entity.get("id")
+    }
+
+
+def _rule_payload(rule: dict, affected: dict, entity_ids: Optional[dict] = None) -> dict:
     rules = renamer_state["naming_rules"]
     mappings = renamer_state["type_mappings"]
     language = rules.language
@@ -491,6 +505,12 @@ def _rule_payload(rule: dict, affected: dict) -> dict:
         **rule,
         "affected": affected.get(rule["id"], 0) if affected is not None else None,
         "redundant": rules.is_redundant(rule, language, builtin),
+        # A rule written for one entity is about that entity, and a registry id
+        # says nothing to a reader. The entity it belongs to does.
+        "entities": [
+            {"registry_id": registry_id, "entity_id": (entity_ids or {}).get(registry_id)}
+            for registry_id in rules._entities_of(rule)
+        ],
     }
 
 
@@ -553,6 +573,7 @@ def naming_rules_collection():
     affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
     language = request.args.get("lang") or rules.language
     wanted = _keys_in_use(renamer_state.get("restructurer"))
+    entity_ids = _entity_ids_by_registry_id()
     system = []
     for entry in renamer_state["type_mappings"].get_all_known_types(language):
         if not entry.get("system_default"):
@@ -565,7 +586,7 @@ def naming_rules_collection():
     return jsonify(
         {
             "language": rules.language,
-            "rules": [_rule_payload(rule, affected) for rule in rules.rules],
+            "rules": [_rule_payload(rule, affected, entity_ids) for rule in rules.rules],
             "system": system,
         }
     )

@@ -50,6 +50,64 @@
         .section-hint { color: #6b7280; font-size: 0.85rem; padding: 0 20px 12px; }
         .row-muted td { color: #9ca3af; }
         .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9999px; background: #eef2ff; color: #4f46e5; font-size: 0.7rem; }
+
+        /* One rule per row, read as a sentence rather than as five columns:
+           entity ids and long names have nowhere to be cut off here. */
+        .rule-list { display: flex; flex-direction: column; }
+
+        .rule-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 20px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .rule-row:hover { background: #f9fafb; }
+        .rule-row-muted { opacity: 0.55; }
+        .rule-body { flex: 1; min-width: 0; }
+        .rule-actions { flex: none; }
+
+        .rule-says {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .rule-from { font-family: monospace; font-size: 0.9rem; color: #374151; word-break: break-word; }
+        .rule-arrow { color: #9ca3af; }
+        .rule-to { color: #111827; font-weight: 500; word-break: break-word; }
+        .rule-entity { font-family: monospace; font-size: 0.85rem; color: #374151; word-break: break-all; }
+
+        .rule-reach {
+            margin-top: 2px;
+            color: #6b7280;
+            font-size: 0.8rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .rule-builtin { color: #9ca3af; }
+        .rule-warning { color: #d97706; }
+
+        /* One line above the list saying what could go, instead of a badge on
+           every row that could. */
+        .tidy-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 0 20px 12px;
+            padding: 10px 14px;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            color: #92400e;
+            font-size: 0.85rem;
+        }
         .kind-badge.muted { background: #f3f4f6; color: #6b7280; }
         .conflict-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
         .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid #d1d5db; background: white; cursor: pointer; font-size: 0.85rem; }
@@ -750,14 +808,14 @@
             <div class="section-header">
                 <h2>
                     <i class="ri-translate-2"></i>
-                    <span x-text="t('settings.type_rules')">Type rules</span>
+                    <span x-text="t('settings.rules')">Rules</span>
                 </h2>
                 <button class="add-btn" @click="openAddRule()">
                     <i class="ri-add-line"></i>
                     <span x-text="t('settings.add_rule')">Add rule</span>
                 </button>
             </div>
-            <p class="section-hint" x-text="t('settings.type_rules_hint')"></p>
+            <p class="section-hint" x-text="t('settings.rules_hint')"></p>
 
             <div class="stats-bar">
                 <div class="stat-item">
@@ -788,90 +846,65 @@
                 </select>
             </div>
 
-            <div class="cleanup-bar" x-show="filterType === 'no_effect' && unusedCount() > 0">
-                <p x-text="t('settings.cleanup_hint', {count: unusedCount()})"></p>
+            <!-- What could go, said once above the list rather than marked on
+                 every row it applies to. -->
+            <div class="tidy-bar" x-show="unusedCount() > 0">
+                <span x-text="t('settings.cleanup_hint', {count: unusedCount()})"></span>
                 <button class="add-btn" @click="deleteUnusedRules()" :disabled="cleaning">
                     <i class="ri-delete-bin-line"></i>
                     <span x-text="t('settings.cleanup_button', {count: unusedCount()})"></span>
                 </button>
             </div>
 
-            <table class="mappings-table" x-show="filteredRules.length > 0">
-                <thead>
-                    <tr>
-                        <th style="width: 26%" x-text="t('settings.th_original')">Original</th>
-                        <th style="width: 26%" x-text="t('settings.th_my_name')">My name</th>
-                        <th style="width: 18%" x-text="t('settings.th_system_default')">Built-in</th>
-                        <th style="width: 10%" x-text="t('settings.th_affected')">Affects</th>
-                        <th style="width: 10%" x-text="t('settings.th_kind')">Kind</th>
-                        <th style="width: 10%" x-text="t('settings.th_actions')">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="row in filteredRules" :key="row.id">
-                        <tr :class="(row.isRule && !row.affected ? 'row-muted ' : '') + (row.id === highlightRuleId ? 'row-highlight' : '')">
-                            <td>
-                                <span class="type-key" x-text="row.key"></span>
-                                <!-- One badge per filter: a rule may reach several
-                                     integrations, models or single entities at once. -->
-                                <template x-for="scope in row.filters" :key="filterLabel(scope)">
-                                    <span class="kind-badge" :title="filterLabel(scope)" x-text="filterLabel(scope)"></span>
-                                </template>
-                            </td>
-                            <td>
-                                <template x-if="editingKey !== row.id">
-                                    <span :class="row.isRule ? 'user-override' : 'translation-value'"
-                                          x-text="row.isRule ? row.value : '—'"></span>
-                                </template>
-                                <template x-if="editingKey === row.id">
-                                    <input type="text"
-                                           class="edit-input"
-                                           x-model="editValue"
-                                           @keydown.enter="saveEdit(row)"
-                                           @keydown.escape="cancelEdit()">
-                                </template>
-                            </td>
-                            <td><span class="system-default" x-text="row.system_default || '—'"></span></td>
-                            <td>
-                                <span x-show="row.isRule" :class="row.affected === 0 ? 'text-amber-600' : ''"
-                                      :title="row.affected === null ? t('settings.affected_unknown') : ''"
-                                      x-text="row.affected === null ? '—' : row.affected"></span>
-                                <span x-show="row.isRule && row.affected === 0" class="text-amber-600 text-xs" :title="t('settings.no_effect_hint')">
-                                    <i class="ri-alert-line"></i>
-                                </span>
-                            </td>
-                            <td>
-                                <!-- What a rule matches on decides which of two rules
-                                     answers for one entity, so the table says it.
-                                     Where the name came from does not: every rule is
-                                     the user's, typed, learned or carried over. -->
-                                <span x-show="row.isRule" class="kind-badge" x-text="t('settings.kind_' + row.kind)"></span>
-                                <span x-show="!row.isRule" class="system-badge">
-                                    <i class="ri-settings-3-line"></i> <span x-text="t('settings.source_system')">Built-in</span>
-                                </span>
-                            </td>
-                            <td>
-                                <template x-if="editingKey !== row.id">
-                                    <div class="action-btns">
-                                        <button class="action-btn" @click="startEdit(row)" :title="t('settings.edit')">
-                                            <i class="ri-pencil-line"></i>
-                                        </button>
-                                        <button class="action-btn delete" @click="deleteRule(row)" x-show="row.isRule" :title="t('settings.remove_rule')">
-                                            <i class="ri-delete-bin-line"></i>
-                                        </button>
-                                    </div>
-                                </template>
-                                <template x-if="editingKey === row.id">
-                                    <div class="save-cancel-btns">
-                                        <button class="save-btn" @click="saveEdit(row)"><i class="ri-check-line"></i></button>
-                                        <button class="cancel-btn" @click="cancelEdit()"><i class="ri-close-line"></i></button>
-                                    </div>
-                                </template>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
+            <div class="rule-list" x-show="filteredRules.length > 0">
+                <template x-for="row in filteredRules" :key="row.id">
+                    <div class="rule-row"
+                         :class="(row.isRule && !row.affected ? 'rule-row-muted ' : '') + (row.id === highlightRuleId ? 'row-highlight' : '')">
+                        <div class="rule-body">
+                            <!-- What the rule says, as one line: the word that comes
+                                 in, the word that goes out. -->
+                            <div class="rule-says" x-show="editingKey !== row.id">
+                                <span class="rule-from" x-text="row.key"></span>
+                                <i class="ri-arrow-right-line rule-arrow"></i>
+                                <span class="rule-to" x-text="row.isRule ? row.value : row.system_default"></span>
+                            </div>
+                            <div class="rule-says" x-show="editingKey === row.id">
+                                <span class="rule-from" x-text="row.key"></span>
+                                <i class="ri-arrow-right-line rule-arrow"></i>
+                                <input type="text" class="edit-input" x-model="editValue"
+                                       @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
+                            </div>
+                            <!-- And where it applies, which is the whole point of a filter. -->
+                            <div class="rule-reach">
+                                <span x-text="reachOf(row)"></span>
+                                <span class="rule-builtin" x-show="row.isRule && row.system_default && row.system_default !== row.value"
+                                      x-text="t('settings.builtin_is', {name: row.system_default})"></span>
+                                <span class="rule-warning" x-show="row.isRule && row.redundant"
+                                      x-text="t('settings.says_the_same')"></span>
+                            </div>
+                        </div>
+                        <div class="rule-actions">
+                            <template x-if="editingKey !== row.id">
+                                <div class="action-btns">
+                                    <button class="action-btn" @click="startEdit(row)" :title="t('settings.edit')">
+                                        <i class="ri-pencil-line"></i>
+                                    </button>
+                                    <button class="action-btn delete" @click="deleteRule(row)" x-show="row.isRule"
+                                            :title="t('settings.remove_rule')">
+                                        <i class="ri-delete-bin-line"></i>
+                                    </button>
+                                </div>
+                            </template>
+                            <template x-if="editingKey === row.id">
+                                <div class="save-cancel-btns">
+                                    <button class="save-btn" @click="saveEdit(row)"><i class="ri-check-line"></i></button>
+                                    <button class="cancel-btn" @click="cancelEdit()"><i class="ri-close-line"></i></button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
 
             <div class="empty-state" x-show="filteredRules.length === 0">
                 <i class="ri-search-line"></i>
@@ -879,65 +912,35 @@
             </div>
         </div>
 
-        <!-- Entities named by hand, past every rule -->
-        <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'rules'">
+        <!-- Entities the user asked to be left alone. Not a name, so not a rule. -->
+        <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'rules' && ignored.length > 0">
             <div class="section-header">
                 <h2>
-                    <i class="ri-user-star-line"></i>
-                    <span x-text="t('settings.exceptions')">Exceptions</span>
+                    <i class="ri-eye-off-line"></i>
+                    <span x-text="t('settings.ignored_entities')">Left alone</span>
                 </h2>
-                <button class="add-btn" @click="cleanUpExceptions()"
-                        x-show="tidyableExceptions.length > 0"
-                        :title="t('settings.exceptions_cleanup_hint')">
-                    <i class="ri-brush-line"></i>
-                    <span x-text="t('settings.exceptions_cleanup', {count: tidyableExceptions.length})">Clean up</span>
-                </button>
             </div>
-            <p class="section-hint" x-text="t('settings.exceptions_hint')"></p>
+            <p class="section-hint" x-text="t('settings.ignored_hint')"></p>
 
-            <table class="mappings-table" x-show="exceptions.length > 0">
-                <thead>
-                    <tr>
-                        <th style="width: 40%" x-text="t('settings.exceptions_entity')">Entity</th>
-                        <th style="width: 25%" x-text="t('settings.exceptions_name')">Name</th>
-                        <th style="width: 25%" x-text="t('settings.exceptions_without')">Without it</th>
-                        <th style="width: 10%" x-text="t('settings.th_actions')">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="row in exceptions" :key="row.registry_id">
-                        <tr>
-                            <td>
-                                <code class="type-key" x-text="row.entity_id || row.registry_id"></code>
-                                <span x-show="row.orphan" class="kind-badge muted"
-                                      x-text="t('settings.exceptions_orphan')">gone</span>
-                            </td>
-                            <td>
-                                <span x-show="!row.keep_original" x-text="row.name"></span>
-                                <span x-show="row.keep_original" class="text-gray-500"
-                                      x-text="t('settings.exceptions_ignored')">ignored</span>
-                            </td>
-                            <td>
-                                <span x-text="row.would_be"></span>
-                                <span x-show="row.redundant" class="kind-badge muted"
-                                      x-text="t('settings.exceptions_redundant')">same</span>
-                            </td>
-                            <td>
-                                <div class="action-btns">
-                                    <button class="action-btn delete" @click="deleteException(row)"
-                                            :title="t('settings.exceptions_remove')">
-                                        <i class="ri-delete-bin-line"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
-
-            <div class="empty-state" x-show="exceptions.length === 0">
-                <i class="ri-user-star-line"></i>
-                <p x-text="t('settings.exceptions_none')"></p>
+            <div class="rule-list">
+                <template x-for="row in ignored" :key="row.registry_id">
+                    <div class="rule-row">
+                        <div class="rule-body">
+                            <div class="rule-says">
+                                <code class="rule-entity" x-text="row.entity_id || row.registry_id"></code>
+                            </div>
+                            <div class="rule-reach" x-text="t('settings.ignored_reach')"></div>
+                        </div>
+                        <div class="rule-actions">
+                            <div class="action-btns">
+                                <button class="action-btn delete" @click="deleteException(row)"
+                                        :title="t('settings.exceptions_remove')">
+                                    <i class="ri-delete-bin-line"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
 
@@ -1283,13 +1286,6 @@
                     await this.loadExceptions();
                 },
 
-                // An exception is the last word on a name, so the list has to
-                // say which ones still change anything before offering to
-                // sweep any of them away.
-                get tidyableExceptions() {
-                    return this.exceptions.filter(row => row.redundant || row.orphan);
-                },
-
                 async loadExceptions() {
                     try {
                         const response = await fetch('api/naming/exceptions');
@@ -1304,12 +1300,6 @@
                     const response = await fetch('api/naming/exceptions/' + encodeURIComponent(row.registry_id), {
                         method: 'DELETE'
                     });
-                    if (!response.ok) return;
-                    await this.loadExceptions();
-                },
-
-                async cleanUpExceptions() {
-                    const response = await fetch('api/naming/exceptions/cleanup', {method: 'POST'});
                     if (!response.ok) return;
                     await this.loadExceptions();
                 },
@@ -1793,12 +1783,33 @@
                     }
                 },
 
+                // How far a whole rule reaches, as the line under what it says.
+                reachOf(row) {
+                    if (!row.isRule) return this.t('settings.reach_builtin');
+                    const parts = [];
+                    if (!row.filters.length) parts.push(this.t('settings.reach_everywhere'));
+                    else parts.push(row.filters.map(one => this.filterLabel(one, row)).join(', '));
+                    if (row.affected !== null && row.affected !== undefined) {
+                        parts.push(this.t('settings.reach_entities', {count: row.affected}));
+                    }
+                    return parts.join(' \u00b7 ');
+                },
+
+                // Entities the user asked to be left alone. They are the only thing
+                // left in the override store now that a named entity is a rule.
+                get ignored() {
+                    return this.exceptions.filter(row => row.keep_original);
+                },
+
                 // How far one filter reaches, in one line. A filter names an
                 // integration, an integration and a model, or a single entity;
                 // a rule without any reaches everything of its type.
-                filterLabel(scope) {
+                filterLabel(scope, row) {
                     if (!scope) return '';
-                    if (scope.registry_id) return this.t('settings.filter_entity');
+                    if (scope.registry_id) {
+                        const named = ((row && row.entities) || []).find(e => e.registry_id === scope.registry_id);
+                        return this.t('settings.reach_only', {entity: (named && named.entity_id) || scope.registry_id});
+                    }
                     return [scope.integration, scope.model].filter(Boolean).join(' \u00b7 ');
                 },
 
@@ -1812,6 +1823,7 @@
                         key: rule.match.value,
                         kind: rule.match.kind,
                         filters: rule.filters || [],
+                        entities: rule.entities || [],
                         value: rule.targets[this.language] || Object.values(rule.targets)[0] || '',
                         system_default: systemByKey[rule.match.value] || null,
                         affected: rule.affected === null || rule.affected === undefined ? null : rule.affected,
@@ -1822,7 +1834,7 @@
                     for (const entry of this.systemRules) {
                         if (covered.has(entry.key)) continue;
                         rows.push({ id: 'sys:' + entry.key, isRule: false, key: entry.key, kind: 'name',
-                                    filters: [], value: '', system_default: entry.value, affected: 0 });
+                                    filters: [], entities: [], value: '', system_default: entry.value, affected: 0 });
                     }
                     return rows;
                 },
@@ -1897,12 +1909,17 @@
                         result = result.filter(r =>
                             r.key.toLowerCase().includes(q) ||
                             (r.value && r.value.toLowerCase().includes(q)) ||
-                            (r.system_default && r.system_default.toLowerCase().includes(q))
+                            (r.system_default && r.system_default.toLowerCase().includes(q)) ||
+                            r.entities.some(e => (e.entity_id || '').toLowerCase().includes(q))
                         );
                     }
+                    // Widest reach first: what touches a hundred entities is worth
+                    // more attention than what touches one, and the single entities
+                    // gather at the bottom where they read as the exceptions they are.
                     result.sort((a, b) => {
                         if (a.isRule !== b.isRule) return a.isRule ? -1 : 1;
-                        if (a.isRule && (!!a.affected) !== (!!b.affected)) return a.affected ? -1 : 1;
+                        const reach = (b.affected || 0) - (a.affected || 0);
+                        if (reach) return reach;
                         return a.key.localeCompare(b.key);
                     });
                     this.filteredRules = result;

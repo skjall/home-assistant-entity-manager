@@ -11,6 +11,7 @@ import os
 from app_state import ha_translations, init_client, renamer_state
 from ha_websocket import HomeAssistantWebSocket
 from json_store import new_lock
+from naming_exception_adoption import adopt_exceptions, forget_missing
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ async def _load_registry(restructurer) -> None:
         await ws.connect()
         await restructurer.load_structure(ws)
         await sync_ha_language(ws)
+        _tidy_entity_rules(restructurer)
     except Exception as error:
         logger.warning("Could not load the registries: %s", error)
     finally:
@@ -88,3 +90,21 @@ async def _load_registry(restructurer) -> None:
             await ws.disconnect()
         except Exception:
             pass
+
+
+def _tidy_entity_rules(restructurer) -> None:
+    """Bring the entity-specific rules in step with the registry just read.
+
+    Both steps want to know which entities exist, which is only true here.
+    Neither is worth failing a load over: a rule list that is a little out of
+    date still names every entity correctly.
+    """
+    overrides = renamer_state.get("naming_overrides")
+    rules = renamer_state.get("naming_rules")
+    if overrides is None or rules is None:
+        return
+    try:
+        adopt_exceptions(overrides, rules, restructurer)
+        forget_missing(overrides, rules, restructurer)
+    except Exception as error:  # noqa: BLE001 - never lose the registry over housekeeping
+        logger.warning("Could not tidy the rules written for single entities: %s", error)
