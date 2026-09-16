@@ -519,7 +519,13 @@
     "behaviour": "Comportement",
     "auto_close": "Fermer la fenêtre en cas de succès complet",
     "auto_close_hint": "La fenêtre de progression se ferme d'elle-même lorsqu'une exécution s'est terminée sans échec et n'a rien laissé à reprendre. Sinon elle reste ouverte.",
-    "spelling_section": "Orthographe"
+    "spelling_section": "Orthographe",
+    "reach_show": "Afficher les entités",
+    "reach_loading": "Chargement …",
+    "reach_supplied": "Fourni : {value}",
+    "reach_today": "Aujourd'hui : {value}",
+    "reach_would_be": "Donnerait : {value}",
+    "reach_by_name": "nommée individuellement"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

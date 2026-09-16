@@ -499,7 +499,13 @@
     "behaviour": "Behaviour",
     "auto_close": "Close the window when everything succeeded",
     "auto_close_hint": "The progress dialog closes by itself when a run finished without a failure and left nothing to follow up. Otherwise it stays open.",
-    "spelling_section": "Spelling"
+    "spelling_section": "Spelling",
+    "reach_show": "Show the entities",
+    "reach_loading": "Loading …",
+    "reach_supplied": "Supplied: {value}",
+    "reach_today": "Today: {value}",
+    "reach_would_be": "Would be: {value}",
+    "reach_by_name": "named one by one"
   },
   "type_mappings": {
     "light": "Light",

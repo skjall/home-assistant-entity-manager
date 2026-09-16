@@ -519,7 +519,13 @@
     "behaviour": "Comportamiento",
     "auto_close": "Cerrar la ventana si todo salió bien",
     "auto_close_hint": "El diálogo de progreso se cierra solo cuando una ejecución terminó sin fallos y no dejó nada pendiente. En caso contrario permanece abierto.",
-    "spelling_section": "Ortografía"
+    "spelling_section": "Ortografía",
+    "reach_show": "Mostrar las entidades",
+    "reach_loading": "Cargando …",
+    "reach_supplied": "Entregado: {value}",
+    "reach_today": "Hoy: {value}",
+    "reach_would_be": "Daría: {value}",
+    "reach_by_name": "nombrada una a una"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

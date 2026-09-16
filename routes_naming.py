@@ -597,6 +597,84 @@ def naming_rules_collection():
     )
 
 
+@naming.route("/api/naming/rules/<rule_id>/entities", methods=["GET"])
+def rule_entities(rule_id: str):
+    """Which entities a rule reaches, and what it does to each of them.
+
+    The list said how many and never which, so a rule that worded something
+    wrongly could not be checked against the entities it words. Each one comes
+    back with the word Home Assistant supplies, the name it carries today and
+    the name the rule would give it - the three values a reader needs to say
+    whether the rule is right.
+    """
+    rules = renamer_state["naming_rules"]
+    rule = next((one for one in rules.rules if one["id"] == rule_id), None)
+    if rule is None:
+        return jsonify({"error": "unknown rule"}), 404
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(ensure_registry_loaded())
+    finally:
+        loop.close()
+
+    restructurer = renamer_state.get("restructurer")
+    if restructurer is None or not restructurer.entities:
+        return jsonify({"error": "the registry is not loaded"}), 503
+
+    language = request.args.get("lang") or rules.language
+    found = []
+    for entity_id, entity_data in restructurer.entities.items():
+        hit = (
+            rules.find(
+                "translation_key",
+                entity_data.get("translation_key") or "",
+                entity_data.get("platform"),
+                language,
+                entity_model(restructurer, entity_data),
+            )
+            or rules.find(
+                "name",
+                entity_data.get("original_name") or "",
+                entity_data.get("platform"),
+                language,
+                entity_model(restructurer, entity_data),
+            )
+            or rules.find(
+                "device_class",
+                entity_data.get("device_class") or entity_data.get("original_device_class") or "",
+                entity_data.get("platform"),
+                language,
+                entity_model(restructurer, entity_data),
+            )
+        )
+        by_id = entity_data.get("id") and entity_data["id"] in rules._entities_of(rule)
+        if not by_id and (hit is None or hit["id"] != rule_id):
+            continue
+        try:
+            proposed_id, proposed = restructurer.calculate_new_entity_name(entity_id)
+        except Exception as error:  # noqa: BLE001 - one entity must not fail the list
+            logger.debug("Could not work out a name for %s: %s", entity_id, error)
+            proposed_id, proposed = "", ""
+        found.append(
+            {
+                "entity_id": entity_id,
+                "name": entity_data.get("name") or entity_data.get("original_name") or "",
+                "supplied": entity_data.get("original_name") or "",
+                "translation_key": entity_data.get("translation_key") or "",
+                "device_class": entity_data.get("device_class") or entity_data.get("original_device_class") or "",
+                "platform": entity_data.get("platform") or "",
+                "proposed": proposed,
+                "proposed_id": proposed_id,
+                # Named one by one rather than caught by what it supplies.
+                "by_name": bool(by_id),
+            }
+        )
+    found.sort(key=lambda one: one["entity_id"])
+    return jsonify({"rule_id": rule_id, "entities": found, "total": len(found)})
+
+
 @naming.route("/api/naming/rules/unused", methods=["GET", "DELETE"])
 def naming_rules_unused():
     """The rules no entity in this home matches, and a way to be rid of them."""

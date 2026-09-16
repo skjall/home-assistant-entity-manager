@@ -192,6 +192,17 @@ OPERATIONS: List[Operation] = [
         tag="Naming",
     ),
     Operation(
+        "/api/naming/rules/<rule_id>/entities",
+        "get",
+        "rule_entities",
+        "Which entities a rule reaches, and what it does to each.",
+        "Each one comes back with the name Home Assistant supplies, the name it "
+        "carries today and the name the rule would give it - enough to say "
+        "whether the rule words them right. The count on the rule says how many; "
+        "this says which.",
+        tag="Naming",
+    ),
+    Operation(
         "/api/naming/rules/<rule_id>/filters",
         "post",
         "add_rule_filter",

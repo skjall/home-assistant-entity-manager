@@ -147,6 +147,34 @@
         }
 
         .reach-badge.empty { background: #f3f4f6; color: #6b7280; }
+        .reach-badge { border: none; font: inherit; font-size: 0.8rem; font-weight: 600; }
+        .reach-badge-open { cursor: pointer; }
+        .reach-badge-open:hover { background: #d1fae5; }
+
+        .reach-list {
+            margin-top: 10px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .reach-loading { margin: 0; color: #6b7280; font-size: 0.8rem; }
+        .reach-item {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 4px 10px;
+        }
+        .reach-id { font-family: monospace; font-size: 0.8rem; color: #374151; word-break: break-all; }
+        .reach-values {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 14px;
+            color: #6b7280;
+            font-size: 0.8rem;
+        }
+        .reach-by-name { color: #6b7280; font-size: 0.75rem; }
         .rule-entity { font-family: monospace; font-size: 0.85rem; color: #374151; word-break: break-all; }
 
         .rule-reach {
@@ -1369,15 +1397,40 @@
                                 </template>
                                 <button class="filter-add" x-show="row.isRule"
                                         @click="openAddFilter(row)" x-text="t('settings.filter_add')"></button>
-                                <span class="reach-badge" :class="row.affected ? '' : 'empty'"
-                                      x-show="row.isRule && row.affected !== null">
-                                    <i class="ri-focus-3-line"></i>
+                                <button type="button" class="reach-badge"
+                                        :class="(row.affected ? '' : 'empty') + (row.affected ? ' reach-badge-open' : '')"
+                                        x-show="row.isRule && row.affected !== null"
+                                        :disabled="!row.affected"
+                                        @click="toggleReach(row)"
+                                        :title="t('settings.reach_show')">
+                                    <i :class="reachOpen === row.id ? 'ri-arrow-down-s-line' : 'ri-focus-3-line'"></i>
                                     <span x-text="t('settings.reach_entities', {count: row.affected})"></span>
-                                </span>
+                                </button>
                                 <span class="rule-builtin" x-show="row.isRule && row.system_default && row.system_default !== row.value"
                                       x-text="t('settings.builtin_is', {name: row.system_default})"></span>
                                 <span class="rule-warning" x-show="row.isRule && row.redundant"
                                       x-text="t('settings.says_the_same')"></span>
+                            </div>
+                            <!-- Which entities the count stands for, with the
+                                 three values that say whether the rule words
+                                 them right. -->
+                            <div class="reach-list" x-show="reachOpen === row.id">
+                                <p class="reach-loading" x-show="reachBusy" x-text="t('settings.reach_loading')"></p>
+                                <p class="reach-loading" x-show="reachError" x-text="reachError"></p>
+                                <template x-for="one in reachRows" :key="one.entity_id">
+                                    <div class="reach-item">
+                                        <code class="reach-id" x-text="one.entity_id"></code>
+                                        <div class="reach-values">
+                                            <span x-text="t('settings.reach_supplied', {
+                                                value: one.translation_key || one.supplied || one.device_class || '—'
+                                            })"></span>
+                                            <span x-text="t('settings.reach_today', {value: one.name || '—'})"></span>
+                                            <span x-text="t('settings.reach_would_be', {value: one.proposed || '—'})"></span>
+                                        </div>
+                                        <span class="reach-by-name" x-show="one.by_name"
+                                              x-text="t('settings.reach_by_name')"></span>
+                                    </div>
+                                </template>
                             </div>
                         </div>
                         <div class="rule-actions">
@@ -1986,6 +2039,10 @@
                 highlightRuleId: null,
                 displayCase: 'first_word',
                 editingKey: null,
+                reachOpen: null,   // the rule whose entities are shown
+                reachRows: [],
+                reachBusy: false,
+                reachError: '',
                 editValue: '',
                 filterFor: null,
                 comboOpen: '',
@@ -2298,6 +2355,31 @@
                 // user decides whether it goes.
                 unusedCount() {
                     return this.rules.filter(rule => rule.affected === 0 || rule.redundant).length;
+                },
+
+                // One list at a time, fetched when it is asked for: a home has
+                // hundreds of rules and the entities behind them are only of
+                // interest for the one being looked at.
+                async toggleReach(row) {
+                    if (this.reachOpen === row.id) {
+                        this.reachOpen = null;
+                        return;
+                    }
+                    this.reachOpen = row.id;
+                    this.reachRows = [];
+                    this.reachError = '';
+                    this.reachBusy = true;
+                    try {
+                        const response = await fetch('api/naming/rules/' + encodeURIComponent(row.id) + '/entities');
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'failed');
+                        if (this.reachOpen !== row.id) return;
+                        this.reachRows = data.entities || [];
+                    } catch (error) {
+                        this.reachError = 'Error: ' + error.message;
+                    } finally {
+                        this.reachBusy = false;
+                    }
                 },
 
                 async deleteUnusedRules() {

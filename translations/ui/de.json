@@ -499,7 +499,13 @@
     "behaviour": "Verhalten",
     "auto_close": "Fenster bei vollständigem Erfolg schließen",
     "auto_close_hint": "Der Fortschrittsdialog schließt sich von selbst, wenn ein Lauf ohne Fehler durchlief und nichts zum Nachziehen übrig blieb. Sonst bleibt er offen.",
-    "spelling_section": "Schreibweise"
+    "spelling_section": "Schreibweise",
+    "reach_show": "Entitäten anzeigen",
+    "reach_loading": "Wird geladen …",
+    "reach_supplied": "Geliefert: {value}",
+    "reach_today": "Heute: {value}",
+    "reach_would_be": "Ergäbe: {value}",
+    "reach_by_name": "einzeln benannt"
   },
   "type_mappings": {
     "light": "Licht",
