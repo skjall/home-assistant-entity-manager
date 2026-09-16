@@ -473,6 +473,16 @@ class EntityRestructurer:
             return None
         return stored
 
+    def _supplied_type(self, registry: Dict[str, Any], state: Dict[str, Any], prefixes: Tuple[str, ...]) -> str:
+        """What the integration calls this entity, without the device in front."""
+        native = next(
+            (candidate for candidate in (registry.get("original_name"), state.get("original_name")) if candidate),
+            "",
+        )
+        if not native:
+            return ""
+        return self._without_device_prefix(native, prefixes) or ""
+
     def _remembered_type(self, registry: Dict[str, Any]) -> str:
         """The type part of a name this add-on wrote, if it is still that name.
 
@@ -808,16 +818,34 @@ class EntityRestructurer:
         # sits in the middle of every proposal. The note does not go stale that
         # way, and rules still have their say on what it holds.
         remembered = self._remembered_type(registry)
-        if remembered:
-            return self._resolve_supplied_name(remembered, entity_id, registry)
         if self._our_note(registry) is not None:
-            # A note from before the type part was kept still settles whose name
-            # this is, and a name of ours was rendered by our own templates, so
-            # unwinding it gives the type part back. Better than the supplied
-            # name, which is what froze the old device name in the first place.
-            base = self._strip_applied_entity_name(registry.get("name") or "", prefixes, context)
-            if base:
-                return self._resolve_supplied_name(base, entity_id, registry, won_by="legacy_parse")
+            # A note from before the type part was kept holds nothing to go by,
+            # but a name of ours was rendered by our own templates, so unwinding
+            # it gives that part back.
+            written = remembered or self._strip_applied_entity_name(registry.get("name") or "", prefixes, context)
+            if written:
+                supplied = self._supplied_type(registry, state, prefixes)
+                # Which of the two is the type part and which is already the
+                # answer? Put the supplied name through the rules: if that is
+                # what the note says, the supplied one was the input and stays
+                # it, so a rule the user edits still reaches here - including
+                # where an older note recorded the rendered word instead of the
+                # one that went in. If it says something else, the supplied name
+                # has gone stale - it froze a device name that has since changed
+                # - and the note is all that is left of the truth.
+                if supplied:
+                    through_rules = self._resolve_supplied_name(supplied, entity_id, registry)
+                    if canon(through_rules["value"]) == canon(written):
+                        # Write the correction back, or it would have to be
+                        # worked out again on every read - and the moment the
+                        # user edits the rule it can no longer be worked out at
+                        # all, because the two words stop agreeing.
+                        if self.naming_state is not None and canon(supplied) != canon(written):
+                            self.naming_state.resupply(registry.get("id") or "", supplied)
+                        return through_rules
+                return self._resolve_supplied_name(
+                    written, entity_id, registry, won_by="original" if remembered else "legacy_parse"
+                )
 
         native = (registry.get("original_name"), state.get("original_name"))
         name = next((candidate for candidate in native if candidate), None)
