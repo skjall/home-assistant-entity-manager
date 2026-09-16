@@ -319,7 +319,6 @@
   "settings": {
     "back_to_manager": "Volver al Gestor de Entidades",
     "page_title": "Ajustes",
-    "system_language": "Idioma:",
     "search_placeholder": "Buscar por clave o traducción...",
     "filter_all": "Todos los Tipos",
     "filter_system": "De Home Assistant",
@@ -404,7 +403,6 @@
     "my_name_label": "Mi nombre",
     "migration_conflicts": "Un tipo, dos nombres distintos",
     "my_name_placeholder": "p. ej. Nivel de batería",
-    "display_case": "Ortografía:",
     "display_case_hint": "Cómo se escriben los tipos sin regla. Nunca cambia la palabra, solo mayúsculas y minúsculas.",
     "display_case_first_word": "Primera palabra en mayúscula",
     "display_case_sentence": "Tipo oración (resto en minúscula)",
@@ -413,7 +411,6 @@
     "tab_naming": "Nombres",
     "tab_rules": "Reglas",
     "tab_system": "Sistema",
-    "language_section": "Idioma y ortografía",
     "affected_unknown": "Aún sin contar. La lista de entidades se está cargando.",
     "field_area": "Área",
     "field_area_id": "ID de área",
@@ -520,7 +517,8 @@
     "filters_apply_log": "Mostrar {count} entradas",
     "behaviour": "Comportamiento",
     "auto_close": "Cerrar la ventana si todo salió bien",
-    "auto_close_hint": "El diálogo de progreso se cierra solo cuando una ejecución terminó sin fallos y no dejó nada pendiente. En caso contrario permanece abierto."
+    "auto_close_hint": "El diálogo de progreso se cierra solo cuando una ejecución terminó sin fallos y no dejó nada pendiente. En caso contrario permanece abierto.",
+    "spelling_section": "Ortografía"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

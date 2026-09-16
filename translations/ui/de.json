@@ -299,7 +299,6 @@
   "settings": {
     "back_to_manager": "Zurück zum Entity Manager",
     "page_title": "Einstellungen",
-    "system_language": "Sprache:",
     "search_placeholder": "Nach Key oder Übersetzung suchen...",
     "filter_all": "Alle Typen",
     "filter_system": "Von Home Assistant",
@@ -384,7 +383,6 @@
     "my_name_label": "Mein Name",
     "migration_conflicts": "Zweimal derselbe Typ, zwei verschiedene Namen",
     "my_name_placeholder": "z. B. Batterieladung",
-    "display_case": "Schreibweise:",
     "display_case_hint": "Wie Typnamen ohne Regel geschrieben werden. Ändert nie das Wort, nur Groß-/Kleinschreibung.",
     "display_case_first_word": "Erstes Wort groß",
     "display_case_sentence": "Satzschreibweise (Rest klein)",
@@ -393,7 +391,6 @@
     "tab_naming": "Benennung",
     "tab_rules": "Regeln",
     "tab_system": "System",
-    "language_section": "Sprache und Schreibweise",
     "affected_unknown": "Noch nicht gezählt. Die Entitätsliste wird gerade geladen.",
     "field_area": "Bereich",
     "field_area_id": "Bereichs-ID",
@@ -500,7 +497,8 @@
     "filters_apply_log": "{count} Einträge anzeigen",
     "behaviour": "Verhalten",
     "auto_close": "Fenster bei vollständigem Erfolg schließen",
-    "auto_close_hint": "Der Fortschrittsdialog schließt sich von selbst, wenn ein Lauf ohne Fehler durchlief und nichts zum Nachziehen übrig blieb. Sonst bleibt er offen."
+    "auto_close_hint": "Der Fortschrittsdialog schließt sich von selbst, wenn ein Lauf ohne Fehler durchlief und nichts zum Nachziehen übrig blieb. Sonst bleibt er offen.",
+    "spelling_section": "Schreibweise"
   },
   "type_mappings": {
     "light": "Licht",

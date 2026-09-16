@@ -299,7 +299,6 @@
   "settings": {
     "back_to_manager": "Back to Entity Manager",
     "page_title": "Settings",
-    "system_language": "Language:",
     "search_placeholder": "Search by key or translation...",
     "filter_all": "All Types",
     "filter_system": "From Home Assistant",
@@ -384,7 +383,6 @@
     "my_name_label": "My name",
     "migration_conflicts": "One type, two different names",
     "my_name_placeholder": "e.g. Battery level",
-    "display_case": "Spelling:",
     "display_case_hint": "How type names without a rule are spelled. Never changes the word, only its casing.",
     "display_case_first_word": "First word capitalised",
     "display_case_sentence": "Sentence case (rest lower)",
@@ -393,7 +391,6 @@
     "tab_naming": "Naming",
     "tab_rules": "Rules",
     "tab_system": "System",
-    "language_section": "Language and spelling",
     "affected_unknown": "Not counted yet. The entity list is still loading.",
     "field_area": "Area",
     "field_area_id": "Area ID",
@@ -500,7 +497,8 @@
     "filters_apply_log": "Show {count} entries",
     "behaviour": "Behaviour",
     "auto_close": "Close the window when everything succeeded",
-    "auto_close_hint": "The progress dialog closes by itself when a run finished without a failure and left nothing to follow up. Otherwise it stays open."
+    "auto_close_hint": "The progress dialog closes by itself when a run finished without a failure and left nothing to follow up. Otherwise it stays open.",
+    "spelling_section": "Spelling"
   },
   "type_mappings": {
     "light": "Light",

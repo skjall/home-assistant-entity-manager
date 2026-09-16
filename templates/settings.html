@@ -1102,17 +1102,16 @@
         <div class="mapping-section" style="margin-bottom: 24px;" x-show="section === 'naming'">
             <div class="section-header">
                 <h2>
-                    <i class="ri-global-line"></i>
-                    <span x-text="t('settings.language_section')">Language and spelling</span>
+                    <i class="ri-font-size"></i>
+                    <span x-text="t('settings.spelling_section')">Spelling</span>
                 </h2>
             </div>
-            <div style="padding: 20px;" class="language-selector">
-                <label x-text="t('settings.system_language')">Language:</label>
-                <span class="kind-badge" x-text="language"></span>
-            </div>
-            <div style="padding: 0 20px 20px;" class="language-selector">
-                <label x-text="t('settings.display_case')">Spelling:</label>
-                <select class="filter-select" x-model="displayCase" @change="changeDisplayCase()" :title="t('settings.display_case_hint')">
+            <div style="padding: 20px;">
+                <!-- What the setting does, said once and in the open, rather than
+                     a label repeating the heading and the reason in a tooltip. -->
+                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 12px;"
+                   x-text="t('settings.display_case_hint')"></p>
+                <select class="filter-select" x-model="displayCase" @change="changeDisplayCase()">
                     <option value="first_word" x-text="t('settings.display_case_first_word')">First word capitalised</option>
                     <option value="sentence" x-text="t('settings.display_case_sentence')">Sentence case</option>
                     <option value="off" x-text="t('settings.display_case_off')">As supplied</option>

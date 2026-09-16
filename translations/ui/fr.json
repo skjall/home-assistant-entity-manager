@@ -319,7 +319,6 @@
   "settings": {
     "back_to_manager": "Retour au Gestionnaire d'Entités",
     "page_title": "Paramètres",
-    "system_language": "Langue :",
     "search_placeholder": "Rechercher par clé ou traduction...",
     "filter_all": "Tous les Types",
     "filter_system": "De Home Assistant",
@@ -404,7 +403,6 @@
     "my_name_label": "Mon nom",
     "migration_conflicts": "Un type, deux noms différents",
     "my_name_placeholder": "p. ex. Niveau de batterie",
-    "display_case": "Orthographe :",
     "display_case_hint": "Comment les types sans règle sont écrits. Ne change jamais le mot, seulement la casse.",
     "display_case_first_word": "Premier mot en majuscule",
     "display_case_sentence": "Casse de phrase (reste en minuscules)",
@@ -413,7 +411,6 @@
     "tab_naming": "Nommage",
     "tab_rules": "Règles",
     "tab_system": "Système",
-    "language_section": "Langue et orthographe",
     "affected_unknown": "Pas encore compté. La liste des entités est en cours de chargement.",
     "field_area": "Zone",
     "field_area_id": "ID de zone",
@@ -520,7 +517,8 @@
     "filters_apply_log": "Afficher {count} entrées",
     "behaviour": "Comportement",
     "auto_close": "Fermer la fenêtre en cas de succès complet",
-    "auto_close_hint": "La fenêtre de progression se ferme d'elle-même lorsqu'une exécution s'est terminée sans échec et n'a rien laissé à reprendre. Sinon elle reste ouverte."
+    "auto_close_hint": "La fenêtre de progression se ferme d'elle-même lorsqu'une exécution s'est terminée sans échec et n'a rien laissé à reprendre. Sinon elle reste ouverte.",
+    "spelling_section": "Orthographe"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",
