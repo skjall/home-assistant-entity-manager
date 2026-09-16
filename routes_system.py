@@ -50,6 +50,102 @@ def rename_log_lookup():
     return jsonify(rename_log.search(entity_id))
 
 
+# A run's log only ever existed inside the panel that was open while it ran.
+# These few helpers turn the finished jobs back into one list that can be
+# searched, narrowed and paged through afterwards.
+LOG_PAGE_SIZE = 50
+LOG_MAX_PAGE_SIZE = 200
+# Older runs than this are on disk but not worth reading on every request.
+LOG_JOBS_READ = 500
+
+
+def _log_lines() -> list:
+    """Every line every finished run wrote, newest first."""
+    store = renamer_state.get("job_store")
+    if store is None:
+        return []
+    jobs = sorted(store.list_jobs(), key=lambda job: job.get("created") or "", reverse=True)[:LOG_JOBS_READ]
+    lines = []
+    for job in jobs:
+        for entry in job.get("log") or []:
+            lines.append(
+                {
+                    "ts": entry.get("ts") or job.get("created") or "",
+                    "step": entry.get("step") or "",
+                    "message": entry.get("message") or "",
+                    "job_id": job.get("job_id") or "",
+                    "job_type": job.get("type") or "",
+                    "job_state": job.get("state") or "",
+                }
+            )
+    lines.sort(key=lambda line: line["ts"], reverse=True)
+    return lines
+
+
+def _wanted(raw: str) -> set:
+    """A comma-separated query parameter as the set of values it names."""
+    return {part.strip() for part in (raw or "").split(",") if part.strip()}
+
+
+def _counted(lines: list, field: str) -> dict:
+    counts: dict = {}
+    for line in lines:
+        value = line.get(field) or ""
+        if value:
+            counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+@system.route("/api/log", methods=["GET"])
+def job_log():
+    """The log of every run, searchable, narrowable and paged.
+
+    Query parameters: ``q`` searches the message, ``step`` and ``type`` each
+    name one or more values to keep (comma-separated), ``page`` and
+    ``per_page`` page through what is left. ``facets`` answers how many lines
+    each step and each kind of run has, counted before the step and type
+    filters so the numbers say what picking one would give.
+    """
+    lines = _log_lines()
+
+    needle = (request.args.get("q") or "").strip().lower()
+    if needle:
+        lines = [line for line in lines if needle in line["message"].lower() or needle in line["step"].lower()]
+
+    facets = {"step": _counted(lines, "step"), "type": _counted(lines, "job_type")}
+
+    steps = _wanted(request.args.get("step"))
+    if steps:
+        lines = [line for line in lines if line["step"] in steps]
+    types = _wanted(request.args.get("type"))
+    if types:
+        lines = [line for line in lines if line["job_type"] in types]
+
+    try:
+        per_page = int(request.args.get("per_page") or LOG_PAGE_SIZE)
+    except ValueError:
+        per_page = LOG_PAGE_SIZE
+    per_page = max(1, min(per_page, LOG_MAX_PAGE_SIZE))
+    try:
+        page = int(request.args.get("page") or 1)
+    except ValueError:
+        page = 1
+    pages = max(1, -(-len(lines) // per_page))
+    page = max(1, min(page, pages))
+    start = (page - 1) * per_page
+
+    return jsonify(
+        {
+            "entries": lines[start : start + per_page],
+            "total": len(lines),
+            "page": page,
+            "per_page": per_page,
+            "pages": pages,
+            "facets": facets,
+        }
+    )
+
+
 def _published_ports() -> dict:
     """Ask the Supervisor which of this add-on's ports are published on the host.
 

@@ -984,4 +984,4 @@ def naming_exception_ignore():
     return jsonify({"success": True, "ignored": True})
 
 
-SETTINGS_SECTIONS = ("naming", "rules", "system")
+SETTINGS_SECTIONS = ("naming", "rules", "log", "system")
