@@ -553,7 +553,7 @@ class EntityRestructurer:
                 # measures where neither a key nor a name matched.
                 device_class = registry.get("device_class") or registry.get("original_device_class")
                 rule = rules.find("device_class", device_class, integration, language, model)
-                if rule:
+                if rule and self._names_the_class(name, entity_id, device_class):
                     candidates.append(
                         {
                             "value": rule["targets"][language],
@@ -598,6 +598,28 @@ class EntityRestructurer:
         winner["platform"] = integration
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
+
+    def _names_the_class(self, supplied: str, entity_id: str, device_class: str) -> bool:
+        """Whether a supplied name is about the device class at all.
+
+        A rule on the class exists to settle how that class is worded:
+        "Firmware-Update" and "Firmware Status" both become "Firmware". But
+        integrations put a class on entities that are about something else -
+        UniFi gives its "regenerate password" button the class "update" - and
+        there the rule is talking about a different thing entirely. A name that
+        does not contain the class's own word is one of those.
+        """
+        if not supplied:
+            return True
+        words = {canon(device_class or "")}
+        if self.ha_translations:
+            domain = entity_id.partition(".")[0]
+            for language in (self.language, "en"):
+                localized = self.ha_translations.device_class_name(domain, device_class, language)
+                if localized:
+                    words.add(canon(localized))
+        written = canon(supplied)
+        return any(word and word in written for word in words)
 
     def _with_discriminator(
         self,
