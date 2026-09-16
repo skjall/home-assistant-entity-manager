@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+from typing import Any, Dict, Optional
 import uuid
 
 import aiohttp
@@ -33,6 +34,7 @@ from ha_websocket import HomeAssistantWebSocket
 from hierarchy_manager import normalize_name
 from jobs import new_job
 import mcp_server
+import naming_service
 from reference_cache import get_reference_checker, invalidate_reference_checker_cache
 from registry import sync_ha_language
 from routes_entities import entities as entity_routes
@@ -742,6 +744,35 @@ async def _preview_changes_async():
         await ws.disconnect()
 
 
+def _note_for(old_id: str, state: Optional[Dict[str, Any]], written_name: str) -> Optional[Dict[str, Any]]:
+    """What went into the name being written, for the note kept with it.
+
+    The supplied type has to be worked out before the rename: afterwards the
+    registry answers with the new name and the type that went into it is gone.
+    Without this note a later rule cannot find the entity again, and the next
+    proposal starts from nothing - which is how one switch came out "Steckdose"
+    once and "Schalter" the next time.
+
+    A name the user typed themselves is still noted, because the supplied type
+    is a fact about the entity either way; only the claim that a rule decided
+    it is dropped, since none did.
+    """
+    if state is None:
+        return None
+    restructurer = renamer_state.get("restructurer")
+    if restructurer is None:
+        return None
+    try:
+        _, proposed_name = restructurer.generate_new_entity_id(old_id, state)
+        note = naming_service.provenance_for(old_id)
+    except Exception as error:  # noqa: BLE001 - a note must never fail a rename
+        logger.warning("Could not work out what named %s: %s", old_id, error)
+        return None
+    if note and written_name and proposed_name != written_name:
+        return {**note, "won_by": "user", "rule_id": None}
+    return note
+
+
 def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_results: dict) -> None:
     """Record what the rename could not carry along, so the user can.
 
@@ -846,6 +877,7 @@ async def _execute_changes_async():
         # Get states for entity generation
         client = await init_client()
         states = await client.get_states()
+        states_by_id = {state["entity_id"]: state for state in states}
 
         # Process devices first
         for device_data in selected_devices:
@@ -919,7 +951,11 @@ async def _execute_changes_async():
 
                                 # Rename entity and enable if needed
                                 await entity_registry.rename_entity(
-                                    entity_id, new_entity_id, new_friendly_name, enable=should_enable
+                                    entity_id,
+                                    new_entity_id,
+                                    new_friendly_name,
+                                    enable=should_enable,
+                                    provenance=_note_for(entity_id, states_by_id.get(entity_id), new_friendly_name),
                                 )
 
                                 if should_enable:
@@ -956,7 +992,6 @@ async def _execute_changes_async():
 
         # Recalculate as one batch so overrides are applied and no two entities
         # are sent to the same ID, which Home Assistant would refuse.
-        states_by_id = {state["entity_id"]: state for state in states}
         recalculated = {
             entity_id: (new_entity_id, friendly_name)
             for entity_id, new_entity_id, friendly_name in renamer_state["restructurer"].deduplicate_entity_ids(
@@ -997,19 +1032,24 @@ async def _execute_changes_async():
                         f"is_disabled={is_disabled}, disabled_by={disabled_by_value}, should_enable={should_enable}"
                     )
 
+                    note = _note_for(old_id, states_by_id.get(old_id), friendly_name)
                     if needs_id_change:
                         # Rename entity and enable if needed in a single operation
-                        await entity_registry.rename_entity(old_id, new_id, friendly_name, enable=should_enable)
+                        await entity_registry.rename_entity(
+                            old_id, new_id, friendly_name, enable=should_enable, provenance=note
+                        )
                         if should_enable:
                             logger.info(f"Enabled and renamed disabled entity: {old_id} -> {new_id}")
                     else:
                         # Only change friendly name
                         if should_enable:
                             # Enable and update name in one operation
-                            await entity_registry.update_entity(old_id, name=friendly_name, enable=True)
+                            await entity_registry.update_entity(
+                                old_id, name=friendly_name, enable=True, provenance=note
+                            )
                             logger.info(f"Enabled entity and updated friendly name: {old_id}")
                         else:
-                            await entity_registry.update_entity(old_id, name=friendly_name)
+                            await entity_registry.update_entity(old_id, name=friendly_name, provenance=note)
 
                     # Update dependencies only on ID change
                     if needs_id_change:
@@ -1139,6 +1179,7 @@ async def execute_direct_handler(job, ctx):
         logger.info("Pre-fetching states for dependency updates...")
         cached_states = await dependency_updater.get_states()
         logger.info(f"Cached {len(cached_states)} states")
+        states_by_id = {state["entity_id"]: state for state in cached_states}
 
         total = len(entities)
         ctx.progress(0, total)
@@ -1176,7 +1217,13 @@ async def execute_direct_handler(job, ctx):
                 should_enable = is_disabled and os.getenv("ENABLE_DISABLED_ENTITIES", "false").lower() == "true"
 
                 # Rename entity
-                await entity_registry.rename_entity(old_id, new_id, friendly_name, enable=should_enable)
+                await entity_registry.rename_entity(
+                    old_id,
+                    new_id,
+                    friendly_name,
+                    enable=should_enable,
+                    provenance=_note_for(old_id, states_by_id.get(old_id), friendly_name),
+                )
 
                 if should_enable:
                     logger.info(f"Enabled and renamed disabled entity: {old_id} -> {new_id}")
