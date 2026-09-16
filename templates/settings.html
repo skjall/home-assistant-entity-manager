@@ -47,7 +47,7 @@
             color: #3b82f6;
         }
 
-        .section-hint { color: #6b7280; font-size: 0.85rem; padding: 0 20px 12px; }
+        .section-hint { color: #6b7280; font-size: 0.85rem; padding: 14px 20px 12px; }
         .row-muted td { color: #9ca3af; }
         .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9999px; background: #eef2ff; color: #4f46e5; font-size: 0.7rem; }
 
@@ -1822,7 +1822,7 @@
                     <i class="ri-filter-line"></i>
                     <span x-text="t('settings.filter_add_title')">Add filter</span>
                 </h3>
-                <p class="section-hint" style="padding: 0 0 12px;"
+                <p class="section-hint" style="padding: 10px 0 12px;"
                    x-text="!filterFor ? '' : (filterFor.filters.length
                             ? t('settings.filter_add_hint', {name: filterFor.value})
                             : t('settings.filter_replaces_everywhere', {name: filterFor.value}))"></p>
