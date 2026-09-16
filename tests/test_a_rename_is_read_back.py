@@ -38,6 +38,16 @@ class FakeSocket:
         return {"id": self._next_id, "success": True, "result": {"entity_entry": self.stored}}
 
 
+@pytest.fixture(autouse=True)
+def without_titles(monkeypatch):
+    """These tests are about the read-back, not about config entry titles.
+
+    app_state wires a title writer onto the class when it is imported, and it
+    would reach for Home Assistant here.
+    """
+    monkeypatch.setattr(EntityRegistry, "supplied_names", None)
+
+
 @pytest.fixture
 def registry():
     return lambda socket: EntityRegistry(socket)

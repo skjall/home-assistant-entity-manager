@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from ha_websocket import HomeAssistantWebSocket
 from label_registry import LabelRegistry
+import supplied_names as supplied_names_module
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,12 @@ class EntityRegistry:
     # through update_entity, so noting it here is the one place that cannot be
     # forgotten when a new rename path appears. Set once by app_state.
     naming_state = None
+
+    # Optional reader and writer of config entry titles. A helper built in the
+    # Home Assistant interface is named by its entry's title, so renaming the
+    # entity without it leaves the name the integration supplies behind - and
+    # the next proposal is built from that stale name. Set once by app_state.
+    supplied_names = None
 
     def __init__(self, websocket: HomeAssistantWebSocket):
         self.ws = websocket
@@ -84,7 +91,77 @@ class EntityRegistry:
             self._check_what_was_stored(stored, new_entity_id or entity_id, name)
         if name is not None:
             self._note_applied_name(result, entity_id, new_entity_id, name, provenance)
+            await self._carry_the_title(entity_id, name)
         return result
+
+    async def _entry_of(self, entity_id: str) -> Dict[str, Any]:
+        """One registry entry, for a path that never listed them all."""
+        try:
+            msg_id = await self.ws._send_message({"type": "config/entity_registry/get", "entity_id": entity_id})
+            answer = await self.ws._receive_message()
+            while answer.get("id") != msg_id:
+                answer = await self.ws._receive_message()
+        except Exception as error:  # noqa: BLE001 - the rename itself stands
+            logger.debug("Could not read %s: %s", entity_id, error)
+            return {}
+        result = answer.get("result") if answer.get("success") else None
+        return result if isinstance(result, dict) else {}
+
+    async def _carry_the_title(self, entity_id: str, name: str) -> None:
+        """Write the new name into the title a helper is named by.
+
+        Part of the rename, not follow-up work: a helper built in the interface
+        reads its entity name from the title of its config entry, so leaving
+        that behind means the integration keeps supplying yesterday's name and
+        every later proposal is built from it.
+
+        Only where the title is what names this entity, which is read rather
+        than assumed - see supplied_names. Never fatal: the entity is renamed
+        either way, and what is left is an offer to bring the title up to date.
+        """
+        if self.supplied_names is None:
+            return
+        # The device swap builds its own registry and never lists the entities,
+        # so the one being renamed is fetched where it is not already known.
+        known = self.entities.get(entity_id)
+        entity = known or await self._entry_of(entity_id)
+        entry_id = (entity or {}).get("config_entry_id")
+        if not entry_id:
+            return
+        try:
+            entries = await self.supplied_names.entries()
+            siblings = (
+                sum(1 for one in self.entities.values() if one.get("config_entry_id") == entry_id)
+                if known
+                else await self._how_many_share(entry_id)
+            )
+            if not supplied_names_module.is_correctable(entity, entries.get(entry_id), siblings):
+                return
+            await self.supplied_names.write_title(self.ws, entry_id, name)
+            await self.supplied_names.reload(entry_id)
+            logger.info("Carried the name %r into the title of %s", name, entry_id)
+        except Exception as error:  # noqa: BLE001 - the rename itself stands
+            logger.warning("Could not carry the name into the title of %s: %s", entry_id, error)
+
+    async def _how_many_share(self, entry_id: str) -> int:
+        """How many entities one config entry holds, for a path that listed none.
+
+        A title only names a single entity when the entry holds exactly that
+        one, so the count has to come from the registry where this add-on has
+        not read it already.
+        """
+        try:
+            msg_id = await self.ws._send_message({"type": "config/entity_registry/list"})
+            answer = await self.ws._receive_message()
+            while answer.get("id") != msg_id:
+                answer = await self.ws._receive_message()
+        except Exception as error:  # noqa: BLE001 - the rename itself stands
+            logger.debug("Could not count what %s holds: %s", entry_id, error)
+            return 0
+        entries = answer.get("result") if answer.get("success") else None
+        if not isinstance(entries, list):
+            return 0
+        return sum(1 for one in entries if isinstance(one, dict) and one.get("config_entry_id") == entry_id)
 
     async def _read_back(self, result: Dict[str, Any], wanted_id: str) -> Optional[Dict[str, Any]]:
         """Ask Home Assistant what it actually stored, after saying it stored it.

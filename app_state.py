@@ -18,6 +18,7 @@ from ha_translations import HaTranslations
 from jobs import TERMINAL_STATES, JobStore, JobWorker
 from json_store import new_lock
 from naming_overrides import NamingOverrides
+from supplied_names import SuppliedNames
 from naming_rules import NamingRules
 from naming_state import NamingState
 from naming_templates import NamingTemplates
@@ -73,6 +74,12 @@ renamer_state["worker"] = JobWorker(renamer_state["job_store"])
 # Share the audit log with every EntityRegistry instance so all rename paths
 # (single, batch, device cascade) get recorded centrally.
 EntityRegistry.rename_log = renamer_state["rename_log"]
+
+# And the titles that name interface-built helpers, so a rename carries them
+# along instead of leaving the supplied name behind.
+EntityRegistry.supplied_names = SuppliedNames(
+    os.getenv("HA_URL", ""), os.getenv("HA_TOKEN", os.getenv("SUPERVISOR_TOKEN", ""))
+)
 
 # Same for the record of which names came from here: every write goes through
 # EntityRegistry.update_entity, so no rename path can forget to note it.
