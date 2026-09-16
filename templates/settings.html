@@ -643,12 +643,14 @@
         .step-carried { background: #d1fae5; color: #047857; }
         .step-not-carried { background: #fee2e2; color: #b91c1c; }
         .step-unreachable { background: #fef3c7; color: #b45309; }
+        .step-enabled { background: #dbeafe; color: #1d4ed8; }
         .step-error { background: #fee2e2; color: #b91c1c; }
         .step-other { background: #f3f4f6; color: #6b7280; }
 
         .row-renamed { border-left-color: #6366f1; }
         .row-carried { border-left-color: #10b981; }
         .row-not-carried, .row-error { border-left-color: #ef4444; }
+        .row-enabled { border-left-color: #3b82f6; }
         .row-unreachable { border-left-color: #f59e0b; }
         .row-other { border-left-color: #d1d5db; }
 
@@ -2878,15 +2880,11 @@
 
                 openFilters() { this.filterModal = true; },
 
-                // What the steps are called and how they are worn. A step no one
-                // has named yet keeps its own name rather than vanishing.
-                LOG_STEPS: {
-                    RENAME:      {key: 'renamed',     icon: 'ri-price-tag-3-line'},
-                    CARRIED:     {key: 'carried',     icon: 'ri-links-line'},
-                    NOT_CARRIED: {key: 'not_carried', icon: 'ri-link-unlink'},
-                    UNREACHABLE: {key: 'unreachable', icon: 'ri-error-warning-line'},
-                    ERROR:       {key: 'error',       icon: 'ri-close-circle-line'},
-                    ENABLE:      {key: 'enabled',     icon: 'ri-toggle-line'},
+                // What the steps are called and how they are worn, from config.js
+                // so this list and the progress panel cannot drift apart. A step
+                // no one has named yet keeps its own name rather than vanishing.
+                get LOG_STEPS() {
+                    return (window.EntityManagerConfig || {}).jobSteps || {};
                 },
 
                 LOG_KINDS: {
@@ -2898,17 +2896,17 @@
 
                 logStepLabel(step) {
                     const known = this.LOG_STEPS[step];
-                    return known ? this.t('jobs.step_' + known.key) : step;
+                    return known ? this.t('jobs.' + known.label) : step;
                 },
 
                 logStepClass(step) {
                     const known = this.LOG_STEPS[step];
-                    return 'step-' + (known ? known.key.replace(/_/g, '-') : 'other');
+                    return 'step-' + (known ? known.colour : 'other');
                 },
 
                 logRowClass(step) {
                     const known = this.LOG_STEPS[step];
-                    return 'row-' + (known ? known.key.replace(/_/g, '-') : 'other');
+                    return 'row-' + (known ? known.colour : 'other');
                 },
 
                 logKindLabel(type) {

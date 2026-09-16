@@ -5311,26 +5311,33 @@
                     return this.jobFailed(job) || this.jobPartiallyFailed(job);
                 },
 
-                // The steps a handler writes, in the order the user cares about:
-                // what was done, what was carried along, and what was not. An
-                // unknown step keeps its own name rather than disappearing, so a
-                // handler can add one without touching this panel.
-                JOB_LOG_STEPS: {
-                    RENAME:       { key: 'renamed',      idle: 'border-gray-200 text-gray-600 hover:bg-gray-50',       active: 'border-gray-400 bg-gray-100 text-gray-800',   badge: 'bg-gray-100 text-gray-600' },
-                    CARRIED:      { key: 'carried',      idle: 'border-green-200 text-green-700 hover:bg-green-50',    active: 'border-green-400 bg-green-100 text-green-800', badge: 'bg-green-100 text-green-700' },
-                    NOT_CARRIED:  { key: 'not_carried',  idle: 'border-red-200 text-red-700 hover:bg-red-50',          active: 'border-red-400 bg-red-100 text-red-800',       badge: 'bg-red-100 text-red-700' },
-                    UNREACHABLE:  { key: 'unreachable',  idle: 'border-amber-200 text-amber-700 hover:bg-amber-50',    active: 'border-amber-400 bg-amber-100 text-amber-800', badge: 'bg-amber-100 text-amber-700' },
-                    ERROR:        { key: 'error',        idle: 'border-red-200 text-red-700 hover:bg-red-50',          active: 'border-red-400 bg-red-100 text-red-800',       badge: 'bg-red-100 text-red-700' },
+                // What each step is called and how it is worn, from config.js so
+                // the settings log and this panel cannot drift apart.
+                get JOB_LOG_STEPS() {
+                    return (window.EntityManagerConfig || {}).jobSteps || {};
+                },
+
+                JOB_STEP_STYLE: {
+                    renamed:       {idle: 'border-gray-200 text-gray-600 hover:bg-gray-50',    active: 'border-gray-400 bg-gray-100 text-gray-800',   badge: 'bg-gray-100 text-gray-600'},
+                    enabled:       {idle: 'border-blue-200 text-blue-700 hover:bg-blue-50',    active: 'border-blue-400 bg-blue-100 text-blue-800',   badge: 'bg-blue-100 text-blue-700'},
+                    carried:       {idle: 'border-green-200 text-green-700 hover:bg-green-50', active: 'border-green-400 bg-green-100 text-green-800', badge: 'bg-green-100 text-green-700'},
+                    'not-carried': {idle: 'border-red-200 text-red-700 hover:bg-red-50',       active: 'border-red-400 bg-red-100 text-red-800',       badge: 'bg-red-100 text-red-700'},
+                    unreachable:   {idle: 'border-amber-200 text-amber-700 hover:bg-amber-50', active: 'border-amber-400 bg-amber-100 text-amber-800', badge: 'bg-amber-100 text-amber-700'},
+                    error:         {idle: 'border-red-200 text-red-700 hover:bg-red-50',       active: 'border-red-400 bg-red-100 text-red-800',       badge: 'bg-red-100 text-red-700'},
+                },
+
+                jobStepStyle(step) {
+                    const known = this.JOB_LOG_STEPS[step];
+                    return (known && this.JOB_STEP_STYLE[known.colour]) || {};
                 },
 
                 jobLogStepLabel(step) {
                     const known = this.JOB_LOG_STEPS[step];
-                    return known ? this.t('jobs.step_' + known.key) : step;
+                    return known ? this.t('jobs.' + known.label) : step;
                 },
 
                 jobLogStepClass(step) {
-                    const known = this.JOB_LOG_STEPS[step];
-                    return known ? known.badge : 'bg-gray-100 text-gray-500';
+                    return this.jobStepStyle(step).badge || 'bg-gray-100 text-gray-500';
                 },
 
                 jobLogCount(step) {
@@ -5352,13 +5359,13 @@
                         return (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
                     });
                     return seen.map(step => {
-                        const known = this.JOB_LOG_STEPS[step] || {};
+                        const style = this.jobStepStyle(step);
                         return {
                             step,
                             label: this.jobLogStepLabel(step),
                             count: this.jobLogCount(step),
-                            idle: known.idle || 'border-gray-200 text-gray-600 hover:bg-gray-50',
-                            active: known.active || 'border-gray-400 bg-gray-100 text-gray-800',
+                            idle: style.idle || 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                            active: style.active || 'border-gray-400 bg-gray-100 text-gray-800',
                         };
                     });
                 },
