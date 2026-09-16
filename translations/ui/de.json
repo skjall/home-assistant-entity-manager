@@ -120,11 +120,7 @@
     "renamed_differently": "Home Assistant hat „{name}“ gespeichert",
     "explain_translation_key": "„{value}“ nennt {integration} diesen Typ ({key}) — aus der Integration",
     "explain_builtin_class": "„{value}“ nennt Home Assistant die Geräteklasse {device_class}",
-    "supplied_stale": "Die Integration liefert noch „{supplied}“ — nachziehbar auf „{wanted}“",
-    "supplied_fix": "Nachziehen",
-    "supplied_fix_hint": "Schreibt den heutigen Namen dorthin, wo die Integration ihn liest. Nacharbeit: Home Assistant verwaltet diesen Namen selbst.",
-    "supplied_fixed": "Gelieferter Name ist jetzt „{name}“",
-    "supplied_needs_restart": "Wirksam nach einem Neustart von Home Assistant"
+    "supplied_stale": "Die Integration liefert noch „{supplied}“ — wird beim Übernehmen mitgezogen"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",

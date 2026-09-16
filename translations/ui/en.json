@@ -120,11 +120,7 @@
     "renamed_differently": "Home Assistant stored “{name}”",
     "explain_translation_key": "{integration} calls this type “{value}” ({key}) — from the integration",
     "explain_builtin_class": "Home Assistant calls the device class {device_class} “{value}”",
-    "supplied_stale": "The integration still supplies “{supplied}” — can be brought up to “{wanted}”",
-    "supplied_fix": "Bring up to date",
-    "supplied_fixed": "The supplied name is now “{name}”",
-    "supplied_fix_hint": "Writes today's name where the integration reads it. Follow-up work: Home Assistant keeps that name itself.",
-    "supplied_needs_restart": "Takes effect after a restart of Home Assistant"
+    "supplied_stale": "The integration still supplies “{supplied}” — carried along when this is applied"
   },
   "virtual_devices": {
     "automations": "Automations",

@@ -112,14 +112,20 @@ def test_a_name_the_integration_froze_does_not_come_back_to_haunt_the_proposal(r
     assert new_id == "sensor.kuche_deckenleuchte_kosten"
 
 
-def test_without_the_note_the_frozen_name_does_come_back(restructurer):
-    """What the case above looks like unrecorded - and why the note is asked first."""
+def test_without_the_note_the_frozen_name_is_still_seen_for_what_it_is(restructurer):
+    """The same case unrecorded: the shape of the name gives it away.
+
+    "Vorrat Steckdose Kosten" is what the entity is called today with a room
+    and a device in front of it that it has since left. The note is the surer
+    reading, but where there is none, a supplied name that ends in the standing
+    one froze a hierarchy and is not the type part.
+    """
     restructurer.entities["sensor.a"]["original_name"] = "Vorrat Steckdose Kosten"
     restructurer.entities["sensor.a"]["name"] = "Küche Deckenleuchte Kosten"
 
     _, name = restructurer.generate_new_entity_id("sensor.a", restructurer.entities["sensor.a"])
 
-    assert name == "Küche Deckenleuchte Vorrat Steckdose Kosten"
+    assert name == "Küche Deckenleuchte Kosten"
 
 
 def test_an_older_note_without_a_type_part_still_says_whose_name_it_is(restructurer, state):

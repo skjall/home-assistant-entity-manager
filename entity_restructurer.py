@@ -636,6 +636,22 @@ class EntityRestructurer:
         return any(part.isdigit() for part in re.split(r"[\s_\-]+", value or "") if part)
 
     @staticmethod
+    def _only_puts_something_in_front(supplied: str, standing: str) -> bool:
+        """Whether a supplied name is the standing one with words in front of it.
+
+        That is what a frozen hierarchy looks like: the type part is still the
+        last thing the supplied name says, and everything before it names a
+        room or a device the entity has since left. Word for word from the
+        back, so "Energie" does not match "Tagesenergie".
+        """
+
+        def words(text: str) -> list:
+            return [canon(part) for part in re.split(r"[\s_\-]+", text or "") if canon(part)]
+
+        here, there = words(standing), words(supplied)
+        return bool(here) and len(there) > len(here) and there[-len(here) :] == here
+
+    @staticmethod
     def _says_more(standing: str, supplied: str) -> bool:
         """Whether a name carries everything another one does, and something else.
 
@@ -964,8 +980,15 @@ class EntityRestructurer:
             # answers with the whole name when it does not recognise the
             # template, and that name still carries them - taking it as the
             # type part would render them a second time.
-            if standing and not self._carries_prefix(standing, prefixes) and self._says_more(standing, name):
-                name = standing
+            # And a supplied name that is the standing one with words in front
+            # of it froze a hierarchy this entity has left: a socket moved from
+            # the utility room to the kitchen still supplies "Kammer
+            # Lueftungsanlage Steckdose Energie" while it is called "Kuehle
+            # Kuehlschrank Steckdose Energie", and proposing the supplied one
+            # renders the old room and device inside the new ones.
+            if standing and not self._carries_prefix(standing, prefixes):
+                if self._says_more(standing, name) or self._only_puts_something_in_front(name, standing):
+                    name = standing
         # The number goes before anything decides the name, so a rule and a name
         # from Home Assistant both cover every endpoint; it comes back after.
         keep_number = ""

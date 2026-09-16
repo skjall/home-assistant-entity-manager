@@ -18,11 +18,11 @@ from ha_translations import HaTranslations
 from jobs import TERMINAL_STATES, JobStore, JobWorker
 from json_store import new_lock
 from naming_overrides import NamingOverrides
-from supplied_names import SuppliedNames
 from naming_rules import NamingRules
 from naming_state import NamingState
 from naming_templates import NamingTemplates
 from rename_log import RenameLog
+from supplied_names import SuppliedNames
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
 
 logger = logging.getLogger(__name__)
