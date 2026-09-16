@@ -285,8 +285,14 @@ def test_reach_is_unknown_while_no_entities_can_be_loaded(client, monkeypatch):
     assert rules and all(rule["affected"] is None for rule in rules)
 
 
-def test_counting_groups_entities_of_one_type(client):
-    """One lookup per type, integration and model instead of one per entity."""
+def test_counting_asks_the_naming_rather_than_the_rules(client):
+    """The count is what the naming decides, not what the rules would match.
+
+    Asking the rules directly is cheaper and wrong: a rule on a device class is
+    matched for entities the naming then refuses it, so the count stood above a
+    list of entities the rule does not touch. Resolving each entity is the only
+    answer that cannot drift from what the user sees.
+    """
     restructurer = web_ui.renamer_state["restructurer"]
     for index in range(20):
         entity_id = f"number.copy{index}_effect_speed"
@@ -315,7 +321,7 @@ def test_counting_groups_entities_of_one_type(client):
         rules.find = original_find
 
     assert rule["affected"] == 22  # the 20 copies plus both spellings in the fixture
-    assert len(calls) < 22  # not one lookup per entity
+    assert calls  # every entity is asked about, which is what makes the count true
 
 
 def test_template_sample_comes_from_a_real_entity(client):

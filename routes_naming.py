@@ -430,44 +430,46 @@ def _repair_rule_kinds(restructurer, rules) -> None:
         renamer_state["type_mappings"]._refresh_user_view()
 
 
+def _names_by_rule(restructurer) -> dict:
+    """entity_id -> the rule that decides its type, as the naming itself decides it.
+
+    Asking the rules directly answers which rule could apply, which is not the
+    same as which one does: a rule on the device class "update" is found for
+    UniFi's "regenerate password" button and then dropped, because the name is
+    about something else entirely. Counting the finds said four entities where
+    two are named, and the list under the count showed the two it does not
+    touch. Resolving each entity costs well under a second for a home of a few
+    thousand, and it cannot drift from what the user sees.
+    """
+    named = {}
+    was_reading_only = restructurer.reading_only
+    restructurer.reading_only = True
+    try:
+        for entity_id, entity_data in restructurer.entities.items():
+            try:
+                behind = restructurer.rule_behind(entity_id, entity_data)
+            except Exception as error:  # noqa: BLE001 - one entity must not fail the count
+                logger.debug("Could not resolve %s: %s", entity_id, error)
+                continue
+            if behind:
+                named[entity_id] = behind
+    finally:
+        restructurer.reading_only = was_reading_only
+    return named
+
+
 def _rule_affected_counts(restructurer, rules):
-    """How many loaded entities each rule applies to, or None when nothing is loaded.
+    """How many loaded entities each rule names, or None when nothing is loaded.
 
     Without the entity list a rule's reach is unknown, which is not the same as
     zero: reporting zero would brand every rule as useless right after a start.
     """
     if restructurer is None or not restructurer.entities:
         return None
-    language = rules.language
     counts = {rule["id"]: 0 for rule in rules.rules}
-    # Entities sharing a type, integration and model all land on the same rule,
-    # so group them first: thousands of entities become a few hundred lookups.
-    groups: dict = {}
-    for entity_data in restructurer.entities.values():
-        group = (
-            entity_data.get("translation_key") or "",
-            entity_data.get("original_name") or "",
-            entity_data.get("device_class") or entity_data.get("original_device_class") or "",
-            entity_data.get("platform") or None,
-            entity_model(restructurer, entity_data) or None,
-        )
-        groups[group] = groups.get(group, 0) + 1
-    for (translation_key, native, device_class, integration, model), size in groups.items():
-        rule = (
-            rules.find("translation_key", translation_key, integration, language, model)
-            or rules.find("name", native, integration, language, model)
-            or rules.find("device_class", device_class, integration, language, model)
-        )
-        if rule:
-            counts[rule["id"]] = counts.get(rule["id"], 0) + size
-    # A rule written for one entity is found by that entity, not by what the
-    # integration supplies, so the grouping above never reaches it. Counted
-    # here, or every such rule would look like one that changes nothing.
-    known = {entity["id"] for entity in restructurer.entities.values() if entity.get("id")}
-    for rule in rules.rules:
-        for registry_id in rules._entities_of(rule):
-            if registry_id in known:
-                counts[rule["id"]] = counts.get(rule["id"], 0) + 1
+    for resolution in _names_by_rule(restructurer).values():
+        rule_id = resolution["rule_id"]
+        counts[rule_id] = counts.get(rule_id, 0) + 1
     return counts
 
 
@@ -623,48 +625,37 @@ def rule_entities(rule_id: str):
     if restructurer is None or not restructurer.entities:
         return jsonify({"error": "the registry is not loaded"}), 503
 
-    language = request.args.get("lang") or rules.language
     found = []
-    for entity_id, entity_data in restructurer.entities.items():
-        model = entity_model(restructurer, entity_data)
-        # In the order the naming itself asks them, so what comes back is the
-        # one that really decided - showing the translation key for an entity a
-        # device-class rule caught says the wrong thing about both.
-        catches = (
-            ("translation_key", entity_data.get("translation_key") or ""),
-            ("name", entity_data.get("original_name") or ""),
-            ("device_class", entity_data.get("device_class") or entity_data.get("original_device_class") or ""),
-        )
-        caught_on, caught_value = "", ""
-        for kind, value in catches:
-            hit = rules.find(kind, value, entity_data.get("platform"), language, model)
-            if hit is not None:
-                if hit["id"] == rule_id:
-                    caught_on, caught_value = kind, value
-                break
-        by_id = bool(entity_data.get("id")) and entity_data["id"] in rules._entities_of(rule)
-        if not by_id and not caught_on:
+    for entity_id, behind in _names_by_rule(restructurer).items():
+        if behind["rule_id"] != rule_id:
             continue
+        entity_data = restructurer.entities.get(entity_id) or {}
         try:
             proposed_id, proposed = restructurer.calculate_new_entity_name(entity_id)
         except Exception as error:  # noqa: BLE001 - one entity must not fail the list
             logger.debug("Could not work out a name for %s: %s", entity_id, error)
             proposed_id, proposed = "", ""
+        device = restructurer.devices.get(entity_data.get("device_id") or "", {}) or {}
         found.append(
             {
                 "entity_id": entity_id,
                 "domain": entity_id.split(".")[0],
                 "name": entity_data.get("name") or entity_data.get("original_name") or "",
-                "caught_on": caught_on,
-                "caught_value": caught_value,
+                # What the rule caught this entity on, not what it might have:
+                # a device-class rule named after a translation key sends the
+                # reader looking for a rule that does not exist.
+                "caught_on": behind["kind"],
+                "caught_value": behind["value"],
                 "supplied": entity_data.get("original_name") or "",
-                "translation_key": entity_data.get("translation_key") or "",
-                "device_class": entity_data.get("device_class") or entity_data.get("original_device_class") or "",
                 "platform": entity_data.get("platform") or "",
                 "proposed": proposed,
                 "proposed_id": proposed_id,
+                # Where to go and look at it.
+                "device_id": entity_data.get("device_id") or "",
+                "device_name": device.get("name_by_user") or device.get("name") or "",
+                "area_id": device.get("area_id") or entity_data.get("area_id") or "",
                 # Named one by one rather than caught by what it supplies.
-                "by_name": by_id,
+                "by_name": bool(entity_data.get("id")) and entity_data["id"] in rules._entities_of(rule),
             }
         )
     found.sort(key=lambda one: one["entity_id"])

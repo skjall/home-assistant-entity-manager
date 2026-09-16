@@ -145,6 +145,55 @@ def test_an_entity_named_one_by_one_is_marked_as_such(client):
     assert answer["entities"][0]["by_name"] is True
 
 
+def test_a_rule_the_naming_refuses_is_not_counted(client):
+    """UniFi's "regenerate password" button carries the device class "update".
+
+    The rule on that class is found for it and then dropped, because the name
+    is about something else. Counting the find put four entities over a list
+    where two are named, and showed the two the rule does not touch.
+    """
+    api, rules = client
+    restructurer = web_ui.renamer_state["restructurer"]
+    restructurer.entities["button.regenerate_password"] = {
+        "id": "reg-c",
+        "entity_id": "button.regenerate_password",
+        "device_id": "d",
+        "platform": "unifi",
+        "original_name": "Passwort neu generieren",
+        "device_class": "update",
+        "has_entity_name": True,
+    }
+    restructurer.entities["update.switch_firmware"]["device_class"] = "update"
+    rule = rules.upsert("device_class", "update", None, "de", "Firmware")
+
+    listed = api.get("/api/naming/rules/" + rule["id"] + "/entities").get_json()
+    counted = next(one for one in api.get("/api/naming/rules").get_json()["rules"] if one["id"] == rule["id"])
+
+    assert [one["entity_id"] for one in listed["entities"]] == ["update.switch_firmware"]
+    assert counted["affected"] == len(listed["entities"])
+
+
+def test_a_rule_that_changes_nothing_still_reaches_its_entities(client):
+    """It loses the name to the supplied spelling and applies all the same."""
+    api, rules = client
+    rule = rules.upsert("name", "update_verfuegbar", None, "de", "Update verfügbar")
+
+    answer = api.get("/api/naming/rules/" + rule["id"] + "/entities").get_json()
+
+    assert [one["entity_id"] for one in answer["entities"]] == ["update.sensor_update"]
+
+
+def test_each_entity_says_which_device_to_go_and_look_at(client):
+    api, rules = client
+    rule = rules.upsert("name", "firmware", None, "de", "Aktualisierung")
+
+    one = api.get("/api/naming/rules/" + rule["id"] + "/entities").get_json()["entities"][0]
+
+    assert one["device_id"] == "d"
+    assert one["device_name"] == "Switch 241"
+    assert one["area_id"] == "b"
+
+
 def test_an_unknown_rule_is_not_an_empty_list(client):
     api, _ = client
 

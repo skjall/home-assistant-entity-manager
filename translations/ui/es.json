@@ -530,7 +530,8 @@
     "caught_translation_key": "clave de traducción",
     "caught_name": "nombre entregado",
     "caught_device_class": "clase de dispositivo",
-    "caught_none": "—"
+    "caught_none": "—",
+    "reach_open_device": "Abrir «{device}» en Home Assistant"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

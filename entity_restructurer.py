@@ -635,6 +635,57 @@ class EntityRestructurer:
         """
         return any(part.isdigit() for part in re.split(r"[\s_\-]+", value or "") if part)
 
+    # Set while a read is only a read. Working out a name corrects the note it
+    # was built from, which is right when the name is being worked out to be
+    # used and wrong when it is being worked out to be counted: the same count,
+    # asked twice, would come back different.
+    reading_only = False
+
+    def rule_behind(self, entity_id: str, registry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Which rule applies to this entity's type, and what it caught it on.
+
+        Not the same question as which rule the name came from: a rule that
+        only repeats what is already shown does not win the name, and still
+        applies. Nor is it the same as asking the rules what they match, which
+        finds a device-class rule for an entity the naming then refuses it -
+        UniFi's "regenerate password" button carries the class "update" and is
+        about something else. Both of those made the count over a rule's entity
+        list disagree with the list itself.
+
+        It is asked with the name that really went into the rules, so a note or
+        a stale supplied name cannot pull the two apart.
+        """
+        rules = getattr(self.type_mappings, "rules", None) if self.type_mappings else None
+        if rules is None:
+            return None
+        self.build_naming_context(entity_id, registry)
+        resolution = self.last_resolutions.get(entity_id) or {}
+        if resolution.get("rule_id"):
+            caught = resolution.get("matched_on") or {}
+            return {
+                "rule_id": resolution["rule_id"],
+                "kind": caught.get("kind") or "",
+                "value": caught.get("value") or "",
+            }
+        name = resolution.get("input") or ""
+        integration = registry.get("platform") or None
+        model = (self.devices.get(registry.get("device_id") or "", {}) or {}).get("model") or None
+        device_class = registry.get("device_class") or registry.get("original_device_class") or ""
+        for kind, value in (
+            ("translation_key", registry.get("translation_key") or ""),
+            ("name", name),
+            ("device_class", device_class),
+        ):
+            rule = rules.find(kind, value, integration, self.language, model)
+            if rule is None:
+                continue
+            if kind == "device_class" and not self._names_the_class(
+                name, entity_id, device_class, rule["targets"].get(self.language, "")
+            ):
+                continue
+            return {"rule_id": rule["id"], "kind": kind, "value": value}
+        return None
+
     @staticmethod
     def _only_puts_something_in_front(supplied: str, standing: str) -> bool:
         """Whether a supplied name is the standing one with words in front of it.
@@ -957,7 +1008,11 @@ class EntityRestructurer:
                         # worked out again on every read - and the moment the
                         # user edits the rule it can no longer be worked out at
                         # all, because the two words stop agreeing.
-                        if self.naming_state is not None and canon(supplied) != canon(written):
+                        if (
+                            self.naming_state is not None
+                            and not self.reading_only
+                            and canon(supplied) != canon(written)
+                        ):
                             self.naming_state.resupply(registry.get("id") or "", supplied)
                         return through_rules
                 return self._resolve_supplied_name(

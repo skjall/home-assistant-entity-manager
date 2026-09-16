@@ -510,7 +510,8 @@
     "caught_translation_key": "translation key",
     "caught_name": "supplied name",
     "caught_device_class": "device class",
-    "caught_none": "—"
+    "caught_none": "—",
+    "reach_open_device": "Open “{device}” in Home Assistant"
   },
   "type_mappings": {
     "light": "Light",

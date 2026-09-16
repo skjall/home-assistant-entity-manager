@@ -11,8 +11,10 @@ import pytest
 
 from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
+from naming_rules import NamingRules
 from naming_state import NamingState
 from naming_templates import NamingTemplates
+from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
 
 APPLIED = "Küche Deckenleuchte Verbindungsqualität"
 
@@ -126,6 +128,70 @@ def test_without_the_note_the_frozen_name_is_still_seen_for_what_it_is(restructu
     _, name = restructurer.generate_new_entity_id("sensor.a", restructurer.entities["sensor.a"])
 
     assert name == "Küche Deckenleuchte Kosten"
+
+
+@pytest.fixture
+def with_a_rule(tmp_path, state):
+    """A home where a rule really changes the word, so the note can go stale.
+
+    The note holds what came out of the rule and the integration supplies what
+    went in, which is the shape a read is meant to correct.
+    """
+    rules = NamingRules(
+        str(tmp_path / "naming_rules.json"),
+        device_class_keys=DEFAULT_SYSTEM_MAPPINGS["device_class"].keys(),
+        default_language="de",
+    )
+    rules.upsert("name", "firmware", None, "de", "Aktualisierung")
+    built = EntityRestructurer(
+        client=object(),
+        naming_overrides=NamingOverrides(str(tmp_path / "overrides.json")),
+        type_mappings=TypeMappings(user_mappings_path=str(tmp_path / "unused.json"), rules=rules),
+        naming_templates=NamingTemplates(str(tmp_path / "templates.json")),
+        naming_state=state,
+    )
+    built.floors = {}
+    built.areas = {"k": {"area_id": "k", "name": "Küche"}}
+    built.devices = {"d": {"id": "d", "name": "Deckenleuchte", "area_id": "k"}}
+    built.entities = {
+        "update.a": {
+            "id": "reg-a",
+            "entity_id": "update.a",
+            "device_id": "d",
+            "platform": "unifi",
+            "original_name": "Firmware",
+            "name": "Küche Deckenleuchte Aktualisierung",
+            "has_entity_name": True,
+        }
+    }
+    state.record(
+        "reg-a",
+        applied_name="Küche Deckenleuchte Aktualisierung",
+        applied_entity_id="update.a",
+        base_entity="Aktualisierung",
+    )
+    return built
+
+
+def test_reading_a_name_corrects_the_note_it_was_built_from(with_a_rule, state):
+    """The note held the rule's answer; what went in is what a rule matches."""
+    with_a_rule.build_naming_context("update.a", with_a_rule.entities["update.a"])
+
+    assert state.get("reg-a")["base_entity"] == "Firmware"
+
+
+def test_a_read_that_only_counts_corrects_nothing(with_a_rule, state):
+    """Or a rule's reach would change by being looked at.
+
+    The count over a rule's entities resolves every entity to see which one it
+    names. Letting that write back means the same count, asked twice, comes
+    back different - and the list under it with it.
+    """
+    with_a_rule.reading_only = True
+
+    with_a_rule.build_naming_context("update.a", with_a_rule.entities["update.a"])
+
+    assert state.get("reg-a")["base_entity"] == "Aktualisierung"
 
 
 def test_an_older_note_without_a_type_part_still_says_whose_name_it_is(restructurer, state):

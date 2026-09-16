@@ -192,7 +192,8 @@
             font-size: 0.7rem;
             font-weight: 600;
         }
-        .reach-id { font-family: monospace; color: #374151; word-break: break-all; }
+        .reach-id { font-family: monospace; color: #4f46e5; word-break: break-all; text-decoration: none; }
+        a.reach-id:hover { text-decoration: underline; }
         .reach-key { font-family: monospace; color: #374151; word-break: break-all; }
         .reach-kind { display: block; color: #9ca3af; font-size: 0.7rem; }
         .reach-changes { color: #047857; font-weight: 600; }
@@ -1453,7 +1454,10 @@
                                                 <tr>
                                                     <td>
                                                         <span class="reach-domain" x-text="one.domain"></span>
-                                                        <code class="reach-id" x-text="one.entity_id.split('.').slice(1).join('.')"></code>
+                                                        <a :href="deviceLink(one)" class="reach-id"
+                                                           target="_blank" rel="noopener"
+                                                           :title="t('settings.reach_open_device', {device: one.device_name || ''})"
+                                                           x-text="one.entity_id.split('.').slice(1).join('.')"></a>
                                                     </td>
                                                     <td>
                                                         <code class="reach-key" x-text="one.caught_value || '—'"></code>
@@ -2394,6 +2398,14 @@
                 // user decides whether it goes.
                 unusedCount() {
                     return this.rules.filter(rule => rule.affected === 0 || rule.redundant).length;
+                },
+
+                // The list is for checking what a rule does to an entity, and
+                // that means looking at the entity's own data: its device page
+                // in Home Assistant, in a tab of its own so the rule list stays
+                // where it was.
+                deviceLink(one) {
+                    return one.device_id ? '/config/devices/device/' + one.device_id : '/config/entities';
                 },
 
                 // One list at a time, fetched when it is asked for: a home has

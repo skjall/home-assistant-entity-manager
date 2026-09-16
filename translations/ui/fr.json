@@ -530,7 +530,8 @@
     "caught_translation_key": "clé de traduction",
     "caught_name": "nom fourni",
     "caught_device_class": "classe d'appareil",
-    "caught_none": "—"
+    "caught_none": "—",
+    "reach_open_device": "Ouvrir « {device} » dans Home Assistant"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",
