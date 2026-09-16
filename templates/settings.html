@@ -87,33 +87,28 @@
            one the user most likely came to look at. */
         .rule-row-muted { border-left-color: #d1d5db; background: #fcfcfd; }
         .rule-row-builtin { border-left-color: #a78bfa; }
-        .rule-body { flex: 1; min-width: 0; }
+        .rule-body { flex: 1 1 auto; min-width: 0; }
         .rule-actions { flex: none; }
 
         .rule-says {
-            display: grid;
-            grid-template-columns: minmax(0, 20ch) 16px minmax(0, 1fr);
+            display: flex;
             align-items: baseline;
-            gap: 8px;
-        }
-
-        @media (max-width: 640px) {
-            .rule-says { grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); }
+            flex-wrap: wrap;
+            gap: 4px 8px;
         }
 
         .rule-from {
-            justify-self: start;
             padding: 2px 8px;
             border-radius: 6px;
             background: #f3f4f6;
             font-family: monospace;
             font-size: 0.85rem;
             color: #4b5563;
-            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
-        .rule-arrow { color: #9ca3af; }
-        .rule-to { color: #111827; font-size: 1rem; font-weight: 600; word-break: break-word; }
+        .rule-arrow { color: #9ca3af; flex: none; }
+        .rule-to { color: #111827; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
 
         /* How far a rule actually reaches, as the one number worth seeing first. */
         .reach-badge {
@@ -1246,7 +1241,7 @@
                             <div class="rule-says" x-show="editingKey === row.id">
                                 <span class="rule-from" x-text="row.key"></span>
                                 <i class="ri-arrow-right-line rule-arrow"></i>
-                                <input type="text" class="edit-input" x-model="editValue"
+                                <input type="text" class="edit-input" style="flex: 1 1 200px;" x-model="editValue"
                                        @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
                             </div>
                             <!-- And where it applies. A rule reaches a list of
