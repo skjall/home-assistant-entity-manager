@@ -48,6 +48,29 @@
         }
 
         .section-hint { color: #6b7280; font-size: 0.85rem; padding: 14px 20px 12px; }
+
+        /* A setting that is on or off reads as a switch, not as a form field.
+           The input stays where it is - it carries the state, the keyboard and
+           the focus ring - and only its looks are taken over. */
+        .switch { position: relative; display: inline-flex; flex: none; width: 42px; height: 24px; }
+        .switch input {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            margin: 0; opacity: 0; cursor: pointer;
+        }
+        .switch .track {
+            position: absolute; inset: 0; border-radius: 9999px;
+            background: #d1d5db; transition: background 0.18s ease;
+        }
+        .switch .track::after {
+            content: ''; position: absolute; top: 3px; left: 3px;
+            width: 18px; height: 18px; border-radius: 50%; background: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+            transition: transform 0.18s ease;
+        }
+        .switch input:checked + .track { background: #4f46e5; }
+        .switch input:checked + .track::after { transform: translateX(18px); }
+        .switch input:focus-visible + .track { box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.35); }
+        .switch input:disabled { cursor: default; }
         .row-muted td { color: #9ca3af; }
         .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9999px; background: #eef2ff; color: #4f46e5; font-size: 0.7rem; }
 
@@ -1535,8 +1558,10 @@
             </div>
             <div style="padding: 20px;">
                 <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
-                    <input type="checkbox" x-model="autoCloseOnSuccess" @change="saveAutoClose()"
-                           style="margin-top: 3px; width: 16px; height: 16px; cursor: pointer;">
+                    <span class="switch" style="margin-top: 2px;">
+                        <input type="checkbox" x-model="autoCloseOnSuccess" @change="saveAutoClose()">
+                        <span class="track"></span>
+                    </span>
                     <span>
                         <span style="font-weight: 600;" x-text="t('settings.auto_close')">Close on success</span>
                         <span style="display: block; color: #6b7280; font-size: 0.9rem; margin-top: 2px;"
@@ -2754,11 +2779,7 @@
 
                 // The main page is where the user wants to be next; do not bounce back.
                 leaveSettings() {
-                    try {
-                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
-                        saved.lastPage = 'main';
-                        localStorage.setItem('entityManagerSettings', JSON.stringify(saved));
-                    } catch (e) { /* storage may be unavailable */ }
+                    this.patchStored({lastPage: 'main'});
                 },
 
                 restoreState() {
@@ -2772,17 +2793,26 @@
                     } catch (e) { /* storage may be unavailable */ }
                 },
 
-                rememberState() {
+                // One key holds everything this app remembers, so a write puts
+                // its own fields in and leaves the rest alone. Replacing the
+                // whole object is what threw away the auto-close switch on the
+                // next section change.
+                patchStored(changes) {
                     try {
-                        localStorage.setItem('entityManagerSettings', JSON.stringify({
-                            lastPage: 'settings',
-                            section: this.section,
-                            picks: this.picksAsText(),
-                            sort: this.sortBy,
-                            q: this.searchQuery,
-                            sample: this.namingSampleEntity
-                        }));
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        localStorage.setItem('entityManagerSettings', JSON.stringify({...saved, ...changes}));
                     } catch (e) { /* storage may be unavailable */ }
+                },
+
+                rememberState() {
+                    this.patchStored({
+                        lastPage: 'settings',
+                        section: this.section,
+                        picks: this.picksAsText(),
+                        sort: this.sortBy,
+                        q: this.searchQuery,
+                        sample: this.namingSampleEntity
+                    });
                 },
 
                 // Keep filter and search in the address without adding history entries.
@@ -2943,13 +2973,7 @@
                 // Shared with the main page through the same key, so the switch
                 // set here is the one the panel reads there.
                 saveAutoClose() {
-                    try {
-                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
-                        saved.autoCloseOnSuccess = this.autoCloseOnSuccess;
-                        localStorage.setItem('entityManagerSettings', JSON.stringify(saved));
-                    } catch (error) {
-                        // Storage can be unavailable; the switch then lasts this visit.
-                    }
+                    this.patchStored({autoCloseOnSuccess: this.autoCloseOnSuccess});
                 },
 
                 readAutoClose() {
