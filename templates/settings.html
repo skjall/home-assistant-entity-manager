@@ -53,18 +53,40 @@
 
         /* One rule per row, read as a sentence rather than as five columns:
            entity ids and long names have nowhere to be cut off here. */
-        .rule-list { display: flex; flex-direction: column; }
+        .rule-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 4px 16px 20px;
+            background: #f8fafc;
+            border-top: 1px solid #e5e7eb;
+        }
 
+        /* A card per rule, with a coloured edge saying what kind of rule it is:
+           the list has to be readable at a glance, not a wall of white. */
         .rule-row {
             display: flex;
             align-items: flex-start;
             gap: 12px;
-            padding: 12px 20px;
-            border-bottom: 1px solid #f3f4f6;
+            padding: 14px 16px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-left: 3px solid #3b82f6;
+            border-radius: 10px;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+            transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
         }
 
-        .rule-row:hover { background: #f9fafb; }
-        .rule-row-muted { opacity: 0.55; }
+        .rule-row:hover {
+            border-color: #bfdbfe;
+            box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+            transform: translateY(-1px);
+        }
+
+        /* A rule that reaches nothing is quieter, but still legible: it is the
+           one the user most likely came to look at. */
+        .rule-row-muted { border-left-color: #d1d5db; background: #fcfcfd; }
+        .rule-row-builtin { border-left-color: #a78bfa; }
         .rule-body { flex: 1; min-width: 0; }
         .rule-actions { flex: none; }
 
@@ -79,9 +101,34 @@
             .rule-says { grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); }
         }
 
-        .rule-from { font-family: monospace; font-size: 0.9rem; color: #374151; word-break: break-word; }
+        .rule-from {
+            justify-self: start;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: #f3f4f6;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #4b5563;
+            word-break: break-word;
+        }
+
         .rule-arrow { color: #9ca3af; }
-        .rule-to { color: #111827; font-weight: 500; word-break: break-word; }
+        .rule-to { color: #111827; font-size: 1rem; font-weight: 600; word-break: break-word; }
+
+        /* How far a rule actually reaches, as the one number worth seeing first. */
+        .reach-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            background: #ecfdf5;
+            color: #047857;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .reach-badge.empty { background: #f3f4f6; color: #6b7280; }
         .rule-entity { font-family: monospace; font-size: 0.85rem; color: #374151; word-break: break-all; }
 
         .rule-reach {
@@ -94,17 +141,32 @@
         }
 
         .rule-group {
-            position: sticky;
-            top: 0;
-            z-index: 1;
-            padding: 6px 20px;
-            background: #f9fafb;
-            border-bottom: 1px solid #f3f4f6;
-            color: #6b7280;
-            font-size: 0.75rem;
-            font-weight: 600;
-            letter-spacing: 0.04em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 14px 2px 2px;
+            color: #374151;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
+        }
+
+        .rule-group::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #e5e7eb;
+        }
+
+        .rule-group .tally {
+            padding: 1px 8px;
+            border-radius: 9999px;
+            background: #e5e7eb;
+            color: #4b5563;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0;
         }
 
         .rule-builtin { color: #9ca3af; }
@@ -364,9 +426,12 @@
             background: white;
             border-radius: 12px;
             padding: 24px;
-            width: 400px;
-            max-width: 90vw;
+            width: 460px;
+            max-width: 92vw;
             box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            /* A suggestion list reaches past the dialog's own edge; clipping it
+               here is what swallowed it. */
+            overflow: visible;
         }
 
         .modal h3 {
@@ -437,23 +502,245 @@
         /* Filter/Search */
         .filter-bar {
             display: flex;
+            align-items: center;
             gap: 12px;
             padding: 16px 20px;
-            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .search-wrap { position: relative; flex: 1; }
+
+        .search-wrap > i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            pointer-events: none;
         }
 
         .search-input {
-            flex: 1;
-            padding: 10px 14px;
+            width: 100%;
+            padding: 10px 14px 10px 34px;
             border: 1px solid #d1d5db;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 0.9rem;
         }
 
         .search-input:focus {
             outline: none;
             border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
         }
+
+        /* One button for every way of narrowing the list, so the bar stays one
+           line and the choices have room to be explained inside. */
+        .filter-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: white;
+            color: #374151;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        .filter-btn:hover { border-color: #93c5fd; color: #1d4ed8; }
+        .filter-btn.on { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
+
+        .filter-count {
+            min-width: 20px;
+            padding: 0 6px;
+            border-radius: 9999px;
+            background: #3b82f6;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 18px;
+            text-align: center;
+        }
+
+        /* What is currently being filtered on, always visible and each one
+           removable on its own. */
+        .active-filters {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            padding: 0 20px 16px;
+        }
+
+        .active-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 6px 5px 12px;
+            border-radius: 9999px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .active-chip button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border: none;
+            border-radius: 9999px;
+            background: transparent;
+            color: #1d4ed8;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .active-chip button:hover { background: #dbeafe; }
+
+        .clear-filters {
+            border: none;
+            background: none;
+            color: #6b7280;
+            font-size: 0.8rem;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .clear-filters:hover { color: #374151; }
+
+        /* A list of integrations or models is far too long to scroll through in
+           a dropdown, so it is typed into and narrowed as you type, the way
+           devices are picked when one is swapped. */
+        .combo { position: relative; }
+
+        .combo-field { position: relative; }
+
+        .combo-field > i.ri-search-line {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            pointer-events: none;
+        }
+
+        .combo-field > i.ri-checkbox-circle-fill {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #10b981;
+        }
+
+        .combo-input {
+            width: 100%;
+            padding: 10px 34px 10px 34px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+
+        .combo-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        .combo-input.chosen { border-color: #6ee7b7; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12); }
+
+        .combo-list {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            z-index: 20;
+            margin-top: 4px;
+            max-height: 240px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
+        }
+
+        .combo-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+            padding: 9px 12px;
+            border: none;
+            border-bottom: 1px solid #f3f4f6;
+            background: none;
+            text-align: left;
+            font-size: 0.9rem;
+            color: #374151;
+            cursor: pointer;
+        }
+
+        .combo-item:last-child { border-bottom: none; }
+        .combo-item:hover, .combo-item:focus { background: #eff6ff; outline: none; }
+        .combo-item.current { background: #dbeafe; font-weight: 600; }
+        .combo-item .tally { color: #9ca3af; font-size: 0.78rem; white-space: nowrap; }
+
+        .combo-maker {
+            margin-right: 6px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: #f3f4f6;
+            color: #6b7280;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .combo-empty, .combo-more {
+            padding: 9px 12px;
+            color: #9ca3af;
+            font-size: 0.85rem;
+        }
+
+        .combo-more { background: #f9fafb; }
+
+        /* Picking filters: groups of chips, several at a time. */
+        .modal-wide { width: 580px; }
+
+        .filter-group { margin-bottom: 18px; }
+
+        .filter-group h4 {
+            margin: 0 0 8px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+
+        .option-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+
+        .option-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 9999px;
+            background: white;
+            color: #374151;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        .option-chip:hover { border-color: #93c5fd; background: #f8fafc; }
+        .option-chip.picked { border-color: #3b82f6; background: #3b82f6; color: white; }
+        .option-chip .tally { font-size: 0.75rem; opacity: 0.7; }
+        .option-chip.picked .tally { opacity: 0.85; }
 
         .filter-select {
             padding: 10px 14px;
@@ -893,22 +1180,39 @@
             </div>
 
             <div class="filter-bar">
-                <input type="text"
-                       class="search-input"
-                       :placeholder="t('settings.search_placeholder')"
-                       x-model="searchQuery"
-                       @input="filterRules()">
-                <select class="filter-select" x-model="filterType" @change="filterRules()">
-                    <option value="all" x-text="t('settings.filter_all')">All</option>
-                    <option value="user" x-text="t('settings.filter_user_rules')">My rules</option>
-                    <option value="no_effect" x-text="t('settings.filter_no_effect')">Without effect</option>
-                    <option value="system" x-text="t('settings.filter_system')">Built-in</option>
-                </select>
+                <div class="search-wrap">
+                    <i class="ri-search-line"></i>
+                    <input type="text"
+                           class="search-input"
+                           :placeholder="t('settings.search_placeholder')"
+                           x-model="searchQuery"
+                           @input="filterRules()">
+                </div>
+                <button class="filter-btn" :class="pickedCount() ? 'on' : ''" @click="openFilters()">
+                    <i class="ri-equalizer-line"></i>
+                    <span x-text="t('settings.filters')">Filters</span>
+                    <span class="filter-count" x-show="pickedCount()" x-text="pickedCount()"></span>
+                </button>
                 <select class="filter-select" x-model="sortBy" @change="filterRules()">
                     <option value="name" x-text="t('settings.sort_name')">By name</option>
                     <option value="reach" x-text="t('settings.sort_reach')">By reach</option>
                     <option value="recent" x-text="t('settings.sort_recent')">Most recently changed</option>
                 </select>
+            </div>
+
+            <!-- Everything the list is currently narrowed by, each removable on
+                 its own so undoing one choice does not mean opening the dialog. -->
+            <div class="active-filters" x-show="pickedCount() > 0">
+                <template x-for="chip in pickedChips()" :key="chip.group + ':' + chip.value">
+                    <span class="active-chip">
+                        <span x-text="chip.label"></span>
+                        <button @click="togglePick(chip.group, chip.value); filterRules()"
+                                :title="t('settings.filter_remove')">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </span>
+                </template>
+                <button class="clear-filters" @click="clearPicks()" x-text="t('settings.filters_clear')"></button>
             </div>
 
             <!-- What could go, said once above the list rather than marked on
@@ -924,9 +1228,13 @@
             <div class="rule-list" x-show="filteredRules.length > 0">
                 <template x-for="row in filteredRules" :key="row.id">
                     <div>
-                    <div class="rule-group" x-show="row.group" x-text="row.group"></div>
+                    <div class="rule-group" x-show="row.group">
+                        <span x-text="row.group"></span>
+                        <span class="tally" x-text="row.groupCount"></span>
+                    </div>
                     <div class="rule-row"
-                         :class="(row.isRule && !row.affected ? 'rule-row-muted ' : '') + (row.id === highlightRuleId ? 'row-highlight' : '')">
+                         :class="(!row.isRule ? 'rule-row-builtin ' : (!row.affected ? 'rule-row-muted ' : ''))
+                                 + (row.id === highlightRuleId ? 'row-highlight' : '')">
                         <div class="rule-body">
                             <!-- What the rule says, as one line: the word that comes
                                  in, the word that goes out. -->
@@ -966,8 +1274,11 @@
                                 </template>
                                 <button class="filter-add" x-show="row.isRule"
                                         @click="openAddFilter(row)" x-text="t('settings.filter_add')"></button>
-                                <span x-show="row.isRule && row.affected !== null"
-                                      x-text="t('settings.reach_entities', {count: row.affected})"></span>
+                                <span class="reach-badge" :class="row.affected ? '' : 'empty'"
+                                      x-show="row.isRule && row.affected !== null">
+                                    <i class="ri-focus-3-line"></i>
+                                    <span x-text="t('settings.reach_entities', {count: row.affected})"></span>
+                                </span>
                                 <span class="rule-builtin" x-show="row.isRule && row.system_default && row.system_default !== row.value"
                                       x-text="t('settings.builtin_is', {name: row.system_default})"></span>
                                 <span class="rule-warning" x-show="row.isRule && row.redundant"
@@ -1269,8 +1580,42 @@
         </div>
 
         <!-- One more place for a rule to apply -->
+        <!-- Narrowing the list: several choices at once, grouped by the question
+             they answer. Picking within a group widens, picking across groups
+             narrows, which is the only arrangement that reads the way people
+             expect. -->
+        <div class="modal-overlay" x-show="filterModal" x-cloak @click.self="filterModal = false">
+            <div class="modal modal-wide">
+                <h3>
+                    <i class="ri-equalizer-line"></i>
+                    <span x-text="t('settings.filters_title')">Narrow the list</span>
+                </h3>
+                <template x-for="group in filterGroups()" :key="group.key">
+                    <div class="filter-group" x-show="group.options.length">
+                        <h4 x-text="group.label"></h4>
+                        <div class="option-grid">
+                            <template x-for="option in group.options" :key="option.value">
+                                <button class="option-chip"
+                                        :class="isPicked(group.key, option.value) ? 'picked' : ''"
+                                        @click="togglePick(group.key, option.value); filterRules()">
+                                    <i :class="isPicked(group.key, option.value) ? 'ri-check-line' : option.icon"></i>
+                                    <span x-text="option.label"></span>
+                                    <span class="tally" x-text="option.count"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <div class="modal-actions">
+                    <button class="btn-secondary" @click="clearPicks()" x-text="t('settings.filters_clear')"></button>
+                    <button class="btn-primary" @click="filterModal = false"
+                            x-text="t('settings.filters_apply', {count: filteredRules.length})"></button>
+                </div>
+            </div>
+        </div>
+
         <div class="modal-overlay" x-show="filterFor" x-cloak>
-            <div class="modal">
+            <div class="modal modal-wide">
                 <h3>
                     <i class="ri-filter-line"></i>
                     <span x-text="t('settings.filter_add_title')">Add filter</span>
@@ -1281,21 +1626,71 @@
                             : t('settings.filter_replaces_everywhere', {name: filterFor.value}))"></p>
                 <div class="form-group">
                     <label for="filterIntegration" x-text="t('settings.filter_integration')">Integration</label>
-                    <select id="filterIntegration" x-model="newFilter.integration" @change="newFilter.model = ''">
-                        <option value="" x-text="t('settings.filter_pick')">Pick one</option>
-                        <template x-for="row in availableFilters" :key="row.integration">
-                            <option :value="row.integration" x-text="row.integration"></option>
-                        </template>
-                    </select>
+                    <div class="combo" @click.away="comboOpen = ''" @keydown.escape.stop="comboOpen = ''">
+                        <div class="combo-field">
+                            <i class="ri-search-line"></i>
+                            <input id="filterIntegration" type="text" class="combo-input" autocomplete="off"
+                                   :class="newFilter.integration ? 'chosen' : ''"
+                                   :placeholder="t('settings.filter_search_integration')"
+                                   x-model="integrationSearch"
+                                   @focus="comboOpen = 'integration'"
+                                   @input="comboOpen = 'integration'; newFilter.integration = ''; newFilter.model = ''">
+                            <i class="ri-checkbox-circle-fill" x-show="newFilter.integration"></i>
+                        </div>
+                        <div class="combo-list" x-show="comboOpen === 'integration'" x-cloak>
+                            <template x-for="row in matchingIntegrations()" :key="row.integration">
+                                <button type="button" class="combo-item"
+                                        :class="row.integration === newFilter.integration ? 'current' : ''"
+                                        @click="pickIntegration(row)">
+                                    <span x-text="row.integration"></span>
+                                    <span class="tally" x-show="(row.models || []).length"
+                                          x-text="t('settings.model_count', {count: (row.models || []).length})"></span>
+                                </button>
+                            </template>
+                            <div class="combo-empty" x-show="!matchingIntegrations().length"
+                                 x-text="t('settings.no_results')"></div>
+                            <div class="combo-more" x-show="integrationOverflow() > 0"
+                                 x-text="t('settings.more_matches', {count: integrationOverflow()})"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group" x-show="modelsOf(newFilter.integration).length">
                     <label for="filterModel" x-text="t('settings.filter_model')">Model</label>
-                    <select id="filterModel" x-model="newFilter.model">
-                        <option value="" x-text="t('settings.filter_any_model')">Any model</option>
-                        <template x-for="model in modelsOf(newFilter.integration)" :key="model">
-                            <option :value="model" x-text="model"></option>
-                        </template>
-                    </select>
+                    <div class="combo" @click.away="comboOpen = ''" @keydown.escape.stop="comboOpen = ''">
+                        <div class="combo-field">
+                            <i class="ri-search-line"></i>
+                            <input id="filterModel" type="text" class="combo-input" autocomplete="off"
+                                   :class="newFilter.model ? 'chosen' : ''"
+                                   :placeholder="t('settings.filter_any_model')"
+                                   x-model="modelSearch"
+                                   @focus="comboOpen = 'model'"
+                                   @input="comboOpen = 'model'; newFilter.model = ''">
+                            <i class="ri-checkbox-circle-fill" x-show="newFilter.model"></i>
+                        </div>
+                        <div class="combo-list" x-show="comboOpen === 'model'" x-cloak>
+                            <button type="button" class="combo-item" :class="newFilter.model ? '' : 'current'"
+                                    @click="pickModel('')">
+                                <span x-text="t('settings.filter_any_model')"></span>
+                            </button>
+                            <template x-for="row in matchingModels()" :key="row.model">
+                                <button type="button" class="combo-item"
+                                        :class="row.model === newFilter.model ? 'current' : ''"
+                                        @click="pickModel(row.model)">
+                                    <span>
+                                        <span class="combo-maker" x-show="row.manufacturer"
+                                              x-text="row.manufacturer"></span>
+                                        <span x-text="row.model"></span>
+                                    </span>
+                                    <span class="tally" x-show="row.count"
+                                          x-text="t('settings.reach_entities', {count: row.count})"></span>
+                                </button>
+                            </template>
+                            <div class="combo-empty" x-show="!matchingModels().length"
+                                 x-text="t('settings.no_results')"></div>
+                            <div class="combo-more" x-show="modelOverflow() > 0"
+                                 x-text="t('settings.more_matches', {count: modelOverflow()})"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button class="btn-secondary" @click="filterFor = null">
@@ -1332,13 +1727,19 @@
                 language: 'de',
                 searchQuery: '',
                 section: '{{ section }}',
-                filterType: 'all',
                 sortBy: 'name',
+                filterModal: false,
+                // Several answers per question, kept apart by the question they
+                // answer: within a group they widen, across groups they narrow.
+                picked: { status: [], reach: [], kind: [], integration: [], model: [] },
                 highlightRuleId: null,
                 displayCase: 'first_word',
                 editingKey: null,
                 editValue: '',
                 filterFor: null,
+                comboOpen: '',
+                integrationSearch: '',
+                modelSearch: '',
                 newFilter: {integration: '', model: ''},
                 availableFilters: [],
                 showAddModal: false,
@@ -1398,9 +1799,9 @@
                     const wanted = params.get('rule');
                     if (wanted) {
                         this.highlightRuleId = wanted;
-                        this.filterType = 'user';
+                        this.usePicks('status:user');
                     }
-                    if (params.get('filter')) this.filterType = params.get('filter');
+                    if (params.get('filter')) this.usePicks(params.get('filter'));
                     if (params.get('q')) this.searchQuery = params.get('q');
                     this.rememberState();
                     // Back and forward move between sections without a page load.
@@ -1919,14 +2320,64 @@
                     }
                 },
 
+                // A list nobody can scroll: typed into and cut to what fits, with a
+                // line saying how much was left out so the search can be narrowed.
+                COMBO_LIMIT: 30,
+
+                _matching(values, needle, pick) {
+                    const q = (needle || '').trim().toLowerCase();
+                    if (!q) return values;
+                    return values.filter(each => pick(each).toLowerCase().includes(q));
+                },
+
+                matchingIntegrations() {
+                    return this._matching(this.availableFilters, this.integrationSearch, row => row.integration)
+                        .slice(0, this.COMBO_LIMIT);
+                },
+
+                integrationOverflow() {
+                    return Math.max(0, this._matching(this.availableFilters, this.integrationSearch,
+                                                      row => row.integration).length - this.COMBO_LIMIT);
+                },
+
+                // Searched by maker as well: nobody remembers that the SONOFF valve
+                // is called "Zigbee smart water valve", and under one integration
+                // every model has a different maker.
+                _modelsFound() {
+                    return this._matching(this.modelsOf(this.newFilter.integration), this.modelSearch,
+                                          row => row.model + ' ' + (row.manufacturer || ''));
+                },
+
+                matchingModels() { return this._modelsFound().slice(0, this.COMBO_LIMIT); },
+
+                modelOverflow() { return Math.max(0, this._modelsFound().length - this.COMBO_LIMIT); },
+
+                pickIntegration(row) {
+                    this.newFilter.integration = row.integration;
+                    this.integrationSearch = row.integration;
+                    this.newFilter.model = '';
+                    this.modelSearch = '';
+                    this.comboOpen = '';
+                },
+
+                pickModel(model) {
+                    this.newFilter.model = model;
+                    this.modelSearch = model;
+                    this.comboOpen = '';
+                },
+
                 modelsOf(integration) {
                     const row = this.availableFilters.find(each => each.integration === integration);
-                    return (row && row.models) || [];
+                    return ((row && row.models) || []).map(model =>
+                        typeof model === 'string' ? {model, manufacturer: '', count: 0} : model);
                 },
 
                 async openAddFilter(row) {
                     this.filterFor = row;
                     this.newFilter = {integration: '', model: ''};
+                    this.integrationSearch = '';
+                    this.modelSearch = '';
+                    this.comboOpen = '';
                     if (this.availableFilters.length) return;
                     try {
                         const response = await fetch('api/naming/filters');
@@ -2047,7 +2498,9 @@
                 restoreState() {
                     try {
                         const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
-                        if (saved.filter) this.filterType = saved.filter;
+                        if (saved.picks) this.usePicks(saved.picks);
+                        else if (saved.filter) this.usePicks('status:' + saved.filter);
+                        if (saved.sort) this.sortBy = saved.sort;
                         if (saved.q) this.searchQuery = saved.q;
                         if (saved.sample) this.namingSampleEntity = saved.sample;
                     } catch (e) { /* storage may be unavailable */ }
@@ -2058,7 +2511,8 @@
                         localStorage.setItem('entityManagerSettings', JSON.stringify({
                             lastPage: 'settings',
                             section: this.section,
-                            filter: this.filterType,
+                            picks: this.picksAsText(),
+                            sort: this.sortBy,
                             q: this.searchQuery,
                             sample: this.namingSampleEntity
                         }));
@@ -2068,7 +2522,8 @@
                 // Keep filter and search in the address without adding history entries.
                 rememberQuery(pushSection) {
                     const params = new URLSearchParams();
-                    if (this.filterType && this.filterType !== 'all') params.set('filter', this.filterType);
+                    const picks = this.picksAsText();
+                    if (picks) params.set('filter', picks);
                     if (this.searchQuery) params.set('q', this.searchQuery);
                     if (this.highlightRuleId) params.set('rule', this.highlightRuleId);
                     const query = params.toString();
@@ -2085,12 +2540,7 @@
                 filterRules() {
                     this.rememberQuery();
                     this.rememberState();
-                    let result = this.ruleRows();
-                    // Rules that only repeat the default are noise; they show under "without effect".
-                    if (this.filterType === 'all') result = result.filter(r => !r.redundant);
-                    else if (this.filterType === 'user') result = result.filter(r => r.isRule && !r.redundant);
-                    else if (this.filterType === 'no_effect') result = result.filter(r => r.isRule && (r.affected === 0 || r.redundant));
-                    else if (this.filterType === 'system') result = result.filter(r => !r.isRule);
+                    let result = this.ruleRows().filter(row => this.rowPasses(row));
                     if (this.searchQuery) {
                         const q = this.searchQuery.toLowerCase();
                         result = result.filter(r =>
@@ -2102,6 +2552,135 @@
                     }
                     result.sort(this.ruleOrder());
                     this.filteredRules = this.withGroups(result);
+                },
+
+                // What a row can be asked about. Everything here is answered from the
+                // row alone, so a group is nothing more than a question and a test.
+                RULE_TESTS: {
+                    status: {
+                        user:      row => row.isRule && !row.redundant,
+                        no_effect: row => row.isRule && (row.affected === 0 || row.redundant),
+                        system:    row => !row.isRule,
+                    },
+                    reach: {
+                        everywhere: row => row.isRule && !row.filters.length,
+                        narrowed:   row => row.isRule && row.filters.length > 0
+                                            && !row.filters.every(one => one.registry_id),
+                        entity:     row => row.isRule && row.filters.some(one => one.registry_id),
+                    },
+                    kind: {
+                        name:            row => row.kind === 'name',
+                        device_class:    row => row.kind === 'device_class',
+                        translation_key: row => row.kind === 'translation_key',
+                    },
+                },
+
+                // A group narrows only if something in it is picked, and inside a
+                // group the picks add up rather than cancelling each other out.
+                rowPasses(row) {
+                    for (const group of ['status', 'reach', 'kind']) {
+                        const picks = this.picked[group];
+                        if (!picks.length) continue;
+                        if (!picks.some(value => (this.RULE_TESTS[group][value] || (() => false))(row))) return false;
+                    }
+                    if (this.picked.integration.length
+                        && !row.filters.some(one => this.picked.integration.includes(one.integration))) return false;
+                    if (this.picked.model.length
+                        && !row.filters.some(one => this.picked.model.includes(one.model))) return false;
+                    // A rule that only repeats the built-in default is noise unless
+                    // it is what the user went looking for.
+                    if (row.redundant && !this.isPicked('status', 'no_effect')) return false;
+                    return true;
+                },
+
+                // The dialog's contents: fixed questions first, then the
+                // integrations and models this home actually has rules for.
+                filterGroups() {
+                    const rows = this.ruleRows();
+                    const tally = test => rows.filter(test).length;
+                    const fixed = (key, values, icons) => ({
+                        key,
+                        label: this.t('settings.group_' + key),
+                        options: values.map(value => ({
+                            value,
+                            label: this.t('settings.pick_' + value),
+                            icon: icons[value],
+                            count: tally(this.RULE_TESTS[key][value]),
+                        })).filter(option => option.count > 0 || this.isPicked(key, option.value)),
+                    });
+                    const seen = (field) => {
+                        const counts = {};
+                        for (const row of rows) {
+                            for (const one of row.filters) {
+                                if (!one[field]) continue;
+                                counts[one[field]] = (counts[one[field]] || 0) + 1;
+                            }
+                        }
+                        return Object.keys(counts).sort((a, b) => a.localeCompare(b, this.language))
+                            .map(value => ({ value, label: value, icon: 'ri-price-tag-3-line', count: counts[value] }));
+                    };
+                    return [
+                        fixed('status', ['user', 'no_effect', 'system'],
+                              { user: 'ri-user-line', no_effect: 'ri-eye-off-line', system: 'ri-shield-line' }),
+                        fixed('reach', ['everywhere', 'narrowed', 'entity'],
+                              { everywhere: 'ri-global-line', narrowed: 'ri-filter-line', entity: 'ri-focus-3-line' }),
+                        fixed('kind', ['name', 'device_class', 'translation_key'],
+                              { name: 'ri-text', device_class: 'ri-shapes-line', translation_key: 'ri-translate-2' }),
+                        { key: 'integration', label: this.t('settings.filter_integration'), options: seen('integration') },
+                        { key: 'model', label: this.t('settings.filter_model'), options: seen('model') },
+                    ];
+                },
+
+                openFilters() { this.filterModal = true; },
+
+                isPicked(group, value) { return this.picked[group].includes(value); },
+
+                togglePick(group, value) {
+                    const picks = this.picked[group];
+                    const at = picks.indexOf(value);
+                    if (at < 0) picks.push(value); else picks.splice(at, 1);
+                },
+
+                pickedCount() {
+                    return Object.values(this.picked).reduce((sum, picks) => sum + picks.length, 0);
+                },
+
+                pickedChips() {
+                    const chips = [];
+                    for (const group of Object.keys(this.picked)) {
+                        for (const value of this.picked[group]) {
+                            chips.push({
+                                group,
+                                value,
+                                label: ['integration', 'model'].includes(group) ? value : this.t('settings.pick_' + value),
+                            });
+                        }
+                    }
+                    return chips;
+                },
+
+                clearPicks() {
+                    for (const group of Object.keys(this.picked)) this.picked[group] = [];
+                    this.filterRules();
+                },
+
+                // Picks travel in the address and in storage as "group:value,...".
+                picksAsText() {
+                    const parts = [];
+                    for (const group of Object.keys(this.picked)) {
+                        for (const value of this.picked[group]) parts.push(group + ':' + value);
+                    }
+                    return parts.join(',');
+                },
+
+                usePicks(text) {
+                    for (const group of Object.keys(this.picked)) this.picked[group] = [];
+                    for (const part of (text || '').split(',')) {
+                        const [group, ...rest] = part.split(':');
+                        const value = rest.join(':');
+                        if (!value || !(group in this.picked)) continue;
+                        if (!this.picked[group].includes(value)) this.picked[group].push(value);
+                    }
                 },
 
                 // The name a rule gives is what the user reads first, so that is
@@ -2127,12 +2706,17 @@
                 // A heading on the first row of each group, so the order is visible
                 // rather than something the reader has to infer.
                 withGroups(rows) {
+                    const sizes = {};
+                    for (const row of rows) {
+                        const group = this.ruleGroup(row);
+                        sizes[group] = (sizes[group] || 0) + 1;
+                    }
                     let previous = null;
                     return rows.map(row => {
                         const group = this.ruleGroup(row);
                         const shown = group === previous ? '' : group;
                         previous = group;
-                        return { ...row, group: shown };
+                        return { ...row, group: shown, groupCount: sizes[group] };
                     });
                 },
 
@@ -2195,9 +2779,9 @@
                     let result = [...this.mappings];
 
                     // Filter by type
-                    if (this.filterType === 'user') {
+                    if (this.isPicked('status', 'user')) {
                         result = result.filter(m => m.has_user_override);
-                    } else if (this.filterType === 'system') {
+                    } else if (this.isPicked('status', 'system')) {
                         result = result.filter(m => !m.has_user_override);
                     }
 

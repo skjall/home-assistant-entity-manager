@@ -673,7 +673,12 @@ def naming_rule_filters(rule_id):
 
 @naming.route("/api/naming/filters", methods=["GET"])
 def naming_filters_available():
-    """The integrations and models this home actually has, to pick a filter from."""
+    """The integrations and models this home actually has, to pick a filter from.
+
+    Each model is answered with its maker. "Zigbee smart water valve" is not
+    something anyone looks for; "SONOFF" is, and under MQTT every model belongs
+    to a different maker.
+    """
     restructurer = renamer_state.get("restructurer")
     entities = (restructurer.entities if restructurer else {}) or {}
     integrations: dict = {}
@@ -681,14 +686,23 @@ def naming_filters_available():
         integration = entity.get("platform")
         if not integration:
             continue
-        seen = integrations.setdefault(integration, set())
+        seen = integrations.setdefault(integration, {})
         model = entity_model(restructurer, entity)
-        if model:
-            seen.add(model)
+        if not model:
+            continue
+        device = restructurer.devices.get(entity.get("device_id") or "", {})
+        row = seen.setdefault(model, {"model": model, "manufacturer": device.get("manufacturer") or "", "count": 0})
+        row["count"] += 1
+        if not row["manufacturer"]:
+            row["manufacturer"] = device.get("manufacturer") or ""
     return jsonify(
         {
             "integrations": [
-                {"integration": name, "models": sorted(models)} for name, models in sorted(integrations.items())
+                {
+                    "integration": name,
+                    "models": [models[key] for key in sorted(models)],
+                }
+                for name, models in sorted(integrations.items())
             ]
         }
     )
