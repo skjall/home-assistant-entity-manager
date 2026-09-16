@@ -127,12 +127,13 @@
         .rule-entity { font-family: monospace; font-size: 0.85rem; color: #374151; word-break: break-all; }
 
         .rule-reach {
-            margin-top: 2px;
+            margin-top: 8px;
             color: #6b7280;
             font-size: 0.8rem;
             display: flex;
+            align-items: center;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 8px;
         }
 
         .rule-group {
@@ -186,29 +187,38 @@
         .kind-badge.muted { background: #f3f4f6; color: #6b7280; }
 
         /* The default reach, worn a shade quieter than a filter someone chose. */
-        .filter-chip-default { background: #f3f4f6; color: #6b7280; padding-right: 8px; }
-
         .filter-chip {
             display: inline-flex;
             align-items: center;
-            gap: 2px;
-            padding: 1px 2px 1px 8px;
+            gap: 4px;
+            padding: 4px 4px 4px 12px;
             border-radius: 9999px;
             background: #eef2ff;
             color: #4f46e5;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            line-height: 1.35;
             max-width: 100%;
             overflow-wrap: anywhere;
+        }
+
+        /* No remove button on this one, so it keeps the same room on both sides. */
+        .filter-chip-default {
+            padding: 4px 12px;
+            background: #f3f4f6;
+            color: #6b7280;
         }
 
         .filter-chip-remove {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
             border: none;
             background: none;
             color: inherit;
             cursor: pointer;
-            padding: 2px;
             border-radius: 9999px;
             opacity: 0.6;
         }
@@ -220,8 +230,10 @@
             background: none;
             color: #4f46e5;
             border-radius: 9999px;
-            padding: 1px 8px;
-            font-size: 0.75rem;
+            padding: 4px 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            line-height: 1.35;
             cursor: pointer;
         }
 
