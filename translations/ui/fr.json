@@ -513,7 +513,8 @@
     "kind_swap": "Remplacement d'appareil",
     "page_back": "Précédent",
     "page_next": "Suivant",
-    "page_of": "Page {page} sur {pages} — {total} entrées"
+    "page_of": "Page {page} sur {pages} — {total} entrées",
+    "filters_apply_log": "Afficher {count} entrées"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

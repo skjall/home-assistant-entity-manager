@@ -513,7 +513,8 @@
     "kind_swap": "Sustitución de dispositivo",
     "page_back": "Atrás",
     "page_next": "Siguiente",
-    "page_of": "Página {page} de {pages} — {total} entradas"
+    "page_of": "Página {page} de {pages} — {total} entradas",
+    "filters_apply_log": "Mostrar {count} entradas"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

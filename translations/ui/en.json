@@ -493,7 +493,8 @@
     "kind_swap": "Device swap",
     "page_back": "Back",
     "page_next": "Next",
-    "page_of": "Page {page} of {pages} — {total} entries"
+    "page_of": "Page {page} of {pages} — {total} entries",
+    "filters_apply_log": "Show {count} entries"
   },
   "type_mappings": {
     "light": "Light",
