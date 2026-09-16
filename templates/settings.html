@@ -69,10 +69,14 @@
         .rule-actions { flex: none; }
 
         .rule-says {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: minmax(0, 20ch) 16px minmax(0, 1fr);
+            align-items: baseline;
             gap: 8px;
+        }
+
+        @media (max-width: 640px) {
+            .rule-says { grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); }
         }
 
         .rule-from { font-family: monospace; font-size: 0.9rem; color: #374151; word-break: break-word; }
@@ -87,6 +91,20 @@
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
+        }
+
+        .rule-group {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            padding: 6px 20px;
+            background: #f9fafb;
+            border-bottom: 1px solid #f3f4f6;
+            color: #6b7280;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         .rule-builtin { color: #9ca3af; }
@@ -109,6 +127,9 @@
             font-size: 0.85rem;
         }
         .kind-badge.muted { background: #f3f4f6; color: #6b7280; }
+
+        /* The default reach, worn a shade quieter than a filter someone chose. */
+        .filter-chip-default { background: #f3f4f6; color: #6b7280; padding-right: 8px; }
 
         .filter-chip {
             display: inline-flex;
@@ -883,6 +904,11 @@
                     <option value="no_effect" x-text="t('settings.filter_no_effect')">Without effect</option>
                     <option value="system" x-text="t('settings.filter_system')">Built-in</option>
                 </select>
+                <select class="filter-select" x-model="sortBy" @change="filterRules()">
+                    <option value="name" x-text="t('settings.sort_name')">By name</option>
+                    <option value="reach" x-text="t('settings.sort_reach')">By reach</option>
+                    <option value="recent" x-text="t('settings.sort_recent')">Most recently changed</option>
+                </select>
             </div>
 
             <!-- What could go, said once above the list rather than marked on
@@ -897,6 +923,8 @@
 
             <div class="rule-list" x-show="filteredRules.length > 0">
                 <template x-for="row in filteredRules" :key="row.id">
+                    <div>
+                    <div class="rule-group" x-show="row.group" x-text="row.group"></div>
                     <div class="rule-row"
                          :class="(row.isRule && !row.affected ? 'rule-row-muted ' : '') + (row.id === highlightRuleId ? 'row-highlight' : '')">
                         <div class="rule-body">
@@ -919,8 +947,13 @@
                                 <template x-if="!row.isRule">
                                     <span x-text="t('settings.reach_builtin')"></span>
                                 </template>
+                                <!-- Everywhere is a place like any other in this
+                                     list, and the one a rule starts in. It carries
+                                     no remove button: the first real filter takes
+                                     its place. -->
                                 <template x-if="row.isRule && !row.filters.length">
-                                    <span x-text="t('settings.reach_everywhere')"></span>
+                                    <span class="filter-chip filter-chip-default"
+                                          x-text="t('settings.filter_everywhere')"></span>
                                 </template>
                                 <template x-for="scope in row.filters" :key="filterLabel(scope, row)">
                                     <span class="filter-chip">
@@ -931,7 +964,7 @@
                                         </button>
                                     </span>
                                 </template>
-                                <button class="filter-add" x-show="row.isRule && row.filters.length"
+                                <button class="filter-add" x-show="row.isRule"
                                         @click="openAddFilter(row)" x-text="t('settings.filter_add')"></button>
                                 <span x-show="row.isRule && row.affected !== null"
                                       x-text="t('settings.reach_entities', {count: row.affected})"></span>
@@ -960,6 +993,7 @@
                                 </div>
                             </template>
                         </div>
+                    </div>
                     </div>
                 </template>
             </div>
@@ -1242,7 +1276,9 @@
                     <span x-text="t('settings.filter_add_title')">Add filter</span>
                 </h3>
                 <p class="section-hint" style="padding: 0 0 12px;"
-                   x-text="filterFor ? t('settings.filter_add_hint', {name: filterFor.value}) : ''"></p>
+                   x-text="!filterFor ? '' : (filterFor.filters.length
+                            ? t('settings.filter_add_hint', {name: filterFor.value})
+                            : t('settings.filter_replaces_everywhere', {name: filterFor.value}))"></p>
                 <div class="form-group">
                     <label for="filterIntegration" x-text="t('settings.filter_integration')">Integration</label>
                     <select id="filterIntegration" x-model="newFilter.integration" @change="newFilter.model = ''">
@@ -1297,6 +1333,7 @@
                 searchQuery: '',
                 section: '{{ section }}',
                 filterType: 'all',
+                sortBy: 'name',
                 highlightRuleId: null,
                 displayCase: 'first_word',
                 editingKey: null,
@@ -1976,13 +2013,15 @@
                         system_default: systemByKey[rule.match.value] || null,
                         affected: rule.affected === null || rule.affected === undefined ? null : rule.affected,
                         redundant: !!rule.redundant,
+                        updated: rule.updated_at || rule.created_at || '',
                         rule
                     }));
                     const covered = new Set(rows.map(r => r.key));
                     for (const entry of this.systemRules) {
                         if (covered.has(entry.key)) continue;
                         rows.push({ id: 'sys:' + entry.key, isRule: false, key: entry.key, kind: 'name',
-                                    filters: [], entities: [], value: '', system_default: entry.value, affected: 0 });
+                                    filters: [], entities: [], value: '', system_default: entry.value,
+                                    affected: 0, updated: '' });
                     }
                     return rows;
                 },
@@ -2061,16 +2100,52 @@
                             r.entities.some(e => (e.entity_id || '').toLowerCase().includes(q))
                         );
                     }
-                    // Widest reach first: what touches a hundred entities is worth
-                    // more attention than what touches one, and the single entities
-                    // gather at the bottom where they read as the exceptions they are.
-                    result.sort((a, b) => {
-                        if (a.isRule !== b.isRule) return a.isRule ? -1 : 1;
-                        const reach = (b.affected || 0) - (a.affected || 0);
-                        if (reach) return reach;
-                        return a.key.localeCompare(b.key);
+                    result.sort(this.ruleOrder());
+                    this.filteredRules = this.withGroups(result);
+                },
+
+                // The name a rule gives is what the user reads first, so that is
+                // what the list is ordered by. Reach and recency are the two other
+                // questions worth asking of the same list.
+                ruleOrder() {
+                    const named = row => (row.isRule ? row.value : row.system_default) || row.key || '';
+                    if (this.sortBy === 'reach') {
+                        return (a, b) => {
+                            if (a.isRule !== b.isRule) return a.isRule ? -1 : 1;
+                            return ((b.affected || 0) - (a.affected || 0))
+                                || named(a).localeCompare(named(b), this.language);
+                        };
+                    }
+                    if (this.sortBy === 'recent') {
+                        return (a, b) => (b.updated || '').localeCompare(a.updated || '')
+                            || named(a).localeCompare(named(b), this.language);
+                    }
+                    return (a, b) => named(a).localeCompare(named(b), this.language)
+                        || a.key.localeCompare(b.key, this.language);
+                },
+
+                // A heading on the first row of each group, so the order is visible
+                // rather than something the reader has to infer.
+                withGroups(rows) {
+                    let previous = null;
+                    return rows.map(row => {
+                        const group = this.ruleGroup(row);
+                        const shown = group === previous ? '' : group;
+                        previous = group;
+                        return { ...row, group: shown };
                     });
-                    this.filteredRules = result;
+                },
+
+                ruleGroup(row) {
+                    if (this.sortBy === 'reach') {
+                        if (!row.isRule) return this.t('settings.group_builtin');
+                        if (!row.affected) return this.t('settings.group_unused');
+                        if (row.affected === 1) return this.t('settings.group_single');
+                        return this.t('settings.group_many');
+                    }
+                    if (this.sortBy === 'recent') return (row.updated || '').slice(0, 10) || this.t('settings.group_undated');
+                    const named = (row.isRule ? row.value : row.system_default) || row.key || '';
+                    return named.slice(0, 1).toUpperCase() || '#';
                 },
 
                 async searchOriginals() {

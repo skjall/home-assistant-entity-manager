@@ -140,14 +140,14 @@ def test_a_different_wording_for_one_type_is_its_own_rule(rules):
     assert len(rules.rules) == 2
 
 
-def test_a_wording_that_already_applies_everywhere_is_left_alone(rules):
-    """Narrowing it to the one place just asked about would take it from the rest."""
+def test_a_filter_takes_the_place_of_everywhere(rules):
+    """Everywhere is the default a rule starts with, so a filter replaces it."""
     rules.upsert("name", "firmware", None, "de", "Aktualisierung")
 
     rules.add_filter("name", "firmware", "de", "Aktualisierung", {"registry_id": "reg-1"})
 
     assert len(rules.rules) == 1
-    assert rules.rules[0]["filters"] == []
+    assert rules.rules[0]["filters"] == [{"registry_id": "reg-1"}]
 
 
 def test_removing_the_last_place_removes_the_rule(rules):

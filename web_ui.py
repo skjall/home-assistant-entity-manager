@@ -744,6 +744,43 @@ async def _preview_changes_async():
         await ws.disconnect()
 
 
+def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_results: dict) -> None:
+    """Record what the rename could not carry along, so the user can.
+
+    Two different things end up here: a write that was attempted and did not
+    take, and an automation the config API cannot reach at all. Both leave the
+    old id in place, so both belong in front of the user rather than in the
+    debug log.
+    """
+    failed = (
+        dep_results.get("scenes", {}).get("failed", [])
+        + dep_results.get("scripts", {}).get("failed", [])
+        + dep_results.get("automations", {}).get("failed", [])
+    )
+    unreachable = dep_results.get("automations", {}).get("unreachable", [])
+    if failed:
+        results["dependency_warnings"].append(
+            {
+                "entity_id": new_id,
+                "old_id": old_id,
+                "failed_updates": failed,
+                "warning": f"Einige Verweise konnten nicht aktualisiert werden: {', '.join(failed)}",
+            }
+        )
+    if unreachable:
+        results["dependency_warnings"].append(
+            {
+                "entity_id": new_id,
+                "old_id": old_id,
+                "unreachable": unreachable,
+                "warning": (
+                    f"Diese Automationen liegen nicht in automations.yaml und nennen weiterhin "
+                    f"{old_id}: {', '.join(unreachable)}"
+                ),
+            }
+        )
+
+
 @app.route("/api/execute", methods=["POST"])
 def execute_changes():
     """Führe ausgewählte Änderungen durch"""
@@ -898,6 +935,7 @@ async def _execute_changes_async():
                                 dep_results = await dependency_updater.update_all_dependencies(
                                     entity_id, new_entity_id, cached_states
                                 )
+                                _warn_about_dependencies(results, entity_id, new_entity_id, dep_results)
 
                                 results["success"].append(
                                     {
@@ -1005,19 +1043,7 @@ async def _execute_changes_async():
 
                             results["success"].append(success_entry)
 
-                            # Warne bei fehlgeschlagenen Dependencies
-                            if dep_results["total_failed"] > 0:
-                                failed_items = []
-                                failed_items.extend(dep_results["scenes"]["failed"])
-                                failed_items.extend(dep_results["scripts"]["failed"])
-                                failed_items.extend(dep_results["automations"]["failed"])
-
-                                results["dependency_warnings"].append(
-                                    {
-                                        "entity_id": new_id,
-                                        "warning": f"Einige Dependencies konnten nicht aktualisiert werden: {', '.join(failed_items)}",
-                                    }
-                                )
+                            _warn_about_dependencies(results, old_id, new_id, dep_results)
 
                         except Exception as e:
                             logger.error(
@@ -1080,6 +1106,11 @@ def execute_direct():
     renamer_state["job_store"].save(job)
     renamer_state["worker"].enqueue(job)
     return jsonify(job), 202
+
+
+def _names(what: str, entries: list) -> str:
+    """ "3 Automationen", or nothing where there are none."""
+    return f"{len(entries)} {what}" if entries else ""
 
 
 async def execute_direct_handler(job, ctx):
@@ -1158,15 +1189,20 @@ async def execute_direct_handler(job, ctx):
 
                 # Update dependencies (automations, scenes, scripts)
                 dep_results = await dependency_updater.update_all_dependencies(old_id, new_id, cached_states)
-                if dep_results.get("total_failed", 0) > 0:
-                    # Collect all failed updates from scenes, scripts, automations
-                    failed_updates = (
-                        dep_results.get("scenes", {}).get("failed", [])
-                        + dep_results.get("scripts", {}).get("failed", [])
-                        + dep_results.get("automations", {}).get("failed", [])
-                    )
+                failed_updates = (
+                    dep_results.get("scenes", {}).get("failed", [])
+                    + dep_results.get("scripts", {}).get("failed", [])
+                    + dep_results.get("automations", {}).get("failed", [])
+                )
+                unreachable = dep_results.get("automations", {}).get("unreachable", [])
+                if failed_updates or unreachable:
                     results["dependency_warnings"].append(
-                        {"entity_id": old_id, "new_id": new_id, "failed_updates": failed_updates}
+                        {
+                            "entity_id": old_id,
+                            "new_id": new_id,
+                            "failed_updates": failed_updates,
+                            "unreachable": unreachable,
+                        }
                     )
 
                 results["success"].append(
@@ -1178,6 +1214,32 @@ async def execute_direct_handler(job, ctx):
                 )
                 logger.info(f"Successfully renamed: {old_id} -> {new_id}")
                 ctx.log("RENAME", f"{old_id} -> {new_id}")
+                # What was carried along, and what was not. Said per entity and
+                # kept with the job, because "renamed" alone is what let a
+                # broken automation go unnoticed for hours.
+                if dep_results.get("total_success"):
+                    ctx.log(
+                        "CARRIED",
+                        f"{new_id}: {dep_results['total_success']} "
+                        + ", ".join(
+                            filter(
+                                None,
+                                [
+                                    _names("Automationen", dep_results["automations"]["success"]),
+                                    _names("Skripte", dep_results["scripts"]["success"]),
+                                    _names("Szenen", dep_results["scenes"]["success"]),
+                                ],
+                            )
+                        ),
+                    )
+                for broken in failed_updates:
+                    ctx.log("NOT_CARRIED", f"{new_id}: {broken} konnte nicht umgeschrieben werden")
+                for out_of_reach in unreachable:
+                    ctx.log(
+                        "UNREACHABLE",
+                        f"{new_id}: {out_of_reach} liegt nicht in automations.yaml "
+                        f"und muss von Hand auf {new_id} geändert werden",
+                    )
 
             except Exception as e:
                 logger.error(f"Error renaming entity {old_id}: {e}")
