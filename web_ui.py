@@ -7,7 +7,6 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
 import uuid
 
 import aiohttp
@@ -781,33 +780,7 @@ async def _preview_changes_async():
         await ws.disconnect()
 
 
-def _note_for(old_id: str, state: Optional[Dict[str, Any]], written_name: str) -> Optional[Dict[str, Any]]:
-    """What went into the name being written, for the note kept with it.
-
-    The supplied type has to be worked out before the rename: afterwards the
-    registry answers with the new name and the type that went into it is gone.
-    Without this note a later rule cannot find the entity again, and the next
-    proposal starts from nothing - which is how one switch came out "Steckdose"
-    once and "Schalter" the next time.
-
-    A name the user typed themselves is still noted, because the supplied type
-    is a fact about the entity either way; only the claim that a rule decided
-    it is dropped, since none did.
-    """
-    if state is None:
-        return None
-    restructurer = renamer_state.get("restructurer")
-    if restructurer is None:
-        return None
-    try:
-        _, proposed_name = restructurer.generate_new_entity_id(old_id, state)
-        note = naming_service.provenance_for(old_id)
-    except Exception as error:  # noqa: BLE001 - a note must never fail a rename
-        logger.warning("Could not work out what named %s: %s", old_id, error)
-        return None
-    if note and written_name and proposed_name != written_name:
-        return {**note, "won_by": "user", "rule_id": None}
-    return note
+_note_for = naming_service.note_for
 
 
 def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_results: dict) -> None:

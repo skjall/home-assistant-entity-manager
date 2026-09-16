@@ -19,7 +19,7 @@ import naming_overrides
 from naming_rules import NamingRuleError
 from naming_templates import NamingTemplateError
 from registry import ensure_registry_loaded
-from sanitize import sanitize_registry_id, sanitize_string, validate_json_input
+from sanitize import sanitize_name, sanitize_registry_id, sanitize_string, validate_json_input
 
 logger = logging.getLogger(__name__)
 
@@ -244,9 +244,7 @@ def set_user_type_mapping():
             return jsonify({"error": error}), 400
 
         type_key = sanitize_string(data.get("type_key"), max_length=64)
-        # Use sanitize_string instead of sanitize_name to avoid HTML escaping
-        # (apostrophes become &#x27; with sanitize_name)
-        translation = sanitize_string(data.get("translation"))
+        translation = sanitize_name(data.get("translation"))
 
         if not type_key or not translation:
             return jsonify({"error": "Invalid type_key or translation"}), 400
@@ -299,8 +297,7 @@ def learn_type_mapping():
             return jsonify({"error": error}), 400
 
         type_key = sanitize_string(data.get("type_key"), max_length=64)
-        # Use sanitize_string instead of sanitize_name to avoid HTML escaping
-        translation = sanitize_string(data.get("translation"))
+        translation = sanitize_name(data.get("translation"))
 
         if not type_key or not translation:
             return jsonify({"error": "Invalid type_key or translation"}), 400

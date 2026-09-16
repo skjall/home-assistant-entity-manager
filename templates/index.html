@@ -1961,7 +1961,8 @@
                                     :disabled="syncingZ2m"
                                     class="shrink-0 text-xs px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
                                     :class="{'opacity-50 cursor-not-allowed': syncingZ2m}">
-                                <i class="ri-check-line mr-1"></i><span x-text="t('entity.apply_rename')">Apply rename</span>
+                                <i class="mr-1" :class="syncingZ2m ? 'ri-loader-4-line animate-spin' : 'ri-check-line'"></i><span
+                                    x-text="t('entity.apply_rename')">Apply rename</span>
                             </button>
                         </div>
                     </div>
@@ -2232,8 +2233,12 @@
                                                                 'btn-outline-gray hover:btn-filled-green': isOrphanEntity(entity)
                                                             }"
                                                             :disabled="isEntityIdTaken(entity) || applyingEntityId || renamingDevice || executing"
-                                                            :title="isEntityIdTaken(entity) ? t('entity.id_conflict') : t('entity.apply_rename')">
-                                                        <i class="ri-check-line"></i>
+                                                            :title="applyingEntityId === entity.id ? t('entity.applying')
+                                                                : (isEntityIdTaken(entity) ? t('entity.id_conflict') : t('entity.apply_rename'))">
+                                                        <!-- The one being written says so; the others only grey out. -->
+                                                        <i :class="applyingEntityId === entity.id
+                                                                   ? 'ri-loader-4-line animate-spin'
+                                                                   : 'ri-check-line'"></i>
                                                     </button>
                                                 </template>
                                                 <!-- Delete button - always visible, filled red in no-area mode -->

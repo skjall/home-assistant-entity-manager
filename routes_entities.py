@@ -19,7 +19,7 @@ from device_registry import DeviceRegistry
 from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 from ha_websocket import HomeAssistantWebSocket
-from jobs import new_job
+from jobs import STATE_COMPLETED, STATE_FAILED, iso_now, new_job
 from naming_exception_adoption import supplied_key
 from naming_rules import NamingRuleError
 import naming_service
@@ -384,12 +384,48 @@ async def _rename_entity_async():
     if not new_entity_id and not new_friendly_name:
         return jsonify({"error": "new_entity_id or new_friendly_name required"}), 400
 
+    state = await naming_service.state_of(old_entity_id)
     try:
-        result = await naming_service.rename_entity(old_entity_id, new_entity_id, new_friendly_name)
+        result = await naming_service.rename_entity(
+            old_entity_id,
+            new_entity_id,
+            new_friendly_name,
+            provenance=naming_service.note_for(old_entity_id, state, new_friendly_name or ""),
+        )
     except Exception as error:
         logger.error(f"Error renaming entity {old_entity_id}: {error}")
+        _record_single_rename(old_entity_id, new_entity_id, new_friendly_name, error=error)
         return jsonify({"error": str(error)}), 500
+    if not result.get("skipped"):
+        _record_single_rename(old_entity_id, new_entity_id, new_friendly_name)
     return jsonify(result)
+
+
+def _record_single_rename(old_id, new_id, name, error=None):
+    """Put a rename of one entity in the log, where every run already is.
+
+    Renaming from the list wrote nothing down: it happened, the toast faded,
+    and the log in the settings - which is where one goes to find out what
+    happened - did not know about it. A failure was worse, because the message
+    was gone before it could be read.
+    """
+    store = renamer_state.get("job_store")
+    if store is None:
+        return
+    written = new_id or old_id
+    job = new_job("rename_entity", {"entity_id": old_id}, job_id=uuid.uuid4().hex)
+    job["progress"] = {"done": 1, "total": 1, "current": written}
+    if error is None:
+        job["state"] = STATE_COMPLETED
+        job["result"] = {"success": [written]}
+        job["log"] = [{"ts": iso_now(), "step": "RENAME", "message": f"{old_id} -> {written} ({name})"}]
+    else:
+        job["state"] = STATE_FAILED
+        job["error"] = str(error)
+        job["result"] = {"failed": [old_id]}
+        job["log"] = [{"ts": iso_now(), "step": "ERROR", "message": f"{old_id}: {error}"}]
+    job["updated"] = iso_now()
+    store.save(job)
 
 
 @entities.route("/api/apply_naming", methods=["POST"])
