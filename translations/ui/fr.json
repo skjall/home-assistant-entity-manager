@@ -502,7 +502,6 @@
     "more_matches": "… {count} de plus — affinez la recherche",
     "tab_log": "Journal",
     "log_title": "Journal",
-    "log_hint": "Ce que chaque exécution a fait — la plus récente en premier.",
     "log_search": "Rechercher dans le journal …",
     "log_empty": "Rien encore journalisé",
     "refresh": "Actualiser",

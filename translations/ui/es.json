@@ -502,7 +502,6 @@
     "more_matches": "… {count} más — acota la búsqueda",
     "tab_log": "Registro",
     "log_title": "Registro",
-    "log_hint": "Lo que hizo cada ejecución — la más reciente primero.",
     "log_search": "Buscar en el registro …",
     "log_empty": "Aún no hay registro",
     "refresh": "Actualizar",
