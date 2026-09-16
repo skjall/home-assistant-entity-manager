@@ -70,10 +70,28 @@ def test_the_class_word_may_sit_anywhere_in_the_name(restructurer):
     assert answer["value"] == "Firmware"
 
 
+def test_a_name_that_says_it_with_the_rules_own_word_is_settled_too(restructurer):
+    """ "Firmware Status" is about an update, it just says so as "Firmware"."""
+    answer = restructurer._resolve_supplied_name("Firmware Status", "button.printer_status", UPDATE_BUTTON)
+
+    assert answer["value"] == "Firmware"
+
+
+def test_a_shorter_word_for_the_class_counts_as_naming_it(restructurer):
+    """ "CO2 concentration" is about carbon dioxide, under the rule's own name."""
+    rules = restructurer.type_mappings.rules
+    rules.add_filter("device_class", "carbon_dioxide", "de", "CO2", None)
+    sensor = {"platform": "overkiz", "original_device_class": "carbon_dioxide"}
+
+    answer = restructurer._resolve_supplied_name("CO2 concentration", "sensor.living_co2", sensor)
+
+    assert answer["value"] == "CO2"
+
+
 def test_an_entity_that_supplies_no_name_is_left_to_the_rule(restructurer):
-    assert restructurer._names_the_class("", "button.x", "update") is True
+    assert restructurer._names_the_class("", "button.x", "update", "Firmware") is True
 
 
 def test_the_english_class_name_counts_too(restructurer):
     """An integration that never translated its names still reaches the rule."""
-    assert restructurer._names_the_class("Firmware update", "button.x", "update") is True
+    assert restructurer._names_the_class("Firmware update", "button.x", "update", "Firmware") is True
