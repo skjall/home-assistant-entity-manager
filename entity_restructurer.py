@@ -685,29 +685,48 @@ class EntityRestructurer:
     ) -> Optional[str]:
         """The name Home Assistant itself uses for this entity's type, if it has one.
 
-        The device class is the widest of its answers and says only what an
-        entity measures. It translates a name that means the class already, as
-        "Temperature" does; it must not overwrite one that says more, or
-        "CPU temperature" and "Temperature" on one device become the same name.
+        Two things can answer: the word the integration picked for this kind of
+        entity, and the device class. Whichever says more wins, and neither may
+        overwrite a name that already says something else - "CPU temperature"
+        and "Temperature" on one device would otherwise become the same name,
+        and an outlet already called "Steckdose" would turn back into the
+        "Schalter" its integration calls every switch.
         """
         if not self.ha_translations:
             return None
         domain = entity_id.partition(".")[0]
         platform = registry.get("platform") or ""
-        translation_key = registry.get("translation_key")
-        if translation_key:
-            name = self.ha_translations.translation_key_name(platform, domain, translation_key, language)
-            if name:
-                return name
         device_class = registry.get("device_class") or registry.get("original_device_class")
+        translation_key = registry.get("translation_key")
+        # A key that only repeats the domain - "switch" on a switch entity -
+        # names nothing the id does not already say, so the device class gets
+        # the question instead. With no device class it is still the best there
+        # is, and answers as before.
+        says_nothing = bool(device_class) and canon(translation_key or "") == canon(domain)
+        if translation_key and not says_nothing:
+            localized = self.ha_translations.translation_key_name(platform, domain, translation_key, language)
+            if localized:
+                english = self.ha_translations.translation_key_name(platform, domain, translation_key, "en") or ""
+                if self._means_the_same(supplied, (translation_key, english, localized)):
+                    return localized
         if not device_class:
             return None
         localized = self.ha_translations.device_class_name(domain, device_class, language)
-        if not localized or not supplied:
-            return localized
+        if not localized:
+            return None
         english = self.ha_translations.device_class_name(domain, device_class, "en") or ""
-        same_meaning = {canon(device_class), canon(english), canon(localized)}
-        return localized if canon(supplied) in same_meaning else None
+        return localized if self._means_the_same(supplied, (device_class, english, localized)) else None
+
+    @staticmethod
+    def _means_the_same(supplied: str, names: Tuple[str, ...]) -> bool:
+        """Whether Home Assistant's name may replace the one already supplied.
+
+        With nothing supplied there is nothing to lose, so it may. With a name
+        in hand it may only be restated, never replaced by a different meaning.
+        """
+        if not supplied:
+            return True
+        return canon(supplied) in {canon(name) for name in names if name}
 
     # Technical values read as words in a name, but stay slugs in an entity ID.
     SPELLED_OUT_FIELDS = ("domain", "device_class")
