@@ -43,6 +43,17 @@ def test_closing_the_panel_clears_the_timer(markup):
     assert "this.stopClosing();" in markup[closing : closing + 400]
 
 
+def test_the_count_starts_before_the_entities_are_reloaded(markup):
+    """Otherwise the button sits there saying "Schließen" through the reload.
+
+    The panel reloads the list when a run ends, which takes as long as it
+    takes. A count that starts after it reads as a second wait tacked on to a
+    panel that already said it was done.
+    """
+    body = markup[markup.index("async finishJob() {") : markup.index("stopJobPolling() {")]
+    assert body.index("this.startClosing(finished);") < body.index("if (cb) await cb(finished);")
+
+
 def test_the_countdown_is_dropped_when_another_job_takes_the_panel(markup):
     start = markup.index("startClosing(finished) {")
     body = markup[start : markup.index("stopClosing() {", start)]

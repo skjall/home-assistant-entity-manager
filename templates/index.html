@@ -5329,12 +5329,14 @@
                             break;
                         }
                     }
-                    if (cb) await cb(finished);
-                    // Long enough to read the green tick, short enough not to wait
-                    // for it. Only when the run left nothing to look at.
+                    // Before the callback, not after: reloading the entities takes
+                    // as long as it takes, and a count that starts on the far side
+                    // of it reads as a second wait after the panel already said it
+                    // was done.
                     if (this.autoCloseWanted() && this.jobFlawless(finished)) {
                         this.startClosing(finished);
                     }
+                    if (cb) await cb(finished);
                 },
 
                 // Counted down on the button rather than closed out of hand, so
