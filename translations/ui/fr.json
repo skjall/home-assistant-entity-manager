@@ -104,8 +104,6 @@
     "explain_exception": "Cette entité seule s’appelle « {value} » au lieu de « {original} »",
     "explain_supplied": "{source} fournit « {value} »",
     "open_rule": "Voir la règle",
-    "drift_badge": "modifié dans HA",
-    "drift_hint": "Modifié dans Home Assistant après l’application. C’était « {applied} ».",
     "drift_explain": "Ce nom a été modifié dans Home Assistant. « {applied} » venait d’ici.",
     "drift_adopt": "Garder ce nom",
     "drift_adopt_hint": "Le nom défini dans Home Assistant devient une exception pour cette seule entité.",

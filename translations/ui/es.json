@@ -104,8 +104,6 @@
     "explain_exception": "Solo esta entidad se llama “{value}” en lugar de “{original}”",
     "explain_supplied": "{source} proporciona “{value}”",
     "open_rule": "Ver regla",
-    "drift_badge": "cambiado en HA",
-    "drift_hint": "Cambiado en Home Assistant después de aplicarlo. Aquí figuraba “{applied}”.",
     "drift_explain": "Este nombre se cambió en Home Assistant. “{applied}” venía de aquí.",
     "drift_adopt": "Conservar este nombre",
     "drift_adopt_hint": "El nombre puesto en Home Assistant se convierte en una excepción para esta entidad.",

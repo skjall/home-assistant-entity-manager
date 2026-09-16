@@ -1557,24 +1557,19 @@
         .rule-link:hover { text-decoration: underline; }
         /* A name that was changed in Home Assistant itself: what happened, and
            the two ways out of it. */
+        /* Reads like every other line that explains where a name came from,
+           not like a warning: a name changed in Home Assistant is a fact about
+           the entity, and the two ways out of it are right there. */
         .drift-bar {
             display: flex;
             align-items: center;
             flex-wrap: wrap;
             gap: 8px;
             margin-top: 8px;
-            padding: 8px 10px;
-            border-radius: 6px;
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
         }
         .drift-text {
             font-size: 0.75rem;
-            color: #1d4ed8;
-        }
-        .drift-bar.is-blocked {
-            background: #fef2f2;
-            border-color: #fecaca;
+            color: #6b7280;
         }
         .drift-bar.is-blocked .drift-text {
             color: #b91c1c;
@@ -2176,10 +2171,6 @@
                                                       class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-red-100 text-red-700"
                                                       :title="t('entity.blocked_hint', {wanted: entity.blocked?.wanted || '', holder: entity.blocked?.holder || ''})"
                                                       x-text="t('entity.blocked_badge')">numbered</span>
-                                                <span x-show="entity.drift"
-                                                      class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-blue-100 text-blue-700"
-                                                      :title="t('entity.drift_hint', {applied: entity.applied_name || ''})"
-                                                      x-text="t('entity.drift_badge')">changed in HA</span>
                                                 <span x-show="isOrphanEntity(entity)"
                                                       class="text-xs text-amber-600 ml-2"
                                                       :title="t('entity.orphan_hint')">
@@ -2297,7 +2288,7 @@
                                                         x-text="t('entity.ignore')">Leave alone</button>
                                             </div>
                                         </div>
-                                        <div x-show="entity.drift" class="drift-bar"
+                                        <div x-show="entity.drift" class="drift-bar">
                                             <span class="drift-text"
                                                   x-text="t('entity.drift_explain', {applied: entity.applied_name || ''})"></span>
                                             <div class="drift-actions">
