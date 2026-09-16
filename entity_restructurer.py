@@ -588,6 +588,20 @@ class EntityRestructurer:
                         "matched_on": {"kind": "name", "value": canon(name), "integration": detected},
                     }
                 )
+        # A translation that numbers what it cannot name loses to a name that
+        # names it: Miele's "temperature_zone_2" reads "Temperaturzone 2" while
+        # the entity says "Temperaturzone Gefrierzone", and only the zone tells
+        # it from its sibling. Nothing else is touched - a translation without
+        # a counter stays, even where the name carries an extra word, or the
+        # German "PLC-Downlink PHY-Rate" would lose to an English name with a
+        # serial number after it. A rule the user wrote always keeps its say.
+        candidates = [
+            candidate
+            for candidate in candidates
+            if candidate["won_by"] != "rule:system"
+            or not self._counts_rather_than_names(candidate["value"])
+            or not self._says_more(name, candidate["value"])
+        ]
         # A rule or default that only repeats the shown spelling has no effect
         # and is not reported as the source.
         candidates = [candidate for candidate in candidates if candidate["value"] != shown]
@@ -604,6 +618,16 @@ class EntityRestructurer:
         """Whether an area or device name is still sitting in this name."""
         written = canon(value)
         return any(canon(prefix) and canon(prefix) in written for prefix in prefixes)
+
+    @staticmethod
+    def _counts_rather_than_names(value: str) -> bool:
+        """Whether a name leans on a bare number to tell one thing from another.
+
+        "Temperaturzone 2" is the second of something it does not name. A
+        number that is part of a word - "PHY-Rate 5G", "PM10" - names, and does
+        not count.
+        """
+        return any(part.isdigit() for part in re.split(r"[\s_\-]+", value or "") if part)
 
     @staticmethod
     def _says_more(standing: str, supplied: str) -> bool:
