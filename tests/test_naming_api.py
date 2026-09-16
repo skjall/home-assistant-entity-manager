@@ -394,7 +394,7 @@ def test_template_sample_falls_back_without_entities(client, monkeypatch):
     assert data["context"]["area"] == "Living room"
 
 
-def test_an_exception_is_saved_before_the_registry_is_loaded(client, monkeypatch):
+def test_a_name_for_one_entity_is_saved_before_the_registry_is_loaded(client, monkeypatch):
     """The route asks for the registry itself instead of reaching into an empty state."""
     loaded = web_ui.renamer_state["restructurer"]
     monkeypatch.setitem(web_ui.renamer_state, "restructurer", None)
@@ -408,9 +408,36 @@ def test_an_exception_is_saved_before_the_registry_is_loaded(client, monkeypatch
 
     assert response.status_code == 200
     assert "error" not in response.get_json()
-    stored = web_ui.renamer_state["naming_overrides"].get_entity_override("reg-unknown")
-    assert stored["name"] == "Taste 1"
-    assert stored["source"] == "user"
+    rule = web_ui.renamer_state["naming_rules"].for_entity("reg-unknown", "de")
+    assert rule["targets"]["de"] == "Taste 1"
+    assert rule["filters"] == [{"registry_id": "reg-unknown"}]
+
+
+def test_naming_one_entity_lands_on_the_rule_that_already_says_it(client):
+    """Two entities wanting one wording are two filters, not two rules."""
+    client.post("/api/set_entity_override", json={"registry_id": "reg-a", "override_name": "Tempo"})
+    client.post("/api/set_entity_override", json={"registry_id": "reg-b", "override_name": "Tempo"})
+
+    rules = web_ui.renamer_state["naming_rules"]
+    mine = [rule for rule in rules.rules if rule["targets"].get("de") == "Tempo"]
+
+    assert len(mine) == 1
+    assert mine[0]["filters"] == [{"registry_id": "reg-a"}, {"registry_id": "reg-b"}]
+
+
+def test_clearing_the_name_takes_that_entity_off_the_rule(client):
+    client.post("/api/set_entity_override", json={"registry_id": "reg-a", "override_name": "Tempo"})
+    client.post("/api/set_entity_override", json={"registry_id": "reg-b", "override_name": "Tempo"})
+
+    client.post("/api/set_entity_override", json={"registry_id": "reg-a", "override_name": ""})
+
+    rules = web_ui.renamer_state["naming_rules"]
+    mine = [rule for rule in rules.rules if rule["targets"].get("de") == "Tempo"]
+    assert len(mine) == 1
+    assert mine[0]["filters"] == [{"registry_id": "reg-b"}]
+
+    client.post("/api/set_entity_override", json={"registry_id": "reg-b", "override_name": ""})
+    assert not [rule for rule in rules.rules if rule["targets"].get("de") == "Tempo"]
 
 
 def test_a_rule_for_one_entity_counts_as_reaching_it(client):
@@ -420,7 +447,7 @@ def test_a_rule_for_one_entity_counts_as_reaching_it(client):
     the grouping that counts every other rule never reaches it.
     """
     rules = web_ui.renamer_state["naming_rules"]
-    mine = rules.upsert_for_entity("reg-a", "effect_speed", "de", "Nur hier")
+    mine = rules.add_filter("name", "effect_speed", "de", "Nur hier", {"registry_id": "reg-a"})
 
     listed = client.get("/api/naming/rules").get_json()["rules"]
     found = next(rule for rule in listed if rule["id"] == mine["id"])
