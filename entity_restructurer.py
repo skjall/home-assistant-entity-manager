@@ -553,7 +553,7 @@ class EntityRestructurer:
                 # measures where neither a key nor a name matched.
                 device_class = registry.get("device_class") or registry.get("original_device_class")
                 rule = rules.find("device_class", device_class, integration, language, model)
-                if rule and self._names_the_class(name, entity_id, device_class):
+                if rule and self._names_the_class(name, entity_id, device_class, rule["targets"].get(language, "")):
                     candidates.append(
                         {
                             "value": rule["targets"][language],
@@ -599,19 +599,24 @@ class EntityRestructurer:
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
 
-    def _names_the_class(self, supplied: str, entity_id: str, device_class: str) -> bool:
+    def _names_the_class(self, supplied: str, entity_id: str, device_class: str, target: str = "") -> bool:
         """Whether a supplied name is about the device class at all.
 
-        A rule on the class exists to settle how that class is worded:
-        "Firmware-Update" and "Firmware Status" both become "Firmware". But
-        integrations put a class on entities that are about something else -
-        UniFi gives its "regenerate password" button the class "update" - and
-        there the rule is talking about a different thing entirely. A name that
-        does not contain the class's own word is one of those.
+        A rule on a class exists to settle how that class is worded:
+        "Firmware-Update" and "Firmware Status" both become "Firmware", and
+        "CO2 concentration" becomes "CO2". But integrations put a class on
+        entities that are about something else - UniFi gives its "regenerate
+        password" button the class "update" - and there the rule is talking
+        about a different thing entirely.
+
+        A name is on the subject when it carries the class's own word or the
+        one the rule gives it. "Firmware Status" says it with the rule's word,
+        "CO2 concentration" with the shorter of the class's two, and
+        "Passwort neu generieren" with neither.
         """
         if not supplied:
             return True
-        words = {canon(device_class or "")}
+        words = {canon(device_class or ""), canon(target or "")}
         if self.ha_translations:
             domain = entity_id.partition(".")[0]
             for language in (self.language, "en"):
