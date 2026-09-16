@@ -2423,12 +2423,12 @@
              x-transition:enter-start="opacity-0"
              x-transition:enter-end="opacity-100"
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            <div class="bg-white rounded-xl shadow-xl max-w-xl w-full max-h-[85vh] overflow-y-auto"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100">
-                <div class="p-6">
-                    <div class="flex items-center gap-3 mb-4">
+                <div class="p-5">
+                    <div class="flex items-center gap-3 mb-3">
                         <div class="w-10 h-10 rounded-full flex items-center justify-center"
                              :class="isJobTerminal(jobPanel.job) ? (jobUnsuccessful(jobPanel.job) ? 'bg-red-100' : 'bg-green-100') : 'bg-blue-100'">
                             <i class="text-xl"
@@ -2452,48 +2452,51 @@
                     </template>
 
                     <!-- Current item / final message -->
-                    <p class="text-sm text-gray-600 mb-3 truncate" x-text="jobOutcome()"></p>
+                    <p class="text-sm text-gray-600 truncate" x-text="jobOutcome()"></p>
 
                     <!-- What the run did, sorted by outcome. The counts double as
                          the filter, so the one line that needs the user is one
                          click away instead of buried in a hundred. -->
                     <template x-if="jobPanel.job && jobPanel.job.log && jobPanel.job.log.length">
-                        <div class="mb-2">
-                            <div class="flex flex-wrap items-center gap-2">
+                        <div>
+                            <!-- The counts and the way into the detail sit on one line:
+                                 stacked, a finished run was three quarters white. -->
+                            <div class="flex flex-wrap items-center gap-2 mt-4">
                                 <template x-for="group in jobLogGroups()" :key="group.step">
                                     <button @click="toggleJobLogFilter(group.step)"
-                                            class="px-2.5 py-1 rounded-full text-xs border transition-colors"
+                                            class="inline-flex items-center gap-1.5 rounded-full border text-xs transition-colors"
+                                            style="padding: 5px 12px"
                                             :class="jobPanel.filter === group.step ? group.active : group.idle">
                                         <span x-text="group.label"></span>
-                                        <span class="font-semibold ml-1" x-text="group.count"></span>
+                                        <span class="font-semibold" x-text="group.count"></span>
                                     </button>
                                 </template>
+                                <button @click="jobPanel.showLog = !jobPanel.showLog"
+                                        class="ml-auto text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 shrink-0">
+                                    <i :class="jobPanel.showLog ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
+                                    <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
+                                </button>
                             </div>
 
                             <!-- The part no rename can do for the user. -->
                             <div x-show="jobLogCount('UNREACHABLE') || jobLogCount('NOT_CARRIED')"
-                                 class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                                <div class="flex items-start gap-2">
-                                    <i class="ri-error-warning-line mt-0.5"></i>
-                                    <div>
-                                        <p class="font-medium" x-text="t('jobs.follow_up')"></p>
-                                        <p class="text-xs mt-0.5" x-text="t('jobs.follow_up_hint')"></p>
-                                    </div>
+                                 class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                                <div class="flex items-center gap-2">
+                                    <i class="ri-error-warning-line shrink-0"></i>
+                                    <span class="font-medium" x-text="t('jobs.follow_up')"></span>
+                                    <span class="text-xs opacity-80 hidden sm:inline"
+                                          x-text="t('jobs.follow_up_hint')"></span>
                                 </div>
                             </div>
 
-                            <button @click="jobPanel.showLog = !jobPanel.showLog"
-                                    class="mt-3 text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
-                                <i :class="jobPanel.showLog ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
-                                <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
-                            </button>
-
-                            <div x-show="jobPanel.showLog" class="mt-2">
+                            <div x-show="jobPanel.showLog" class="mt-3">
                                 <div class="relative mb-2">
-                                    <i class="ri-search-line absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                                    <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"
+                                       style="pointer-events: none"></i>
                                     <input type="text" x-model="jobPanel.search"
                                            :placeholder="t('jobs.search_log')"
-                                           class="w-full pl-7 pr-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                                           style="padding-left: 34px"
+                                           class="w-full pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30">
                                 </div>
                                 <div class="max-h-72 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
                                     <template x-for="(entry, i) in jobLogEntries()" :key="i">
@@ -2512,7 +2515,7 @@
                         </div>
                     </template>
 
-                    <div class="flex justify-end mt-4">
+                    <div class="flex justify-end mt-5">
                         <button @click="closeJobPanel()"
                                 :disabled="!isJobTerminal(jobPanel.job)"
                                 class="btn"
@@ -5406,10 +5409,13 @@
                     }
                     if (this.jobFailed(job)) return (job && job.error) || this.t('jobs.failed');
                     const result = (job && job.result) || {};
-                    const done = (result.success || []).length || result.entities_renamed || 0;
+                    const done = (result.success || []).length
+                        || (result.enabled || []).length
+                        || result.entities_renamed || 0;
                     const failed = (result.failed || []).length || result.entities_failed || 0;
                     const parts = [];
-                    if (done) parts.push(this.t('jobs.count_done', {count: done}));
+                    const did = (result.enabled || []).length ? 'jobs.count_enabled' : 'jobs.count_done';
+                    if (done) parts.push(this.t(did, {count: done}));
                     if (failed) parts.push(this.t('jobs.count_failed', {count: failed}));
                     if (this.jobLogCount('UNREACHABLE')) {
                         parts.push(this.t('jobs.count_unreachable', {count: this.jobLogCount('UNREACHABLE')}));
