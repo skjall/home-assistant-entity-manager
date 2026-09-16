@@ -19,7 +19,7 @@ from device_registry import DeviceRegistry
 from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 from ha_websocket import HomeAssistantWebSocket
-from jobs import new_job
+from jobs import STATE_COMPLETED, STATE_FAILED, iso_now, new_job
 from naming_exception_adoption import supplied_key
 from naming_rules import NamingRuleError
 import naming_service
@@ -380,12 +380,48 @@ async def _rename_entity_async():
     if not new_entity_id and not new_friendly_name:
         return jsonify({"error": "new_entity_id or new_friendly_name required"}), 400
 
+    state = await naming_service.state_of(old_entity_id)
     try:
-        result = await naming_service.rename_entity(old_entity_id, new_entity_id, new_friendly_name)
+        result = await naming_service.rename_entity(
+            old_entity_id,
+            new_entity_id,
+            new_friendly_name,
+            provenance=naming_service.note_for(old_entity_id, state, new_friendly_name or ""),
+        )
     except Exception as error:
         logger.error(f"Error renaming entity {old_entity_id}: {error}")
+        _record_single_rename(old_entity_id, new_entity_id, new_friendly_name, error=error)
         return jsonify({"error": str(error)}), 500
+    if not result.get("skipped"):
+        _record_single_rename(old_entity_id, new_entity_id, new_friendly_name)
     return jsonify(result)
+
+
+def _record_single_rename(old_id, new_id, name, error=None):
+    """Put a rename of one entity in the log, where every run already is.
+
+    Renaming from the list wrote nothing down: it happened, the toast faded,
+    and the log in the settings - which is where one goes to find out what
+    happened - did not know about it. A failure was worse, because the message
+    was gone before it could be read.
+    """
+    store = renamer_state.get("job_store")
+    if store is None:
+        return
+    written = new_id or old_id
+    job = new_job("rename_entity", {"entity_id": old_id}, job_id=uuid.uuid4().hex)
+    job["progress"] = {"done": 1, "total": 1, "current": written}
+    if error is None:
+        job["state"] = STATE_COMPLETED
+        job["result"] = {"success": [written]}
+        job["log"] = [{"ts": iso_now(), "step": "RENAME", "message": f"{old_id} -> {written} ({name})"}]
+    else:
+        job["state"] = STATE_FAILED
+        job["error"] = str(error)
+        job["result"] = {"failed": [old_id]}
+        job["log"] = [{"ts": iso_now(), "step": "ERROR", "message": f"{old_id}: {error}"}]
+    job["updated"] = iso_now()
+    store.save(job)
 
 
 @entities.route("/api/apply_naming", methods=["POST"])
@@ -496,25 +532,39 @@ def rename_device():
     return jsonify(job), 202
 
 
-def _capture_device_entity_names(
+def _capture_device_entity_naming(
     restructurer: EntityRestructurer,
     device_id: str,
     states: list[dict[str, Any]],
-) -> dict[str, str]:
-    """Capture entity-specific names before changing their device name."""
+) -> dict[str, dict[str, Any]]:
+    """What names this device's entities before the device itself is renamed.
+
+    The type part has to be read now: afterwards the device carries a different
+    name and can no longer be stripped off an entity name that froze the old
+    one. The same reading feeds the new names and the note kept with them, so
+    a rule edited later still finds the entity by the word it matches on.
+    """
     states_by_id = {state["entity_id"]: state for state in states}
-    return {
-        entity_id: restructurer.build_naming_context(entity_id, states_by_id.get(entity_id, {}))["entity"]
-        for entity_id, entity_info in restructurer.entities.items()
-        if entity_info.get("device_id") == device_id
-    }
+    resolutions = getattr(restructurer, "last_resolutions", {}) or {}
+    captured = {}
+    for entity_id, entity_info in restructurer.entities.items():
+        if entity_info.get("device_id") != device_id:
+            continue
+        context = restructurer.build_naming_context(entity_id, states_by_id.get(entity_id, {}))
+        resolution = resolutions.get(entity_id) or {}
+        captured[entity_id] = {
+            "base_entity": context["entity"],
+            "won_by": resolution.get("won_by"),
+            "rule_id": resolution.get("rule_id"),
+        }
+    return captured
 
 
 def _plan_device_entity_changes(
     restructurer: EntityRestructurer,
     device_id: str,
     states: list[dict[str, Any]],
-    entity_names: dict[str, str],
+    captured: dict[str, dict[str, Any]],
 ) -> list[tuple[str, str, str]]:
     """Generate entity changes for a renamed device with the active templates."""
     states_by_id = {state["entity_id"]: state for state in states}
@@ -524,7 +574,7 @@ def _plan_device_entity_changes(
             *restructurer.generate_new_entity_id(
                 entity_id,
                 states_by_id.get(entity_id, {}),
-                entity_names.get(entity_id),
+                (captured.get(entity_id) or {}).get("base_entity"),
             ),
         )
         for entity_id, entity_info in restructurer.entities.items()
@@ -559,7 +609,7 @@ async def rename_device_handler(job, ctx):
 
         dependency_updater = DependencyUpdater(base_url, token)
         cached_states = await dependency_updater.get_states()
-        entity_names = _capture_device_entity_names(
+        captured = _capture_device_entity_naming(
             renamer_state["restructurer"],
             device_id,
             cached_states,
@@ -594,7 +644,7 @@ async def rename_device_handler(job, ctx):
             renamer_state["restructurer"],
             device_id,
             cached_states,
-            entity_names,
+            captured,
         )
         total = len(entity_changes)
         logger.info(f"Found {total} entities for device {device_id}")
@@ -617,7 +667,10 @@ async def rename_device_handler(job, ctx):
                 # Rename entity (ID + friendly name)
                 id_changed = new_entity_id != old_entity_id
                 await entity_registry.rename_entity(
-                    old_entity_id, new_entity_id if id_changed else None, new_friendly_name
+                    old_entity_id,
+                    new_entity_id if id_changed else None,
+                    new_friendly_name,
+                    provenance=captured.get(old_entity_id),
                 )
                 entities_updated += 1
                 logger.info("  SUCCESS: Renamed entity")

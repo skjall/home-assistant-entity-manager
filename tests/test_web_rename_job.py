@@ -66,6 +66,7 @@ def test_device_rename_uses_active_naming_templates() -> None:
             "sensor.kitchen_sofa_voltage": {"device_id": "device-1"},
             "sensor.unrelated": {"device_id": "device-2"},
         }
+        last_resolutions: dict[str, dict[str, object]] = {}
 
         def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
             """Return the entity-specific part captured before the device rename."""
@@ -93,12 +94,38 @@ def test_device_rename_uses_active_naming_templates() -> None:
         {"entity_id": "sensor.kitchen_sofa_voltage", "attributes": {"native_name": "Voltage"}},
     ]
     restructurer = FakeRestructurer()
-    names = routes_entities._capture_device_entity_names(restructurer, "device-1", states)
+    captured = routes_entities._capture_device_entity_naming(restructurer, "device-1", states)
 
-    assert routes_entities._plan_device_entity_changes(restructurer, "device-1", states, names) == [
+    assert routes_entities._plan_device_entity_changes(restructurer, "device-1", states, captured) == [
         ("sensor.kitchen_sofa_energy", "sensor.ground_floor_sofa1_energy", "Energy"),
         ("sensor.kitchen_sofa_voltage", "sensor.ground_floor_sofa1_voltage", "Voltage"),
     ]
+
+
+def test_a_device_rename_notes_the_type_part_it_used() -> None:
+    """Otherwise the note says a name is ours without saying what went into it.
+
+    The type part has to be read before the device is renamed - afterwards the
+    device name can no longer be stripped off a name that froze it - so the
+    same reading feeds the proposal and the note.
+    """
+
+    class FakeRestructurer:
+        entities = {"sensor.kitchen_sofa_energy": {"device_id": "device-1"}}
+        last_resolutions = {"sensor.kitchen_sofa_energy": {"won_by": "original", "rule_id": "rule-7"}}
+
+        def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
+            return {"entity": state["attributes"]["native_name"]}
+
+    states = [{"entity_id": "sensor.kitchen_sofa_energy", "attributes": {"native_name": "Energy"}}]
+
+    captured = routes_entities._capture_device_entity_naming(FakeRestructurer(), "device-1", states)
+
+    assert captured["sensor.kitchen_sofa_energy"] == {
+        "base_entity": "Energy",
+        "won_by": "original",
+        "rule_id": "rule-7",
+    }
 
 
 def test_init_client_recreates_missing_restructurer(monkeypatch) -> None:

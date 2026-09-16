@@ -97,6 +97,22 @@ class NamingState:
         self._save()
         return dict(entry)
 
+    @guarded
+    def resupply(self, registry_id: str, base_entity: str) -> bool:
+        """Correct which word an entry records the name as having been built from.
+
+        Entries written before the type part was kept as it went in hold the
+        word that came out of the rules instead. Nothing matches that word
+        again, so a rule the user edits would never reach the entity. Where a
+        read works out what actually went in, it is written back here, once.
+        """
+        entry = self.data.get("entities", {}).get(registry_id or "")
+        if not isinstance(entry, dict) or entry.get("base_entity") == base_entity:
+            return False
+        entry["base_entity"] = base_entity or ""
+        self._save()
+        return True
+
     def get(self, registry_id: str) -> Optional[Dict[str, Any]]:
         """The entry for ``registry_id``, or None if we never wrote its name."""
         entry = self.data.get("entities", {}).get(registry_id or "")

@@ -1436,6 +1436,35 @@
                 margin-left: 8px;
             }
 
+            /* The row an area or a virtual device puts inside itself carries
+               its own left-and-right layout. Without a share of the width it
+               shrinks to its text, and the count ends up glued to the name
+               instead of sitting at the edge. */
+            .hierarchy-item:not(.device-item) > * {
+                flex: 1;
+                min-width: 0;
+            }
+
+            /* A device row stacks its parts in a column of its own, and
+               centring across a column is centring sideways - which put every
+               name in the middle of the screen. Stretch leaves them where they
+               belong, and the chevron sits at the right edge instead of
+               claiming a line under them. */
+            .hierarchy-item.device-item {
+                align-items: stretch;
+                justify-content: flex-start;
+                position: relative;
+                padding-right: 38px;
+            }
+
+            .hierarchy-item.device-item::after {
+                position: absolute;
+                right: 12px;
+                top: 50%;
+                transform: translateY(-50%);
+                margin-left: 0;
+            }
+
             /* Entity cards */
             .entity-card-simple .entity-names {
                 padding: 14px 16px;
@@ -1932,7 +1961,8 @@
                                     :disabled="syncingZ2m"
                                     class="shrink-0 text-xs px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
                                     :class="{'opacity-50 cursor-not-allowed': syncingZ2m}">
-                                <i class="ri-check-line mr-1"></i><span x-text="t('entity.apply_rename')">Apply rename</span>
+                                <i class="mr-1" :class="syncingZ2m ? 'ri-loader-4-line animate-spin' : 'ri-check-line'"></i><span
+                                    x-text="t('entity.apply_rename')">Apply rename</span>
                             </button>
                         </div>
                     </div>
@@ -2203,8 +2233,12 @@
                                                                 'btn-outline-gray hover:btn-filled-green': isOrphanEntity(entity)
                                                             }"
                                                             :disabled="isEntityIdTaken(entity) || applyingEntityId || renamingDevice || executing"
-                                                            :title="isEntityIdTaken(entity) ? t('entity.id_conflict') : t('entity.apply_rename')">
-                                                        <i class="ri-check-line"></i>
+                                                            :title="applyingEntityId === entity.id ? t('entity.applying')
+                                                                : (isEntityIdTaken(entity) ? t('entity.id_conflict') : t('entity.apply_rename'))">
+                                                        <!-- The one being written says so; the others only grey out. -->
+                                                        <i :class="applyingEntityId === entity.id
+                                                                   ? 'ri-loader-4-line animate-spin'
+                                                                   : 'ri-check-line'"></i>
                                                     </button>
                                                 </template>
                                                 <!-- Delete button - always visible, filled red in no-area mode -->
@@ -3870,7 +3904,8 @@
                     const icons = {
                         'automation': 'ri-robot-line',
                         'scene': 'ri-palette-line',
-                        'script': 'ri-terminal-box-line'
+                        'script': 'ri-terminal-box-line',
+                        'helper': 'ri-tools-line'
                     };
                     return icons[configType] || 'ri-question-line';
                 },
@@ -3887,6 +3922,10 @@
                         return `${baseUrl}/config/scene/edit/${id}`;
                     } else if (ref.config_type === 'script') {
                         return `${baseUrl}/config/script/edit/${ref.config_id.replace('script.', '')}`;
+                    } else if (ref.config_type === 'helper') {
+                        // A helper is a config entry, and Home Assistant opens
+                        // those from its helper list rather than by their id.
+                        return `${baseUrl}/config/helpers`;
                     }
                     return '#';
                 },

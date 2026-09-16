@@ -7,7 +7,6 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
 import uuid
 
 import aiohttp
@@ -35,6 +34,7 @@ from jobs import new_job
 import mcp_server
 import naming_service
 from reference_cache import get_reference_checker, invalidate_reference_checker_cache
+from reference_checker import Suggestion
 from registry import sync_ha_language
 from routes_entities import entities as entity_routes
 from routes_naming import (
@@ -780,33 +780,7 @@ async def _preview_changes_async():
         await ws.disconnect()
 
 
-def _note_for(old_id: str, state: Optional[Dict[str, Any]], written_name: str) -> Optional[Dict[str, Any]]:
-    """What went into the name being written, for the note kept with it.
-
-    The supplied type has to be worked out before the rename: afterwards the
-    registry answers with the new name and the type that went into it is gone.
-    Without this note a later rule cannot find the entity again, and the next
-    proposal starts from nothing - which is how one switch came out "Steckdose"
-    once and "Schalter" the next time.
-
-    A name the user typed themselves is still noted, because the supplied type
-    is a fact about the entity either way; only the claim that a rule decided
-    it is dropped, since none did.
-    """
-    if state is None:
-        return None
-    restructurer = renamer_state.get("restructurer")
-    if restructurer is None:
-        return None
-    try:
-        _, proposed_name = restructurer.generate_new_entity_id(old_id, state)
-        note = naming_service.provenance_for(old_id)
-    except Exception as error:  # noqa: BLE001 - a note must never fail a rename
-        logger.warning("Could not work out what named %s: %s", old_id, error)
-        return None
-    if note and written_name and proposed_name != written_name:
-        return {**note, "won_by": "user", "rule_id": None}
-    return note
+_note_for = naming_service.note_for
 
 
 def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_results: dict) -> None:
@@ -1583,6 +1557,21 @@ async def _get_suggestions_async(missing_entity_id):
         checker = get_reference_checker()
         suggestions = await checker.get_suggestions(missing_entity_id)
 
+        # A rename this add-on carried out is not a guess: the log says what the
+        # entity is called now, so that answer goes first and the similarity
+        # scores stay as the fallback for everything else.
+        answer = renamer_state["rename_log"].search(missing_entity_id)
+        current = answer.get("current_entity_id") if answer.get("renamed") else None
+        if current:
+            suggestions = [sug for sug in suggestions if sug.entity_id != current]
+            renamed_to = Suggestion(
+                entity_id=current,
+                friendly_name=(answer["history"][-1].get("friendly_name") or ""),
+                score=1.0,
+                reasons=["renamed_here"],
+            )
+            suggestions.insert(0, renamed_to)
+
         return jsonify({"suggestions": [sug.to_dict() for sug in suggestions], "missing_entity_id": missing_entity_id})
     except Exception as e:
         logger.error(f"Error getting suggestions for {missing_entity_id}: {e}")
@@ -1664,6 +1653,16 @@ async def _fix_reference_async():
 
             elif ref.config_type == "script":
                 success = await updater.update_script_entities(config_id, old_entity_id, new_entity_id)
+
+            elif ref.config_type == "helper":
+                # config_id is the config entry, not an entity: a helper built
+                # in the interface has no config to fetch, only options to put
+                # back through its own flow.
+                try:
+                    success = await updater.helpers.replace_in(config_id, old_entity_id, new_entity_id)
+                except Exception as error:  # noqa: BLE001 - one helper must not stop the rest
+                    logger.error(f"Could not repair helper {config_id}: {error}")
+                    success = False
 
             if success:
                 results["fixed"].append(config_id)

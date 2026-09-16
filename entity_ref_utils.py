@@ -62,7 +62,10 @@ def replace_entity_ref_in_string(value: str, old_entity_id: str, new_entity_id: 
     # Templates: Entity-ID kann als Teil eines Jinja-Ausdrucks vorkommen.
     # Nur mit Wortgrenzen ersetzen, damit `sensor.temp` nicht in
     # `sensor.temperature` trifft.
-    if "{{" in value and "}}" in value and old_entity_id in value:
+    # `{% set %}` zaehlt mit: Helfer aus der Oberflaeche holen ihren Wert oft
+    # so, und ohne diesen Fall blieb die alte ID darin stehen.
+    is_template = ("{{" in value and "}}" in value) or ("{%" in value and "%}" in value)
+    if is_template and old_entity_id in value:
         pattern = r"\b" + re.escape(old_entity_id) + r"\b"
         new_value = re.sub(pattern, new_entity_id, value)
         if new_value != value:
