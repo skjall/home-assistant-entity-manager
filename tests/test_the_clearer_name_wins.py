@@ -20,11 +20,13 @@ class Translations:
 
     KEYS = {
         ("matter", "switch", "switch"): {"de": "Schalter", "en": "Switch"},
+        ("matter", "button", "button"): {"de": "Taste", "en": "Button"},
         ("unifi", "sensor", "battery_voltage"): {"de": "Batteriespannung", "en": "Battery voltage"},
     }
     CLASSES = {
         ("switch", "outlet"): {"de": "Steckdose", "en": "Outlet"},
         ("sensor", "voltage"): {"de": "Spannung", "en": "Voltage"},
+        # Home Assistant has no words for a button's device class, so none here.
     }
 
     def translation_key_name(self, platform, domain, key, language):
@@ -64,15 +66,16 @@ def test_a_word_that_says_more_than_the_device_class_still_wins(restructurer):
     assert name == "Batteriespannung"
 
 
-def test_a_name_already_in_hand_is_not_replaced_by_a_different_meaning(restructurer):
+def test_an_outlet_already_named_stays_named(restructurer):
     """An outlet called "Steckdose" must not turn back into "Schalter"."""
     name = restructurer._home_assistant_name("switch.thermomix", OUTLET, "de", supplied="Steckdose")
 
-    assert name in (None, "Steckdose")
+    assert name == "Steckdose"
 
 
-def test_a_name_already_in_hand_is_restated_where_it_means_the_same(restructurer):
-    name = restructurer._home_assistant_name("sensor.ap_battery", VOLTAGE, "de", supplied="Battery voltage")
+def test_a_word_that_says_more_may_still_replace_the_supplied_name(restructurer):
+    """That is the whole point of the word: a raw supplied name becomes a real one."""
+    name = restructurer._home_assistant_name("sensor.ap_battery", VOLTAGE, "de", supplied="Battery volts")
 
     assert name == "Batteriespannung"
 
@@ -82,6 +85,20 @@ def test_a_word_that_repeats_the_domain_still_answers_when_nothing_else_does(res
     without_class = {"platform": "matter", "translation_key": "switch"}
 
     assert restructurer._home_assistant_name("switch.lamp", without_class, "de") == "Schalter"
+
+
+def test_a_device_class_nobody_can_put_into_words_does_not_silence_the_word(restructurer):
+    """ "button" has no words for its device class, so "Taste" has to stay."""
+    button = {"platform": "matter", "translation_key": "button", "original_device_class": "button"}
+
+    assert restructurer._home_assistant_name("button.identify", button, "de") == "Taste"
+
+
+def test_the_device_class_still_may_not_widen_a_name_that_says_more(restructurer):
+    """The older guard, unchanged: a cell voltage must not become "Spannung"."""
+    only_class = {"platform": "unifi", "original_device_class": "voltage"}
+
+    assert restructurer._home_assistant_name("sensor.ap", only_class, "de", supplied="Zellspannung") is None
 
 
 def test_an_entity_with_neither_is_left_to_the_rest_of_the_chain(restructurer):
