@@ -186,12 +186,44 @@ OPERATIONS: List[Operation] = [
         "/api/naming/rules/<rule_id>",
         "put",
         "update_rule",
-        "Change an existing rule's name or the devices it narrows to.",
+        "Change what an existing rule calls its type.",
+        "Where it applies is its filters; add or remove one of those instead.",
+        body={"targets": thing("The name per language code.")},
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/rules/<rule_id>/filters",
+        "post",
+        "add_rule_filter",
+        "Make a rule apply in one more place.",
+        "A filter names one entity by its registry id, or an integration, or an "
+        "integration and a device model. A rule that already applies everywhere "
+        "is left as it is.",
         body={
-            "targets": thing("The name per language code."),
-            "integration": text("Narrow the rule to one integration, or empty to widen it."),
-            "model": text("Narrow the rule to one device model."),
+            "registry_id": text("One entity, by its registry id."),
+            "integration": text("Every entity of one integration."),
+            "model": text("Narrow the integration to one device model."),
         },
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/rules/<rule_id>/filters",
+        "delete",
+        "remove_rule_filter",
+        "Stop a rule applying in one place.",
+        "Removing the last place removes the rule: one left without any would " "apply to every entity of its type.",
+        body={
+            "registry_id": text("One entity, by its registry id."),
+            "integration": text("Every entity of one integration."),
+            "model": text("The model the integration was narrowed to."),
+        },
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/filters",
+        "get",
+        "available_filters",
+        "The integrations and device models this home has, to pick a filter from.",
         tag="Naming",
     ),
     Operation(

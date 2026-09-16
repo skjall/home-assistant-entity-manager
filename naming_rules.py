@@ -809,10 +809,15 @@ class NamingRules:
         self,
         rule_id: str,
         targets: Optional[Mapping[str, str]] = None,
-        integration: Any = ...,
-        model: Any = ...,
         filters: Any = ...,
     ) -> Dict[str, Any]:
+        """Change what a rule says, or the whole list of places it applies.
+
+        One place at a time is add_filter and remove_filter; this is for
+        replacing the list wholesale, which is the only other honest way to
+        change it. There is deliberately no way to set a single scope: on a
+        rule reaching three places that could only mean throwing two away.
+        """
         rule = self.get(rule_id)
         if rule is None:
             raise NamingRuleError(f"Unknown rule: {rule_id}")
@@ -824,22 +829,6 @@ class NamingRules:
 
         if filters is not ...:
             wanted = clean_filters(filters)
-        elif integration is not ... or model is not ...:
-            # The older way in: one scope, which is this rule's one filter. Its
-            # other half comes from the filter already there, so setting just
-            # the model keeps the integration it was narrowed to.
-            current = (rule.get("filters") or [{}])[0]
-            scope = {
-                "integration": current.get("integration") if integration is ... else integration,
-                "model": current.get("model") if model is ... else model,
-            }
-            wanted = clean_filters(
-                [{key: value for key, value in scope.items() if value}] if any(scope.values()) else []
-            )
-        else:
-            wanted = None
-
-        if wanted is not None:
             self._refuse_collision({**rule, "filters": wanted})
             rule["filters"] = wanted
         rule["updated_at"] = _now()
