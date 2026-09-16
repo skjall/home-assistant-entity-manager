@@ -109,6 +109,45 @@
             font-size: 0.85rem;
         }
         .kind-badge.muted { background: #f3f4f6; color: #6b7280; }
+
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 1px 2px 1px 8px;
+            border-radius: 9999px;
+            background: #eef2ff;
+            color: #4f46e5;
+            font-size: 0.75rem;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+        }
+
+        .filter-chip-remove {
+            display: inline-flex;
+            align-items: center;
+            border: none;
+            background: none;
+            color: inherit;
+            cursor: pointer;
+            padding: 2px;
+            border-radius: 9999px;
+            opacity: 0.6;
+        }
+
+        .filter-chip-remove:hover { opacity: 1; background: rgba(79, 70, 229, 0.15); }
+
+        .filter-add {
+            border: 1px dashed #c7d2fe;
+            background: none;
+            color: #4f46e5;
+            border-radius: 9999px;
+            padding: 1px 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .filter-add:hover { background: #eef2ff; }
         .conflict-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
         .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid #d1d5db; background: white; cursor: pointer; font-size: 0.85rem; }
         .chip-active { background: #2563eb; color: white; border-color: #2563eb; }
@@ -874,9 +913,28 @@
                                 <input type="text" class="edit-input" x-model="editValue"
                                        @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
                             </div>
-                            <!-- And where it applies, which is the whole point of a filter. -->
+                            <!-- And where it applies. A rule reaches a list of
+                                 places, so each is its own chip and goes on its own. -->
                             <div class="rule-reach">
-                                <span x-text="reachOf(row)"></span>
+                                <template x-if="!row.isRule">
+                                    <span x-text="t('settings.reach_builtin')"></span>
+                                </template>
+                                <template x-if="row.isRule && !row.filters.length">
+                                    <span x-text="t('settings.reach_everywhere')"></span>
+                                </template>
+                                <template x-for="scope in row.filters" :key="filterLabel(scope, row)">
+                                    <span class="filter-chip">
+                                        <span x-text="filterLabel(scope, row)"></span>
+                                        <button class="filter-chip-remove" @click="removeFilter(row, scope)"
+                                                :title="t('settings.filter_remove')">
+                                            <i class="ri-close-line"></i>
+                                        </button>
+                                    </span>
+                                </template>
+                                <button class="filter-add" x-show="row.isRule && row.filters.length"
+                                        @click="openAddFilter(row)" x-text="t('settings.filter_add')"></button>
+                                <span x-show="row.isRule && row.affected !== null"
+                                      x-text="t('settings.reach_entities', {count: row.affected})"></span>
                                 <span class="rule-builtin" x-show="row.isRule && row.system_default && row.system_default !== row.value"
                                       x-text="t('settings.builtin_is', {name: row.system_default})"></span>
                                 <span class="rule-warning" x-show="row.isRule && row.redundant"
@@ -1176,6 +1234,44 @@
             </div>
         </div>
 
+        <!-- One more place for a rule to apply -->
+        <div class="modal-overlay" x-show="filterFor" x-cloak>
+            <div class="modal">
+                <h3>
+                    <i class="ri-filter-line"></i>
+                    <span x-text="t('settings.filter_add_title')">Add filter</span>
+                </h3>
+                <p class="section-hint" style="padding: 0 0 12px;"
+                   x-text="filterFor ? t('settings.filter_add_hint', {name: filterFor.value}) : ''"></p>
+                <div class="form-group">
+                    <label for="filterIntegration" x-text="t('settings.filter_integration')">Integration</label>
+                    <select id="filterIntegration" x-model="newFilter.integration" @change="newFilter.model = ''">
+                        <option value="" x-text="t('settings.filter_pick')">Pick one</option>
+                        <template x-for="row in availableFilters" :key="row.integration">
+                            <option :value="row.integration" x-text="row.integration"></option>
+                        </template>
+                    </select>
+                </div>
+                <div class="form-group" x-show="modelsOf(newFilter.integration).length">
+                    <label for="filterModel" x-text="t('settings.filter_model')">Model</label>
+                    <select id="filterModel" x-model="newFilter.model">
+                        <option value="" x-text="t('settings.filter_any_model')">Any model</option>
+                        <template x-for="model in modelsOf(newFilter.integration)" :key="model">
+                            <option :value="model" x-text="model"></option>
+                        </template>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-secondary" @click="filterFor = null">
+                        <span x-text="t('settings.cancel')">Cancel</span>
+                    </button>
+                    <button class="btn-primary" @click="addFilter()" :disabled="!newFilter.integration">
+                        <span x-text="t('settings.filter_add')">Add filter</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Loading Overlay -->
         <div class="modal-overlay" x-show="loading" x-cloak>
             <div style="text-align: center; color: white;">
@@ -1205,6 +1301,9 @@
                 displayCase: 'first_word',
                 editingKey: null,
                 editValue: '',
+                filterFor: null,
+                newFilter: {integration: '', model: ''},
+                availableFilters: [],
                 showAddModal: false,
                 newMapping: { key: '', translation: '' },
                 loading: false,
@@ -1780,6 +1879,55 @@
                         console.error('Error loading rules:', error);
                     } finally {
                         this.loading = false;
+                    }
+                },
+
+                modelsOf(integration) {
+                    const row = this.availableFilters.find(each => each.integration === integration);
+                    return (row && row.models) || [];
+                },
+
+                async openAddFilter(row) {
+                    this.filterFor = row;
+                    this.newFilter = {integration: '', model: ''};
+                    if (this.availableFilters.length) return;
+                    try {
+                        const response = await fetch('api/naming/filters');
+                        this.availableFilters = (await response.json()).integrations || [];
+                    } catch (error) {
+                        console.error('Could not load the filters on offer:', error);
+                    }
+                },
+
+                async addFilter() {
+                    const one = {integration: this.newFilter.integration};
+                    if (this.newFilter.model) one.model = this.newFilter.model;
+                    await this.changeFilter(this.filterFor, one, 'POST');
+                    this.filterFor = null;
+                },
+
+                async removeFilter(row, scope) {
+                    await this.changeFilter(row, scope, 'DELETE');
+                },
+
+                // Both directions answer with the rule as it now stands, or say
+                // it is gone because its last place went with the filter.
+                async changeFilter(row, one, method) {
+                    try {
+                        const response = await fetch('api/naming/rules/' + encodeURIComponent(row.id) + '/filters', {
+                            method,
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(one)
+                        });
+                        const answer = await response.json();
+                        if (!response.ok) {
+                            this.namingMessage = answer.error || '';
+                            this.namingError = true;
+                            return;
+                        }
+                        await this.loadMappings();
+                    } catch (error) {
+                        console.error('Could not change where the rule applies:', error);
                     }
                 },
 

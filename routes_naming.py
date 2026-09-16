@@ -623,6 +623,77 @@ def naming_rules_unused():
     return jsonify({"removed": removed})
 
 
+def _filter_from(data: dict) -> dict:
+    """The one filter a request is about, sanitised."""
+    return {
+        key: sanitize_string(data.get(key) or "", max_length=128)
+        for key in ("registry_id", "integration", "model")
+        if data.get(key)
+    }
+
+
+@naming.route("/api/naming/rules/<rule_id>/filters", methods=["POST", "DELETE"])
+def naming_rule_filters(rule_id):
+    """Add or remove one of the places a rule applies.
+
+    A rule reaches a list of filters, so widening or narrowing it is adding or
+    removing one of them - not editing a single scope, which could only ever be
+    exchanged.
+    """
+    rules = renamer_state["naming_rules"]
+    rule_id = sanitize_string(rule_id, max_length=32)
+    rule = rules.get(rule_id)
+    if rule is None:
+        return jsonify({"error": "unknown rule"}), 404
+    data = request.json if isinstance(request.json, dict) else {}
+    one = _filter_from(data)
+    if not one:
+        return jsonify({"error": "a filter names an entity, an integration or a model"}), 400
+    try:
+        if request.method == "DELETE":
+            rule = rules.remove_filter(rule_id, one)
+        else:
+            rule = rules.add_filter(
+                rule["match"]["kind"],
+                rule["match"]["value"],
+                rules.language,
+                rule["targets"].get(rules.language) or "",
+                one,
+            )
+    except NamingRuleError as error:
+        return jsonify({"error": str(error)}), 400
+    renamer_state["type_mappings"]._refresh_user_view()
+    if rule.get("deleted"):
+        # Its last place went with it; a rule left without one would apply to
+        # everything of its type, which removing a place never means.
+        return jsonify({"deleted": True, "rule_id": rule_id})
+    affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
+    return jsonify({"rule": _rule_payload(rule, affected, _entity_ids_by_registry_id())})
+
+
+@naming.route("/api/naming/filters", methods=["GET"])
+def naming_filters_available():
+    """The integrations and models this home actually has, to pick a filter from."""
+    restructurer = renamer_state.get("restructurer")
+    entities = (restructurer.entities if restructurer else {}) or {}
+    integrations: dict = {}
+    for entity in entities.values():
+        integration = entity.get("platform")
+        if not integration:
+            continue
+        seen = integrations.setdefault(integration, set())
+        model = entity_model(restructurer, entity)
+        if model:
+            seen.add(model)
+    return jsonify(
+        {
+            "integrations": [
+                {"integration": name, "models": sorted(models)} for name, models in sorted(integrations.items())
+            ]
+        }
+    )
+
+
 @naming.route("/api/naming/rules/<rule_id>", methods=["PUT", "DELETE"])
 def naming_rule_item(rule_id):
     rules = renamer_state["naming_rules"]
@@ -634,13 +705,9 @@ def naming_rule_item(rule_id):
         return jsonify({"success": True})
     data = request.json if isinstance(request.json, dict) else {}
     try:
-        integration = ...
-        if "integration" in data:
-            integration = sanitize_string(data.get("integration") or "", max_length=64) or None
-        model = ...
-        if "model" in data:
-            model = sanitize_string(data.get("model") or "", max_length=128) or None
-        rule = rules.update(rule_id, targets=data.get("targets"), integration=integration, model=model)
+        # Where a rule applies is added and removed one filter at a time; a
+        # single scope here would have to throw the rest of the list away.
+        rule = rules.update(rule_id, targets=data.get("targets"))
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()

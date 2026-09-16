@@ -456,3 +456,73 @@ def test_a_rule_for_one_entity_counts_as_reaching_it(client):
     assert found["affected"] == 1
     assert found["entities"] == [{"registry_id": "reg-a", "entity_id": "number.a_effect_speed"}]
     assert not [rule for rule in unused if rule["id"] == mine["id"]]
+
+
+def test_a_filter_can_be_added_to_a_rule(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+
+    response = client.post(f"/api/naming/rules/{rule['id']}/filters", json={"integration": "matter"})
+
+    assert response.status_code == 200
+    assert response.get_json()["rule"]["filters"] == [{"registry_id": "reg-a"}, {"integration": "matter"}]
+
+
+def test_a_filter_can_be_removed_from_a_rule(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+    rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-b"})
+
+    response = client.delete(f"/api/naming/rules/{rule['id']}/filters", json={"registry_id": "reg-a"})
+
+    assert response.status_code == 200
+    assert response.get_json()["rule"]["filters"] == [{"registry_id": "reg-b"}]
+
+
+def test_removing_the_last_filter_removes_the_rule(client):
+    """A rule left without one would apply to every entity of its type."""
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+
+    response = client.delete(f"/api/naming/rules/{rule['id']}/filters", json={"registry_id": "reg-a"})
+
+    assert response.status_code == 200
+    assert response.get_json() == {"deleted": True, "rule_id": rule["id"]}
+    assert rules.get(rule["id"]) is None
+
+
+def test_a_filter_the_rule_does_not_have_is_refused(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+
+    response = client.delete(f"/api/naming/rules/{rule['id']}/filters", json={"registry_id": "reg-b"})
+
+    assert response.status_code == 400
+    assert rules.get(rule["id"])["filters"] == [{"registry_id": "reg-a"}]
+
+
+def test_a_request_without_a_filter_is_refused(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+
+    assert client.post(f"/api/naming/rules/{rule['id']}/filters", json={}).status_code == 400
+
+
+def test_the_filters_on_offer_are_the_ones_this_home_has(client):
+    response = client.get("/api/naming/filters")
+
+    assert response.status_code == 200
+    assert response.get_json()["integrations"] == [{"integration": "mqtt", "models": []}]
+
+
+def test_a_rules_wording_can_be_changed_without_touching_where_it_applies(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+    rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-b"})
+
+    response = client.put(f"/api/naming/rules/{rule['id']}", json={"targets": {"de": "Geschwindigkeit"}})
+
+    assert response.status_code == 200
+    changed = response.get_json()["rule"]
+    assert changed["targets"]["de"] == "Geschwindigkeit"
+    assert changed["filters"] == [{"registry_id": "reg-a"}, {"registry_id": "reg-b"}]

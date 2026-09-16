@@ -181,11 +181,15 @@ def test_a_rule_over_several_integrations_has_no_single_one(rules):
     assert rules.sole_integration(rule) == "matter"
 
 
-def test_the_older_way_of_narrowing_still_works(rules):
-    """Callers that set one integration keep working; it is one filter now."""
+def test_the_whole_list_of_places_can_be_replaced_at_once(rules):
+    """One place at a time is add_filter; this is the only other honest change.
+
+    There is deliberately no way to set a single scope any more: on a rule
+    reaching three places that could only mean throwing two away.
+    """
     rules.upsert("name", "brightness", None, "de", "Helligkeit")
     rule = rules.rules[0]
 
-    updated = rules.update(rule["id"], integration="mqtt")
+    updated = rules.update(rule["id"], filters=[{"integration": "mqtt"}, {"integration": "matter"}])
 
-    assert updated["filters"] == [{"integration": "mqtt"}]
+    assert updated["filters"] == [{"integration": "matter"}, {"integration": "mqtt"}]
