@@ -411,3 +411,21 @@ def test_an_exception_is_saved_before_the_registry_is_loaded(client, monkeypatch
     stored = web_ui.renamer_state["naming_overrides"].get_entity_override("reg-unknown")
     assert stored["name"] == "Taste 1"
     assert stored["source"] == "user"
+
+
+def test_a_rule_for_one_entity_counts_as_reaching_it(client):
+    """Otherwise it looks like a rule that changes nothing and gets swept away.
+
+    It is found by its entity rather than by what the integration supplies, so
+    the grouping that counts every other rule never reaches it.
+    """
+    rules = web_ui.renamer_state["naming_rules"]
+    mine = rules.upsert_for_entity("reg-a", "effect_speed", "de", "Nur hier")
+
+    listed = client.get("/api/naming/rules").get_json()["rules"]
+    found = next(rule for rule in listed if rule["id"] == mine["id"])
+    unused = client.get("/api/naming/rules/unused").get_json()["rules"]
+
+    assert found["affected"] == 1
+    assert found["entities"] == [{"registry_id": "reg-a", "entity_id": "number.a_effect_speed"}]
+    assert not [rule for rule in unused if rule["id"] == mine["id"]]
