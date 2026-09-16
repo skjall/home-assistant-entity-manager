@@ -599,6 +599,29 @@ class EntityRestructurer:
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
 
+    @staticmethod
+    def _carries_prefix(value: str, prefixes: Tuple[str, ...]) -> bool:
+        """Whether an area or device name is still sitting in this name."""
+        written = canon(value)
+        return any(canon(prefix) and canon(prefix) in written for prefix in prefixes)
+
+    @staticmethod
+    def _says_more(standing: str, supplied: str) -> bool:
+        """Whether a name carries everything another one does, and something else.
+
+        Word for word, so a rewording is not mistaken for an addition: only a
+        name that keeps every word and adds one counts. A bare number does not
+        count as a word - "Temperaturzone 2" numbers what it cannot name, and
+        "Temperaturzone Gefrierzone" says the same thing better.
+        """
+
+        def words(text: str) -> set:
+            parts = {canon(part) for part in re.split(r"[\s_\-]+", text or "") if part}
+            return {part for part in parts if part and not part.isdigit()}
+
+        here, there = words(standing), words(supplied)
+        return bool(there) and there < here
+
     def _names_the_class(self, supplied: str, entity_id: str, device_class: str, target: str = "") -> bool:
         """Whether a supplied name is about the device class at all.
 
@@ -897,6 +920,20 @@ class EntityRestructurer:
         name = next((candidate for candidate in native if candidate), None)
         if name:
             name = self._without_device_prefix(name, prefixes) or None
+        # A name already on the entity that says everything the supplied one
+        # says and more is the better answer, whoever wrote it. Miele calls two
+        # fridge sensors "Temperatur" and "Temperaturzone 2"; the names on them
+        # say "Temperatur Kuehlzone" and "Temperaturzone Gefrierzone", and only
+        # those tell the two apart. Proposing the supplied name would throw the
+        # zone away and leave a bare counter behind.
+        if name:
+            standing = self._strip_applied_entity_name(registry.get("name") or "", prefixes, context)
+            # Only where the area and device were really taken off: unwinding
+            # answers with the whole name when it does not recognise the
+            # template, and that name still carries them - taking it as the
+            # type part would render them a second time.
+            if standing and not self._carries_prefix(standing, prefixes) and self._says_more(standing, name):
+                name = standing
         # The number goes before anything decides the name, so a rule and a name
         # from Home Assistant both cover every endpoint; it comes back after.
         keep_number = ""
