@@ -117,7 +117,9 @@
     "ignore_hint": "No more proposals for this entity; the supplied name stays.",
     "ignored": "This entity is left alone",
     "renamed_to": "Renamed to “{name}”",
-    "renamed_differently": "Home Assistant stored “{name}”"
+    "renamed_differently": "Home Assistant stored “{name}”",
+    "explain_translation_key": "{integration} calls this type “{value}” ({key}) — from the integration",
+    "explain_builtin_class": "Home Assistant calls the device class {device_class} “{value}”"
   },
   "virtual_devices": {
     "automations": "Automations",

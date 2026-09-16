@@ -564,14 +564,20 @@ class EntityRestructurer:
                     )
             # Home Assistant knows its own entities in every language it speaks,
             # which is far more than this add-on could translate itself.
+            self._last_ha_source = None
             supplied = self._home_assistant_name(entity_id, registry, language, name)
             if supplied:
+                # What answered, not the name that was asked about: the lookup
+                # goes by this entity's translation key or its device class,
+                # and saying "every entity called X" would claim something
+                # about names that were never looked at.
+                source = self._last_ha_source or {"kind": "home_assistant", "value": canon(name)}
                 candidates.append(
                     {
                         "value": supplied,
                         "won_by": "rule:system",
                         "rule_id": None,
-                        "matched_on": {"kind": "home_assistant", "value": canon(name), "integration": integration},
+                        "matched_on": {**source, "integration": integration},
                     }
                 )
             detected = integration or self.type_mappings.detect_integration(entity_id)
@@ -784,7 +790,9 @@ class EntityRestructurer:
         if translation_key and not says_nothing:
             by_key = self.ha_translations.translation_key_name(platform, domain, translation_key, language)
             if by_key:
+                self._last_ha_source = {"kind": "translation_key", "value": translation_key}
                 return by_key
+        self._last_ha_source = {"kind": "device_class", "value": device_class or ""}
         if not by_class or not supplied:
             return by_class
         english = self.ha_translations.device_class_name(domain, device_class, "en") or ""

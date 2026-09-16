@@ -117,7 +117,9 @@
     "ignore_hint": "Plus aucune proposition pour cette entité ; le nom fourni reste.",
     "ignored": "Cette entité est laissée telle quelle",
     "renamed_to": "Renommé en « {name} »",
-    "renamed_differently": "Home Assistant a enregistré « {name} »"
+    "renamed_differently": "Home Assistant a enregistré « {name} »",
+    "explain_translation_key": "{integration} nomme ce type « {value} » ({key}) — depuis l'intégration",
+    "explain_builtin_class": "Home Assistant nomme la classe d'appareil {device_class} « {value} »"
   },
   "virtual_devices": {
     "automations": "Automatisations",

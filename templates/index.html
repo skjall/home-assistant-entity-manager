@@ -4446,6 +4446,16 @@
                             }
                             return this.t('entity.explain_rule_all', {original, value});
                         case 'rule:system':
+                            // Which lookup answered, so the line does not claim
+                            // something about every entity that shares a word.
+                            if (match?.kind === 'translation_key') {
+                                return this.t('entity.explain_translation_key', {
+                                    value, key: match.value, integration: source
+                                });
+                            }
+                            if (match?.kind === 'device_class') {
+                                return this.t('entity.explain_builtin_class', {value, device_class: match.value});
+                            }
                             return this.t('entity.explain_builtin', {original, value});
                         case 'legacy_parse':
                             return this.t('entity.explain_legacy', {value});

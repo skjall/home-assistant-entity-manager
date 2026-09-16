@@ -117,7 +117,9 @@
     "ignore_hint": "Sin más propuestas para esta entidad; se mantiene el nombre suministrado.",
     "ignored": "Esta entidad se deja como está",
     "renamed_to": "Renombrado a «{name}»",
-    "renamed_differently": "Home Assistant guardó «{name}»"
+    "renamed_differently": "Home Assistant guardó «{name}»",
+    "explain_translation_key": "{integration} llama a este tipo «{value}» ({key}) — desde la integración",
+    "explain_builtin_class": "Home Assistant llama «{value}» a la clase de dispositivo {device_class}"
   },
   "virtual_devices": {
     "automations": "Automatizaciones",
