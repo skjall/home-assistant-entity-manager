@@ -502,10 +502,15 @@
     "spelling_section": "Schreibweise",
     "reach_show": "Entitäten anzeigen",
     "reach_loading": "Wird geladen …",
-    "reach_supplied": "Geliefert: {value}",
-    "reach_today": "Heute: {value}",
-    "reach_would_be": "Ergäbe: {value}",
-    "reach_by_name": "einzeln benannt"
+    "reach_by_name": "einzeln benannt",
+    "reach_col_entity": "Entität",
+    "reach_col_caught": "Trifft auf",
+    "reach_col_today": "Heute",
+    "reach_col_would_be": "Ergäbe",
+    "caught_translation_key": "Übersetzungsschlüssel",
+    "caught_name": "gelieferter Name",
+    "caught_device_class": "Geräteklasse",
+    "caught_none": "—"
   },
   "type_mappings": {
     "light": "Licht",

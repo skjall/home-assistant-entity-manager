@@ -626,31 +626,24 @@ def rule_entities(rule_id: str):
     language = request.args.get("lang") or rules.language
     found = []
     for entity_id, entity_data in restructurer.entities.items():
-        hit = (
-            rules.find(
-                "translation_key",
-                entity_data.get("translation_key") or "",
-                entity_data.get("platform"),
-                language,
-                entity_model(restructurer, entity_data),
-            )
-            or rules.find(
-                "name",
-                entity_data.get("original_name") or "",
-                entity_data.get("platform"),
-                language,
-                entity_model(restructurer, entity_data),
-            )
-            or rules.find(
-                "device_class",
-                entity_data.get("device_class") or entity_data.get("original_device_class") or "",
-                entity_data.get("platform"),
-                language,
-                entity_model(restructurer, entity_data),
-            )
+        model = entity_model(restructurer, entity_data)
+        # In the order the naming itself asks them, so what comes back is the
+        # one that really decided - showing the translation key for an entity a
+        # device-class rule caught says the wrong thing about both.
+        catches = (
+            ("translation_key", entity_data.get("translation_key") or ""),
+            ("name", entity_data.get("original_name") or ""),
+            ("device_class", entity_data.get("device_class") or entity_data.get("original_device_class") or ""),
         )
-        by_id = entity_data.get("id") and entity_data["id"] in rules._entities_of(rule)
-        if not by_id and (hit is None or hit["id"] != rule_id):
+        caught_on, caught_value = "", ""
+        for kind, value in catches:
+            hit = rules.find(kind, value, entity_data.get("platform"), language, model)
+            if hit is not None:
+                if hit["id"] == rule_id:
+                    caught_on, caught_value = kind, value
+                break
+        by_id = bool(entity_data.get("id")) and entity_data["id"] in rules._entities_of(rule)
+        if not by_id and not caught_on:
             continue
         try:
             proposed_id, proposed = restructurer.calculate_new_entity_name(entity_id)
@@ -660,7 +653,10 @@ def rule_entities(rule_id: str):
         found.append(
             {
                 "entity_id": entity_id,
+                "domain": entity_id.split(".")[0],
                 "name": entity_data.get("name") or entity_data.get("original_name") or "",
+                "caught_on": caught_on,
+                "caught_value": caught_value,
                 "supplied": entity_data.get("original_name") or "",
                 "translation_key": entity_data.get("translation_key") or "",
                 "device_class": entity_data.get("device_class") or entity_data.get("original_device_class") or "",
@@ -668,7 +664,7 @@ def rule_entities(rule_id: str):
                 "proposed": proposed,
                 "proposed_id": proposed_id,
                 # Named one by one rather than caught by what it supplies.
-                "by_name": bool(by_id),
+                "by_name": by_id,
             }
         )
     found.sort(key=lambda one: one["entity_id"])

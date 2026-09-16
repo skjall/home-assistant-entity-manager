@@ -522,10 +522,15 @@
     "spelling_section": "Ortografía",
     "reach_show": "Mostrar las entidades",
     "reach_loading": "Cargando …",
-    "reach_supplied": "Entregado: {value}",
-    "reach_today": "Hoy: {value}",
-    "reach_would_be": "Daría: {value}",
-    "reach_by_name": "nombrada una a una"
+    "reach_by_name": "nombrada una a una",
+    "reach_col_entity": "Entidad",
+    "reach_col_caught": "Coincide con",
+    "reach_col_today": "Hoy",
+    "reach_col_would_be": "Daría",
+    "caught_translation_key": "clave de traducción",
+    "caught_name": "nombre entregado",
+    "caught_device_class": "clase de dispositivo",
+    "caught_none": "—"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

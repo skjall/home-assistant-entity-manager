@@ -159,22 +159,43 @@
             flex-direction: column;
             gap: 8px;
         }
-        .reach-loading { margin: 0; color: #6b7280; font-size: 0.8rem; }
-        .reach-item {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: baseline;
-            gap: 4px 10px;
-        }
-        .reach-id { font-family: monospace; font-size: 0.8rem; color: #374151; word-break: break-all; }
-        .reach-values {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px 14px;
-            color: #6b7280;
+        .reach-note { margin: 0; color: #6b7280; font-size: 0.8rem; }
+
+        /* Wider than a phone at four columns, and scrolled rather than wrapped:
+           a name broken over three lines is what made this unreadable. */
+        .reach-scroll { overflow-x: auto; }
+        .reach-table {
+            width: 100%;
+            border-collapse: collapse;
             font-size: 0.8rem;
         }
-        .reach-by-name { color: #6b7280; font-size: 0.75rem; }
+        .reach-table th {
+            text-align: left;
+            font-weight: 600;
+            color: #6b7280;
+            padding: 0 12px 6px 0;
+            white-space: nowrap;
+        }
+        .reach-table td {
+            padding: 6px 12px 6px 0;
+            border-top: 1px solid #f3f4f6;
+            color: #374151;
+            vertical-align: top;
+        }
+        .reach-domain {
+            display: inline-block;
+            padding: 1px 6px;
+            margin-right: 6px;
+            border-radius: 4px;
+            background: #eef2ff;
+            color: #4338ca;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .reach-id { font-family: monospace; color: #374151; word-break: break-all; }
+        .reach-key { font-family: monospace; color: #374151; word-break: break-all; }
+        .reach-kind { display: block; color: #9ca3af; font-size: 0.7rem; }
+        .reach-changes { color: #047857; font-weight: 600; }
         .rule-entity { font-family: monospace; font-size: 0.85rem; color: #374151; word-break: break-all; }
 
         .rule-reach {
@@ -1411,26 +1432,44 @@
                                 <span class="rule-warning" x-show="row.isRule && row.redundant"
                                       x-text="t('settings.says_the_same')"></span>
                             </div>
-                            <!-- Which entities the count stands for, with the
-                                 three values that say whether the rule words
-                                 them right. -->
+                            <!-- Which entities the count stands for. Four values
+                                 per entity read as one run-on line, so they get
+                                 a column each. -->
                             <div class="reach-list" x-show="reachOpen === row.id">
-                                <p class="reach-loading" x-show="reachBusy" x-text="t('settings.reach_loading')"></p>
-                                <p class="reach-loading" x-show="reachError" x-text="reachError"></p>
-                                <template x-for="one in reachRows" :key="one.entity_id">
-                                    <div class="reach-item">
-                                        <code class="reach-id" x-text="one.entity_id"></code>
-                                        <div class="reach-values">
-                                            <span x-text="t('settings.reach_supplied', {
-                                                value: one.translation_key || one.supplied || one.device_class || '—'
-                                            })"></span>
-                                            <span x-text="t('settings.reach_today', {value: one.name || '—'})"></span>
-                                            <span x-text="t('settings.reach_would_be', {value: one.proposed || '—'})"></span>
-                                        </div>
-                                        <span class="reach-by-name" x-show="one.by_name"
-                                              x-text="t('settings.reach_by_name')"></span>
-                                    </div>
-                                </template>
+                                <p class="reach-note" x-show="reachBusy" x-text="t('settings.reach_loading')"></p>
+                                <p class="reach-note" x-show="reachError" x-text="reachError"></p>
+                                <div class="reach-scroll" x-show="!reachBusy && reachRows.length">
+                                    <table class="reach-table">
+                                        <thead>
+                                            <tr>
+                                                <th x-text="t('settings.reach_col_entity')"></th>
+                                                <th x-text="t('settings.reach_col_caught')"></th>
+                                                <th x-text="t('settings.reach_col_today')"></th>
+                                                <th x-text="t('settings.reach_col_would_be')"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <template x-for="one in reachRows" :key="one.entity_id">
+                                                <tr>
+                                                    <td>
+                                                        <span class="reach-domain" x-text="one.domain"></span>
+                                                        <code class="reach-id" x-text="one.entity_id.split('.').slice(1).join('.')"></code>
+                                                    </td>
+                                                    <td>
+                                                        <code class="reach-key" x-text="one.caught_value || '—'"></code>
+                                                        <span class="reach-kind"
+                                                              x-text="one.by_name
+                                                                      ? t('settings.reach_by_name')
+                                                                      : t('settings.caught_' + (one.caught_on || 'none'))"></span>
+                                                    </td>
+                                                    <td x-text="one.name || '—'"></td>
+                                                    <td :class="one.proposed && one.proposed !== one.name ? 'reach-changes' : ''"
+                                                        x-text="one.proposed || '—'"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                         <div class="rule-actions">

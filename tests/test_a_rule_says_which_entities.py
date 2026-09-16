@@ -94,6 +94,34 @@ def test_each_one_says_what_is_supplied_what_it_is_and_what_it_would_be(client):
     assert one["platform"] == "unifi"
 
 
+def test_it_says_what_the_rule_caught_this_entity_on(client):
+    """A device-class rule showing a translation key says the wrong thing twice.
+
+    The printer's firmware sensor carries the key "firmware_update" and the
+    class "update". A rule on the class caught it, and naming the key would
+    send the reader looking for a rule that does not exist.
+    """
+    api, rules = client
+    restructurer = web_ui.renamer_state["restructurer"]
+    restructurer.entities["update.switch_firmware"]["translation_key"] = "firmware_update"
+    restructurer.entities["update.switch_firmware"]["device_class"] = "update"
+    rule = rules.upsert("device_class", "update", None, "de", "Firmware")
+
+    one = api.get("/api/naming/rules/" + rule["id"] + "/entities").get_json()["entities"][0]
+
+    assert one["caught_on"] == "device_class"
+    assert one["caught_value"] == "update"
+
+
+def test_every_entity_says_which_domain_it_is_in(client):
+    api, rules = client
+    rule = rules.upsert("name", "firmware", None, "de", "Aktualisierung")
+
+    one = api.get("/api/naming/rules/" + rule["id"] + "/entities").get_json()["entities"][0]
+
+    assert one["domain"] == "update"
+
+
 def test_a_rule_for_another_word_does_not_claim_them(client):
     """The case that started this: two update sensors, two words, two rules."""
     api, rules = client

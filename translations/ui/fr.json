@@ -522,10 +522,15 @@
     "spelling_section": "Orthographe",
     "reach_show": "Afficher les entités",
     "reach_loading": "Chargement …",
-    "reach_supplied": "Fourni : {value}",
-    "reach_today": "Aujourd'hui : {value}",
-    "reach_would_be": "Donnerait : {value}",
-    "reach_by_name": "nommée individuellement"
+    "reach_by_name": "nommée individuellement",
+    "reach_col_entity": "Entité",
+    "reach_col_caught": "Correspond à",
+    "reach_col_today": "Aujourd'hui",
+    "reach_col_would_be": "Donnerait",
+    "caught_translation_key": "clé de traduction",
+    "caught_name": "nom fourni",
+    "caught_device_class": "classe d'appareil",
+    "caught_none": "—"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

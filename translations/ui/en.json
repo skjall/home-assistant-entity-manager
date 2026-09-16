@@ -502,10 +502,15 @@
     "spelling_section": "Spelling",
     "reach_show": "Show the entities",
     "reach_loading": "Loading …",
-    "reach_supplied": "Supplied: {value}",
-    "reach_today": "Today: {value}",
-    "reach_would_be": "Would be: {value}",
-    "reach_by_name": "named one by one"
+    "reach_by_name": "named one by one",
+    "reach_col_entity": "Entity",
+    "reach_col_caught": "Caught on",
+    "reach_col_today": "Today",
+    "reach_col_would_be": "Would be",
+    "caught_translation_key": "translation key",
+    "caught_name": "supplied name",
+    "caught_device_class": "device class",
+    "caught_none": "—"
   },
   "type_mappings": {
     "light": "Light",
