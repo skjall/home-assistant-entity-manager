@@ -13,6 +13,7 @@ import aiohttp
 from dotenv import load_dotenv
 
 from entity_ref_utils import replace_entity_in_obj
+from helper_options import HelperOptions
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +29,10 @@ class DependencyUpdater:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
         }
+        # Helpers built in the interface keep their entity ids in free text,
+        # which no rename reaches on its own. Shared across one job so the
+        # options are read once, not once per entity.
+        self.helpers = HelperOptions(self.base_url, self.token)
 
     async def get_states(self) -> List[Dict]:
         """Hole alle States"""
@@ -211,6 +216,7 @@ class DependencyUpdater:
             "scenes": {"success": [], "failed": []},
             "scripts": {"success": [], "failed": []},
             "automations": {"success": [], "failed": []},
+            "helpers": {"success": [], "failed": []},
             "total_success": 0,
             "total_failed": 0,
         }
@@ -298,6 +304,16 @@ class DependencyUpdater:
                     logger.debug(f"Could not fetch config for automation {automation_entity_id}")
             else:
                 logger.debug(f"Automation {automation_entity_id} has no numeric ID")
+
+        # Helpers built in the interface. Their templates name entities in
+        # prose, so Home Assistant carries nothing over for them.
+        try:
+            helpers = await self.helpers.rename(old_entity_id, new_entity_id)
+            results["helpers"] = helpers
+            results["total_success"] += len(helpers["success"])
+            results["total_failed"] += len(helpers["failed"])
+        except Exception as error:  # noqa: BLE001 - a rename must not fail over a helper
+            logger.error("Could not carry the rename into the helpers: %s", error)
 
         return results
 

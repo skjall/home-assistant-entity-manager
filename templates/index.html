@@ -3810,7 +3810,8 @@
                     const icons = {
                         'automation': 'ri-robot-line',
                         'scene': 'ri-palette-line',
-                        'script': 'ri-terminal-box-line'
+                        'script': 'ri-terminal-box-line',
+                        'helper': 'ri-tools-line'
                     };
                     return icons[configType] || 'ri-question-line';
                 },
@@ -3827,6 +3828,10 @@
                         return `${baseUrl}/config/scene/edit/${id}`;
                     } else if (ref.config_type === 'script') {
                         return `${baseUrl}/config/script/edit/${ref.config_id.replace('script.', '')}`;
+                    } else if (ref.config_type === 'helper') {
+                        // A helper is a config entry, and Home Assistant opens
+                        // those from its helper list rather than by their id.
+                        return `${baseUrl}/config/helpers`;
                     }
                     return '#';
                 },
