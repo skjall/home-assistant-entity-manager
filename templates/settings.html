@@ -422,12 +422,17 @@
         .modal-overlay {
             position: fixed;
             inset: 0;
+            padding: 24px 16px;
             background: rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow-y: auto;
+            overscroll-behavior: contain;
             z-index: 100;
         }
+
+        body.modal-open { overflow: hidden; }
 
         .modal {
             background: white;
@@ -1007,7 +1012,8 @@
     </style>
 </head>
 <body>
-    <div x-data="settingsManager()" x-init="init()" class="settings-container">
+    <div x-data="settingsManager()" x-init="init()" class="settings-container"
+         x-effect="document.body.classList.toggle('modal-open', modalOpen())">
         <!-- Header -->
         <div class="settings-header">
             <div>
@@ -2688,6 +2694,12 @@
                 },
 
                 openFilters() { this.filterModal = true; },
+
+                // Any dialog covering the page. Kept in one place so a new one
+                // only has to be named here to hold the page still as well.
+                modalOpen() {
+                    return !!(this.filterModal || this.filterFor || this.showAddModal || this.loading);
+                },
 
                 isPicked(group, value) { return this.picked[group].includes(value); },
 
