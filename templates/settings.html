@@ -50,6 +50,7 @@
         .section-hint { color: #6b7280; font-size: 0.85rem; padding: 0 20px 12px; }
         .row-muted td { color: #9ca3af; }
         .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9999px; background: #eef2ff; color: #4f46e5; font-size: 0.7rem; }
+        .kind-badge.muted { background: #f3f4f6; color: #6b7280; }
         .conflict-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
         .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid #d1d5db; background: white; cursor: pointer; font-size: 0.85rem; }
         .chip-active { background: #2563eb; color: white; border-color: #2563eb; }
@@ -144,18 +145,6 @@
 
         .user-override {
             color: #059669;
-            font-weight: 500;
-        }
-
-        .user-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 2px 8px;
-            background: #d1fae5;
-            color: #059669;
-            border-radius: 12px;
-            font-size: 0.75rem;
             font-weight: 500;
         }
 
@@ -814,7 +803,7 @@
                         <th style="width: 26%" x-text="t('settings.th_my_name')">My name</th>
                         <th style="width: 18%" x-text="t('settings.th_system_default')">Built-in</th>
                         <th style="width: 10%" x-text="t('settings.th_affected')">Affects</th>
-                        <th style="width: 10%" x-text="t('settings.th_source')">Source</th>
+                        <th style="width: 10%" x-text="t('settings.th_kind')">Kind</th>
                         <th style="width: 10%" x-text="t('settings.th_actions')">Actions</th>
                     </tr>
                 </thead>
@@ -823,8 +812,11 @@
                         <tr :class="(row.isRule && !row.affected ? 'row-muted ' : '') + (row.id === highlightRuleId ? 'row-highlight' : '')">
                             <td>
                                 <span class="type-key" x-text="row.key"></span>
-                                <span x-show="row.integration" class="kind-badge" x-text="row.integration"></span>
-                                <span x-show="row.model" class="kind-badge" :title="row.model" x-text="row.model"></span>
+                                <!-- One badge per filter: a rule may reach several
+                                     integrations, models or single entities at once. -->
+                                <template x-for="scope in row.filters" :key="filterLabel(scope)">
+                                    <span class="kind-badge" :title="filterLabel(scope)" x-text="filterLabel(scope)"></span>
+                                </template>
                             </td>
                             <td>
                                 <template x-if="editingKey !== row.id">
@@ -849,10 +841,11 @@
                                 </span>
                             </td>
                             <td>
-                                <!-- Typed, learned or carried over: every rule is the user's. -->
-                                <span x-show="row.isRule" class="user-badge">
-                                    <i class="ri-user-line"></i> <span x-text="t('settings.source_user')"></span>
-                                </span>
+                                <!-- What a rule matches on decides which of two rules
+                                     answers for one entity, so the table says it.
+                                     Where the name came from does not: every rule is
+                                     the user's, typed, learned or carried over. -->
+                                <span x-show="row.isRule" class="kind-badge" x-text="t('settings.kind_' + row.kind)"></span>
                                 <span x-show="!row.isRule" class="system-badge">
                                     <i class="ri-settings-3-line"></i> <span x-text="t('settings.source_system')">Built-in</span>
                                 </span>
@@ -902,14 +895,14 @@
             </div>
             <p class="section-hint" x-text="t('settings.exceptions_hint')"></p>
 
-            <table class="mapping-table" x-show="exceptions.length > 0">
+            <table class="mappings-table" x-show="exceptions.length > 0">
                 <thead>
                     <tr>
-                        <th x-text="t('settings.exceptions_entity')">Entity</th>
-                        <th x-text="t('settings.exceptions_name')">Name</th>
-                        <th x-text="t('settings.exceptions_source')">From</th>
-                        <th x-text="t('settings.exceptions_without')">Without it</th>
-                        <th></th>
+                        <th style="width: 34%" x-text="t('settings.exceptions_entity')">Entity</th>
+                        <th style="width: 22%" x-text="t('settings.exceptions_name')">Name</th>
+                        <th style="width: 12%" x-text="t('settings.exceptions_source')">From</th>
+                        <th style="width: 22%" x-text="t('settings.exceptions_without')">Without it</th>
+                        <th style="width: 10%" x-text="t('settings.th_actions')">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -917,7 +910,7 @@
                         <tr>
                             <td>
                                 <code class="type-key" x-text="row.entity_id || row.registry_id"></code>
-                                <span x-show="row.orphan" class="badge badge-gray"
+                                <span x-show="row.orphan" class="kind-badge muted"
                                       x-text="t('settings.exceptions_orphan')">gone</span>
                             </td>
                             <td>
@@ -928,7 +921,7 @@
                             <td x-text="row.source === 'ha_ui' ? t('settings.exceptions_from_ha') : t('settings.exceptions_from_here')"></td>
                             <td>
                                 <span x-text="row.would_be"></span>
-                                <span x-show="row.redundant" class="badge badge-gray"
+                                <span x-show="row.redundant" class="kind-badge muted"
                                       x-text="t('settings.exceptions_redundant')">same</span>
                             </td>
                             <td>
@@ -1802,6 +1795,15 @@
                     }
                 },
 
+                // How far one filter reaches, in one line. A filter names an
+                // integration, an integration and a model, or a single entity;
+                // a rule without any reaches everything of its type.
+                filterLabel(scope) {
+                    if (!scope) return '';
+                    if (scope.registry_id) return this.t('settings.filter_entity');
+                    return [scope.integration, scope.model].filter(Boolean).join(' \u00b7 ');
+                },
+
                 // One row per rule; built-in defaults without a rule show as their own rows.
                 ruleRows() {
                     const systemByKey = {};
@@ -1811,20 +1813,18 @@
                         isRule: true,
                         key: rule.match.value,
                         kind: rule.match.kind,
-                        integration: rule.match.integration,
-                        model: rule.match.model || null,
+                        filters: rule.filters || [],
                         value: rule.targets[this.language] || Object.values(rule.targets)[0] || '',
                         system_default: systemByKey[rule.match.value] || null,
                         affected: rule.affected === null || rule.affected === undefined ? null : rule.affected,
                         redundant: !!rule.redundant,
-                        source: rule.source || 'user',
                         rule
                     }));
                     const covered = new Set(rows.map(r => r.key));
                     for (const entry of this.systemRules) {
                         if (covered.has(entry.key)) continue;
                         rows.push({ id: 'sys:' + entry.key, isRule: false, key: entry.key, kind: 'name',
-                                    integration: null, model: null, value: '', system_default: entry.value, affected: 0, source: 'system' });
+                                    filters: [], value: '', system_default: entry.value, affected: 0 });
                     }
                     return rows;
                 },
