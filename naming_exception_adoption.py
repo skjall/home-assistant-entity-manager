@@ -52,7 +52,7 @@ def _entities_by_registry_id(restructurer) -> Dict[str, Dict[str, Any]]:
     }
 
 
-def _supplied_key(entry: Dict[str, Any], fallback: str) -> str:
+def supplied_key(entry: Dict[str, Any], fallback: str) -> str:
     """What this entity is about, for a reader of the rule list.
 
     A rule written for one entity is found by that entity, never by this value,
@@ -94,11 +94,18 @@ def forget_missing(overrides, rules, restructurer) -> Dict[str, int]:
 
 
 def adopt_exceptions(overrides, rules, restructurer) -> Optional[Dict[str, Any]]:
-    """Turn every exception that names an entity into a rule for that entity.
+    """Turn every exception that names an entity into a filter on a rule.
 
     Once, and recorded in the rules file so a later start leaves alone what the
-    user has since changed. An entity the user asked to keep its own name stays
-    in the override store: that is not a name, it is the absence of one.
+    user has since changed. Exceptions saying the same thing land on the same
+    rule - a rule applies to a list of filters, and two entities wanting one
+    wording are two filters, not two rules. An entity the user asked to keep
+    its own name stays in the override store: that is not a name, it is the
+    absence of one.
+
+    Everything is written at the end rather than per entity: a hundred writes
+    into one file, while the rest of the add-on is reading it, is a hundred
+    chances to lose one.
     """
     if rules.data.get("exceptions_adopted"):
         return None
@@ -109,7 +116,7 @@ def adopt_exceptions(overrides, rules, restructurer) -> Optional[Dict[str, Any]]
 
     backup = _back_up(overrides, rules)
     language = rules.language
-    adopted, kept, failed = [], [], []
+    adopted, kept, failed, taken = [], [], [], []
     for registry_id, entry in list(overrides.get_all_entity_overrides().items()):
         name = (entry or {}).get("name") or ""
         if (entry or {}).get("keep_original") or not name:
@@ -121,27 +128,40 @@ def adopt_exceptions(overrides, rules, restructurer) -> Optional[Dict[str, Any]]
             # an entity nobody can point at.
             continue
         try:
-            rule = rules.upsert_for_entity(
-                registry_id,
-                _supplied_key(found["entry"], name),
+            rule = rules.add_filter_quietly(
+                "name",
+                supplied_key(found["entry"], name),
                 language,
                 name,
+                {"registry_id": registry_id},
                 learned_from=found["entity_id"],
             )
         except NamingRuleError as error:
             failed.append({"registry_id": registry_id, "error": str(error)})
             continue
-        overrides.remove_entity_override(registry_id)
+        taken.append(registry_id)
         adopted.append({"registry_id": registry_id, "entity_id": found["entity_id"], "rule_id": rule["id"]})
 
+    rules.save()
+    for registry_id in taken:
+        overrides.remove_entity_override(registry_id)
+
+    folded = rules.merge_duplicates()
     report = {
         "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "backup": backup,
         "adopted": len(adopted),
         "kept": len(kept),
+        "folded": len(folded),
         "failed": failed,
     }
     rules.data["exceptions_adopted"] = report
     rules.save()
-    logger.info("Adopted %d exceptions as rules, left %d alone, %d failed", len(adopted), len(kept), len(failed))
+    logger.info(
+        "Adopted %d exceptions onto %d rules, left %d alone, %d failed",
+        len(adopted),
+        len({row["rule_id"] for row in adopted}),
+        len(kept),
+        len(failed),
+    )
     return report

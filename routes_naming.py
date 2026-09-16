@@ -664,16 +664,23 @@ def naming_learn():
         return jsonify({"error": "unknown entity"}), 404
     if not value:
         return jsonify({"error": "value required"}), 400
-    integration = (entity.get("platform") or None) if scope in ("integration", "model") else None
-    model = entity_model(restructurer, entity) or None if scope == "model" else None
     kind, key = _rule_key_for(entity)
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
+    # Where the correction should apply, as the one filter it is. "Everywhere"
+    # is no filter at all.
+    one = None
+    if scope == "entity":
+        one = {"registry_id": entity.get("id") or ""}
+    elif scope in ("integration", "model"):
+        one = {"integration": entity.get("platform") or ""}
+        if scope == "model":
+            one["model"] = entity_model(restructurer, entity) or ""
     rules = renamer_state["naming_rules"]
     try:
-        rule = rules.upsert(
-            kind, key, integration, rules.language, value, source="learned", learned_from=entity_id, model=model
-        )
+        # The rule that already says this gains the place; a second rule saying
+        # the same thing somewhere else would have to be kept in step by hand.
+        rule = rules.add_filter(kind, key, rules.language, value, one, source="learned", learned_from=entity_id)
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()

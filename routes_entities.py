@@ -20,6 +20,8 @@ from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 from ha_websocket import HomeAssistantWebSocket
 from jobs import new_job
+from naming_exception_adoption import supplied_key
+from naming_rules import NamingRuleError
 import naming_service
 from routes_naming import ensure_registry_loaded
 from sanitize import (
@@ -65,18 +67,37 @@ async def _set_entity_override_async():
         # to be there before the override can be turned into a name.
         await ensure_registry_loaded()
 
-        # Speichere Override
-        if override_name:
-            renamer_state["naming_overrides"].set_entity_override(registry_id, override_name)
-        else:
-            renamer_state["naming_overrides"].remove_entity_override(registry_id)
-
         # Finde die Entity ID basierend auf der Registry ID
         entity_id = None
         for eid, entity in renamer_state["restructurer"].entities.items():
             if entity.get("id") == registry_id:
                 entity_id = eid
                 break
+
+        # A name for one entity is a rule that applies in one place. The rule
+        # already saying that word gains this entity as another filter rather
+        # than being written a second time beside itself.
+        rules = renamer_state["naming_rules"]
+        one = {"registry_id": registry_id}
+        if override_name:
+            entry = renamer_state["restructurer"].entities.get(entity_id or "", {})
+            try:
+                rules.add_filter(
+                    "name",
+                    supplied_key(entry, override_name),
+                    rules.language,
+                    override_name,
+                    one,
+                    learned_from=entity_id,
+                )
+            except NamingRuleError as error:
+                return jsonify({"error": str(error)}), 400
+        else:
+            existing = rules.for_entity(registry_id, rules.language)
+            if existing is not None:
+                rules.remove_filter(existing["id"], one)
+            renamer_state["naming_overrides"].remove_entity_override(registry_id)
+        renamer_state["type_mappings"]._refresh_user_view()
 
         # Calculate the new entity ID and friendly name with the override
         new_id = None

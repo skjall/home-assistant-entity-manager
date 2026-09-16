@@ -655,39 +655,152 @@ class NamingRules:
         return rule
 
     @guarded
-    def upsert_for_entity(
+    def saying(self, kind: str, value: str, language: str, target: str) -> Optional[Dict[str, Any]]:
+        """The rule that already says exactly this, whatever it applies to.
+
+        What makes a rule one rule is what it says - this type is called that
+        word - not where it applies. Where it applies is the filter list, and a
+        second place the same wording is wanted belongs in that list rather than
+        in a second rule beside it.
+        """
+        key = value if kind == "translation_key" else canon(value)
+        wanted = (target or "").strip()
+        for rule in self.rules:
+            if rule["match"]["kind"] != kind or rule["match"]["value"] != key:
+                continue
+            if (rule["targets"].get(language) or "").strip() == wanted:
+                return rule
+        return None
+
+    @guarded
+    def add_filter(
         self,
-        registry_id: str,
+        kind: str,
         value: str,
         language: str,
         target: str,
+        one: Optional[Mapping[str, str]],
+        source: str = "user",
         learned_from: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Create or update the rule that names one entity.
+        rule = self.add_filter_quietly(kind, value, language, target, one, source, learned_from)
+        self.save()
+        return rule
 
-        The entity is what such a rule is found by, so a second call for the
-        same entity changes that rule rather than adding one beside it, which
-        would leave the answer to whichever came first.
+    def add_filter_quietly(
+        self,
+        kind: str,
+        value: str,
+        language: str,
+        target: str,
+        one: Optional[Mapping[str, str]],
+        source: str = "user",
+        learned_from: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Make this wording apply in one more place.
+
+        The rule that already says it gains a filter; if none does, one is
+        written. A rule that says it and carries no filter already applies
+        everywhere, so it is answered with unchanged - narrowing it to the one
+        place just asked about would take the wording away from everywhere else.
         """
-        if not registry_id:
-            raise NamingRuleError("A rule for one entity needs its registry id")
-        rule = self._entity_index().get(registry_id)
+        if not (target or "").strip():
+            raise NamingRuleError("A rule needs a target")
+        # No filter at all is the place that is everywhere, which is how a rule
+        # widened from one entity to the whole home arrives here.
+        wanted = clean_filter(one) if one else None
+        rule = self.saying(kind, value, language, target)
         if rule is None:
             rule = self._make_rule(
-                "name",
-                value,
+                kind,
+                value if kind == "translation_key" else canon(value),
                 None,
                 {language: target},
-                source="user",
+                source=source,
                 learned_from=learned_from,
-                filters=[{"registry_id": registry_id}],
+                filters=[wanted] if wanted else [],
             )
+            self._refuse_collision(rule)
             self.rules.append(rule)
-        else:
-            if not target.strip():
-                raise NamingRuleError("A rule needs a target")
-            rule["targets"][language] = target.strip()
+        elif wanted is None:
+            if not rule["filters"]:
+                return rule
+            self._refuse_collision({**rule, "filters": []})
+            rule["filters"] = []
             rule["updated_at"] = _now()
+        elif rule.get("filters"):
+            merged = clean_filters(list(rule["filters"]) + [wanted])
+            if merged == rule["filters"]:
+                return rule
+            self._refuse_collision({**rule, "filters": merged})
+            rule["filters"] = merged
+            rule["updated_at"] = _now()
+        else:
+            # It already applies everywhere; narrowing it to the one place just
+            # asked about would take the wording away from everywhere else.
+            return rule
+        self._forget_index()
+        return rule
+
+    @guarded
+    def merge_duplicates(self) -> List[Dict[str, Any]]:
+        """Fold rules that say the same thing into one, filters and all.
+
+        Two rules saying one type is called one word are one rule that applies
+        in two places. Kept apart they have to be edited twice and can drift,
+        and a reader cannot see from either how far the wording actually
+        reaches. One that carries no filter already applies everywhere, so the
+        others add nothing and go.
+        """
+        language = self.language
+        first: Dict[tuple, Dict[str, Any]] = {}
+        merged: List[Dict[str, Any]] = []
+        dropped = set()
+        for rule in self.rules:
+            key = (rule["match"]["kind"], rule["match"]["value"], (rule["targets"].get(language) or "").strip())
+            if not key[2]:
+                continue
+            kept = first.get(key)
+            if kept is None:
+                first[key] = rule
+                continue
+            dropped.add(rule["id"])
+            if not kept.get("filters") or not rule.get("filters"):
+                # One of them reaches everything of its type; the other is
+                # already covered by it.
+                kept["filters"] = []
+            else:
+                kept["filters"] = clean_filters(list(kept["filters"]) + list(rule["filters"]))
+            kept["updated_at"] = _now()
+            if kept not in merged:
+                merged.append(kept)
+        if dropped:
+            self.data["rules"] = [rule for rule in self.rules if rule["id"] not in dropped]
+            self.save()
+            logger.info("Folded %d rules into %d that already said the same", len(dropped), len(merged))
+        return merged
+
+    @guarded
+    def remove_filter(self, rule_id: str, one: Mapping[str, str]) -> Dict[str, Any]:
+        """Stop this rule applying in one place.
+
+        Taking the last filter off would widen the rule to everything of its
+        type, which is never what removing a place means, so the rule goes
+        instead.
+        """
+        rule = self.get(rule_id)
+        if rule is None:
+            raise NamingRuleError(f"Unknown rule: {rule_id}")
+        wanted = clean_filter(one)
+        left = [each for each in (rule.get("filters") or []) if each != wanted]
+        if len(left) == len(rule.get("filters") or []):
+            raise NamingRuleError("That rule does not apply there")
+        if not left:
+            self.data["rules"] = [each for each in self.rules if each["id"] != rule_id]
+            self.save()
+            return {**rule, "deleted": True}
+        rule["filters"] = clean_filters(left)
+        rule["updated_at"] = _now()
         self.save()
         return rule
 

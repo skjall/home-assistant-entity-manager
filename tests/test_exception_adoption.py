@@ -106,7 +106,7 @@ def test_adoption_happens_once(overrides, rules, restructurer):
 
 def test_what_the_registry_no_longer_has_is_forgotten(overrides, rules, restructurer):
     overrides.set_entity_override("reg-gone", "Tür")
-    rules.upsert_for_entity("reg-gone", "tur", "de", "Tür")
+    rules.add_filter("name", "tur", "de", "Tür", {"registry_id": "reg-gone"})
 
     removed = forget_missing(overrides, rules, restructurer)
 
@@ -124,10 +124,53 @@ def test_an_unread_registry_forgets_nothing(overrides, rules, restructurer):
     assert overrides.get_entity_override("reg-1") is not None
 
 
-def test_two_rules_may_not_name_the_same_entity(rules):
-    rules.upsert_for_entity("reg-1", "firmware", "de", "Aktualisierung")
-
-    same = rules.upsert_for_entity("reg-1", "firmware", "de", "Update")
+def test_one_wording_wanted_twice_is_one_rule_with_two_filters(rules):
+    """This is what a filter list is for: a rule applies to a list of places."""
+    rules.add_filter("name", "firmware", "de", "Aktualisierung", {"registry_id": "reg-1"})
+    rules.add_filter("name", "firmware", "de", "Aktualisierung", {"registry_id": "reg-2"})
 
     assert len(rules.rules) == 1
-    assert same["targets"]["de"] == "Update"
+    assert rules.rules[0]["filters"] == [{"registry_id": "reg-1"}, {"registry_id": "reg-2"}]
+
+
+def test_a_different_wording_for_one_type_is_its_own_rule(rules):
+    rules.add_filter("name", "firmware", "de", "Aktualisierung", {"registry_id": "reg-1"})
+    rules.add_filter("name", "firmware", "de", "Update verfügbar", {"registry_id": "reg-2"})
+
+    assert len(rules.rules) == 2
+
+
+def test_a_wording_that_already_applies_everywhere_is_left_alone(rules):
+    """Narrowing it to the one place just asked about would take it from the rest."""
+    rules.upsert("name", "firmware", None, "de", "Aktualisierung")
+
+    rules.add_filter("name", "firmware", "de", "Aktualisierung", {"registry_id": "reg-1"})
+
+    assert len(rules.rules) == 1
+    assert rules.rules[0]["filters"] == []
+
+
+def test_removing_the_last_place_removes_the_rule(rules):
+    rule = rules.add_filter("name", "firmware", "de", "Aktualisierung", {"registry_id": "reg-1"})
+    rules.add_filter("name", "firmware", "de", "Aktualisierung", {"registry_id": "reg-2"})
+
+    rules.remove_filter(rule["id"], {"registry_id": "reg-1"})
+    assert rules.get(rule["id"])["filters"] == [{"registry_id": "reg-2"}]
+
+    rules.remove_filter(rule["id"], {"registry_id": "reg-2"})
+    assert rules.get(rule["id"]) is None
+
+
+def test_rules_that_say_the_same_thing_are_folded_together(rules):
+    """What the migration does to rules written before the filter list."""
+    rules.add_filter("name", "linkquality", "de", "Verbindungsqualität", {"registry_id": "reg-1"})
+    second = rules._make_rule(
+        "name", "linkquality", None, {"de": "Verbindungsqualität"}, filters=[{"registry_id": "reg-2"}]
+    )
+    rules.rules.append(second)
+
+    folded = rules.merge_duplicates()
+
+    assert len(folded) == 1
+    assert len(rules.rules) == 1
+    assert rules.rules[0]["filters"] == [{"registry_id": "reg-1"}, {"registry_id": "reg-2"}]
