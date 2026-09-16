@@ -133,9 +133,12 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         "name_comes_from": resolution.get("won_by"),
         "rule_id": resolution.get("rule_id"),
         "supplied_name": resolution.get("input"),
-        # The type part on its own, kept with the name once it is written so a
-        # later read gets it back without taking the rendered name apart.
-        "base_entity": resolution.get("value") or "",
+        # The type part as it went in, kept with the name once it is written so
+        # a later read gets it back without taking the rendered name apart.
+        # What went in, not what came out: a rule the user edits afterwards has
+        # to reach this entity again, and it only does if the note hands it the
+        # word the rule matches on.
+        "base_entity": resolution.get("input") or resolution.get("value") or "",
     }
 
 
@@ -151,7 +154,7 @@ def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
     if not resolution:
         return None
     return {
-        "base_entity": resolution.get("value") or "",
+        "base_entity": resolution.get("input") or resolution.get("value") or "",
         "won_by": resolution.get("won_by") or "",
         "rule_id": resolution.get("rule_id"),
         "template_hash": renamer_state["naming_templates"].fingerprint(),

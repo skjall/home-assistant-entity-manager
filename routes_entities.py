@@ -501,7 +501,10 @@ def _capture_device_entity_naming(
         name = restructurer.build_naming_context(entity_id, states_by_id.get(entity_id, {}))["entity"]
         resolution = restructurer.last_resolutions.get(entity_id) or {}
         captured[entity_id] = {
-            "base_entity": name,
+            # What went into the name, not what came out of it: a rule the user
+            # edits afterwards only reaches this entity again if the note hands
+            # it back the word the rule matches on.
+            "base_entity": resolution.get("input") or name,
             "won_by": resolution.get("won_by") or "",
             "rule_id": resolution.get("rule_id"),
         }
