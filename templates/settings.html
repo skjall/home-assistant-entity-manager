@@ -680,7 +680,8 @@
         }
 
         .combo-item:last-child { border-bottom: none; }
-        .combo-item:hover, .combo-item:focus { background: #eff6ff; outline: none; }
+        .combo-item:hover, .combo-item:focus, .combo-item.at { background: #eff6ff; outline: none; }
+        .combo-item.at { box-shadow: inset 2px 0 0 #3b82f6; }
         .combo-item.current { background: #dbeafe; font-weight: 600; }
         .combo-item .tally { color: #9ca3af; font-size: 0.78rem; white-space: nowrap; }
 
@@ -1629,14 +1630,21 @@
                                    :class="newFilter.integration ? 'chosen' : ''"
                                    :placeholder="t('settings.filter_search_integration')"
                                    x-model="integrationSearch"
-                                   @focus="comboOpen = 'integration'"
-                                   @input="comboOpen = 'integration'; newFilter.integration = ''; newFilter.model = ''">
+                                   @focus="comboOpen = 'integration'; comboAt = 0"
+                                   @input="comboOpen = 'integration'; comboAt = 0;
+                                           newFilter.integration = ''; newFilter.model = ''"
+                                   @keydown.arrow-down.prevent="comboOpen = 'integration';
+                                                                comboStep(1, matchingIntegrations().length)"
+                                   @keydown.arrow-up.prevent="comboStep(-1, matchingIntegrations().length)"
+                                   @keydown.enter.prevent="takeIntegration()">
                             <i class="ri-checkbox-circle-fill" x-show="newFilter.integration"></i>
                         </div>
                         <div class="combo-list" x-show="comboOpen === 'integration'" x-cloak>
-                            <template x-for="row in matchingIntegrations()" :key="row.integration">
+                            <template x-for="(row, at) in matchingIntegrations()" :key="row.integration">
                                 <button type="button" class="combo-item"
-                                        :class="row.integration === newFilter.integration ? 'current' : ''"
+                                        :class="(row.integration === newFilter.integration ? 'current ' : '')
+                                                + (at === comboAt ? 'at' : '')"
+                                        @mousemove="comboAt = at"
                                         @click="pickIntegration(row)">
                                     <span x-text="row.integration"></span>
                                     <span class="tally" x-show="(row.models || []).length"
@@ -1660,23 +1668,25 @@
                                    :class="newFilter.model ? 'chosen' : ''"
                                    :placeholder="t('settings.filter_any_model')"
                                    x-model="modelSearch"
-                                   @focus="comboOpen = 'model'"
-                                   @input="comboOpen = 'model'; newFilter.model = ''">
+                                   @focus="comboOpen = 'model'; comboAt = 0"
+                                   @input="comboOpen = 'model'; comboAt = 0; newFilter.model = ''"
+                                   @keydown.arrow-down.prevent="comboOpen = 'model';
+                                                                comboStep(1, modelOptions().length)"
+                                   @keydown.arrow-up.prevent="comboStep(-1, modelOptions().length)"
+                                   @keydown.enter.prevent="takeModel()">
                             <i class="ri-checkbox-circle-fill" x-show="newFilter.model"></i>
                         </div>
                         <div class="combo-list" x-show="comboOpen === 'model'" x-cloak>
-                            <button type="button" class="combo-item" :class="newFilter.model ? '' : 'current'"
-                                    @click="pickModel('')">
-                                <span x-text="t('settings.filter_any_model')"></span>
-                            </button>
-                            <template x-for="row in matchingModels()" :key="row.model">
+                            <template x-for="(row, at) in modelOptions()" :key="row.model || '*'">
                                 <button type="button" class="combo-item"
-                                        :class="row.model === newFilter.model ? 'current' : ''"
+                                        :class="(row.model === newFilter.model ? 'current ' : '')
+                                                + (at === comboAt ? 'at' : '')"
+                                        @mousemove="comboAt = at"
                                         @click="pickModel(row.model)">
                                     <span>
                                         <span class="combo-maker" x-show="row.manufacturer"
                                               x-text="row.manufacturer"></span>
-                                        <span x-text="row.model"></span>
+                                        <span x-text="row.model || t('settings.filter_any_model')"></span>
                                     </span>
                                     <span class="tally" x-show="row.count"
                                           x-text="t('settings.reach_entities', {count: row.count})"></span>
@@ -1735,6 +1745,7 @@
                 editValue: '',
                 filterFor: null,
                 comboOpen: '',
+                comboAt: 0,
                 integrationSearch: '',
                 modelSearch: '',
                 newFilter: {integration: '', model: ''},
@@ -2353,18 +2364,49 @@
                     if (this.comboOpen === which) this.comboOpen = '';
                 },
 
+                // Arrow keys walk the list and Enter takes what they land on, so
+                // a search that leaves one match needs no reach for the mouse.
+                comboStep(by, total) {
+                    if (!total) return;
+                    this.comboAt = (this.comboAt + by + total) % total;
+                    this.$nextTick(() => {
+                        const at = document.querySelector('.combo-list .combo-item.at');
+                        if (at) at.scrollIntoView({block: 'nearest'});
+                    });
+                },
+
+                // "Any model" is the first entry rather than a button beside the
+                // list, so stepping and counting need no special case.
+                modelOptions() {
+                    return [{model: '', manufacturer: '', count: 0}].concat(this.matchingModels());
+                },
+
+                takeIntegration() {
+                    const found = this.matchingIntegrations();
+                    const row = found[this.comboAt] || (found.length === 1 ? found[0] : null);
+                    if (row) this.pickIntegration(row);
+                },
+
+                takeModel() {
+                    const found = this.modelOptions();
+                    const row = found[this.comboAt];
+                    if (row) this.pickModel(row.model);
+                },
+
                 pickIntegration(row) {
                     this.newFilter.integration = row.integration;
                     this.integrationSearch = row.integration;
                     this.newFilter.model = '';
                     this.modelSearch = '';
                     this.comboOpen = '';
+                    this.comboAt = 0;
                 },
 
                 pickModel(model) {
                     this.newFilter.model = model;
                     this.modelSearch = model;
                     this.comboOpen = '';
+                    this.comboAt = 0;
                 },
 
                 modelsOf(integration) {
@@ -2379,6 +2421,7 @@
                     this.integrationSearch = '';
                     this.modelSearch = '';
                     this.comboOpen = '';
+                    this.comboAt = 0;
                     if (this.availableFilters.length) return;
                     try {
                         const response = await fetch('api/naming/filters');
