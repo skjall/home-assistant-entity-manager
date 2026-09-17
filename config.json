@@ -17,6 +17,13 @@
   "ingress_port": 5000,
   "panel_icon": "mdi:rename-box",
   "panel_title": "Entity Manager",
+  "map": [
+    {
+      "type": "homeassistant_config",
+      "read_only": true,
+      "path": "/config"
+    }
+  ],
   "homeassistant_api": true,
   "hassio_api": true,
   "hassio_role": "manager",

@@ -145,7 +145,11 @@
     "fix": "Fix Reference",
     "fixed_successfully": "Reference fixed successfully",
     "select_replacement": "Please select a replacement entity",
-    "open_in_ha": "Open in Home Assistant"
+    "open_in_ha": "Open in Home Assistant",
+    "by_hand_badge": "yours to edit",
+    "by_hand_title": "These I cannot change",
+    "by_hand_hint": "They sit in YAML Home Assistant only reads - packages, includes or a YAML-mode dashboard. Replace the old entity there with the one you pick below.",
+    "in_comment": "(commented out)"
   },
   "messages": {
     "loading": "Loading...",
@@ -548,6 +552,7 @@
     "step_carried": "Carried along",
     "step_not_carried": "Not carried along",
     "step_unreachable": "Needs you",
+    "step_by_hand": "In your YAML",
     "step_error": "Error",
     "follow_up": "This part is left to you",
     "follow_up_hint": "These references still name the old entity and cannot be changed from here.",

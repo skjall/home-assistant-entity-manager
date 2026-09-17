@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import aiohttp
 from dotenv import load_dotenv
 
+from config_files import shared as shared_config_files
 from helper_options import HelperOptions
 
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +34,14 @@ class BrokenReference:
     numeric_id: Optional[str] = None  # For automation/scene edit links
     area_id: Optional[str] = None  # Area assigned to the automation/scene/script
     yaml_path: Optional[str] = None  # Path in YAML, e.g. "use_blueprint -> input -> button_1 -> entity_id"
+    # Set when the reference lives in a file the configuration API will not
+    # write. Nothing here can be repaired for the user; the interface says which
+    # file and which line to edit instead.
+    file_path: Optional[str] = None  # As the user sees it, e.g. "/config/packages/water.yaml"
+    file_line: Optional[int] = None
+    line_text: Optional[str] = None
+    in_comment: bool = False
+    fixable: bool = True
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -159,6 +168,9 @@ class ReferenceChecker:
         # prose, so nothing carries a rename into them and a dead reference
         # sits there silently.
         self.helpers = HelperOptions(self.base_url, self.token)
+        # The YAML the configuration API does not hand out: packages, includes
+        # and YAML-mode dashboards. Present only when the mount is there.
+        self.config_files = shared_config_files()
         # Cache
         self._existing_entities: Optional[Set[str]] = None
         self._entity_details: Optional[Dict[str, Dict]] = None
@@ -169,6 +181,7 @@ class ReferenceChecker:
         self._broken_refs_cache = None
         self._existing_entities = None
         self._entity_details = None
+        self.config_files.forget()
         logger.info("Reference checker cache invalidated")
 
     async def get_states(self) -> List[Dict]:
@@ -502,9 +515,44 @@ class ReferenceChecker:
         except Exception as error:  # noqa: BLE001 - the other findings still stand
             logger.error("Could not scan the helpers: %s", error)
 
+        broken_refs.extend(self._broken_in_the_yaml(existing))
+
         logger.info(f"Found {len(broken_refs)} broken references")
         self._broken_refs_cache = broken_refs
         return broken_refs
+
+    def _broken_in_the_yaml(self, existing: Set[str]) -> List[BrokenReference]:
+        """Dead references in the files the configuration API will not write.
+
+        One entry per line, because the user edits the file line by line and a
+        count of occurrences would not tell them where to go.
+        """
+        if not self.config_files.available():
+            logger.info("No configuration mount, skipping the YAML kept by hand")
+            return []
+        logger.info("Scanning the YAML kept by hand...")
+        found: List[BrokenReference] = []
+        for entity_id, mentions in self.config_files.index().items():
+            if entity_id in existing or entity_id.split(".", 1)[0] not in self.VALID_DOMAINS:
+                continue
+            for one in mentions:
+                shown = self.config_files.shown_as(one.path)
+                found.append(
+                    BrokenReference(
+                        config_type="yaml",
+                        config_id=f"{shown}:{one.line}",
+                        config_name=shown.rsplit("/", 1)[-1],
+                        missing_entity_id=entity_id,
+                        context="yaml",
+                        yaml_path=shown,
+                        file_path=shown,
+                        file_line=one.line,
+                        line_text=one.text,
+                        in_comment=one.in_comment,
+                        fixable=False,
+                    )
+                )
+        return found
 
     def _levenshtein_distance(self, s1: str, s2: str) -> int:
         """Berechnet die Levenshtein-Distanz zwischen zwei Strings."""

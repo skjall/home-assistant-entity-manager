@@ -145,7 +145,11 @@
     "fix": "Corriger la référence",
     "fixed_successfully": "Référence corrigée avec succès",
     "select_replacement": "Veuillez sélectionner une entité de remplacement",
-    "open_in_ha": "Ouvrir dans Home Assistant"
+    "open_in_ha": "Ouvrir dans Home Assistant",
+    "by_hand_badge": "à toi de l'éditer",
+    "by_hand_title": "Celles-ci, je ne peux pas les changer",
+    "by_hand_hint": "Elles sont dans du YAML que Home Assistant se contente de lire - paquets, includes ou un tableau de bord en mode YAML. Remplaces-y l'ancienne entité par celle que tu choisis ci-dessous.",
+    "in_comment": "(en commentaire)"
   },
   "messages": {
     "loading": "Chargement...",
@@ -548,6 +552,7 @@
     "step_carried": "Reporté",
     "step_not_carried": "Non reporté",
     "step_unreachable": "À reprendre",
+    "step_by_hand": "Dans ton YAML",
     "step_error": "Erreur",
     "follow_up": "Cette partie vous revient",
     "follow_up_hint": "Ces références nomment toujours l'ancienne entité et ne peuvent pas être modifiées d'ici.",

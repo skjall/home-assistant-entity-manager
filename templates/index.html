@@ -2070,14 +2070,19 @@
                                     <div class="affected-configs">
                                         <template x-for="ref in group.refs" :key="ref.config_id + ref.yaml_path">
                                             <div class="affected-config-item">
-                                                <i :class="getConfigIcon(ref.config_type)" class="text-gray-400"></i>
+                                                <i :class="[getConfigIcon(ref.config_type), isByHand(ref) ? 'text-amber-500' : 'text-gray-400']"></i>
                                                 <div class="config-info">
-                                                    <span class="config-name" x-text="ref.config_name"></span>
+                                                    <span class="config-name"
+                                                          x-text="isByHand(ref) ? ref.file_path + ':' + ref.file_line : ref.config_name"></span>
                                                     <span class="yaml-path text-xs text-gray-400 ml-1"
-                                                          x-show="ref.yaml_path"
+                                                          x-show="ref.yaml_path && !isByHand(ref)"
                                                           x-text="'(' + ref.yaml_path + ')'"></span>
+                                                    <span class="text-xs text-amber-600 ml-1"
+                                                          x-show="isByHand(ref)"
+                                                          x-text="t('broken_refs.by_hand_badge')"></span>
                                                 </div>
-                                                <a :href="getHAConfigUrl(ref)" target="_blank"
+                                                <a x-show="!isByHand(ref)"
+                                                   :href="getHAConfigUrl(ref)" target="_blank"
                                                    @click.stop
                                                    class="external-link ml-auto"
                                                    :title="t('broken_refs.open_in_ha')">
@@ -2089,6 +2094,30 @@
 
                                     <!-- Expanded Panel - Suggestions -->
                                     <div class="edit-panel" x-show="expandedBrokenRef === group.missing_entity_id" x-transition @click.stop>
+                                        <!-- What the repair below will not reach: YAML Home Assistant
+                                             only reads. Said before the suggestions, because a repair
+                                             that looks complete is what leaves these behind. -->
+                                        <div x-show="byHandIn(group).length"
+                                             class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                            <div class="flex items-start gap-2">
+                                                <i class="ri-file-edit-line text-amber-600 mt-0.5"></i>
+                                                <div class="text-xs text-amber-900">
+                                                    <div class="font-semibold" x-text="t('broken_refs.by_hand_title')"></div>
+                                                    <div class="mt-1" x-text="t('broken_refs.by_hand_hint')"></div>
+                                                    <ul class="mt-2 space-y-1">
+                                                        <template x-for="ref in byHandIn(group)" :key="ref.config_id">
+                                                            <li class="font-mono">
+                                                                <span x-text="ref.file_path + ':' + ref.file_line"></span>
+                                                                <span x-show="ref.in_comment"
+                                                                      class="ml-1 not-italic text-amber-600"
+                                                                      x-text="t('broken_refs.in_comment')"></span>
+                                                                <div class="text-amber-700 truncate" x-text="ref.line_text"></div>
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <label class="text-xs text-gray-500 block mb-2" x-text="t('broken_refs.suggestions')">Suggestions</label>
                                         <div class="suggestion-list">
                                             <template x-for="sug in getSuggestionsFor(group.missing_entity_id)" :key="sug.entity_id">
@@ -3904,9 +3933,21 @@
                         'automation': 'ri-robot-line',
                         'scene': 'ri-palette-line',
                         'script': 'ri-terminal-box-line',
-                        'helper': 'ri-tools-line'
+                        'helper': 'ri-tools-line',
+                        'yaml': 'ri-file-edit-line'
                     };
                     return icons[configType] || 'ri-question-line';
+                },
+
+                // A reference in YAML the configuration API does not write. It
+                // has no page in Home Assistant to open, so the row carries the
+                // file and the line instead of a link.
+                isByHand(ref) {
+                    return ref.config_type === 'yaml';
+                },
+
+                byHandIn(group) {
+                    return (group.refs || []).filter(ref => this.isByHand(ref));
                 },
 
                 getHAConfigUrl(ref) {

@@ -25,6 +25,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import access
 from app_state import UNASSIGNED_AREA, ensure_mqtt_bridge, init_client, renamer_state
 import asgi
+from config_files import out_of_reach as references_out_of_reach
 from dependency_updater import DependencyUpdater
 from device_registry import DeviceRegistry
 from entity_registry import EntityRegistry
@@ -1196,6 +1197,9 @@ async def execute_direct_handler(job, ctx):
         "failed": [],
         "skipped": [],
         "dependency_warnings": [],
+        # References only the user can rewrite: they live in YAML the
+        # configuration API does not hand out.
+        "references_by_hand": [],
     }
 
     ws = HomeAssistantWebSocket(ws_url, token)
@@ -1312,6 +1316,15 @@ async def execute_direct_handler(job, ctx):
                         "UNREACHABLE",
                         f"{new_id}: {out_of_reach} liegt nicht in automations.yaml "
                         f"und muss von Hand auf {new_id} geändert werden",
+                    )
+                # Packages, includes and YAML-mode dashboards: the configuration
+                # API does not write them, so the old id is still there and the
+                # line it is on is what the user needs.
+                for by_hand in references_out_of_reach(old_id, new_id):
+                    results["references_by_hand"].append(by_hand)
+                    ctx.log(
+                        "BY_HAND",
+                        f"{by_hand['path']}:{by_hand['line']} - {by_hand['replace']} -> {by_hand['with']}",
                     )
 
             except Exception as e:

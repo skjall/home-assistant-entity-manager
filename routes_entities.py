@@ -14,6 +14,7 @@ import uuid
 from flask import Blueprint, jsonify, request
 
 from app_state import init_client, renamer_state, ws_url
+from config_files import out_of_reach
 from dependency_updater import DependencyUpdater
 from device_registry import DeviceRegistry
 from entity_registry import EntityRegistry
@@ -650,6 +651,7 @@ async def rename_device_handler(job, ctx):
         entities_failed = 0
         entities_skipped = 0
         dependencies_updated = 0
+        references_by_hand = []
 
         logger.info("=== Starting entity rename after device rename ===")
         logger.info(f"Device ID: {device_id}")
@@ -707,6 +709,15 @@ async def rename_device_handler(job, ctx):
                     if dep_count > 0:
                         logger.info(f"  Updated {dep_count} dependencies")
 
+                    # The YAML kept by hand is out of the API's reach: say where
+                    # the old id is still written and what to write instead.
+                    for one in out_of_reach(old_entity_id, new_entity_id):
+                        references_by_hand.append(one)
+                        ctx.log(
+                            "BY_HAND",
+                            f"{one['path']}:{one['line']} - {one['replace']} -> {one['with']}",
+                        )
+
             except Exception as e:
                 entities_failed += 1
                 logger.error(f"  FAILED: {e}")
@@ -739,6 +750,7 @@ async def rename_device_handler(job, ctx):
             "entities_updated": entities_updated,
             "entities_failed": entities_failed,
             "dependencies_updated": dependencies_updated,
+            "references_by_hand": references_by_hand,
             "z2m_synced": z2m_sync.get("synced"),
             "z2m_failed": (z2m_sync.get("error") if z2m_sync.get("supported") and not z2m_sync.get("synced") else None),
         }
