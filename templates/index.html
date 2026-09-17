@@ -2077,7 +2077,7 @@
                                                     <span class="config-name" x-text="ref.config_name"></span>
                                                     <span class="text-xs text-amber-600 ml-1"
                                                           x-show="isByHand(ref)"
-                                                          x-text="t('broken_refs.by_hand_badge')"></span>
+                                                          x-text="writesYaml ? t('broken_refs.by_hand_beta') : t('broken_refs.by_hand_badge')"></span>
                                                     <span class="yaml-path text-xs text-gray-400 ml-1"
                                                           x-show="ref.yaml_path && !isByHand(ref)"
                                                           x-text="'(' + ref.yaml_path + ')'"></span>
@@ -2101,9 +2101,12 @@
                                              above already say which lines it does not; this only says
                                              how many are left once it has run. -->
                                         <div x-show="byHandIn(group).length"
-                                             class="text-xs text-amber-700 mb-2 flex items-center gap-1.5">
+                                             class="text-xs mb-2 flex items-center gap-1.5"
+                                             :class="writesYaml ? 'text-gray-500' : 'text-amber-700'">
                                             <i class="ri-file-edit-line"></i>
-                                            <span x-text="t('broken_refs.by_hand_remaining', {count: byHandIn(group).length})"></span>
+                                            <span x-text="writesYaml
+                                                ? t('broken_refs.by_hand_written', {count: byHandIn(group).length})
+                                                : t('broken_refs.by_hand_remaining', {count: byHandIn(group).length})"></span>
                                         </div>
                                         <label class="text-xs text-gray-500 block mb-2" x-text="t('broken_refs.suggestions')">Suggestions</label>
                                         <div class="suggestion-list">
@@ -3444,6 +3447,10 @@
                     }
                 },
 
+                // Whether a repair reaches the YAML the user keeps by hand, which
+                // is an add-on setting and off unless they turned it on.
+                writesYaml: false,
+
                 // Broken references state
                 brokenReferences: [],
                 brokenRefSuggestions: {},
@@ -3801,6 +3808,13 @@
                     if (this.brokenRefsCached && !forceRefresh) return;
 
                     this.brokenRefsLoading = true;
+                    // Whether a repair will reach the YAML, or only name the line.
+                    try {
+                        const settings = await (await fetch('api/network')).json();
+                        this.writesYaml = settings.fix_yaml === 'beta';
+                    } catch (error) {
+                        this.writesYaml = false;
+                    }
 
                     // Clear suggestions cache on force refresh so they get reloaded with fresh entity data
                     if (forceRefresh) {

@@ -147,7 +147,9 @@
     "select_replacement": "Bitte eine Ersatz-Entity auswählen",
     "open_in_ha": "In Home Assistant öffnen",
     "by_hand_badge": "nur von Hand",
-    "by_hand_remaining": "{count} bleiben für dich"
+    "by_hand_remaining": "{count} bleiben für dich",
+    "by_hand_beta": "wird geschrieben (Beta)",
+    "by_hand_written": "{count} werden mitgeschrieben"
   },
   "messages": {
     "loading": "Lädt...",

@@ -9,6 +9,8 @@ export Z2M_BASE_TOPIC=$(bashio::config 'z2m_base_topic' || echo 'zigbee2mqtt')
 export EXTERNAL_ACCESS=$(bashio::config 'external_access' | paste -sd, -)
 export EXTERNAL_API=$(bashio::config 'external_api' || echo 'read')
 export MCP=$(bashio::config 'mcp' || echo 'off')
+# Whether the add-on may rewrite the user's own YAML. Off unless asked.
+export FIX_YAML=$(bashio::config 'fix_yaml' || echo 'off')
 
 bashio::log.info "Starting Entity Manager..."
 
@@ -23,6 +25,7 @@ bashio::log.info "ENABLE_DISABLED_ENTITIES: ${ENABLE_DISABLED_ENTITIES}"
 bashio::log.info "EXTERNAL_ACCESS: ${EXTERNAL_ACCESS:-(none)}"
 bashio::log.info "EXTERNAL_API: ${EXTERNAL_API}"
 bashio::log.info "MCP: ${MCP}"
+bashio::log.info "FIX_YAML: ${FIX_YAML}"
 
 # Check if web_ui.py exists
 if [ -f /app/web_ui.py ]; then

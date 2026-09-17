@@ -56,6 +56,8 @@ from sanitize import (
     validate_json_input,
 )
 import supplied_names
+from yaml_edit import YamlEditor
+import yaml_writing
 from z2m import sync_z2m_name
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
@@ -1691,6 +1693,15 @@ async def _fix_reference_async():
             elif ref.config_type == "script":
                 success = await updater.update_script_entities(config_id, old_entity_id, new_entity_id)
 
+            elif ref.config_type == "yaml":
+                # A file the configuration API does not write. Only rewritten
+                # where the user has switched that on, and then one line at a
+                # time, leaving the rest of the file byte for byte as it was.
+                outcome = _rewrite_one_line(ref, old_entity_id, new_entity_id)
+                success = outcome.changed
+                if not success:
+                    results.setdefault("by_hand", []).append(outcome.to_dict())
+
             elif ref.config_type == "helper":
                 # config_id is the config entry, not an entity: a helper built
                 # in the interface has no config to fetch, only options to put
@@ -1725,6 +1736,9 @@ async def _fix_reference_async():
                     "failed_count": total_failed,
                     "fixed": results["fixed"],
                     "failed": results["failed"],
+                    # Lines in the user's own YAML that were not rewritten, and
+                    # why. Empty when writing is on and every one went through.
+                    "by_hand": results.get("by_hand", []),
                 }
             )
         else:
@@ -1736,6 +1750,37 @@ async def _fix_reference_async():
     except Exception as e:
         logger.error(f"Error fixing reference: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+def _rewrite_one_line(ref, old_entity_id, new_entity_id):
+    """Put the new id on the one line of the one file, if that is allowed.
+
+    The file belongs to the user, not to Home Assistant, so this happens only
+    under the `fix_yaml` setting. Off, it reports what would be done and the
+    interface says which line to edit.
+    """
+    checker = get_reference_checker()
+    editor = YamlEditor(
+        checker.config_files.root,
+        allowed=yaml_writing.allowed(),
+        backup_dir=yaml_writing.BACKUP_DIR,
+    )
+    # file_path is shown the way the user knows it; the editor works relative
+    # to the mount.
+    relative = (ref.file_path or "").replace("/config/", "", 1)
+    outcome = editor.replace(
+        relative,
+        ref.file_line or 0,
+        old_entity_id,
+        new_entity_id,
+        dry_run=not yaml_writing.allowed(),
+    )
+    if outcome.changed:
+        logger.info("Rewrote %s:%s, copy at %s", relative, ref.file_line, outcome.backup)
+        checker.config_files.forget()
+    else:
+        logger.info("Left %s:%s alone: %s", relative, ref.file_line, outcome.reason)
+    return outcome
 
 
 @app.route("/api/all_entities")

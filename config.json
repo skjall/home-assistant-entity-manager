@@ -20,7 +20,7 @@
   "map": [
     {
       "type": "homeassistant_config",
-      "read_only": true,
+      "read_only": false,
       "path": "/config"
     }
   ],
@@ -44,7 +44,8 @@
     "z2m_base_topic": "zigbee2mqtt",
     "external_access": [],
     "mcp": "off",
-    "external_api": "read"
+    "external_api": "read",
+    "fix_yaml": "off"
   },
   "schema": {
     "log_level": "list(debug|info|warning|error)?",
@@ -55,7 +56,8 @@
       "str?"
     ],
     "mcp": "list(off|read|write)?",
-    "external_api": "list(off|read|write)?"
+    "external_api": "list(off|read|write)?",
+    "fix_yaml": "list(off|beta)?"
   },
   "environment": {
     "HA_URL": "http://supervisor/core",
