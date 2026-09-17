@@ -14,8 +14,10 @@ from flask import Blueprint, jsonify, render_template, request
 
 import api_spec
 from app_state import renamer_state
+import config_files
 import external_access
 import mcp_server
+import yaml_writing
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +183,10 @@ def network_status():
             "published": _published_ports(),
             "api": external_access.api_mode(),
             "mcp": mcp_server.mode(),
+            # Whether a repair reaches the user's own YAML, or only says which
+            # line to edit.
+            "fix_yaml": yaml_writing.mode(),
+            "scan_yaml": config_files.scanning(),
         }
     )
 

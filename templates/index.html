@@ -2033,7 +2033,8 @@
                                         <div class="missing-entity-header">
                                             <i class="ri-error-warning-line text-red-500"></i>
                                             <code class="missing-entity-id" x-text="group.missing_entity_id"></code>
-                                            <span class="ref-count" x-text="'(' + group.refs.length + ')'"></span>
+                                            <span class="ref-count"
+                                                  x-text="t('broken_refs.places', {count: group.refs.length})"></span>
                                         </div>
 
                                         <!-- Arrow and Replacement -->
@@ -2056,7 +2057,6 @@
                                                     :disabled="!selectedReplacement[group.missing_entity_id]"
                                                     :title="t('broken_refs.fix')">
                                                 <i class="ri-check-line"></i>
-                                                <span x-show="group.refs.length > 1" class="ml-1" x-text="'(' + group.refs.length + ')'"></span>
                                             </button>
                                             <!-- Expand indicator -->
                                             <div class="expand-indicator"
@@ -2066,16 +2066,19 @@
                                         </div>
                                     </div>
 
-                                    <!-- Affected Configs List -->
+                                    <!-- Where it is named. Grouped by where that is:
+                                         one line per thing the repair can rewrite, and
+                                         one block per file it cannot, since saying "yours
+                                         to edit" six times says it five times too often. -->
                                     <div class="affected-configs">
-                                        <template x-for="ref in group.refs" :key="ref.config_id + ref.yaml_path">
+                                        <template x-for="ref in fixableIn(group)" :key="ref.config_id + ref.yaml_path">
                                             <div class="affected-config-item">
                                                 <i :class="getConfigIcon(ref.config_type)" class="text-gray-400"></i>
                                                 <div class="config-info">
                                                     <span class="config-name" x-text="ref.config_name"></span>
                                                     <span class="yaml-path text-xs text-gray-400 ml-1"
                                                           x-show="ref.yaml_path"
-                                                          x-text="'(' + ref.yaml_path + ')'"></span>
+                                                          x-text="ref.yaml_path"></span>
                                                 </div>
                                                 <a :href="getHAConfigUrl(ref)" target="_blank"
                                                    @click.stop
@@ -2085,11 +2088,47 @@
                                                 </a>
                                             </div>
                                         </template>
+
+                                        <template x-for="file in byHandFiles(group)" :key="file.path">
+                                            <div class="affected-config-item items-start">
+                                                <i class="ri-file-edit-line text-amber-500 mt-0.5"></i>
+                                                <div class="config-info">
+                                                    <div class="flex items-center gap-2 flex-wrap">
+                                                        <span class="config-name font-mono" x-text="file.path"></span>
+                                                        <span class="text-xs text-amber-600"
+                                                              x-text="writesYaml ? t('broken_refs.by_hand_beta') : t('broken_refs.by_hand_badge')"></span>
+                                                    </div>
+                                                    <template x-for="place in file.places" :key="place.lines.join(',')">
+                                                        <div class="text-xs text-gray-500">
+                                                            <span x-show="place.name" x-text="place.name"></span>
+                                                            <span x-show="place.name" class="text-gray-300"> · </span>
+                                                            <span x-text="place.lines.length > 1
+                                                                ? t('broken_refs.lines', {lines: place.lines.join(', ')})
+                                                                : t('broken_refs.line', {line: place.lines[0]})"></span>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
                                     </div>
 
                                     <!-- Expanded Panel - Suggestions -->
                                     <div class="edit-panel" x-show="expandedBrokenRef === group.missing_entity_id" x-transition @click.stop>
-                                        <label class="text-xs text-gray-500 block mb-2" x-text="t('broken_refs.suggestions')">Suggestions</label>
+                                        <!-- The repair below reaches what the API writes. The rows
+                                             above already say which lines it does not; this only says
+                                             how many are left once it has run. -->
+                                        <div x-show="byHandIn(group).length"
+                                             class="text-xs mb-2 flex items-center gap-1.5"
+                                             :class="writesYaml ? 'text-gray-500' : 'text-amber-700'">
+                                            <i class="ri-file-edit-line"></i>
+                                            <span x-text="writesYaml
+                                                ? t('broken_refs.by_hand_written', {count: byHandIn(group).length})
+                                                : t('broken_refs.by_hand_remaining', {count: byHandIn(group).length})"></span>
+                                        </div>
+                                        <label class="text-xs text-gray-500 block mb-2"
+                                               x-text="getSuggestionsFor(group.missing_entity_id).length
+                                                   ? t('broken_refs.suggestions')
+                                                   : t('broken_refs.pick_yourself')"></label>
                                         <div class="suggestion-list">
                                             <template x-for="sug in getSuggestionsFor(group.missing_entity_id)" :key="sug.entity_id">
                                                 <div class="suggestion-item"
@@ -2102,9 +2141,8 @@
                                                         <code class="suggestion-entity" x-text="sug.entity_id"></code>
                                                         <span class="suggestion-name" x-text="sug.friendly_name"></span>
                                                     </div>
-                                                    <div class="suggestion-score"
-                                                         :class="sug.score >= 0.7 ? 'score-high' : sug.score >= 0.4 ? 'score-medium' : 'score-low'"
-                                                         x-text="Math.round(sug.score * 100) + '%'"></div>
+                                                    <div class="suggestion-score score-high"
+                                                         x-text="t('broken_refs.renamed_here')"></div>
                                                 </div>
                                             </template>
 
@@ -3428,6 +3466,10 @@
                     }
                 },
 
+                // Whether a repair reaches the YAML the user keeps by hand, which
+                // is an add-on setting and off unless they turned it on.
+                writesYaml: false,
+
                 // Broken references state
                 brokenReferences: [],
                 brokenRefSuggestions: {},
@@ -3562,8 +3604,11 @@
                         return this.brokenReferences;
                     }
 
-                    // Filter by area_id (assigned area of the automation/scene/script)
-                    return this.brokenReferences.filter(ref => ref.area_id === this.selectedArea);
+                    // Filter by area_id (assigned area of the automation/scene/script).
+                    // A reference in a file belongs to no area, and neither does
+                    // a helper: those stay visible whichever area is picked,
+                    // because filtering them out hid them everywhere at once.
+                    return this.brokenReferences.filter(ref => !ref.area_id || ref.area_id === this.selectedArea);
                 },
 
                 // Computed: Broken references grouped by missing_entity_id
@@ -3782,6 +3827,13 @@
                     if (this.brokenRefsCached && !forceRefresh) return;
 
                     this.brokenRefsLoading = true;
+                    // Whether a repair will reach the YAML, or only name the line.
+                    try {
+                        const settings = await (await fetch('api/network')).json();
+                        this.writesYaml = settings.fix_yaml === 'beta';
+                    } catch (error) {
+                        this.writesYaml = false;
+                    }
 
                     // Clear suggestions cache on force refresh so they get reloaded with fresh entity data
                     if (forceRefresh) {
@@ -3829,8 +3881,8 @@
                                 [missingEntityId]: suggestions
                             };
 
-                            // Auto-select best match if score is high (green, >= 0.7)
-                            if (suggestions.length > 0 && suggestions[0].score >= 0.7) {
+                            // The log's answer is what was renamed to what, not a guess.
+                            if (suggestions.length > 0) {
                                 this.selectedReplacement = {
                                     ...this.selectedReplacement,
                                     [missingEntityId]: suggestions[0].entity_id
@@ -3904,9 +3956,48 @@
                         'automation': 'ri-robot-line',
                         'scene': 'ri-palette-line',
                         'script': 'ri-terminal-box-line',
-                        'helper': 'ri-tools-line'
+                        'helper': 'ri-tools-line',
+                        'yaml': 'ri-file-edit-line'
                     };
                     return icons[configType] || 'ri-question-line';
+                },
+
+                // A reference in YAML the configuration API does not write. It
+                // has no page in Home Assistant to open, so the row carries the
+                // file and the line instead of a link.
+                isByHand(ref) {
+                    return ref.config_type === 'yaml';
+                },
+
+                byHandIn(group) {
+                    return (group.refs || []).filter(ref => this.isByHand(ref));
+                },
+
+                fixableIn(group) {
+                    return (group.refs || []).filter(ref => !this.isByHand(ref));
+                },
+
+                // One block per file, and inside it one line per thing named,
+                // with its line numbers gathered. Four rows saying the same
+                // script and the same badge are one row and four numbers.
+                byHandFiles(group) {
+                    const files = new Map();
+                    for (const ref of this.byHandIn(group)) {
+                        const path = ref.file_path || '';
+                        if (!files.has(path)) files.set(path, new Map());
+                        const places = files.get(path);
+                        // A path standing in for a name says nothing a line
+                        // number does not; the number alone is less to read.
+                        const name = (ref.config_name || '').includes('→') ? '' : (ref.config_name || '');
+                        if (!places.has(name)) places.set(name, []);
+                        places.get(name).push(ref.file_line);
+                    }
+                    return [...files.entries()].map(([path, places]) => ({
+                        path,
+                        places: [...places.entries()]
+                            .map(([name, lines]) => ({name, lines: lines.sort((a, b) => a - b)}))
+                            .sort((a, b) => (b.name ? 1 : 0) - (a.name ? 1 : 0)),
+                    }));
                 },
 
                 getHAConfigUrl(ref) {

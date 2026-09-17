@@ -8,11 +8,13 @@ from dataclasses import asdict, dataclass
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 import aiohttp
 from dotenv import load_dotenv
 
+from config_files import shared as shared_config_files
+from device_swap import INTERIM_SUFFIX
 from helper_options import HelperOptions
 
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +35,14 @@ class BrokenReference:
     numeric_id: Optional[str] = None  # For automation/scene edit links
     area_id: Optional[str] = None  # Area assigned to the automation/scene/script
     yaml_path: Optional[str] = None  # Path in YAML, e.g. "use_blueprint -> input -> button_1 -> entity_id"
+    # Set when the reference lives in a file the configuration API will not
+    # write. Nothing here can be repaired for the user; the interface says which
+    # file and which line to edit instead.
+    file_path: Optional[str] = None  # As the user sees it, e.g. "/config/packages/water.yaml"
+    file_line: Optional[int] = None
+    line_text: Optional[str] = None
+    fixable: bool = True
+    object_id: Optional[str] = None  # script.x, where the file's shape names one
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -53,6 +63,10 @@ class Suggestion:
 
 class ReferenceChecker:
     """Prüft Automations/Scenes/Scripts/Helfer auf verwaiste Entity-Referenzen."""
+
+    # Set once the application state is built, as EntityRegistry's is. Without
+    # it only a guess is available, which is what a fresh installation has.
+    rename_log = None
 
     # Entity-ID Pattern für Extraktion
     ENTITY_ID_PATTERN = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
@@ -159,6 +173,9 @@ class ReferenceChecker:
         # prose, so nothing carries a rename into them and a dead reference
         # sits there silently.
         self.helpers = HelperOptions(self.base_url, self.token)
+        # The YAML the configuration API does not hand out: packages, includes
+        # and YAML-mode dashboards. Present only when the mount is there.
+        self.config_files = shared_config_files(self.VALID_DOMAINS)
         # Cache
         self._existing_entities: Optional[Set[str]] = None
         self._entity_details: Optional[Dict[str, Dict]] = None
@@ -169,6 +186,7 @@ class ReferenceChecker:
         self._broken_refs_cache = None
         self._existing_entities = None
         self._entity_details = None
+        self.config_files.forget()
         logger.info("Reference checker cache invalidated")
 
     async def get_states(self) -> List[Dict]:
@@ -502,109 +520,105 @@ class ReferenceChecker:
         except Exception as error:  # noqa: BLE001 - the other findings still stand
             logger.error("Could not scan the helpers: %s", error)
 
+        broken_refs.extend(self._broken_in_the_yaml(existing))
+
         logger.info(f"Found {len(broken_refs)} broken references")
         self._broken_refs_cache = broken_refs
         return broken_refs
 
-    def _levenshtein_distance(self, s1: str, s2: str) -> int:
-        """Berechnet die Levenshtein-Distanz zwischen zwei Strings."""
-        if len(s1) < len(s2):
-            return self._levenshtein_distance(s2, s1)
+    def _broken_in_the_yaml(self, existing: Set[str]) -> List[BrokenReference]:
+        """Dead references in the files the configuration API will not write.
 
-        if len(s2) == 0:
-            return len(s1)
+        One entry per line, because the user edits the file line by line and a
+        count of occurrences would not tell them where to go.
+        """
+        if not self.config_files.available():
+            logger.info("No configuration mount, skipping the YAML kept by hand")
+            return []
+        logger.info("Scanning the YAML kept by hand...")
+        found: List[BrokenReference] = []
+        for entity_id, mentions in self.config_files.index().items():
+            if entity_id in existing or entity_id.split(".", 1)[0] not in self.VALID_DOMAINS:
+                continue
+            for one in mentions:
+                shown = self.config_files.shown_as(one.path)
+                holder = self.config_files.holder_of(one)
+                found.append(
+                    BrokenReference(
+                        config_type="yaml",
+                        config_id=f"{shown}:{one.line}",
+                        # What the object is called, where the file says so at
+                        # all; the file name is the last resort.
+                        config_name=(holder.described() if holder else "") or shown.rsplit("/", 1)[-1],
+                        missing_entity_id=entity_id,
+                        context="yaml",
+                        yaml_path=(" → ".join(holder.trail) if holder else shown),
+                        file_path=shown,
+                        file_line=one.line,
+                        line_text=one.text,
+                        fixable=False,
+                        object_id=(holder.object_id if holder else None),
+                    )
+                )
+        return found
 
-        previous_row = range(len(s2) + 1)
-        for i, c1 in enumerate(s1):
-            current_row = [i + 1]
-            for j, c2 in enumerate(s2):
-                insertions = previous_row[j + 1] + 1
-                deletions = current_row[j] + 1
-                substitutions = previous_row[j] + (c1 != c2)
-                current_row.append(min(insertions, deletions, substitutions))
-            previous_row = current_row
+    async def get_suggestions(self, missing_entity_id: str) -> List[Suggestion]:
+        """What this entity became, according to what was actually renamed.
 
-        return previous_row[-1]
+        Only the rename log answers. Resembling names were weighed before, and
+        the weighing could not tell apart what the names themselves do not say:
+        `buro_rechtes_fenster_status` was answered with that window's
+        `hardwarefehler`, `netzwerkfehler`, `funkmodulfehler` and `zustand`, all
+        four scoring the same and ordered by nothing. A name carries a place, a
+        device and a type, and counting shared words reads a shared place as
+        evidence while the type - the part that differs - costs the same as any
+        other word.
 
-    def _calculate_similarity(self, missing_id: str, candidate_id: str) -> Tuple[float, List[str]]:
-        """Berechnet die Ähnlichkeit zwischen zwei Entity-IDs."""
-        score = 0.0
-        reasons = []
-
-        missing_parts = missing_id.split(".")
-        candidate_parts = candidate_id.split(".")
-
-        missing_domain = missing_parts[0]
-        candidate_domain = candidate_parts[0]
-        missing_name = missing_parts[1] if len(missing_parts) > 1 else ""
-        candidate_name = candidate_parts[1] if len(candidate_parts) > 1 else ""
-
-        # 1. Domain Match (+30%)
-        if missing_domain == candidate_domain:
-            score += 0.30
-            reasons.append("same_domain")
-
-        # 2. Area Match (+25%) - Prüfe ob der erste Teil des Namens übereinstimmt
-        missing_area = missing_name.split("_")[0] if "_" in missing_name else ""
-        candidate_area = candidate_name.split("_")[0] if "_" in candidate_name else ""
-        if missing_area and candidate_area and missing_area == candidate_area:
-            score += 0.25
-            reasons.append("same_area")
-
-        # 3. Name Similarity - Levenshtein (+0-45%)
-        if missing_name and candidate_name:
-            max_len = max(len(missing_name), len(candidate_name))
-            if max_len > 0:
-                distance = self._levenshtein_distance(missing_name, candidate_name)
-                lev_ratio = 1 - (distance / max_len)
-                score += lev_ratio * 0.45
-                if lev_ratio > 0.5:
-                    reasons.append("similar_name")
-
-        return (score, reasons)
-
-    async def get_suggestions(self, missing_entity_id: str, limit: int = 5) -> List[Suggestion]:
-        """Generiert Ersatz-Vorschläge basierend auf Ähnlichkeit.
-
-        Nur Entities mit der gleichen Domain werden vorgeschlagen.
-        Andere Domains können über die Suchfunktion gefunden werden.
+        So where the log has nothing to say, neither does this. Nothing is
+        better than something wrong: a bad suggestion sends the user to an
+        entity that has nothing to do with the one they lost.
         """
         existing = await self._load_existing_entities()
         if self._entity_details is None:
             await self._load_existing_entities()
 
-        suggestions = []
-        missing_domain = missing_entity_id.split(".")[0]
+        return [carried] if (carried := self._where_it_went(missing_entity_id, existing)) else []
 
-        for entity_id in existing:
-            # Überspringe gleiche Entity
-            if entity_id == missing_entity_id:
-                continue
+    def _where_it_went(self, missing_entity_id: str, existing: Set[str]) -> Optional[Suggestion]:
+        """What the rename log says this entity became, if it still exists.
 
-            # Nur Entities mit gleicher Domain vorschlagen
-            candidate_domain = entity_id.split(".")[0]
-            if candidate_domain != missing_domain:
-                continue
-
-            # Berechne Ähnlichkeit
-            score, reasons = self._calculate_similarity(missing_entity_id, entity_id)
-
-            # Nur Vorschläge mit Mindest-Score
-            if score >= 0.2:
-                details = self._entity_details.get(entity_id, {})
-                suggestions.append(
-                    Suggestion(
-                        entity_id=entity_id,
-                        friendly_name=details.get("friendly_name", entity_id),
-                        score=round(score, 3),
-                        reasons=reasons,
-                    )
-                )
-
-        # Sortiere nach Score (absteigend)
-        suggestions.sort(key=lambda s: s.score, reverse=True)
-
-        return suggestions[:limit]
+        The log records one hop at a time and an entity can be renamed again, so
+        the chain is followed to its end. It ends nowhere often enough to check:
+        a device swap parks the old entity on an interim id, and where the old
+        device was deleted the chain stops at something that is gone.
+        """
+        if self.rename_log is None:
+            return None
+        try:
+            answer = self.rename_log.search(missing_entity_id)
+        except Exception as error:  # noqa: BLE001 - an unreadable log is not a broken scan
+            logger.debug("Could not read the rename log for %s: %s", missing_entity_id, error)
+            return None
+        if not answer.get("found"):
+            return None
+        current = answer.get("current_entity_id")
+        if not current or current not in existing:
+            logger.debug("The rename chain for %s ends at %s, which is gone", missing_entity_id, current)
+            return None
+        # A swap can keep the old device, renamed, and then the chain ends on the
+        # interim id. It exists, so the check above lets it through, and it is
+        # still the entity that was replaced rather than the one replacing it.
+        # Where the new device has no matching entity there is nothing to offer.
+        if current.endswith(INTERIM_SUFFIX):
+            logger.debug("The rename chain for %s ends on the replaced entity %s", missing_entity_id, current)
+            return None
+        details = (self._entity_details or {}).get(current, {})
+        return Suggestion(
+            entity_id=current,
+            friendly_name=details.get("friendly_name", current),
+            score=1.0,
+            reasons=["renamed_here"],
+        )
 
     async def get_all_entities(self) -> List[Dict]:
         """Gibt alle Entities für Autocomplete zurück."""

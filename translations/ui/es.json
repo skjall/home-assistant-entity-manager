@@ -145,7 +145,16 @@
     "fix": "Corregir referencia",
     "fixed_successfully": "Referencia corregida exitosamente",
     "select_replacement": "Por favor seleccione una entidad de reemplazo",
-    "open_in_ha": "Abrir en Home Assistant"
+    "open_in_ha": "Abrir en Home Assistant",
+    "by_hand_badge": "solo a mano",
+    "by_hand_remaining": "{count} quedan para ti",
+    "by_hand_beta": "se escribirá (beta)",
+    "by_hand_written": "{count} se escribirán también",
+    "places": "{count} lugares",
+    "line": "línea {line}",
+    "lines": "líneas {lines}",
+    "renamed_here": "renombrado",
+    "pick_yourself": "Nada en el registro – elige un reemplazo:"
   },
   "messages": {
     "loading": "Cargando...",
@@ -548,6 +557,7 @@
     "step_carried": "Actualizado",
     "step_not_carried": "Sin actualizar",
     "step_unreachable": "Requiere tu mano",
+    "step_by_hand": "En tu YAML",
     "step_error": "Error",
     "follow_up": "Esta parte te toca a ti",
     "follow_up_hint": "Estas referencias siguen nombrando la entidad antigua y no se pueden cambiar desde aquí.",

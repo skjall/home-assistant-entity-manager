@@ -25,6 +25,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import access
 from app_state import UNASSIGNED_AREA, ensure_mqtt_bridge, init_client, renamer_state
 import asgi
+from config_files import out_of_reach as references_out_of_reach
 from dependency_updater import DependencyUpdater
 from device_registry import DeviceRegistry
 from entity_registry import EntityRegistry
@@ -34,7 +35,6 @@ from jobs import new_job
 import mcp_server
 import naming_service
 from reference_cache import get_reference_checker, invalidate_reference_checker_cache
-from reference_checker import Suggestion
 from registry import sync_ha_language
 from routes_entities import entities as entity_routes
 from routes_naming import (
@@ -55,6 +55,8 @@ from sanitize import (
     validate_json_input,
 )
 import supplied_names
+from yaml_edit import YamlEditor
+import yaml_writing
 from z2m import sync_z2m_name
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
@@ -1196,6 +1198,9 @@ async def execute_direct_handler(job, ctx):
         "failed": [],
         "skipped": [],
         "dependency_warnings": [],
+        # References only the user can rewrite: they live in YAML the
+        # configuration API does not hand out.
+        "references_by_hand": [],
     }
 
     ws = HomeAssistantWebSocket(ws_url, token)
@@ -1312,6 +1317,17 @@ async def execute_direct_handler(job, ctx):
                         "UNREACHABLE",
                         f"{new_id}: {out_of_reach} liegt nicht in automations.yaml "
                         f"und muss von Hand auf {new_id} geändert werden",
+                    )
+                # Packages, includes and YAML-mode dashboards: the configuration
+                # API does not write them, so the old id is still there and the
+                # line it is on is what the user needs.
+                for by_hand in references_out_of_reach(old_id, new_id):
+                    results["references_by_hand"].append(by_hand)
+                    ctx.log(
+                        "BY_HAND",
+                        f"{by_hand['in_object'] or by_hand['path']}"
+                        f" - {by_hand['path']}:{by_hand['line']}"
+                        f" - {by_hand['replace']} -> {by_hand['with']}",
                     )
 
             except Exception as e:
@@ -1577,22 +1593,10 @@ async def _get_suggestions_async(missing_entity_id):
     """Async implementation of get_suggestions."""
     try:
         checker = get_reference_checker()
+        # The checker reads the rename log itself, follows the chain to its end
+        # and drops an answer that is gone or is the entity a swap replaced.
+        # Reading the log a second time here undid all three.
         suggestions = await checker.get_suggestions(missing_entity_id)
-
-        # A rename this add-on carried out is not a guess: the log says what the
-        # entity is called now, so that answer goes first and the similarity
-        # scores stay as the fallback for everything else.
-        answer = renamer_state["rename_log"].search(missing_entity_id)
-        current = answer.get("current_entity_id") if answer.get("renamed") else None
-        if current:
-            suggestions = [sug for sug in suggestions if sug.entity_id != current]
-            renamed_to = Suggestion(
-                entity_id=current,
-                friendly_name=(answer["history"][-1].get("friendly_name") or ""),
-                score=1.0,
-                reasons=["renamed_here"],
-            )
-            suggestions.insert(0, renamed_to)
 
         return jsonify({"suggestions": [sug.to_dict() for sug in suggestions], "missing_entity_id": missing_entity_id})
     except Exception as e:
@@ -1676,6 +1680,15 @@ async def _fix_reference_async():
             elif ref.config_type == "script":
                 success = await updater.update_script_entities(config_id, old_entity_id, new_entity_id)
 
+            elif ref.config_type == "yaml":
+                # A file the configuration API does not write. Only rewritten
+                # where the user has switched that on, and then one line at a
+                # time, leaving the rest of the file byte for byte as it was.
+                outcome = _rewrite_one_line(ref, old_entity_id, new_entity_id)
+                success = outcome.changed
+                if not success:
+                    results.setdefault("by_hand", []).append(outcome.to_dict())
+
             elif ref.config_type == "helper":
                 # config_id is the config entry, not an entity: a helper built
                 # in the interface has no config to fetch, only options to put
@@ -1710,6 +1723,9 @@ async def _fix_reference_async():
                     "failed_count": total_failed,
                     "fixed": results["fixed"],
                     "failed": results["failed"],
+                    # Lines in the user's own YAML that were not rewritten, and
+                    # why. Empty when writing is on and every one went through.
+                    "by_hand": results.get("by_hand", []),
                 }
             )
         else:
@@ -1721,6 +1737,37 @@ async def _fix_reference_async():
     except Exception as e:
         logger.error(f"Error fixing reference: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+def _rewrite_one_line(ref, old_entity_id, new_entity_id):
+    """Put the new id on the one line of the one file, if that is allowed.
+
+    The file belongs to the user, not to Home Assistant, so this happens only
+    under the `fix_yaml` setting. Off, it reports what would be done and the
+    interface says which line to edit.
+    """
+    checker = get_reference_checker()
+    editor = YamlEditor(
+        checker.config_files.root,
+        allowed=yaml_writing.allowed(),
+        backup_dir=yaml_writing.BACKUP_DIR,
+    )
+    # file_path is shown the way the user knows it; the editor works relative
+    # to the mount.
+    relative = (ref.file_path or "").replace("/config/", "", 1)
+    outcome = editor.replace(
+        relative,
+        ref.file_line or 0,
+        old_entity_id,
+        new_entity_id,
+        dry_run=not yaml_writing.allowed(),
+    )
+    if outcome.changed:
+        logger.info("Rewrote %s:%s, copy at %s", relative, ref.file_line, outcome.backup)
+        checker.config_files.forget()
+    else:
+        logger.info("Left %s:%s alone: %s", relative, ref.file_line, outcome.reason)
+    return outcome
 
 
 @app.route("/api/all_entities")

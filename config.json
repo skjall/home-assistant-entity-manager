@@ -17,6 +17,13 @@
   "ingress_port": 5000,
   "panel_icon": "mdi:rename-box",
   "panel_title": "Entity Manager",
+  "map": [
+    {
+      "type": "homeassistant_config",
+      "read_only": false,
+      "path": "/config"
+    }
+  ],
   "homeassistant_api": true,
   "hassio_api": true,
   "hassio_role": "manager",
@@ -37,7 +44,9 @@
     "z2m_base_topic": "zigbee2mqtt",
     "external_access": [],
     "mcp": "off",
-    "external_api": "read"
+    "external_api": "read",
+    "scan_yaml": "off",
+    "fix_yaml": "off"
   },
   "schema": {
     "log_level": "list(debug|info|warning|error)?",
@@ -48,7 +57,9 @@
       "str?"
     ],
     "mcp": "list(off|read|write)?",
-    "external_api": "list(off|read|write)?"
+    "external_api": "list(off|read|write)?",
+    "scan_yaml": "list(off|beta)?",
+    "fix_yaml": "list(off|beta)?"
   },
   "environment": {
     "HA_URL": "http://supervisor/core",

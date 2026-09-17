@@ -12,6 +12,7 @@ import os
 from typing import Any, Dict, Optional
 
 from app_state import renamer_state, ws_url
+from config_files import out_of_reach
 from dependency_updater import DependencyUpdater
 from entity_registry import EntityRegistry
 from ha_websocket import HomeAssistantWebSocket
@@ -154,6 +155,13 @@ async def rename_entity(
         logger.error("Error updating dependencies for %s: %s", old_entity_id, error)
         result["dependencies_checked"] = False
         result["dependencies_error"] = str(error)
+
+    # Packages, includes and YAML-mode dashboards are not written by the
+    # configuration API, so the old id is still sitting in them.
+    by_hand = out_of_reach(old_entity_id, written_id)
+    if by_hand:
+        result["references_by_hand"] = by_hand
+        logger.warning("%d reference(s) to %s are only in YAML", len(by_hand), old_entity_id)
 
     invalidate_reference_checker_cache()
     return result

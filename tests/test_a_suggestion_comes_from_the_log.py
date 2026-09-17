@@ -1,0 +1,218 @@
+"""What an entity became, rather than what its name looks like.
+
+`binary_sensor.buro_linkes_fenster_status` was answered with
+`binary_sensor.buro_bambu_lab_h2c_drucker_firmware_status` at 0.74, and the five
+suggestions behind it all sat between 0.700 and 0.743 - the order was noise. Two
+thirds of every score was handed out for the domain, which only matching
+candidates have, and for the first word, which every entity in the room shares.
+
+The rename log records what was actually renamed to what. Where it answers, it
+settles the question; where it does not, a guess is offered only if it is close
+enough to be worth looking at, and otherwise nothing at all.
+"""
+
+import pytest
+
+from reference_checker import ReferenceChecker, Suggestion
+
+
+class Log:
+    """A rename log with the hops written into it."""
+
+    def __init__(self, hops=None, raises=False):
+        self.hops = hops or {}
+        self.raises = raises
+
+    def search(self, entity_id):
+        if self.raises:
+            raise OSError("the log is unreadable")
+        trail = []
+        current = entity_id
+        seen = {current}
+        while current in self.hops:
+            current = self.hops[current]
+            trail.append({"new_entity_id": current})
+            if current in seen:
+                break
+            seen.add(current)
+        if not trail:
+            return {"query": entity_id, "found": False, "renamed": False}
+        return {"query": entity_id, "found": True, "renamed": True, "current_entity_id": current, "history": trail}
+
+
+@pytest.fixture
+def checker():
+    one = ReferenceChecker("http://nowhere", "token")
+    one._existing_entities = {
+        "binary_sensor.buro_bambu_lab_h2c_drucker_firmware_status",
+        "binary_sensor.buro_heizung_fernmessung_der_aussentemperatur",
+        "switch.kammer_it_steckdose_schalter",
+        "sensor.balkon_ventil_wasserstatus",
+    }
+    one._entity_details = {
+        entity_id: {"friendly_name": entity_id, "domain": entity_id.split(".")[0]}
+        for entity_id in one._existing_entities
+    }
+    one.rename_log = Log()
+    return one
+
+
+async def test_the_log_settles_it_where_it_can(checker):
+    checker.rename_log = Log({"sensor.balkon_ventil_geratestatus": "sensor.balkon_ventil_wasserstatus"})
+
+    found = await checker.get_suggestions("sensor.balkon_ventil_geratestatus")
+
+    assert [one.entity_id for one in found] == ["sensor.balkon_ventil_wasserstatus"]
+    assert found[0].score == 1.0
+    assert found[0].reasons == ["renamed_here"]
+
+
+async def test_a_chain_is_followed_to_its_end(checker):
+    """An entity can be renamed again, and again."""
+    checker.rename_log = Log(
+        {
+            "sensor.first": "sensor.second",
+            "sensor.second": "sensor.third",
+            "sensor.third": "sensor.balkon_ventil_wasserstatus",
+        }
+    )
+
+    found = await checker.get_suggestions("sensor.first")
+
+    assert [one.entity_id for one in found] == ["sensor.balkon_ventil_wasserstatus"]
+
+
+async def test_a_chain_ending_at_something_gone_is_not_offered(checker):
+    """A swap parks the old entity on an interim id, and deleting it ends the chain nowhere."""
+    checker.rename_log = Log(
+        {"binary_sensor.buro_rechtes_fenster_status": "binary_sensor.buro_rechtes_fenster_status_swapout"}
+    )
+
+    found = await checker.get_suggestions("binary_sensor.buro_rechtes_fenster_status")
+
+    assert [one.entity_id for one in found] == []
+
+
+async def test_a_chain_that_returns_to_where_it_started_is_not_offered(checker):
+    checker.rename_log = Log({"sensor.round": "sensor.about", "sensor.about": "sensor.round"})
+
+    assert await checker.get_suggestions("sensor.round") == []
+
+
+def test_without_a_log_there_is_nothing_to_answer_from(checker):
+    """A fresh installation has renamed nothing yet."""
+    checker.rename_log = None
+
+    assert checker._where_it_went("switch.kammer_it_steckdose_zustand", checker._existing_entities) is None
+
+
+def test_what_the_log_answers_is_a_suggestion_like_any_other(checker):
+    checker.rename_log = Log({"sensor.gone": "sensor.balkon_ventil_wasserstatus"})
+
+    answer = checker._where_it_went("sensor.gone", checker._existing_entities)
+
+    assert isinstance(answer, Suggestion)
+    assert answer.to_dict()["entity_id"] == "sensor.balkon_ventil_wasserstatus"
+
+
+class Recorded:
+    """A rename log that keeps what it was told, in order."""
+
+    def __init__(self):
+        self.written = []
+
+    def record(self, old_entity_id, new_entity_id, friendly_name=None, timestamp=None):
+        self.written.append((old_entity_id, new_entity_id))
+
+
+def test_a_swap_writes_down_which_entity_took_over():
+    """Without it the chain ends at the interim id the old device was parked on."""
+    from device_swap import SwapExecutor
+
+    log = Recorded()
+
+    class Registry:
+        rename_log = log
+
+    executor = SwapExecutor.__new__(SwapExecutor)
+    executor.entity_registry = Registry()
+
+    executor._note_the_succession("binary_sensor.window_old", "binary_sensor.window_new")
+
+    assert log.written == [("binary_sensor.window_old", "binary_sensor.window_new")]
+
+
+def test_a_swap_that_kept_the_id_writes_nothing():
+    from device_swap import SwapExecutor
+
+    log = Recorded()
+
+    class Registry:
+        rename_log = log
+
+    executor = SwapExecutor.__new__(SwapExecutor)
+    executor.entity_registry = Registry()
+
+    executor._note_the_succession("binary_sensor.same", "binary_sensor.same")
+
+    assert log.written == []
+
+
+def test_a_swap_without_a_log_carries_on():
+    from device_swap import SwapExecutor
+
+    class Registry:
+        pass
+
+    executor = SwapExecutor.__new__(SwapExecutor)
+    executor.entity_registry = Registry()
+
+    executor._note_the_succession("binary_sensor.one", "binary_sensor.two")
+
+
+async def test_a_name_that_resembles_it_is_not_offered(checker):
+    """Resemblance was weighed once and could not tell these two apart.
+
+    Three words of five, and two different windows in two different rooms.
+    Only what was actually renamed answers now.
+    """
+    checker._existing_entities = {"binary_sensor.kinderzimmer_mittleres_fenster_zustand"}
+    checker._entity_details = {
+        "binary_sensor.kinderzimmer_mittleres_fenster_zustand": {"friendly_name": "Kinderzimmer"}
+    }
+
+    assert await checker.get_suggestions("binary_sensor.buro_mittleres_fenster_zustand") == []
+
+
+async def test_the_replaced_entity_is_not_offered(checker):
+    """A swap may keep the old device under its interim id, and often does.
+
+    It exists, so it passes the check that the chain ends somewhere real - and
+    it is still the entity that was replaced, not the one replacing it. Where
+    the new device has no matching entity, there is no answer to give.
+    """
+    parked = "binary_sensor.buro_rechtes_fenster_status_swapout"
+    checker._existing_entities = {parked}
+    checker._entity_details = {parked: {"friendly_name": parked}}
+    checker.rename_log = Log({"binary_sensor.buro_rechtes_fenster_status": parked})
+
+    assert await checker.get_suggestions("binary_sensor.buro_rechtes_fenster_status") == []
+
+
+async def test_an_unreadable_log_answers_nothing(checker):
+    """A log that cannot be read has nothing to say, and neither has this."""
+    checker.rename_log = Log(raises=True)
+
+    assert await checker.get_suggestions("switch.kammer_it_steckdose_zustand") == []
+
+
+async def test_a_name_one_word_away_is_not_offered(checker):
+    """`kammer_it_steckdose_zustand` against `..._schalter` was a guess worth 0.6.
+
+    It happened to be right. `buro_rechtes_fenster_status` against that window's
+    `hardwarefehler`, `netzwerkfehler`, `funkmodulfehler` and `zustand` scored
+    the same four times over, and three of those four were wrong.
+    """
+    checker.rename_log = Log({})
+
+    assert await checker.get_suggestions("switch.kammer_it_steckdose_zustand") == []

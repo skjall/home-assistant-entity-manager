@@ -145,7 +145,16 @@
     "fix": "Referenz reparieren",
     "fixed_successfully": "Referenz erfolgreich repariert",
     "select_replacement": "Bitte eine Ersatz-Entity auswählen",
-    "open_in_ha": "In Home Assistant öffnen"
+    "open_in_ha": "In Home Assistant öffnen",
+    "by_hand_badge": "nur von Hand",
+    "by_hand_remaining": "{count} bleiben für dich",
+    "by_hand_beta": "wird geschrieben (Beta)",
+    "by_hand_written": "{count} werden mitgeschrieben",
+    "places": "{count} Stellen",
+    "line": "Zeile {line}",
+    "lines": "Zeilen {lines}",
+    "renamed_here": "umbenannt",
+    "pick_yourself": "Kein Eintrag im Verlauf – Ersatz selbst wählen:"
   },
   "messages": {
     "loading": "Lädt...",
@@ -548,6 +557,7 @@
     "step_carried": "Mitgezogen",
     "step_not_carried": "Nicht mitgezogen",
     "step_unreachable": "Nachziehen",
+    "step_by_hand": "In der YAML",
     "step_error": "Fehler",
     "follow_up": "Hier musst du selbst nachziehen",
     "follow_up_hint": "Diese Verweise nennen weiterhin den alten Namen und lassen sich von hier aus nicht ändern.",
