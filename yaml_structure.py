@@ -35,6 +35,9 @@ ID_FIELDS = ("id", "unique_id")
 # A file this large is parsed only when something was found in it.
 _TOO_LARGE_TO_PARSE = 8 * 1024 * 1024
 
+# How many steps of an unnamed path are worth reading.
+_ENOUGH_OF_A_TRAIL = 3
+
 
 class Forgiving(yaml.SafeLoader):
     """Reads Home Assistant's YAML without knowing its tags."""
@@ -72,10 +75,19 @@ class Where:
         return {"trail": " → ".join(self.trail), "name": self.name, "object_id": self.object_id}
 
     def described(self) -> str:
-        """One line for a log: the name, the id, or the path down to it."""
+        """One line for a log: the name, the id, or the path down to it.
+
+        The path is cut short where nothing along it is named: the whole way
+        down a dashboard runs to a dozen steps and reads as noise, while the
+        first few say which part of the file to look at.
+        """
         if self.name and self.object_id:
             return f"{self.name} ({self.object_id})"
-        return self.name or self.object_id or " → ".join(self.trail)
+        if self.name or self.object_id:
+            return self.name or self.object_id
+        if len(self.trail) > _ENOUGH_OF_A_TRAIL:
+            return " → ".join(self.trail[:_ENOUGH_OF_A_TRAIL]) + " → …"
+        return " → ".join(self.trail)
 
     def __repr__(self) -> str:  # pragma: no cover - for test output
         return f"Where({self.described()})"

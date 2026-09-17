@@ -152,3 +152,23 @@ def test_the_file_is_parsed_once_however_many_lines_are_asked_about(files, monke
     files.what_holds("package.yaml", 11)
 
     assert len(reads) == 1
+
+
+def test_a_path_through_nothing_named_is_cut_short(tmp_path):
+    """A dashboard nests deep, and the whole way down reads as noise."""
+    (tmp_path / "deep.yaml").write_text(
+        "views:\n"
+        "  - cards:\n"
+        "      - type: vertical-stack\n"
+        "        cards:\n"
+        "          - type: entities\n"
+        "            entities:\n"
+        "              - entity: sensor.gone_away\n",
+        encoding="utf-8",
+    )
+    where = Structures(str(tmp_path)).what_holds("deep.yaml", 7)
+
+    assert where.name is None
+    assert where.described().endswith("→ …")
+    assert where.described().count("→") == 3
+    assert where.trail[0] == "views"
