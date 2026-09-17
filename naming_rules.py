@@ -4,17 +4,31 @@ A rule maps an entity's type — identified by its integration's
 ``translation_key``, the canonical form of the name the integration supplies,
 or its ``device_class`` — to the wording the user wants, per language.
 
+How far a rule reaches is a list of filters rather than one fixed scope. A
+filter names an integration, an integration and a device model, or a single
+entity by its registry id. A rule with no filter at all reaches every entity of
+its type. Several filters on one rule are read as "or", so one rule can say
+"this wording, for ecoflow_cloud and for matter" without being written twice.
+
+Where more than one rule could answer, the narrowest filter decides: one
+entity, then a model, then an integration, then everywhere. Two rules may
+therefore never claim the same filter for the same type — that is refused on
+write rather than resolved by guessing.
+
 Storage: ``/data/naming_rules.json``::
 
-    {"version": 1, "language": "de",
+    {"version": 2, "language": "de",
      "rules": [{"id": "r_ab12cd34",
-                "match": {"kind": "name", "value": "linkquality", "integration": null},
+                "match": {"kind": "name", "value": "linkquality"},
+                "filters": [{"integration": "mqtt"}],
                 "targets": {"de": "Verbindungsqualität"},
                 "source": "learned", "learned_from": "sensor.x", "created_at": "..."}],
      "migration": {...}}
 
 The legacy store ``user_type_mappings.json`` is migrated on first load; its
-backup and a report stay next to it so nothing is lost silently.
+backup and a report stay next to it so nothing is lost silently. Rules written
+before the filter list are migrated in place: their single scope becomes their
+one filter.
 """
 
 from copy import deepcopy
@@ -32,10 +46,17 @@ from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 KINDS = ("translation_key", "name", "device_class")
 # Lookup order: the most specific identity first.
 KIND_PRIORITY = {"translation_key": 0, "name": 1, "device_class": 2}
+
+# What a filter may say. A registry id names one entity and stands alone; the
+# other two describe a kind of device and may be combined.
+FILTER_FIELDS = ("registry_id", "integration", "model")
+
+# Narrowest first. Nothing at all is widest and comes last.
+EVERYWHERE_RANK = 4
 
 
 class NamingRuleError(ValueError):
@@ -48,6 +69,66 @@ def _now() -> str:
 
 def _new_id() -> str:
     return f"r_{uuid.uuid4().hex[:8]}"
+
+
+def clean_filter(raw: Any) -> Dict[str, str]:
+    """One filter, reduced to the fields that say something."""
+    if not isinstance(raw, Mapping):
+        raise NamingRuleError("A filter has to be an object")
+    unknown = set(raw) - set(FILTER_FIELDS)
+    if unknown:
+        raise NamingRuleError(f"A filter knows no {', '.join(sorted(unknown))}")
+    registry_id = str(raw.get("registry_id") or "").strip()
+    integration = str(raw.get("integration") or "").strip()
+    model = str(raw.get("model") or "").strip()
+    if registry_id:
+        if integration or model:
+            raise NamingRuleError("A filter names one entity or a kind of device, not both")
+        return {"registry_id": registry_id}
+    cleaned = {}
+    if integration:
+        cleaned["integration"] = integration
+    if model:
+        cleaned["model"] = model
+    if not cleaned:
+        raise NamingRuleError("A filter that says nothing is the rule without filters")
+    return cleaned
+
+
+def filter_rank(one: Mapping[str, str]) -> int:
+    """How narrow a filter is: 0 is one entity, 4 is everything."""
+    if one.get("registry_id"):
+        return 0
+    integration = one.get("integration")
+    model = one.get("model")
+    if integration and model:
+        return 1
+    if model:
+        return 2
+    if integration:
+        return 3
+    return EVERYWHERE_RANK
+
+
+def clean_filters(raw: Any) -> List[Dict[str, str]]:
+    """A rule's filters, without repeats and in a settled order.
+
+    The same filter twice reaches no further than once, so it is dropped rather
+    than kept and explained later. Sorting them makes two rules with the same
+    reach compare equal whatever order they were typed in.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, Mapping):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        raise NamingRuleError("Filters have to be a list")
+    seen: List[Dict[str, str]] = []
+    for entry in raw:
+        one = clean_filter(entry)
+        if one not in seen:
+            seen.append(one)
+    return sorted(seen, key=lambda one: (filter_rank(one), sorted(one.items())))
 
 
 class NamingRules:
@@ -68,6 +149,7 @@ class NamingRules:
         self.default_language = default_language
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._rule_index = None
+        self._by_entity = None
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -92,8 +174,7 @@ class NamingRules:
                 data.setdefault("language", self.default_language)
                 data.setdefault("migration", None)
                 data.setdefault("display_case", DEFAULT_CASE)
-                for rule in data["rules"]:
-                    rule.get("match", {}).setdefault("model", None)
+                self._migrate_scopes_to_filters(data)
                 return data
             except (OSError, json.JSONDecodeError, NamingRuleError) as error:
                 logger.error("Failed to load naming rules: %s", error)
@@ -105,11 +186,35 @@ class NamingRules:
             self._write(data)
         return data
 
+    @staticmethod
+    def _migrate_scopes_to_filters(data: Dict[str, Any]) -> None:
+        """Turn the one scope a rule used to carry into its one filter.
+
+        Runs on every load rather than once behind a flag: it is idempotent, and
+        a rule written by an older version can still arrive through an import or
+        a restored backup long after the file itself says version 2.
+        """
+        for rule in data.get("rules", []):
+            match = rule.setdefault("match", {})
+            if "filters" not in rule:
+                scope = {}
+                if match.get("integration"):
+                    scope["integration"] = match["integration"]
+                if match.get("model"):
+                    scope["model"] = match["model"]
+                rule["filters"] = [scope] if scope else []
+            else:
+                rule["filters"] = clean_filters(rule["filters"])
+            match.pop("integration", None)
+            match.pop("model", None)
+        data["version"] = SCHEMA_VERSION
+
     def _write(self, data: Mapping[str, Any]) -> None:
         atomically(self.storage_path, data)
 
     def _forget_index(self) -> None:
         self._rule_index = None
+        self._by_entity = None
 
     @guarded
     def save(self) -> None:
@@ -272,6 +377,7 @@ class NamingRules:
         source: str = "user",
         learned_from: Optional[str] = None,
         model: Optional[str] = None,
+        filters: Any = None,
     ) -> Dict[str, Any]:
         if kind not in KINDS:
             raise NamingRuleError(f"Unknown rule kind: {kind}")
@@ -280,9 +386,18 @@ class NamingRules:
         clean_targets = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
         if not clean_targets:
             raise NamingRuleError("A rule needs at least one target")
+        if filters is None:
+            # The older way of saying it: one integration, one model, or neither.
+            scope = {}
+            if integration:
+                scope["integration"] = integration
+            if model:
+                scope["model"] = model
+            filters = [scope] if scope else []
         rule = {
             "id": _new_id(),
-            "match": {"kind": kind, "value": value, "integration": integration or None, "model": model or None},
+            "match": {"kind": kind, "value": value},
+            "filters": clean_filters(filters),
             "targets": clean_targets,
             "source": source,
             "created_at": _now(),
@@ -348,6 +463,27 @@ class NamingRules:
     def _index_key(kind: str, value: str, integration: Optional[str], model: Optional[str]):
         return (kind, value, integration or None, canon(model or ""))
 
+    @classmethod
+    def _keys_of(cls, rule: Mapping[str, Any]) -> List[tuple]:
+        """Every place this rule has to be found under.
+
+        One key per filter, because a rule with two filters answers to both. A
+        rule without filters gets the one key that stands for everywhere. A
+        filter naming one entity is not a type key at all - see _entities_of.
+        """
+        match = rule["match"]
+        filters = [one for one in (rule.get("filters") or []) if not one.get("registry_id")]
+        if not filters and not cls._entities_of(rule):
+            filters = [{}]
+        return [
+            cls._index_key(match["kind"], match["value"], one.get("integration"), one.get("model")) for one in filters
+        ]
+
+    @staticmethod
+    def _entities_of(rule: Mapping[str, Any]) -> List[str]:
+        """The single entities this rule names, by registry id."""
+        return [one["registry_id"] for one in (rule.get("filters") or []) if one.get("registry_id")]
+
     def _index(self) -> Dict[tuple, Dict[str, Any]]:
         """Rules by what they match on.
 
@@ -355,21 +491,59 @@ class NamingRules:
         would be thousands of comparisons per entity on a large installation.
         """
         if self._rule_index is None:
-            self._rule_index = {
-                self._index_key(
-                    rule["match"]["kind"],
-                    rule["match"]["value"],
-                    rule["match"].get("integration"),
-                    rule["match"].get("model"),
-                ): rule
-                for rule in self.rules
-            }
+            index: Dict[tuple, Dict[str, Any]] = {}
+            for rule in self.rules:
+                for key in self._keys_of(rule):
+                    index.setdefault(key, rule)
+            self._rule_index = index
         return self._rule_index
 
-    def _matching(
-        self, kind: str, value: str, integration: Optional[str], model: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
-        return self._index().get(self._index_key(kind, value, integration, model))
+    def _entity_index(self) -> Dict[str, Dict[str, Any]]:
+        """Rules that name one entity, by that entity's registry id."""
+        if self._by_entity is None:
+            index: Dict[str, Dict[str, Any]] = {}
+            for rule in self.rules:
+                for registry_id in self._entities_of(rule):
+                    index.setdefault(registry_id, rule)
+            self._by_entity = index
+        return self._by_entity
+
+    def for_entity(self, registry_id: str, language: str = "") -> Optional[Dict[str, Any]]:
+        """The rule written for this one entity, if there is one.
+
+        It answers whatever the integration supplies, because that is what
+        being written for one entity means: the user looked at this entity and
+        said what it is called. No type rule gets a say where one exists.
+        """
+        if not registry_id:
+            return None
+        rule = self._entity_index().get(registry_id)
+        if rule is None:
+            return None
+        return rule if rule["targets"].get(language or self.language) else None
+
+    def claimed_by(self, rule: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        """The rule that already answers to one of these filters, if any.
+
+        Two rules claiming one filter for one type would make the answer depend
+        on which came first, so a write that would do it is refused instead.
+        """
+        index = self._index()
+        for key in self._keys_of(rule):
+            other = index.get(key)
+            if other is not None and other["id"] != rule.get("id"):
+                return other
+        by_entity = self._entity_index()
+        for registry_id in self._entities_of(rule):
+            other = by_entity.get(registry_id)
+            if other is not None and other["id"] != rule.get("id"):
+                return other
+        return None
+
+    def _refuse_collision(self, rule: Mapping[str, Any]) -> None:
+        other = self.claimed_by(rule)
+        if other is not None:
+            raise NamingRuleError(f"Rule {other['id']} already covers one of those filters")
 
     @staticmethod
     def _scopes(integration: Optional[str], model: Optional[str]):
@@ -380,6 +554,56 @@ class NamingRules:
             if scope not in seen:
                 seen.append(scope)
         return seen
+
+    def _matching(
+        self, kind: str, value: str, integration: Optional[str], model: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        return self._index().get(self._index_key(kind, value, integration, model))
+
+    @staticmethod
+    def matching_filter(
+        rule: Mapping[str, Any], integration: Optional[str] = None, model: Optional[str] = None
+    ) -> Dict[str, str]:
+        """The narrowest filter of this rule that covers such an entity.
+
+        Empty for a rule without filters, which covers everything. Answering
+        with the filter rather than the whole list is what lets a reader see
+        why this rule applied here and not somewhere else.
+        """
+        best: Optional[Dict[str, str]] = None
+        for one in rule.get("filters") or []:
+            if one.get("registry_id"):
+                continue
+            if one.get("integration") and one["integration"] != (integration or None):
+                continue
+            if one.get("model") and canon(one["model"]) != canon(model or ""):
+                continue
+            if best is None or filter_rank(one) < filter_rank(best):
+                best = one
+        return dict(best) if best else {}
+
+    @staticmethod
+    def sole_integration(rule: Mapping[str, Any]) -> Optional[str]:
+        """The one integration this rule is about, if it is about exactly one.
+
+        A rule spanning several has no single integration whose built-in
+        wording it could be compared against, so it gets none.
+        """
+        found = {one["integration"] for one in rule.get("filters") or [] if one.get("integration")}
+        return found.pop() if len(found) == 1 else None
+
+    @classmethod
+    def why(
+        cls, rule: Mapping[str, Any], integration: Optional[str] = None, model: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """What a rule matched on, for a reader: its type and the filter that caught this entity."""
+        one = cls.matching_filter(rule, integration, model)
+        return {
+            **rule["match"],
+            "integration": one.get("integration"),
+            "model": one.get("model"),
+            "filters": [dict(each) for each in rule.get("filters") or []],
+        }
 
     def find(
         self,
@@ -418,6 +642,7 @@ class NamingRules:
         rule = self._matching(kind, key, integration or None, model or None)
         if rule is None:
             rule = self._make_rule(kind, key, integration, {language: target}, source, learned_from, model)
+            self._refuse_collision(rule)
             self.rules.append(rule)
         else:
             if not target.strip():
@@ -430,13 +655,170 @@ class NamingRules:
         return rule
 
     @guarded
+    def saying(self, kind: str, value: str, language: str, target: str) -> Optional[Dict[str, Any]]:
+        """The rule that already says exactly this, whatever it applies to.
+
+        What makes a rule one rule is what it says - this type is called that
+        word - not where it applies. Where it applies is the filter list, and a
+        second place the same wording is wanted belongs in that list rather than
+        in a second rule beside it.
+        """
+        key = value if kind == "translation_key" else canon(value)
+        wanted = (target or "").strip()
+        for rule in self.rules:
+            if rule["match"]["kind"] != kind or rule["match"]["value"] != key:
+                continue
+            if (rule["targets"].get(language) or "").strip() == wanted:
+                return rule
+        return None
+
+    @guarded
+    def add_filter(
+        self,
+        kind: str,
+        value: str,
+        language: str,
+        target: str,
+        one: Optional[Mapping[str, str]],
+        source: str = "user",
+        learned_from: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        rule = self.add_filter_quietly(kind, value, language, target, one, source, learned_from)
+        self.save()
+        return rule
+
+    def add_filter_quietly(
+        self,
+        kind: str,
+        value: str,
+        language: str,
+        target: str,
+        one: Optional[Mapping[str, str]],
+        source: str = "user",
+        learned_from: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Make this wording apply in one more place.
+
+        The rule that already says it gains a filter; if none does, one is
+        written. Carrying no filter is not a place of its own but the default a
+        rule starts out with, so the first real filter replaces it.
+        """
+        if not (target or "").strip():
+            raise NamingRuleError("A rule needs a target")
+        # No filter at all is the place that is everywhere, which is how a rule
+        # widened from one entity to the whole home arrives here.
+        wanted = clean_filter(one) if one else None
+        rule = self.saying(kind, value, language, target)
+        if rule is None:
+            rule = self._make_rule(
+                kind,
+                value if kind == "translation_key" else canon(value),
+                None,
+                {language: target},
+                source=source,
+                learned_from=learned_from,
+                filters=[wanted] if wanted else [],
+            )
+            self._refuse_collision(rule)
+            self.rules.append(rule)
+        elif wanted is None:
+            if not rule["filters"]:
+                return rule
+            self._refuse_collision({**rule, "filters": []})
+            rule["filters"] = []
+            rule["updated_at"] = _now()
+        elif rule.get("filters"):
+            merged = clean_filters(list(rule["filters"]) + [wanted])
+            if merged == rule["filters"]:
+                return rule
+            self._refuse_collision({**rule, "filters": merged})
+            rule["filters"] = merged
+            rule["updated_at"] = _now()
+        else:
+            # Everywhere is where a rule starts, not somewhere it was put: the
+            # first filter takes its place instead of being swallowed by it.
+            self._refuse_collision({**rule, "filters": [wanted]})
+            rule["filters"] = [wanted]
+            rule["updated_at"] = _now()
+        self._forget_index()
+        return rule
+
+    @guarded
+    def merge_duplicates(self) -> List[Dict[str, Any]]:
+        """Fold rules that say the same thing into one, filters and all.
+
+        Two rules saying one type is called one word are one rule that applies
+        in two places. Kept apart they have to be edited twice and can drift,
+        and a reader cannot see from either how far the wording actually
+        reaches. One that carries no filter already applies everywhere, so the
+        others add nothing and go.
+        """
+        language = self.language
+        first: Dict[tuple, Dict[str, Any]] = {}
+        merged: List[Dict[str, Any]] = []
+        dropped = set()
+        for rule in self.rules:
+            key = (rule["match"]["kind"], rule["match"]["value"], (rule["targets"].get(language) or "").strip())
+            if not key[2]:
+                continue
+            kept = first.get(key)
+            if kept is None:
+                first[key] = rule
+                continue
+            dropped.add(rule["id"])
+            if not kept.get("filters") or not rule.get("filters"):
+                # One of them reaches everything of its type; the other is
+                # already covered by it.
+                kept["filters"] = []
+            else:
+                kept["filters"] = clean_filters(list(kept["filters"]) + list(rule["filters"]))
+            kept["updated_at"] = _now()
+            if kept not in merged:
+                merged.append(kept)
+        if dropped:
+            self.data["rules"] = [rule for rule in self.rules if rule["id"] not in dropped]
+            self.save()
+            logger.info("Folded %d rules into %d that already said the same", len(dropped), len(merged))
+        return merged
+
+    @guarded
+    def remove_filter(self, rule_id: str, one: Mapping[str, str]) -> Dict[str, Any]:
+        """Stop this rule applying in one place.
+
+        Taking the last filter off would widen the rule to everything of its
+        type, which is never what removing a place means, so the rule goes
+        instead.
+        """
+        rule = self.get(rule_id)
+        if rule is None:
+            raise NamingRuleError(f"Unknown rule: {rule_id}")
+        wanted = clean_filter(one)
+        left = [each for each in (rule.get("filters") or []) if each != wanted]
+        if len(left) == len(rule.get("filters") or []):
+            raise NamingRuleError("That rule does not apply there")
+        if not left:
+            self.data["rules"] = [each for each in self.rules if each["id"] != rule_id]
+            self.save()
+            return {**rule, "deleted": True}
+        rule["filters"] = clean_filters(left)
+        rule["updated_at"] = _now()
+        self.save()
+        return rule
+
+    @guarded
     def update(
         self,
         rule_id: str,
         targets: Optional[Mapping[str, str]] = None,
-        integration: Any = ...,
-        model: Any = ...,
+        filters: Any = ...,
     ) -> Dict[str, Any]:
+        """Change what a rule says, or the whole list of places it applies.
+
+        One place at a time is add_filter and remove_filter; this is for
+        replacing the list wholesale, which is the only other honest way to
+        change it. There is deliberately no way to set a single scope: on a
+        rule reaching three places that could only mean throwing two away.
+        """
         rule = self.get(rule_id)
         if rule is None:
             raise NamingRuleError(f"Unknown rule: {rule_id}")
@@ -445,10 +827,11 @@ class NamingRules:
             if not clean:
                 raise NamingRuleError("A rule needs at least one target")
             rule["targets"] = clean
-        if integration is not ...:
-            rule["match"]["integration"] = integration or None
-        if model is not ...:
-            rule["match"]["model"] = model or None
+
+        if filters is not ...:
+            wanted = clean_filters(filters)
+            self._refuse_collision({**rule, "filters": wanted})
+            rule["filters"] = wanted
         rule["updated_at"] = _now()
         self.save()
         return rule
@@ -492,7 +875,9 @@ class NamingRules:
         language = language or self.language
         view: Dict[str, str] = {}
         for rule in self.rules:
-            if rule["match"].get("integration"):
+            if rule.get("filters"):
+                # A rule that reaches only some entities cannot be flattened
+                # into a view that has no room to say which.
                 continue
             target = rule["targets"].get(language)
             if target:

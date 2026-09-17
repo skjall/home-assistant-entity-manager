@@ -112,9 +112,13 @@ class MockWebSocket:
 
     async def _send_message(self, message):
         self.messages.append(message)
+        self.asked = message["type"]
         return 1
 
     async def _receive_message(self):
+        # A rename is read back afterwards, and a get answers with the entry.
+        if getattr(self, "asked", "") == "config/entity_registry/get":
+            return {"id": 1, "success": True, "result": self.entry}
         return {"id": 1, "success": True, "result": {"entity_entry": self.entry}}
 
 

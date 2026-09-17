@@ -19,7 +19,9 @@ from device_registry import DeviceRegistry
 from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 from ha_websocket import HomeAssistantWebSocket
-from jobs import new_job
+from jobs import STATE_COMPLETED, STATE_FAILED, iso_now, new_job
+from naming_exception_adoption import supplied_key
+from naming_rules import NamingRuleError
 import naming_service
 from routes_naming import ensure_registry_loaded
 from sanitize import (
@@ -65,18 +67,37 @@ async def _set_entity_override_async():
         # to be there before the override can be turned into a name.
         await ensure_registry_loaded()
 
-        # Speichere Override
-        if override_name:
-            renamer_state["naming_overrides"].set_entity_override(registry_id, override_name)
-        else:
-            renamer_state["naming_overrides"].remove_entity_override(registry_id)
-
         # Finde die Entity ID basierend auf der Registry ID
         entity_id = None
         for eid, entity in renamer_state["restructurer"].entities.items():
             if entity.get("id") == registry_id:
                 entity_id = eid
                 break
+
+        # A name for one entity is a rule that applies in one place. The rule
+        # already saying that word gains this entity as another filter rather
+        # than being written a second time beside itself.
+        rules = renamer_state["naming_rules"]
+        one = {"registry_id": registry_id}
+        if override_name:
+            entry = renamer_state["restructurer"].entities.get(entity_id or "", {})
+            try:
+                rules.add_filter(
+                    "name",
+                    supplied_key(entry, override_name),
+                    rules.language,
+                    override_name,
+                    one,
+                    learned_from=entity_id,
+                )
+            except NamingRuleError as error:
+                return jsonify({"error": str(error)}), 400
+        else:
+            existing = rules.for_entity(registry_id, rules.language)
+            if existing is not None:
+                rules.remove_filter(existing["id"], one)
+            renamer_state["naming_overrides"].remove_entity_override(registry_id)
+        renamer_state["type_mappings"]._refresh_user_view()
 
         # Calculate the new entity ID and friendly name with the override
         new_id = None
@@ -363,12 +384,57 @@ async def _rename_entity_async():
     if not new_entity_id and not new_friendly_name:
         return jsonify({"error": "new_entity_id or new_friendly_name required"}), 400
 
+    state = await naming_service.state_of(old_entity_id)
     try:
-        result = await naming_service.rename_entity(old_entity_id, new_entity_id, new_friendly_name)
+        result = await naming_service.rename_entity(
+            old_entity_id,
+            new_entity_id,
+            new_friendly_name,
+            provenance=naming_service.note_for(old_entity_id, state, new_friendly_name or ""),
+        )
     except Exception as error:
         logger.error(f"Error renaming entity {old_entity_id}: {error}")
+        _record_single_rename(old_entity_id, new_entity_id, new_friendly_name, error=error)
         return jsonify({"error": str(error)}), 500
+    if not result.get("skipped"):
+        _record_single_rename(
+            old_entity_id,
+            result.get("new_entity_id") or new_entity_id,
+            result.get("new_friendly_name") or new_friendly_name,
+            verified=result.get("verified", False),
+        )
     return jsonify(result)
+
+
+def _record_single_rename(old_id, new_id, name, error=None, verified=True):
+    """Put a rename of one entity in the log, where every run already is.
+
+    Renaming from the list wrote nothing down: it happened, the toast faded,
+    and the log in the settings - which is where one goes to find out what
+    happened - did not know about it. A failure was worse, because the message
+    was gone before it could be read.
+    """
+    store = renamer_state.get("job_store")
+    if store is None:
+        return
+    written = new_id or old_id
+    job = new_job("rename_entity", {"entity_id": old_id}, job_id=uuid.uuid4().hex)
+    job["progress"] = {"done": 1, "total": 1, "current": written}
+    if error is None:
+        job["state"] = STATE_COMPLETED
+        job["result"] = {"success": [written]}
+        job["log"] = [{"ts": iso_now(), "step": "RENAME", "message": f"{old_id} -> {written} ({name})"}]
+        if not verified:
+            job["log"].append(
+                {"ts": iso_now(), "step": "UNVERIFIED", "message": f"{old_id} -> {written}: written, not read back"}
+            )
+    else:
+        job["state"] = STATE_FAILED
+        job["error"] = str(error)
+        job["result"] = {"failed": [old_id]}
+        job["log"] = [{"ts": iso_now(), "step": "ERROR", "message": f"{old_id}: {error}"}]
+    job["updated"] = iso_now()
+    store.save(job)
 
 
 @entities.route("/api/apply_naming", methods=["POST"])
@@ -501,7 +567,10 @@ def _capture_device_entity_naming(
         name = restructurer.build_naming_context(entity_id, states_by_id.get(entity_id, {}))["entity"]
         resolution = restructurer.last_resolutions.get(entity_id) or {}
         captured[entity_id] = {
-            "base_entity": name,
+            # What went into the name, not what came out of it: a rule the user
+            # edits afterwards only reaches this entity again if the note hands
+            # it back the word the rule matches on.
+            "base_entity": resolution.get("input") or name,
             "won_by": resolution.get("won_by") or "",
             "rule_id": resolution.get("rule_id"),
         }
@@ -616,12 +685,14 @@ async def rename_device_handler(job, ctx):
             try:
                 # Rename entity (ID + friendly name)
                 id_changed = new_entity_id != old_entity_id
-                await entity_registry.rename_entity(
+                written = await entity_registry.rename_entity(
                     old_entity_id,
                     new_entity_id if id_changed else None,
                     new_friendly_name,
                     provenance={**(captured.get(old_entity_id) or {}), "template_hash": template_hash},
                 )
+                if not (written or {}).get("verified"):
+                    ctx.log("UNVERIFIED", f"{old_entity_id} -> {new_entity_id}: written, not read back")
                 entities_updated += 1
                 logger.info("  SUCCESS: Renamed entity")
                 ctx.log("RENAME", f"{old_entity_id} -> {new_entity_id}")

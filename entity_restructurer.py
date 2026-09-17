@@ -473,6 +473,16 @@ class EntityRestructurer:
             return None
         return stored
 
+    def _supplied_type(self, registry: Dict[str, Any], state: Dict[str, Any], prefixes: Tuple[str, ...]) -> str:
+        """What the integration calls this entity, without the device in front."""
+        native = next(
+            (candidate for candidate in (registry.get("original_name"), state.get("original_name")) if candidate),
+            "",
+        )
+        if not native:
+            return ""
+        return self._without_device_prefix(native, prefixes) or ""
+
     def _remembered_type(self, registry: Dict[str, Any]) -> str:
         """The type part of a name this add-on wrote, if it is still that name.
 
@@ -526,7 +536,7 @@ class EntityRestructurer:
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": dict(rule["match"]),
+                            "matched_on": rules.why(rule, integration, model),
                         }
                     )
                 rule = rules.find("name", name, integration, language, model)
@@ -536,32 +546,38 @@ class EntityRestructurer:
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": dict(rule["match"]),
+                            "matched_on": rules.why(rule, integration, model),
                         }
                     )
                 # The device class is the widest anchor: it says what a value
                 # measures where neither a key nor a name matched.
                 device_class = registry.get("device_class") or registry.get("original_device_class")
                 rule = rules.find("device_class", device_class, integration, language, model)
-                if rule:
+                if rule and self._names_the_class(name, entity_id, device_class, rule["targets"].get(language, "")):
                     candidates.append(
                         {
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": dict(rule["match"]),
+                            "matched_on": rules.why(rule, integration, model),
                         }
                     )
             # Home Assistant knows its own entities in every language it speaks,
             # which is far more than this add-on could translate itself.
+            self._last_ha_source = None
             supplied = self._home_assistant_name(entity_id, registry, language, name)
             if supplied:
+                # What answered, not the name that was asked about: the lookup
+                # goes by this entity's translation key or its device class,
+                # and saying "every entity called X" would claim something
+                # about names that were never looked at.
+                source = self._last_ha_source or {"kind": "home_assistant", "value": canon(name)}
                 candidates.append(
                     {
                         "value": supplied,
                         "won_by": "rule:system",
                         "rule_id": None,
-                        "matched_on": {"kind": "home_assistant", "value": canon(name), "integration": integration},
+                        "matched_on": {**source, "integration": integration},
                     }
                 )
             detected = integration or self.type_mappings.detect_integration(entity_id)
@@ -578,6 +594,20 @@ class EntityRestructurer:
                         "matched_on": {"kind": "name", "value": canon(name), "integration": detected},
                     }
                 )
+        # A translation that numbers what it cannot name loses to a name that
+        # names it: Miele's "temperature_zone_2" reads "Temperaturzone 2" while
+        # the entity says "Temperaturzone Gefrierzone", and only the zone tells
+        # it from its sibling. Nothing else is touched - a translation without
+        # a counter stays, even where the name carries an extra word, or the
+        # German "PLC-Downlink PHY-Rate" would lose to an English name with a
+        # serial number after it. A rule the user wrote always keeps its say.
+        candidates = [
+            candidate
+            for candidate in candidates
+            if candidate["won_by"] != "rule:system"
+            or not self._counts_rather_than_names(candidate["value"])
+            or not self._says_more(name, candidate["value"])
+        ]
         # A rule or default that only repeats the shown spelling has no effect
         # and is not reported as the source.
         candidates = [candidate for candidate in candidates if candidate["value"] != shown]
@@ -588,6 +618,133 @@ class EntityRestructurer:
         winner["platform"] = integration
         winner["candidates"] = [{"won_by": c["won_by"], "value": c["value"]} for c in candidates]
         return winner
+
+    @staticmethod
+    def _carries_prefix(value: str, prefixes: Tuple[str, ...]) -> bool:
+        """Whether an area or device name is still sitting in this name."""
+        written = canon(value)
+        return any(canon(prefix) and canon(prefix) in written for prefix in prefixes)
+
+    @staticmethod
+    def _counts_rather_than_names(value: str) -> bool:
+        """Whether a name leans on a bare number to tell one thing from another.
+
+        "Temperaturzone 2" is the second of something it does not name. A
+        number that is part of a word - "PHY-Rate 5G", "PM10" - names, and does
+        not count.
+        """
+        return any(part.isdigit() for part in re.split(r"[\s_\-]+", value or "") if part)
+
+    # Set while a read is only a read. Working out a name corrects the note it
+    # was built from, which is right when the name is being worked out to be
+    # used and wrong when it is being worked out to be counted: the same count,
+    # asked twice, would come back different.
+    reading_only = False
+
+    def rule_behind(self, entity_id: str, registry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Which rule applies to this entity's type, and what it caught it on.
+
+        Not the same question as which rule the name came from: a rule that
+        only repeats what is already shown does not win the name, and still
+        applies. Nor is it the same as asking the rules what they match, which
+        finds a device-class rule for an entity the naming then refuses it -
+        UniFi's "regenerate password" button carries the class "update" and is
+        about something else. Both of those made the count over a rule's entity
+        list disagree with the list itself.
+
+        It is asked with the name that really went into the rules, so a note or
+        a stale supplied name cannot pull the two apart.
+        """
+        rules = getattr(self.type_mappings, "rules", None) if self.type_mappings else None
+        if rules is None:
+            return None
+        self.build_naming_context(entity_id, registry)
+        resolution = self.last_resolutions.get(entity_id) or {}
+        if resolution.get("rule_id"):
+            caught = resolution.get("matched_on") or {}
+            return {
+                "rule_id": resolution["rule_id"],
+                "kind": caught.get("kind") or "",
+                "value": caught.get("value") or "",
+            }
+        name = resolution.get("input") or ""
+        integration = registry.get("platform") or None
+        model = (self.devices.get(registry.get("device_id") or "", {}) or {}).get("model") or None
+        device_class = registry.get("device_class") or registry.get("original_device_class") or ""
+        for kind, value in (
+            ("translation_key", registry.get("translation_key") or ""),
+            ("name", name),
+            ("device_class", device_class),
+        ):
+            rule = rules.find(kind, value, integration, self.language, model)
+            if rule is None:
+                continue
+            if kind == "device_class" and not self._names_the_class(
+                name, entity_id, device_class, rule["targets"].get(self.language, "")
+            ):
+                continue
+            return {"rule_id": rule["id"], "kind": kind, "value": value}
+        return None
+
+    @staticmethod
+    def _only_puts_something_in_front(supplied: str, standing: str) -> bool:
+        """Whether a supplied name is the standing one with words in front of it.
+
+        That is what a frozen hierarchy looks like: the type part is still the
+        last thing the supplied name says, and everything before it names a
+        room or a device the entity has since left. Word for word from the
+        back, so "Energie" does not match "Tagesenergie".
+        """
+
+        def words(text: str) -> list:
+            return [canon(part) for part in re.split(r"[\s_\-]+", text or "") if canon(part)]
+
+        here, there = words(standing), words(supplied)
+        return bool(here) and len(there) > len(here) and there[-len(here) :] == here
+
+    @staticmethod
+    def _says_more(standing: str, supplied: str) -> bool:
+        """Whether a name carries everything another one does, and something else.
+
+        Word for word, so a rewording is not mistaken for an addition: only a
+        name that keeps every word and adds one counts. A bare number does not
+        count as a word - "Temperaturzone 2" numbers what it cannot name, and
+        "Temperaturzone Gefrierzone" says the same thing better.
+        """
+
+        def words(text: str) -> set:
+            parts = {canon(part) for part in re.split(r"[\s_\-]+", text or "") if part}
+            return {part for part in parts if part and not part.isdigit()}
+
+        here, there = words(standing), words(supplied)
+        return bool(there) and there < here
+
+    def _names_the_class(self, supplied: str, entity_id: str, device_class: str, target: str = "") -> bool:
+        """Whether a supplied name is about the device class at all.
+
+        A rule on a class exists to settle how that class is worded:
+        "Firmware-Update" and "Firmware Status" both become "Firmware", and
+        "CO2 concentration" becomes "CO2". But integrations put a class on
+        entities that are about something else - UniFi gives its "regenerate
+        password" button the class "update" - and there the rule is talking
+        about a different thing entirely.
+
+        A name is on the subject when it carries the class's own word or the
+        one the rule gives it. "Firmware Status" says it with the rule's word,
+        "CO2 concentration" with the shorter of the class's two, and
+        "Passwort neu generieren" with neither.
+        """
+        if not supplied:
+            return True
+        words = {canon(device_class or ""), canon(target or "")}
+        if self.ha_translations:
+            domain = entity_id.partition(".")[0]
+            for language in (self.language, "en"):
+                localized = self.ha_translations.device_class_name(domain, device_class, language)
+                if localized:
+                    words.add(canon(localized))
+        written = canon(supplied)
+        return any(word and word in written for word in words)
 
     def _with_discriminator(
         self,
@@ -675,7 +832,13 @@ class EntityRestructurer:
     ) -> Optional[str]:
         """The name Home Assistant itself uses for this entity's type, if it has one.
 
-        The device class is the widest of its answers and says only what an
+        Two things can answer: the word the integration picked for this kind of
+        entity, and the device class. The word usually says more and wins - but
+        one that only repeats the domain, "switch" on a switch entity, says
+        nothing the id does not already say, and there the device class knows
+        better: an outlet is an outlet, not a switch.
+
+        The device class is the widest answer there is and says only what an
         entity measures. It translates a name that means the class already, as
         "Temperature" does; it must not overwrite one that says more, or
         "CPU temperature" and "Temperature" on one device become the same name.
@@ -684,20 +847,24 @@ class EntityRestructurer:
             return None
         domain = entity_id.partition(".")[0]
         platform = registry.get("platform") or ""
-        translation_key = registry.get("translation_key")
-        if translation_key:
-            name = self.ha_translations.translation_key_name(platform, domain, translation_key, language)
-            if name:
-                return name
         device_class = registry.get("device_class") or registry.get("original_device_class")
-        if not device_class:
-            return None
-        localized = self.ha_translations.device_class_name(domain, device_class, language)
-        if not localized or not supplied:
-            return localized
+        by_class = self.ha_translations.device_class_name(domain, device_class, language) if device_class else None
+        translation_key = registry.get("translation_key")
+        # Only a device class that can actually be put into words takes the
+        # question off a domain-repeating key; where it cannot, that key is
+        # still the best answer there is.
+        says_nothing = bool(by_class) and canon(translation_key or "") == canon(domain)
+        if translation_key and not says_nothing:
+            by_key = self.ha_translations.translation_key_name(platform, domain, translation_key, language)
+            if by_key:
+                self._last_ha_source = {"kind": "translation_key", "value": translation_key}
+                return by_key
+        self._last_ha_source = {"kind": "device_class", "value": device_class or ""}
+        if not by_class or not supplied:
+            return by_class
         english = self.ha_translations.device_class_name(domain, device_class, "en") or ""
-        same_meaning = {canon(device_class), canon(english), canon(localized)}
-        return localized if canon(supplied) in same_meaning else None
+        same_meaning = {canon(device_class), canon(english), canon(by_class)}
+        return by_class if canon(supplied) in same_meaning else None
 
     # Technical values read as words in a name, but stay slugs in an entity ID.
     SPELLED_OUT_FIELDS = ("domain", "device_class")
@@ -784,6 +951,17 @@ class EntityRestructurer:
             )
             return plain(self._without_device_prefix(supplied, prefixes) or supplied, "ignored")
 
+        # A rule written for this one entity answers whatever the integration
+        # supplies: the user looked at this entity and said what it is called.
+        # It is the narrowest filter there is, so nothing else gets a say.
+        rules = getattr(self.type_mappings, "rules", None) if self.type_mappings else None
+        entity_rule = rules.for_entity(registry.get("id") or "", self.language) if rules is not None else None
+        if entity_rule is not None:
+            resolution = plain(entity_rule["targets"][self.language], "rule:user")
+            resolution["rule_id"] = entity_rule["id"]
+            resolution["matched_on"] = rules.why(entity_rule)
+            return resolution
+
         override_name = override.get("name") if override else None
         if override_name:
             # An exception is the user's own wording and stays as typed — unless
@@ -808,21 +986,64 @@ class EntityRestructurer:
         # sits in the middle of every proposal. The note does not go stale that
         # way, and rules still have their say on what it holds.
         remembered = self._remembered_type(registry)
-        if remembered:
-            return self._resolve_supplied_name(remembered, entity_id, registry)
         if self._our_note(registry) is not None:
-            # A note from before the type part was kept still settles whose name
-            # this is, and a name of ours was rendered by our own templates, so
-            # unwinding it gives the type part back. Better than the supplied
-            # name, which is what froze the old device name in the first place.
-            base = self._strip_applied_entity_name(registry.get("name") or "", prefixes, context)
-            if base:
-                return self._resolve_supplied_name(base, entity_id, registry, won_by="legacy_parse")
+            # A note from before the type part was kept holds nothing to go by,
+            # but a name of ours was rendered by our own templates, so unwinding
+            # it gives that part back.
+            written = remembered or self._strip_applied_entity_name(registry.get("name") or "", prefixes, context)
+            if written:
+                supplied = self._supplied_type(registry, state, prefixes)
+                # Which of the two is the type part and which is already the
+                # answer? Put the supplied name through the rules: if that is
+                # what the note says, the supplied one was the input and stays
+                # it, so a rule the user edits still reaches here - including
+                # where an older note recorded the rendered word instead of the
+                # one that went in. If it says something else, the supplied name
+                # has gone stale - it froze a device name that has since changed
+                # - and the note is all that is left of the truth.
+                if supplied:
+                    through_rules = self._resolve_supplied_name(supplied, entity_id, registry)
+                    if canon(through_rules["value"]) == canon(written):
+                        # Write the correction back, or it would have to be
+                        # worked out again on every read - and the moment the
+                        # user edits the rule it can no longer be worked out at
+                        # all, because the two words stop agreeing.
+                        if (
+                            self.naming_state is not None
+                            and not self.reading_only
+                            and canon(supplied) != canon(written)
+                        ):
+                            self.naming_state.resupply(registry.get("id") or "", supplied)
+                        return through_rules
+                return self._resolve_supplied_name(
+                    written, entity_id, registry, won_by="original" if remembered else "legacy_parse"
+                )
 
         native = (registry.get("original_name"), state.get("original_name"))
         name = next((candidate for candidate in native if candidate), None)
         if name:
             name = self._without_device_prefix(name, prefixes) or None
+        # A name already on the entity that says everything the supplied one
+        # says and more is the better answer, whoever wrote it. Miele calls two
+        # fridge sensors "Temperatur" and "Temperaturzone 2"; the names on them
+        # say "Temperatur Kuehlzone" and "Temperaturzone Gefrierzone", and only
+        # those tell the two apart. Proposing the supplied name would throw the
+        # zone away and leave a bare counter behind.
+        if name:
+            standing = self._strip_applied_entity_name(registry.get("name") or "", prefixes, context)
+            # Only where the area and device were really taken off: unwinding
+            # answers with the whole name when it does not recognise the
+            # template, and that name still carries them - taking it as the
+            # type part would render them a second time.
+            # And a supplied name that is the standing one with words in front
+            # of it froze a hierarchy this entity has left: a socket moved from
+            # the utility room to the kitchen still supplies "Kammer
+            # Lueftungsanlage Steckdose Energie" while it is called "Kuehle
+            # Kuehlschrank Steckdose Energie", and proposing the supplied one
+            # renders the old room and device inside the new ones.
+            if standing and not self._carries_prefix(standing, prefixes):
+                if self._says_more(standing, name) or self._only_puts_something_in_front(name, standing):
+                    name = standing
         # The number goes before anything decides the name, so a rule and a name
         # from Home Assistant both cover every endpoint; it comes back after.
         keep_number = ""

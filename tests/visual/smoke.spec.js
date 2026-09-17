@@ -50,10 +50,13 @@ test("the settings page shows the section of the open tab", async ({ page }) => 
   await expect(page.locator("nav.settings-tabs")).toBeVisible();
   // Only the open tab's section is shown; the others stay in the markup.
   await expect(page.locator(".mapping-section:visible").first()).toBeVisible();
-  // The exceptions area fills itself from a live call and must render its
-  // empty state rather than stay blank. Anchored on the icon, so the assertion
-  // survives whichever interface language the browser asks for.
-  await expect(page.locator("i.ri-user-star-line").first()).toBeVisible();
+  // The rule list fills itself from a live call and must render either its
+  // rules or its empty state rather than stay blank. Anchored on structure,
+  // so the assertion survives whichever interface language the browser asks
+  // for.
+  await expect(
+    page.locator(".rule-list .rule-row, .empty-state i.ri-search-line").first(),
+  ).toBeVisible();
 });
 
 test("the API documentation renders the description", async ({ page }) => {

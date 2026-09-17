@@ -7,7 +7,6 @@ import asyncio
 import json
 import logging
 import os
-import time
 import uuid
 
 import aiohttp
@@ -55,6 +54,7 @@ from sanitize import (
     sanitize_string,
     validate_json_input,
 )
+import supplied_names
 from z2m import sync_z2m_name
 
 # Don't load .env in Add-on mode - use environment variables from Supervisor
@@ -316,7 +316,7 @@ async def load_areas_and_entities():
 def index():
     """Hauptseite"""
     # Use timestamp for cache busting
-    version = str(int(time.time()))
+    version = asset_version()
     response = make_response(render_template("index.html", version=version))
     # Prevent browser from caching the HTML page
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -331,20 +331,57 @@ def test():
     return send_from_directory("static", "test.html")
 
 
+def asset_version() -> str:
+    """A number that changes when the shipped files change, and only then.
+
+    It goes into the URL of every stylesheet and script, so a deploy asks for
+    a path the browser has never seen. A query string would not do: the
+    service worker Home Assistant puts in front of an add-on keys on the path
+    alone, and would keep answering with yesterday's file.
+    """
+    newest = 0.0
+    here = os.path.dirname(os.path.abspath(__file__))
+    for folder in ("static/css", "static/js", "translations/ui"):
+        for root, _, names in os.walk(os.path.join(here, folder)):
+            for name in names:
+                try:
+                    newest = max(newest, os.path.getmtime(os.path.join(root, name)))
+                except OSError:  # a file that went away mid-walk tells us nothing
+                    continue
+    return str(int(newest))
+
+
+def _no_stale_copies(response):
+    """Say that this file must be fetched, not remembered.
+
+    The UI asks for its stylesheet and scripts with a cache-busting query, but
+    the service worker Home Assistant puts in front of an add-on keys on the
+    path alone. Without this, a deploy leaves the browser on yesterday's CSS
+    while the page itself is new - a chip with no padding, a step still called
+    "ENABLE" - and nothing about it looks like a caching problem.
+    """
+    response.headers["Cache-Control"] = "no-store, must-revalidate"
+    return response
+
+
 @app.route("/static/css/<path:filename>")
-def serve_font_workaround(filename):
+@app.route("/static/css/v<version>/<path:filename>")
+def serve_font_workaround(filename, version=None):
     """Workaround to serve font files from fonts directory when requested from css directory"""
     if filename.startswith("remixicon.") and filename.endswith((".woff", ".woff2", ".ttf", ".eot", ".svg")):
         # Strip query parameters
         filename = filename.split("?")[0]
+        # A font file is named after its content and never changes under its
+        # own name, so it may be kept.
         return send_from_directory("static/fonts", filename)
-    return send_from_directory("static/css", filename)
+    return _no_stale_copies(send_from_directory("static/css", filename))
 
 
 @app.route("/static/js/<path:filename>")
-def serve_js(filename):
+@app.route("/static/js/v<version>/<path:filename>")
+def serve_js(filename, version=None):
     """Serve JavaScript files"""
-    return send_from_directory("static/js", filename)
+    return _no_stale_copies(send_from_directory("static/js", filename))
 
 
 @app.route("/static/translations/<path:filename>")
@@ -744,6 +781,56 @@ async def _preview_changes_async():
         await ws.disconnect()
 
 
+_note_for = naming_service.note_for
+
+
+def _unconfirmed(old_id: str, new_id: str) -> str:
+    """The line for a write the registry could not be asked about.
+
+    The name is written; what is missing is the confirmation. Saying so is
+    what keeps a run with one of these from counting as flawless - and what
+    stops the window from closing on a result nobody checked.
+    """
+    return f"{old_id} -> {new_id or old_id}: written, not read back"
+
+
+def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_results: dict) -> None:
+    """Record what the rename could not carry along, so the user can.
+
+    Two different things end up here: a write that was attempted and did not
+    take, and an automation the config API cannot reach at all. Both leave the
+    old id in place, so both belong in front of the user rather than in the
+    debug log.
+    """
+    failed = (
+        dep_results.get("scenes", {}).get("failed", [])
+        + dep_results.get("scripts", {}).get("failed", [])
+        + dep_results.get("automations", {}).get("failed", [])
+    )
+    unreachable = dep_results.get("automations", {}).get("unreachable", [])
+    if failed:
+        results["dependency_warnings"].append(
+            {
+                "entity_id": new_id,
+                "old_id": old_id,
+                "failed_updates": failed,
+                "warning": f"Einige Verweise konnten nicht aktualisiert werden: {', '.join(failed)}",
+            }
+        )
+    if unreachable:
+        results["dependency_warnings"].append(
+            {
+                "entity_id": new_id,
+                "old_id": old_id,
+                "unreachable": unreachable,
+                "warning": (
+                    f"Diese Automationen liegen nicht in automations.yaml und nennen weiterhin "
+                    f"{old_id}: {', '.join(unreachable)}"
+                ),
+            }
+        )
+
+
 @app.route("/api/execute", methods=["POST"])
 def execute_changes():
     """Führe ausgewählte Änderungen durch"""
@@ -811,6 +898,7 @@ async def _execute_changes_async():
         # Get states for entity generation
         client = await init_client()
         states = await client.get_states()
+        states_by_id = {state["entity_id"]: state for state in states}
 
         # Process devices first
         for device_data in selected_devices:
@@ -883,13 +971,22 @@ async def _execute_changes_async():
                                 )
 
                                 # Rename entity and enable if needed
-                                await entity_registry.rename_entity(
+                                written = await entity_registry.rename_entity(
                                     entity_id,
                                     new_entity_id,
                                     new_friendly_name,
                                     enable=should_enable,
-                                    provenance=naming_service.provenance_for(entity_id),
+                                    provenance=_note_for(entity_id, states_by_id.get(entity_id), new_friendly_name),
                                 )
+                                if not (written or {}).get("verified"):
+                                    results["dependency_warnings"].append(
+                                        {
+                                            "entity_id": new_entity_id,
+                                            "old_id": entity_id,
+                                            "unverified": True,
+                                            "warning": _unconfirmed(entity_id, new_entity_id),
+                                        }
+                                    )
 
                                 if should_enable:
                                     logger.info(f"Enabled and renamed disabled entity: {entity_id} -> {new_entity_id}")
@@ -898,6 +995,7 @@ async def _execute_changes_async():
                                 dep_results = await dependency_updater.update_all_dependencies(
                                     entity_id, new_entity_id, cached_states
                                 )
+                                _warn_about_dependencies(results, entity_id, new_entity_id, dep_results)
 
                                 results["success"].append(
                                     {
@@ -924,7 +1022,6 @@ async def _execute_changes_async():
 
         # Recalculate as one batch so overrides are applied and no two entities
         # are sent to the same ID, which Home Assistant would refuse.
-        states_by_id = {state["entity_id"]: state for state in states}
         recalculated = {
             entity_id: (new_entity_id, friendly_name)
             for entity_id, new_entity_id, friendly_name in renamer_state["restructurer"].deduplicate_entity_ids(
@@ -965,19 +1062,24 @@ async def _execute_changes_async():
                         f"is_disabled={is_disabled}, disabled_by={disabled_by_value}, should_enable={should_enable}"
                     )
 
+                    note = _note_for(old_id, states_by_id.get(old_id), friendly_name)
                     if needs_id_change:
                         # Rename entity and enable if needed in a single operation
-                        await entity_registry.rename_entity(old_id, new_id, friendly_name, enable=should_enable)
+                        await entity_registry.rename_entity(
+                            old_id, new_id, friendly_name, enable=should_enable, provenance=note
+                        )
                         if should_enable:
                             logger.info(f"Enabled and renamed disabled entity: {old_id} -> {new_id}")
                     else:
                         # Only change friendly name
                         if should_enable:
                             # Enable and update name in one operation
-                            await entity_registry.update_entity(old_id, name=friendly_name, enable=True)
+                            await entity_registry.update_entity(
+                                old_id, name=friendly_name, enable=True, provenance=note
+                            )
                             logger.info(f"Enabled entity and updated friendly name: {old_id}")
                         else:
-                            await entity_registry.update_entity(old_id, name=friendly_name)
+                            await entity_registry.update_entity(old_id, name=friendly_name, provenance=note)
 
                     # Update dependencies only on ID change
                     if needs_id_change:
@@ -1005,19 +1107,7 @@ async def _execute_changes_async():
 
                             results["success"].append(success_entry)
 
-                            # Warne bei fehlgeschlagenen Dependencies
-                            if dep_results["total_failed"] > 0:
-                                failed_items = []
-                                failed_items.extend(dep_results["scenes"]["failed"])
-                                failed_items.extend(dep_results["scripts"]["failed"])
-                                failed_items.extend(dep_results["automations"]["failed"])
-
-                                results["dependency_warnings"].append(
-                                    {
-                                        "entity_id": new_id,
-                                        "warning": f"Einige Dependencies konnten nicht aktualisiert werden: {', '.join(failed_items)}",
-                                    }
-                                )
+                            _warn_about_dependencies(results, old_id, new_id, dep_results)
 
                         except Exception as e:
                             logger.error(
@@ -1082,6 +1172,11 @@ def execute_direct():
     return jsonify(job), 202
 
 
+def _names(what: str, entries: list) -> str:
+    """ "3 Automationen", or nothing where there are none."""
+    return f"{len(entries)} {what}" if entries else ""
+
+
 async def execute_direct_handler(job, ctx):
     """Apply a batch of entity renames, reporting progress per entity.
 
@@ -1114,6 +1209,7 @@ async def execute_direct_handler(job, ctx):
         logger.info("Pre-fetching states for dependency updates...")
         cached_states = await dependency_updater.get_states()
         logger.info(f"Cached {len(cached_states)} states")
+        states_by_id = {state["entity_id"]: state for state in cached_states}
 
         total = len(entities)
         ctx.progress(0, total)
@@ -1151,22 +1247,35 @@ async def execute_direct_handler(job, ctx):
                 should_enable = is_disabled and os.getenv("ENABLE_DISABLED_ENTITIES", "false").lower() == "true"
 
                 # Rename entity
-                await entity_registry.rename_entity(old_id, new_id, friendly_name, enable=should_enable)
+                written = await entity_registry.rename_entity(
+                    old_id,
+                    new_id,
+                    friendly_name,
+                    enable=should_enable,
+                    provenance=_note_for(old_id, states_by_id.get(old_id), friendly_name),
+                )
+                if not (written or {}).get("verified"):
+                    ctx.log("UNVERIFIED", _unconfirmed(old_id, new_id))
 
                 if should_enable:
                     logger.info(f"Enabled and renamed disabled entity: {old_id} -> {new_id}")
 
                 # Update dependencies (automations, scenes, scripts)
                 dep_results = await dependency_updater.update_all_dependencies(old_id, new_id, cached_states)
-                if dep_results.get("total_failed", 0) > 0:
-                    # Collect all failed updates from scenes, scripts, automations
-                    failed_updates = (
-                        dep_results.get("scenes", {}).get("failed", [])
-                        + dep_results.get("scripts", {}).get("failed", [])
-                        + dep_results.get("automations", {}).get("failed", [])
-                    )
+                failed_updates = (
+                    dep_results.get("scenes", {}).get("failed", [])
+                    + dep_results.get("scripts", {}).get("failed", [])
+                    + dep_results.get("automations", {}).get("failed", [])
+                )
+                unreachable = dep_results.get("automations", {}).get("unreachable", [])
+                if failed_updates or unreachable:
                     results["dependency_warnings"].append(
-                        {"entity_id": old_id, "new_id": new_id, "failed_updates": failed_updates}
+                        {
+                            "entity_id": old_id,
+                            "new_id": new_id,
+                            "failed_updates": failed_updates,
+                            "unreachable": unreachable,
+                        }
                     )
 
                 results["success"].append(
@@ -1178,6 +1287,32 @@ async def execute_direct_handler(job, ctx):
                 )
                 logger.info(f"Successfully renamed: {old_id} -> {new_id}")
                 ctx.log("RENAME", f"{old_id} -> {new_id}")
+                # What was carried along, and what was not. Said per entity and
+                # kept with the job, because "renamed" alone is what let a
+                # broken automation go unnoticed for hours.
+                if dep_results.get("total_success"):
+                    ctx.log(
+                        "CARRIED",
+                        f"{new_id}: {dep_results['total_success']} "
+                        + ", ".join(
+                            filter(
+                                None,
+                                [
+                                    _names("Automationen", dep_results["automations"]["success"]),
+                                    _names("Skripte", dep_results["scripts"]["success"]),
+                                    _names("Szenen", dep_results["scenes"]["success"]),
+                                ],
+                            )
+                        ),
+                    )
+                for broken in failed_updates:
+                    ctx.log("NOT_CARRIED", f"{new_id}: {broken} konnte nicht umgeschrieben werden")
+                for out_of_reach in unreachable:
+                    ctx.log(
+                        "UNREACHABLE",
+                        f"{new_id}: {out_of_reach} liegt nicht in automations.yaml "
+                        f"und muss von Hand auf {new_id} geändert werden",
+                    )
 
             except Exception as e:
                 logger.error(f"Error renaming entity {old_id}: {e}")
@@ -1724,6 +1859,25 @@ async def _get_hierarchy_async():
         await load_areas_and_entities()
         restructurer = renamer_state["restructurer"]
 
+        # Config entries, for the one supplied name that can be corrected from
+        # here: a helper is named by its entry's title. Never fatal - without
+        # them the list is the same list, only without that offer.
+        config_entries = {}
+        try:
+            reader = supplied_names.SuppliedNames(os.getenv("HA_URL"), os.getenv("HA_TOKEN"))
+            config_entries = await reader.entries()
+        except Exception as error:  # noqa: BLE001 - the hierarchy must still load
+            logger.warning("Could not read the config entries: %s", error)
+
+        per_entry = {}
+        for one in restructurer.entities.values():
+            entry_id = one.get("config_entry_id")
+            if entry_id:
+                per_entry[entry_id] = per_entry.get(entry_id, 0) + 1
+
+        def entries_with(entry_id):
+            return per_entry.get(entry_id, 0)
+
         # Build orphan lookup from entities_by_area (where is_orphan is detected)
         orphan_entities = set()
         for area_data in renamer_state.get("entities_by_area", {}).values():
@@ -1899,6 +2053,13 @@ async def _get_hierarchy_async():
                     # Set when the proposal only got an id by numbering away
                     # from another entity that renders the same name.
                     "blocked": blocked_of(restructurer, entity_id),
+                    # Set when the name the integration supplies is the title
+                    # of this entity's own config entry, and has gone stale.
+                    "supplied_correctable": supplied_names.what_to_correct(
+                        entity_data,
+                        config_entries.get(entity_data.get("config_entry_id")),
+                        entries_with(entity_data.get("config_entry_id")),
+                    ),
                 }
             )
 
@@ -1936,7 +2097,7 @@ def settings_page(section: str = "naming"):
     if section not in SETTINGS_SECTIONS:
         section = "naming"
     base_href = "../"
-    version = str(int(time.time()))
+    version = asset_version()
     response = make_response(render_template("settings.html", version=version, section=section, base_href=base_href))
     # Prevent browser from caching the HTML page
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"

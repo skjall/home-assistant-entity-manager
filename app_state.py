@@ -22,6 +22,7 @@ from naming_rules import NamingRules
 from naming_state import NamingState
 from naming_templates import NamingTemplates
 from rename_log import RenameLog
+from supplied_names import SuppliedNames
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,12 @@ renamer_state["worker"] = JobWorker(renamer_state["job_store"])
 # Share the audit log with every EntityRegistry instance so all rename paths
 # (single, batch, device cascade) get recorded centrally.
 EntityRegistry.rename_log = renamer_state["rename_log"]
+
+# And the titles that name interface-built helpers, so a rename carries them
+# along instead of leaving the supplied name behind.
+EntityRegistry.supplied_names = SuppliedNames(
+    os.getenv("HA_URL", ""), os.getenv("HA_TOKEN", os.getenv("SUPERVISOR_TOKEN", ""))
+)
 
 # Same for the record of which names came from here: every write goes through
 # EntityRegistry.update_entity, so no rename path can forget to note it.

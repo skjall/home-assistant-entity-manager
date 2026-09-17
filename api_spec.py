@@ -186,12 +186,69 @@ OPERATIONS: List[Operation] = [
         "/api/naming/rules/<rule_id>",
         "put",
         "update_rule",
-        "Change an existing rule's name or the devices it narrows to.",
+        "Change what an existing rule calls its type.",
+        "Where it applies is its filters; add or remove one of those instead.",
+        body={"targets": thing("The name per language code.")},
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/rules/<rule_id>/entities",
+        "get",
+        "rule_entities",
+        "Which entities a rule reaches, and what it does to each.",
+        "Each one comes back with the name Home Assistant supplies, the name it "
+        "carries today and the name the rule would give it - enough to say "
+        "whether the rule words them right. The count on the rule says how many; "
+        "this says which.",
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/rules/<rule_id>/filters",
+        "post",
+        "add_rule_filter",
+        "Make a rule apply in one more place.",
+        "A filter names one entity by its registry id, or an integration, or an "
+        "integration and a device model. A rule that already applies everywhere "
+        "is left as it is.",
         body={
-            "targets": thing("The name per language code."),
-            "integration": text("Narrow the rule to one integration, or empty to widen it."),
-            "model": text("Narrow the rule to one device model."),
+            "registry_id": text("One entity, by its registry id."),
+            "integration": text("Every entity of one integration."),
+            "model": text("Narrow the integration to one device model."),
         },
+        tag="Naming",
+    ),
+    Operation(
+        "/api/naming/rules/<rule_id>/filters",
+        "delete",
+        "remove_rule_filter",
+        "Stop a rule applying in one place.",
+        "Removing the last place removes the rule: one left without any would " "apply to every entity of its type.",
+        body={
+            "registry_id": text("One entity, by its registry id."),
+            "integration": text("Every entity of one integration."),
+            "model": text("The model the integration was narrowed to."),
+        },
+        tag="Naming",
+    ),
+    Operation(
+        "/api/log",
+        "get",
+        "run_log",
+        "What every run did, newest first: searchable with q, narrowed by step and type, paged.",
+        query={
+            "q": text("Search the message and the step."),
+            "step": text("Keep only these steps, comma-separated (RENAME, CARRIED, NOT_CARRIED, UNREACHABLE, ERROR)."),
+            "type": text("Keep only these kinds of run, comma-separated."),
+            "page": text("Which page to answer, from 1."),
+            "per_page": text("Lines per page, at most 200."),
+        },
+        tag="Jobs",
+    ),
+    Operation(
+        "/api/naming/filters",
+        "get",
+        "available_filters",
+        "The integrations and device models this home has, to pick a filter from.",
         tag="Naming",
     ),
     Operation(

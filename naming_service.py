@@ -21,6 +21,47 @@ from registry import ensure_registry_loaded
 logger = logging.getLogger(__name__)
 
 
+def note_for(entity_id: str, state: Optional[Dict[str, Any]], written_name: str) -> Optional[Dict[str, Any]]:
+    """What went into the name being written, for the note kept with it.
+
+    The supplied type has to be worked out before the rename: afterwards the
+    registry answers with the new name and the type that went into it is gone.
+    Without this note a later rule cannot find the entity again, and the next
+    proposal starts from nothing - which is how one switch came out "Steckdose"
+    once and "Schalter" the next time.
+
+    A name the user typed themselves is still noted, because the supplied type
+    is a fact about the entity either way; only the claim that a rule decided
+    it is dropped, since none did.
+    """
+    if state is None:
+        return None
+    restructurer = renamer_state.get("restructurer")
+    if restructurer is None:
+        return None
+    try:
+        _, proposed_name = restructurer.generate_new_entity_id(entity_id, state)
+        note = provenance_for(entity_id)
+    except Exception as error:  # noqa: BLE001 - a note must never fail a rename
+        logger.warning("Could not work out what named %s: %s", entity_id, error)
+        return None
+    if note and written_name and proposed_name != written_name:
+        return {**note, "won_by": "user", "rule_id": None}
+    return note
+
+
+async def state_of(entity_id: str) -> Optional[Dict[str, Any]]:
+    """The one state a single rename needs, without fetching all of them."""
+    client = renamer_state.get("client")
+    if client is None:
+        return None
+    try:
+        return await client.get_entity(entity_id)
+    except Exception as error:  # noqa: BLE001 - a note must never fail a rename
+        logger.warning("Could not read the state of %s: %s", entity_id, error)
+        return None
+
+
 async def rename_entity(
     old_entity_id: str,
     new_entity_id: Optional[str] = None,
@@ -57,13 +98,29 @@ async def rename_entity(
     if not renamed:
         raise RuntimeError(f"Home Assistant refused to rename {old_entity_id}")
 
-    logger.info("Renamed entity: %s -> %s (%s)", old_entity_id, new_entity_id or old_entity_id, friendly_name)
+    # What the registry holds now, read back after the write - not what was
+    # asked for. Home Assistant numbers a colliding id and cuts a long name,
+    # and the caller has to show what is true, not what it wanted.
+    stored = renamed.get("entity_entry") if isinstance(renamed, dict) else None
+    stored = stored if isinstance(stored, dict) else {}
+    written_id = stored.get("entity_id") or new_entity_id or old_entity_id
+    written_name = stored.get("name") if stored else friendly_name
+    if stored and written_name is None:
+        # No override left, so the integration's own name applies again.
+        written_name = stored.get("original_name") or ""
+
+    logger.info("Renamed entity: %s -> %s (%s)", old_entity_id, written_id, written_name)
     result: Dict[str, Any] = {
         "success": True,
         "old_entity_id": old_entity_id,
-        "new_entity_id": new_entity_id or old_entity_id,
-        "new_friendly_name": friendly_name,
+        "new_entity_id": written_id,
+        "new_friendly_name": written_name,
+        # The rename was read back out of the registry, not just acknowledged.
+        "verified": bool(stored),
     }
+
+    # What follows depends on the id that is really there, not the one asked for.
+    id_changed = written_id != old_entity_id
 
     if not id_changed:
         result["dependencies_checked"] = False
@@ -75,7 +132,7 @@ async def rename_entity(
     # the old one pointing at nothing.
     try:
         updater = DependencyUpdater(os.getenv("HA_URL"), token)
-        updated = await updater.update_all_dependencies(old_entity_id, new_entity_id)
+        updated = await updater.update_all_dependencies(old_entity_id, written_id)
         result["dependencies_checked"] = True
         result["dependencies_updated"] = {
             "total": updated["total_success"],
@@ -133,9 +190,34 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         "name_comes_from": resolution.get("won_by"),
         "rule_id": resolution.get("rule_id"),
         "supplied_name": resolution.get("input"),
-        # The type part on its own, kept with the name once it is written so a
-        # later read gets it back without taking the rendered name apart.
-        "base_entity": resolution.get("value") or "",
+        # The type part as it went in, kept with the name once it is written so
+        # a later read gets it back without taking the rendered name apart.
+        # What went in, not what came out: a rule the user edits afterwards has
+        # to reach this entity again, and it only does if the note hands it the
+        # word the rule matches on.
+        "base_entity": resolution.get("input") or resolution.get("value") or "",
+    }
+
+
+def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
+    """The note for a name the restructurer has just worked out.
+
+    It reads the resolution left behind by the last naming of this entity, so
+    the caller has to have named it just now; one working from a proposal made
+    earlier gets None rather than a claim that may since have gone stale.
+    """
+    restructurer = renamer_state.get("restructurer")
+    resolution = (getattr(restructurer, "last_resolutions", None) or {}).get(entity_id)
+    if not resolution:
+        return None
+    return {
+        # What went into the name, not what came out of it: a rule the user
+        # edits afterwards only reaches this entity again if the note hands it
+        # back the word the rule matches on.
+        "base_entity": resolution.get("input") or resolution.get("value") or "",
+        "won_by": resolution.get("won_by") or "",
+        "rule_id": resolution.get("rule_id"),
+        "template_hash": renamer_state["naming_templates"].fingerprint(),
     }
 
 

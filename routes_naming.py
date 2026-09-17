@@ -19,7 +19,7 @@ import naming_overrides
 from naming_rules import NamingRuleError
 from naming_templates import NamingTemplateError
 from registry import ensure_registry_loaded
-from sanitize import sanitize_registry_id, sanitize_string, validate_json_input
+from sanitize import sanitize_name, sanitize_registry_id, sanitize_string, validate_json_input
 
 logger = logging.getLogger(__name__)
 
@@ -244,9 +244,7 @@ def set_user_type_mapping():
             return jsonify({"error": error}), 400
 
         type_key = sanitize_string(data.get("type_key"), max_length=64)
-        # Use sanitize_string instead of sanitize_name to avoid HTML escaping
-        # (apostrophes become &#x27; with sanitize_name)
-        translation = sanitize_string(data.get("translation"))
+        translation = sanitize_name(data.get("translation"))
 
         if not type_key or not translation:
             return jsonify({"error": "Invalid type_key or translation"}), 400
@@ -299,8 +297,7 @@ def learn_type_mapping():
             return jsonify({"error": error}), 400
 
         type_key = sanitize_string(data.get("type_key"), max_length=64)
-        # Use sanitize_string instead of sanitize_name to avoid HTML escaping
-        translation = sanitize_string(data.get("translation"))
+        translation = sanitize_name(data.get("translation"))
 
         if not type_key or not translation:
             return jsonify({"error": "Invalid type_key or translation"}), 400
@@ -433,36 +430,46 @@ def _repair_rule_kinds(restructurer, rules) -> None:
         renamer_state["type_mappings"]._refresh_user_view()
 
 
+def _names_by_rule(restructurer) -> dict:
+    """entity_id -> the rule that decides its type, as the naming itself decides it.
+
+    Asking the rules directly answers which rule could apply, which is not the
+    same as which one does: a rule on the device class "update" is found for
+    UniFi's "regenerate password" button and then dropped, because the name is
+    about something else entirely. Counting the finds said four entities where
+    two are named, and the list under the count showed the two it does not
+    touch. Resolving each entity costs well under a second for a home of a few
+    thousand, and it cannot drift from what the user sees.
+    """
+    named = {}
+    was_reading_only = restructurer.reading_only
+    restructurer.reading_only = True
+    try:
+        for entity_id, entity_data in restructurer.entities.items():
+            try:
+                behind = restructurer.rule_behind(entity_id, entity_data)
+            except Exception as error:  # noqa: BLE001 - one entity must not fail the count
+                logger.debug("Could not resolve %s: %s", entity_id, error)
+                continue
+            if behind:
+                named[entity_id] = behind
+    finally:
+        restructurer.reading_only = was_reading_only
+    return named
+
+
 def _rule_affected_counts(restructurer, rules):
-    """How many loaded entities each rule applies to, or None when nothing is loaded.
+    """How many loaded entities each rule names, or None when nothing is loaded.
 
     Without the entity list a rule's reach is unknown, which is not the same as
     zero: reporting zero would brand every rule as useless right after a start.
     """
     if restructurer is None or not restructurer.entities:
         return None
-    language = rules.language
     counts = {rule["id"]: 0 for rule in rules.rules}
-    # Entities sharing a type, integration and model all land on the same rule,
-    # so group them first: thousands of entities become a few hundred lookups.
-    groups: dict = {}
-    for entity_data in restructurer.entities.values():
-        group = (
-            entity_data.get("translation_key") or "",
-            entity_data.get("original_name") or "",
-            entity_data.get("device_class") or entity_data.get("original_device_class") or "",
-            entity_data.get("platform") or None,
-            entity_model(restructurer, entity_data) or None,
-        )
-        groups[group] = groups.get(group, 0) + 1
-    for (translation_key, native, device_class, integration, model), size in groups.items():
-        rule = (
-            rules.find("translation_key", translation_key, integration, language, model)
-            or rules.find("name", native, integration, language, model)
-            or rules.find("device_class", device_class, integration, language, model)
-        )
-        if rule:
-            counts[rule["id"]] = counts.get(rule["id"], 0) + size
+    for resolution in _names_by_rule(restructurer).values():
+        rule_id = resolution["rule_id"]
+        counts[rule_id] = counts.get(rule_id, 0) + 1
     return counts
 
 
@@ -474,23 +481,43 @@ def _rule_builtins(rules) -> dict:
     for rule in rules.rules:
         if rule["match"]["kind"] == "translation_key":
             continue
-        builtin = mappings.find_system_translation(rule["match"]["value"], language, rule["match"].get("integration"))
+        builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
         if builtin is not None:
             builtins[rule["id"]] = builtin
     return builtins
 
 
-def _rule_payload(rule: dict, affected: dict) -> dict:
+def _entity_ids_by_registry_id() -> dict:
+    """registry id -> entity_id, built once for a whole list of rules.
+
+    Looking each one up on its own would walk every entity again per rule,
+    which on a large home is a hundred scans of several thousand entries.
+    """
+    restructurer = renamer_state.get("restructurer")
+    return {
+        entity["id"]: entity_id
+        for entity_id, entity in (restructurer.entities if restructurer else {}).items()
+        if entity.get("id")
+    }
+
+
+def _rule_payload(rule: dict, affected: dict, entity_ids: Optional[dict] = None) -> dict:
     rules = renamer_state["naming_rules"]
     mappings = renamer_state["type_mappings"]
     language = rules.language
     builtin = None
     if rule["match"]["kind"] != "translation_key":
-        builtin = mappings.find_system_translation(rule["match"]["value"], language, rule["match"].get("integration"))
+        builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
     return {
         **rule,
         "affected": affected.get(rule["id"], 0) if affected is not None else None,
         "redundant": rules.is_redundant(rule, language, builtin),
+        # A rule written for one entity is about that entity, and a registry id
+        # says nothing to a reader. The entity it belongs to does.
+        "entities": [
+            {"registry_id": registry_id, "entity_id": (entity_ids or {}).get(registry_id)}
+            for registry_id in rules._entities_of(rule)
+        ],
     }
 
 
@@ -541,7 +568,7 @@ def naming_rules_collection():
             return jsonify({"error": str(error)}), 400
         renamer_state["type_mappings"]._refresh_user_view()
         affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
-        return jsonify({"rule": _rule_payload(rule, affected)})
+        return jsonify({"rule": _rule_payload(rule, affected, _entity_ids_by_registry_id())})
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -553,6 +580,7 @@ def naming_rules_collection():
     affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
     language = request.args.get("lang") or rules.language
     wanted = _keys_in_use(renamer_state.get("restructurer"))
+    entity_ids = _entity_ids_by_registry_id()
     system = []
     for entry in renamer_state["type_mappings"].get_all_known_types(language):
         if not entry.get("system_default"):
@@ -565,10 +593,73 @@ def naming_rules_collection():
     return jsonify(
         {
             "language": rules.language,
-            "rules": [_rule_payload(rule, affected) for rule in rules.rules],
+            "rules": [_rule_payload(rule, affected, entity_ids) for rule in rules.rules],
             "system": system,
         }
     )
+
+
+@naming.route("/api/naming/rules/<rule_id>/entities", methods=["GET"])
+def rule_entities(rule_id: str):
+    """Which entities a rule reaches, and what it does to each of them.
+
+    The list said how many and never which, so a rule that worded something
+    wrongly could not be checked against the entities it words. Each one comes
+    back with the word Home Assistant supplies, the name it carries today and
+    the name the rule would give it - the three values a reader needs to say
+    whether the rule is right.
+    """
+    rules = renamer_state["naming_rules"]
+    rule = next((one for one in rules.rules if one["id"] == rule_id), None)
+    if rule is None:
+        return jsonify({"error": "unknown rule"}), 404
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(ensure_registry_loaded())
+    finally:
+        loop.close()
+
+    restructurer = renamer_state.get("restructurer")
+    if restructurer is None or not restructurer.entities:
+        return jsonify({"error": "the registry is not loaded"}), 503
+
+    found = []
+    for entity_id, behind in _names_by_rule(restructurer).items():
+        if behind["rule_id"] != rule_id:
+            continue
+        entity_data = restructurer.entities.get(entity_id) or {}
+        try:
+            proposed_id, proposed = restructurer.calculate_new_entity_name(entity_id)
+        except Exception as error:  # noqa: BLE001 - one entity must not fail the list
+            logger.debug("Could not work out a name for %s: %s", entity_id, error)
+            proposed_id, proposed = "", ""
+        device = restructurer.devices.get(entity_data.get("device_id") or "", {}) or {}
+        found.append(
+            {
+                "entity_id": entity_id,
+                "domain": entity_id.split(".")[0],
+                "name": entity_data.get("name") or entity_data.get("original_name") or "",
+                # What the rule caught this entity on, not what it might have:
+                # a device-class rule named after a translation key sends the
+                # reader looking for a rule that does not exist.
+                "caught_on": behind["kind"],
+                "caught_value": behind["value"],
+                "supplied": entity_data.get("original_name") or "",
+                "platform": entity_data.get("platform") or "",
+                "proposed": proposed,
+                "proposed_id": proposed_id,
+                # Where to go and look at it.
+                "device_id": entity_data.get("device_id") or "",
+                "device_name": device.get("name_by_user") or device.get("name") or "",
+                "area_id": device.get("area_id") or entity_data.get("area_id") or "",
+                # Named one by one rather than caught by what it supplies.
+                "by_name": bool(entity_data.get("id")) and entity_data["id"] in rules._entities_of(rule),
+            }
+        )
+    found.sort(key=lambda one: one["entity_id"])
+    return jsonify({"rule_id": rule_id, "entities": found, "total": len(found)})
 
 
 @naming.route("/api/naming/rules/unused", methods=["GET", "DELETE"])
@@ -587,10 +678,96 @@ def naming_rules_unused():
         return jsonify({"error": "the entities are not loaded yet"}), 409
     unused = rules.unused(affected, rules.language, _rule_builtins(rules))
     if request.method == "GET":
-        return jsonify({"rules": [_rule_payload(rule, affected) for rule in unused]})
+        entity_ids = _entity_ids_by_registry_id()
+        return jsonify({"rules": [_rule_payload(rule, affected, entity_ids) for rule in unused]})
     removed = rules.delete_many(rule["id"] for rule in unused)
     renamer_state["type_mappings"]._refresh_user_view()
     return jsonify({"removed": removed})
+
+
+def _filter_from(data: dict) -> dict:
+    """The one filter a request is about, sanitised."""
+    return {
+        key: sanitize_string(data.get(key) or "", max_length=128)
+        for key in ("registry_id", "integration", "model")
+        if data.get(key)
+    }
+
+
+@naming.route("/api/naming/rules/<rule_id>/filters", methods=["POST", "DELETE"])
+def naming_rule_filters(rule_id):
+    """Add or remove one of the places a rule applies.
+
+    A rule reaches a list of filters, so widening or narrowing it is adding or
+    removing one of them - not editing a single scope, which could only ever be
+    exchanged.
+    """
+    rules = renamer_state["naming_rules"]
+    rule_id = sanitize_string(rule_id, max_length=32)
+    rule = rules.get(rule_id)
+    if rule is None:
+        return jsonify({"error": "unknown rule"}), 404
+    data = request.json if isinstance(request.json, dict) else {}
+    one = _filter_from(data)
+    if not one:
+        return jsonify({"error": "a filter names an entity, an integration or a model"}), 400
+    try:
+        if request.method == "DELETE":
+            rule = rules.remove_filter(rule_id, one)
+        else:
+            rule = rules.add_filter(
+                rule["match"]["kind"],
+                rule["match"]["value"],
+                rules.language,
+                rule["targets"].get(rules.language) or "",
+                one,
+            )
+    except NamingRuleError as error:
+        return jsonify({"error": str(error)}), 400
+    renamer_state["type_mappings"]._refresh_user_view()
+    if rule.get("deleted"):
+        # Its last place went with it; a rule left without one would apply to
+        # everything of its type, which removing a place never means.
+        return jsonify({"deleted": True, "rule_id": rule_id})
+    affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
+    return jsonify({"rule": _rule_payload(rule, affected, _entity_ids_by_registry_id())})
+
+
+@naming.route("/api/naming/filters", methods=["GET"])
+def naming_filters_available():
+    """The integrations and models this home actually has, to pick a filter from.
+
+    Each model is answered with its maker. "Zigbee smart water valve" is not
+    something anyone looks for; "SONOFF" is, and under MQTT every model belongs
+    to a different maker.
+    """
+    restructurer = renamer_state.get("restructurer")
+    entities = (restructurer.entities if restructurer else {}) or {}
+    integrations: dict = {}
+    for entity in entities.values():
+        integration = entity.get("platform")
+        if not integration:
+            continue
+        seen = integrations.setdefault(integration, {})
+        model = entity_model(restructurer, entity)
+        if not model:
+            continue
+        device = restructurer.devices.get(entity.get("device_id") or "", {})
+        row = seen.setdefault(model, {"model": model, "manufacturer": device.get("manufacturer") or "", "count": 0})
+        row["count"] += 1
+        if not row["manufacturer"]:
+            row["manufacturer"] = device.get("manufacturer") or ""
+    return jsonify(
+        {
+            "integrations": [
+                {
+                    "integration": name,
+                    "models": [models[key] for key in sorted(models)],
+                }
+                for name, models in sorted(integrations.items())
+            ]
+        }
+    )
 
 
 @naming.route("/api/naming/rules/<rule_id>", methods=["PUT", "DELETE"])
@@ -604,18 +781,14 @@ def naming_rule_item(rule_id):
         return jsonify({"success": True})
     data = request.json if isinstance(request.json, dict) else {}
     try:
-        integration = ...
-        if "integration" in data:
-            integration = sanitize_string(data.get("integration") or "", max_length=64) or None
-        model = ...
-        if "model" in data:
-            model = sanitize_string(data.get("model") or "", max_length=128) or None
-        rule = rules.update(rule_id, targets=data.get("targets"), integration=integration, model=model)
+        # Where a rule applies is added and removed one filter at a time; a
+        # single scope here would have to throw the rest of the list away.
+        rule = rules.update(rule_id, targets=data.get("targets"))
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()
     affected = _rule_affected_counts(renamer_state.get("restructurer"), rules)
-    return jsonify({"rule": _rule_payload(rule, affected)})
+    return jsonify({"rule": _rule_payload(rule, affected, _entity_ids_by_registry_id())})
 
 
 @naming.route("/api/naming/learn", methods=["POST"])
@@ -634,21 +807,28 @@ def naming_learn():
         return jsonify({"error": "unknown entity"}), 404
     if not value:
         return jsonify({"error": "value required"}), 400
-    integration = (entity.get("platform") or None) if scope in ("integration", "model") else None
-    model = entity_model(restructurer, entity) or None if scope == "model" else None
     kind, key = _rule_key_for(entity)
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
+    # Where the correction should apply, as the one filter it is. "Everywhere"
+    # is no filter at all.
+    one = None
+    if scope == "entity":
+        one = {"registry_id": entity.get("id") or ""}
+    elif scope in ("integration", "model"):
+        one = {"integration": entity.get("platform") or ""}
+        if scope == "model":
+            one["model"] = entity_model(restructurer, entity) or ""
     rules = renamer_state["naming_rules"]
     try:
-        rule = rules.upsert(
-            kind, key, integration, rules.language, value, source="learned", learned_from=entity_id, model=model
-        )
+        # The rule that already says this gains the place; a second rule saying
+        # the same thing somewhere else would have to be kept in step by hand.
+        rule = rules.add_filter(kind, key, rules.language, value, one, source="learned", learned_from=entity_id)
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()
     affected = _rule_affected_counts(restructurer, rules)
-    return jsonify({"rule": _rule_payload(rule, affected)})
+    return jsonify({"rule": _rule_payload(rule, affected, _entity_ids_by_registry_id())})
 
 
 @naming.route("/api/naming/originals")
@@ -866,4 +1046,4 @@ def naming_exception_ignore():
     return jsonify({"success": True, "ignored": True})
 
 
-SETTINGS_SECTIONS = ("naming", "rules", "system")
+SETTINGS_SECTIONS = ("naming", "rules", "log", "system")

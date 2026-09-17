@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home Assistant Entity Manager</title>
-    <link href="static/css/styles.css?v={{ version }}" rel="stylesheet">
+    <link href="static/css/v{{ version }}/styles.css" rel="stylesheet">
     <link href="static/css/remixicon.css?v={{ version }}" rel="stylesheet">
     <script>window.assetVersion = "{{ version }}";</script>
-    <script src="static/js/translations.js?v={{ version }}"></script>
-    <script src="static/js/config.js?v={{ version }}"></script>
+    <script src="static/js/v{{ version }}/translations.js"></script>
+    <script src="static/js/v{{ version }}/config.js"></script>
     <script src="static/js/alpine.min.js" defer></script>
     <style>
         /* Hide elements until Alpine.js initializes */
@@ -318,6 +318,28 @@
         }
 
         /* Broken References - Suggestion List */
+        /* The panel asked for these three from the start and nothing ever defined
+           them, so its only button rendered as bare text. */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 18px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+
+        .btn-ghost { background: white; border-color: #d1d5db; color: #374151; }
+        .btn-ghost:hover { border-color: #9ca3af; }
+
         .suggestion-list {
             display: flex;
             flex-direction: column;
@@ -1535,24 +1557,19 @@
         .rule-link:hover { text-decoration: underline; }
         /* A name that was changed in Home Assistant itself: what happened, and
            the two ways out of it. */
+        /* Reads like every other line that explains where a name came from,
+           not like a warning: a name changed in Home Assistant is a fact about
+           the entity, and the two ways out of it are right there. */
         .drift-bar {
             display: flex;
             align-items: center;
             flex-wrap: wrap;
             gap: 8px;
             margin-top: 8px;
-            padding: 8px 10px;
-            border-radius: 6px;
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
         }
         .drift-text {
             font-size: 0.75rem;
-            color: #1d4ed8;
-        }
-        .drift-bar.is-blocked {
-            background: #fef2f2;
-            border-color: #fecaca;
+            color: #6b7280;
         }
         .drift-bar.is-blocked .drift-text {
             color: #b91c1c;
@@ -1939,7 +1956,8 @@
                                     :disabled="syncingZ2m"
                                     class="shrink-0 text-xs px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
                                     :class="{'opacity-50 cursor-not-allowed': syncingZ2m}">
-                                <i class="ri-check-line mr-1"></i><span x-text="t('entity.apply_rename')">Apply rename</span>
+                                <i class="mr-1" :class="syncingZ2m ? 'ri-loader-4-line animate-spin' : 'ri-check-line'"></i><span
+                                    x-text="t('entity.apply_rename')">Apply rename</span>
                             </button>
                         </div>
                     </div>
@@ -2149,19 +2167,10 @@
                                                       x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
                                                               ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'old')
                                                               : escapeHtml(entity.original_name || t('entity.no_name'))"></span>
-                                                <span x-show="selectedArea !== '__no_area__' && resolutionBadge(entity)"
-                                                      class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle"
-                                                      :class="resolutionBadgeClass(entity)"
-                                                      :title="resolutionExplain(entity)"
-                                                      x-text="resolutionBadge(entity)"></span>
                                                 <span x-show="entity.blocked"
                                                       class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-red-100 text-red-700"
                                                       :title="t('entity.blocked_hint', {wanted: entity.blocked?.wanted || '', holder: entity.blocked?.holder || ''})"
                                                       x-text="t('entity.blocked_badge')">numbered</span>
-                                                <span x-show="entity.drift"
-                                                      class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-blue-100 text-blue-700"
-                                                      :title="t('entity.drift_hint', {applied: entity.applied_name || ''})"
-                                                      x-text="t('entity.drift_badge')">changed in HA</span>
                                                 <span x-show="isOrphanEntity(entity)"
                                                       class="text-xs text-amber-600 ml-2"
                                                       :title="t('entity.orphan_hint')">
@@ -2215,8 +2224,12 @@
                                                                 'btn-outline-gray hover:btn-filled-green': isOrphanEntity(entity)
                                                             }"
                                                             :disabled="isEntityIdTaken(entity) || applyingEntityId || renamingDevice || executing"
-                                                            :title="isEntityIdTaken(entity) ? t('entity.id_conflict') : t('entity.apply_rename')">
-                                                        <i class="ri-check-line"></i>
+                                                            :title="applyingEntityId === entity.id ? t('entity.applying')
+                                                                : (isEntityIdTaken(entity) ? t('entity.id_conflict') : t('entity.apply_rename'))">
+                                                        <!-- The one being written says so; the others only grey out. -->
+                                                        <i :class="applyingEntityId === entity.id
+                                                                   ? 'ri-loader-4-line animate-spin'
+                                                                   : 'ri-check-line'"></i>
                                                     </button>
                                                 </template>
                                                 <!-- Delete button - always visible, filled red in no-area mode -->
@@ -2275,7 +2288,7 @@
                                                         x-text="t('entity.ignore')">Leave alone</button>
                                             </div>
                                         </div>
-                                        <div x-show="entity.drift" class="drift-bar"
+                                        <div x-show="entity.drift" class="drift-bar">
                                             <span class="drift-text"
                                                   x-text="t('entity.drift_explain', {applied: entity.applied_name || ''})"></span>
                                             <div class="drift-actions">
@@ -2300,6 +2313,10 @@
                                                 <i class="ri-external-link-line"></i>
                                             </a>
                                         </p>
+                                        <p x-show="entity.supplied_correctable" class="text-xs text-gray-500 mt-1"
+                                           x-text="t('entity.supplied_stale', {
+                                               supplied: entity.supplied_correctable?.supplied || ''
+                                           })"></p>
                                         <div class="scope-bar" x-show="typeEdited(entity)">
                                             <span class="scope-label" x-text="t('entity.scope_label', {name: typeOriginal(entity)})"></span>
                                             <div class="scope-group" role="group">
@@ -2311,7 +2328,7 @@
                                                     <span class="scope-count" x-text="entity.type_count || 1"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
-                                                        x-show="entity.platform && entity.type_integration_count && entity.type_integration_count < (entity.type_count || 0)"
+                                                        x-show="entity.platform && entity.type_integration_count"
                                                         :class="entity._ruleScope === 'integration' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'integration'"
                                                         :title="t('entity.scope_integration_hint', {integration: entity.platform, count: entity.type_integration_count || 0})">
@@ -2319,7 +2336,7 @@
                                                     <span class="scope-count" x-text="entity.type_integration_count || 0"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
-                                                        x-show="entity.device_model && entity.type_model_count && entity.type_model_count < (entity.type_integration_count || entity.type_count || 0)"
+                                                        x-show="entity.device_model && entity.type_model_count"
                                                         :class="entity._ruleScope === 'model' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'model'"
                                                         :title="t('entity.scope_model_hint', {model: entity.device_model, count: entity.type_model_count || 0})">
@@ -2406,22 +2423,23 @@
              x-transition:enter-start="opacity-0"
              x-transition:enter-end="opacity-100"
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-xl shadow-xl max-w-lg w-full"
+            <div class="bg-white rounded-xl shadow-xl max-w-xl w-full overflow-y-auto"
+                 style="max-height: 85vh"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100">
-                <div class="p-6">
-                    <div class="flex items-center gap-3 mb-4">
+                <div style="padding: 20px">
+                    <div class="flex items-center gap-3 mb-3">
                         <div class="w-10 h-10 rounded-full flex items-center justify-center"
                              :class="isJobTerminal(jobPanel.job) ? (jobUnsuccessful(jobPanel.job) ? 'bg-red-100' : 'bg-green-100') : 'bg-blue-100'">
                             <i class="text-xl"
                                :class="!isJobTerminal(jobPanel.job) ? 'ri-loader-4-line animate-spin text-blue-600' : (jobUnsuccessful(jobPanel.job) ? 'ri-error-warning-line text-red-600' : 'ri-check-line text-green-600')"></i>
                         </div>
-                        <h3 class="text-lg font-semibold" x-text="jobPanel.titleKey ? t(jobPanel.titleKey) : t('jobs.working')"></h3>
+                        <h3 class="text-lg font-semibold" x-text="jobTitle()"></h3>
                     </div>
 
                     <!-- Progress bar (shown while a total is known) -->
-                    <template x-if="jobPanel.job && jobPanel.job.progress && jobPanel.job.progress.total > 0">
+                    <template x-if="!isJobTerminal(jobPanel.job) && jobPanel.job && jobPanel.job.progress && jobPanel.job.progress.total > 0">
                         <div class="mb-3">
                             <div class="flex justify-between text-sm text-gray-500 mb-1">
                                 <span x-text="`${jobPanel.job.progress.done}/${jobPanel.job.progress.total}`"></span>
@@ -2435,35 +2453,77 @@
                     </template>
 
                     <!-- Current item / final message -->
-                    <p class="text-sm text-gray-600 mb-3 truncate"
-                       x-text="isJobTerminal(jobPanel.job) ? (jobFailed(jobPanel.job) ? (jobPanel.job.error || t('jobs.failed')) : ((jobPanel.job.result && jobPanel.job.result.message) || t('jobs.completed'))) : (jobPanel.job && jobPanel.job.progress && jobPanel.job.progress.current) || t('jobs.working')"></p>
+                    <p class="text-sm text-gray-600 truncate" x-text="jobOutcome()"></p>
 
-                    <!-- Collapsible, height-limited log tail -->
+                    <!-- What the run did, sorted by outcome. The counts double as
+                         the filter, so the one line that needs the user is one
+                         click away instead of buried in a hundred. -->
                     <template x-if="jobPanel.job && jobPanel.job.log && jobPanel.job.log.length">
-                        <div class="mb-2">
-                            <button @click="jobPanel.showLog = !jobPanel.showLog"
-                                    class="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
-                                <i :class="jobPanel.showLog ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
-                                <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
-                            </button>
-                            <div x-show="jobPanel.showLog"
-                                 class="mt-2 max-h-64 overflow-y-auto text-xs font-mono bg-gray-50 rounded p-2 border border-gray-200">
-                                <template x-for="(entry, i) in jobPanel.job.log.slice(-100)" :key="i">
-                                    <div class="text-gray-600 break-all">
-                                        <span class="text-gray-400" x-text="entry.step"></span>
-                                        <span x-text="' ' + entry.message"></span>
-                                    </div>
+                        <div>
+                            <!-- The counts and the way into the detail sit on one line:
+                                 stacked, a finished run was three quarters white. -->
+                            <div class="flex flex-wrap items-center gap-2 mt-4">
+                                <template x-for="group in jobLogGroups()" :key="group.step">
+                                    <button @click="toggleJobLogFilter(group.step)"
+                                            class="inline-flex items-center gap-1.5 rounded-full border text-xs transition-colors"
+                                            style="padding: 5px 12px"
+                                            :class="jobPanel.filter === group.step ? group.active : group.idle">
+                                        <span x-text="group.label"></span>
+                                        <span class="font-semibold" x-text="group.count"></span>
+                                    </button>
                                 </template>
+                                <button @click="jobPanel.showLog = !jobPanel.showLog; stopClosing()"
+                                        class="ml-auto text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 shrink-0">
+                                    <i :class="jobPanel.showLog ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
+                                    <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
+                                </button>
+                            </div>
+
+                            <!-- The part no rename can do for the user. -->
+                            <div x-show="jobLogCount('UNREACHABLE') || jobLogCount('NOT_CARRIED')"
+                                 class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                                <div class="flex items-center gap-2">
+                                    <i class="ri-error-warning-line shrink-0"></i>
+                                    <span class="font-medium" x-text="t('jobs.follow_up')"></span>
+                                    <span class="text-xs opacity-80 hidden sm:inline"
+                                          x-text="t('jobs.follow_up_hint')"></span>
+                                </div>
+                            </div>
+
+                            <div x-show="jobPanel.showLog" class="mt-3">
+                                <div class="relative mb-2">
+                                    <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"
+                                       style="pointer-events: none"></i>
+                                    <input type="text" x-model="jobPanel.search"
+                                           :placeholder="t('jobs.search_log')"
+                                           style="padding-left: 34px"
+                                           class="w-full pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                                </div>
+                                <div class="max-h-72 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+                                    <template x-for="(entry, i) in jobLogEntries()" :key="i">
+                                        <div class="flex items-start gap-2 px-2 py-1.5 text-xs">
+                                            <span class="shrink-0 px-1.5 py-0.5 rounded font-medium"
+                                                  :class="jobLogStepClass(entry.step)"
+                                                  x-text="jobLogStepLabel(entry.step)"></span>
+                                            <span class="text-gray-700 break-all" x-text="entry.message"></span>
+                                        </div>
+                                    </template>
+                                    <p x-show="!jobLogEntries().length"
+                                       class="px-2 py-3 text-xs text-gray-400 text-center"
+                                       x-text="t('jobs.log_empty')"></p>
+                                </div>
                             </div>
                         </div>
                     </template>
 
-                    <div class="flex justify-end mt-4">
+                    <div class="flex justify-end mt-5">
                         <button @click="closeJobPanel()"
                                 :disabled="!isJobTerminal(jobPanel.job)"
                                 class="btn"
                                 :class="isJobTerminal(jobPanel.job) ? 'btn-primary' : 'btn-ghost opacity-50 cursor-not-allowed'"
-                                x-text="isJobTerminal(jobPanel.job) ? t('jobs.close') : t('jobs.running')"></button>
+                                x-text="isJobTerminal(jobPanel.job)
+                                        ? t('jobs.close') + (jobPanel.closing ? ' (' + jobPanel.closing + ')' : '')
+                                        : t('jobs.running')"></button>
                     </div>
                 </div>
             </div>
@@ -2834,8 +2894,12 @@
                     titleKey: '',     // translation key, rendered reactively via t()
                     pollUrl: null,
                     job: null,
-                    showLog: false,   // log tail is collapsed by default
+                    showLog: false,   // log is collapsed by default
+                    filter: '',       // one step name, or '' for everything
+                    search: '',
                     timer: null,
+                    closing: null,    // seconds left before it closes itself
+                    closingTimer: null,
                     onDone: null,
                 },
 
@@ -4175,7 +4239,12 @@
                     const newName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
                     const newId = entity._previewId || this.getNewEntityIdForEntity(entity);
 
-                    return entity.id !== newId || entity.original_name !== newName;
+                    // A supplied name that froze an old hierarchy is written
+                    // back as part of the rename, so there is something to do
+                    // even where the name and the id already read right.
+                    return entity.id !== newId
+                        || entity.original_name !== newName
+                        || !!entity.supplied_correctable;
                 },
 
                 // Get friendly name using entity's own device/area (not selected)
@@ -4369,24 +4438,6 @@
                     );
                 },
 
-                // A badge marks what the user decided: a rule or an exception.
-                // Everything else is the standard and needs no mark.
-                resolutionBadge(entity) {
-                    const _ = this.translationsReady;
-                    const won = entity?.resolution?.won_by;
-                    if (won !== 'override' && won !== 'rule:user') return '';
-                    const key = 'entity.source_' + won.replace(':', '_');
-                    const label = this.t(key);
-                    return label === key ? won : label;
-                },
-
-                resolutionBadgeClass(entity) {
-                    const won = entity?.resolution?.won_by || '';
-                    if (won === 'override') return 'bg-violet-100 text-violet-700';
-                    if (won === 'rule:user') return 'bg-amber-100 text-amber-700';
-                    return '';
-                },
-
                 // One plain statement: what it is called, where that holds, for how many.
                 resolutionExplain(entity) {
                     const _ = this.translationsReady;
@@ -4408,6 +4459,16 @@
                             }
                             return this.t('entity.explain_rule_all', {original, value});
                         case 'rule:system':
+                            // Which lookup answered, so the line does not claim
+                            // something about every entity that shares a word.
+                            if (match?.kind === 'translation_key') {
+                                return this.t('entity.explain_translation_key', {
+                                    value, key: match.value, integration: source
+                                });
+                            }
+                            if (match?.kind === 'device_class') {
+                                return this.t('entity.explain_builtin_class', {value, device_class: match.value});
+                            }
                             return this.t('entity.explain_builtin', {original, value});
                         case 'legacy_parse':
                             return this.t('entity.explain_legacy', {value});
@@ -4666,7 +4727,7 @@
                     const idChanged = entity.id !== newId;
                     const nameChanged = entity.original_name !== newName;
 
-                    if (!idChanged && !nameChanged) {
+                    if (!idChanged && !nameChanged && !entity.supplied_correctable) {
                         this.showMessage('No changes needed', 'info');
                         return;
                     }
@@ -4688,9 +4749,14 @@
 
                         const data = await response.json();
                         if (data.success) {
-                            // Update local entity data
-                            entity.id = newId;
-                            entity.original_name = newName;
+                            // What the registry holds now, read back after the write.
+                            // Taking the requested values here is what let a name
+                            // look right in the list and be something else in Home
+                            // Assistant until the next reload.
+                            const storedId = data.new_entity_id || newId;
+                            const storedName = data.new_friendly_name ?? newName;
+                            entity.id = storedId;
+                            entity.original_name = storedName;
                             // Update base_name to the new suffix so input field shows correct value
                             if (entity._currentSuffix !== undefined) {
                                 entity.base_name = entity._currentSuffix;
@@ -4699,12 +4765,19 @@
                             entity._previewName = null;
                             entity._previewId = null;
                             entity._currentSuffix = undefined;
+                            entity.supplied_correctable = null;  // The rename carried it along
                             entity._justRenamed = true;  // Mark as renamed so it doesn't show as needing change
 
                             // Recompute previews for other entities (IDs may have changed)
                             this.invalidateEntityPreviews();
 
-                            this.showMessage(`Renamed to "${newName}"`, 'success');
+                            // A name Home Assistant changed on the way in is said
+                            // out loud, rather than quietly showing the wish.
+                            if (storedName !== newName || storedId !== newId) {
+                                this.showMessage(this.t('entity.renamed_differently', {name: storedName}), 'info');
+                            } else {
+                                this.showMessage(this.t('entity.renamed_to', {name: storedName}), 'success');
+                            }
                         } else {
                             throw new Error(data.error || 'Rename failed');
                         }
@@ -5194,6 +5267,8 @@
                     this.jobPanel.titleKey = titleKey;
                     this.jobPanel.onDone = onDone;
                     this.jobPanel.showLog = false;
+                    this.jobPanel.filter = '';
+                    this.jobPanel.search = '';
                     this.jobPanel.show = true;
                     if (this.isJobTerminal(job)) {
                         this.finishJob();
@@ -5215,6 +5290,28 @@
                     }
                 },
 
+                // Nothing to look at: it finished, every target succeeded, and no
+                // line asks the user to go and do something himself. Anything
+                // less than that keeps the panel open, because the log is the
+                // only place the per-target outcome exists.
+                jobFlawless(job) {
+                    if (!this.isJobTerminal(job) || this.jobUnsuccessful(job)) return false;
+                    for (const step of ['ERROR', 'UNREACHABLE', 'NOT_CARRIED', 'UNVERIFIED']) {
+                        if (this.jobLogCount(step)) return false;
+                    }
+                    const progress = (job && job.progress) || {};
+                    if (progress.total > 0 && progress.done < progress.total) return false;
+                    return true;
+                },
+
+                autoCloseWanted() {
+                    try {
+                        return !!JSON.parse(localStorage.getItem('entityManagerSettings') || '{}').autoCloseOnSuccess;
+                    } catch (error) {
+                        return false;
+                    }
+                },
+
                 async finishJob() {
                     this.stopJobPolling();
                     const finished = this.jobPanel.job;
@@ -5223,7 +5320,49 @@
                     // the only place the per-target outcome exists. Expand that log
                     // when something went wrong, so the failures need no extra click.
                     if (finished && this.jobUnsuccessful(finished)) this.jobPanel.showLog = true;
+                    // Something the rename could not do itself outranks the rest:
+                    // open the log on exactly those lines.
+                    for (const step of ['NOT_CARRIED', 'UNREACHABLE']) {
+                        if (this.jobLogCount(step)) {
+                            this.jobPanel.filter = step;
+                            this.jobPanel.showLog = true;
+                            break;
+                        }
+                    }
+                    // Before the callback, not after: reloading the entities takes
+                    // as long as it takes, and a count that starts on the far side
+                    // of it reads as a second wait after the panel already said it
+                    // was done.
+                    if (this.autoCloseWanted() && this.jobFlawless(finished)) {
+                        this.startClosing(finished);
+                    }
                     if (cb) await cb(finished);
+                },
+
+                // Counted down on the button rather than closed out of hand, so
+                // the panel says how long is left and can be kept open.
+                startClosing(finished) {
+                    this.stopClosing();
+                    this.jobPanel.closing = 3;
+                    this.jobPanel.closingTimer = setInterval(() => {
+                        if (this.jobPanel.job !== finished) {
+                            this.stopClosing();
+                            return;
+                        }
+                        this.jobPanel.closing -= 1;
+                        if (this.jobPanel.closing <= 0) {
+                            this.stopClosing();
+                            this.closeJobPanel();
+                        }
+                    }, 1000);
+                },
+
+                stopClosing() {
+                    if (this.jobPanel.closingTimer) {
+                        clearInterval(this.jobPanel.closingTimer);
+                        this.jobPanel.closingTimer = null;
+                    }
+                    this.jobPanel.closing = null;
                 },
 
                 stopJobPolling() {
@@ -5232,6 +5371,7 @@
 
                 closeJobPanel() {
                     this.stopJobPolling();
+                    this.stopClosing();
                     this.jobPanel.show = false;
                     this.jobPanel.job = null;
                     this.jobPanel.pollUrl = null;
@@ -5260,6 +5400,115 @@
                 // finished while some targets did not.
                 jobUnsuccessful(job) {
                     return this.jobFailed(job) || this.jobPartiallyFailed(job);
+                },
+
+                // What each step is called and how it is worn, from config.js so
+                // the settings log and this panel cannot drift apart.
+                get JOB_LOG_STEPS() {
+                    return (window.EntityManagerConfig || {}).jobSteps || {};
+                },
+
+                JOB_STEP_STYLE: {
+                    renamed:       {idle: 'border-gray-200 text-gray-600 hover:bg-gray-50',    active: 'border-gray-400 bg-gray-100 text-gray-800',   badge: 'bg-gray-100 text-gray-600'},
+                    enabled:       {idle: 'border-blue-200 text-blue-700 hover:bg-blue-50',    active: 'border-blue-400 bg-blue-100 text-blue-800',   badge: 'bg-blue-100 text-blue-700'},
+                    carried:       {idle: 'border-green-200 text-green-700 hover:bg-green-50', active: 'border-green-400 bg-green-100 text-green-800', badge: 'bg-green-100 text-green-700'},
+                    'not-carried': {idle: 'border-red-200 text-red-700 hover:bg-red-50',       active: 'border-red-400 bg-red-100 text-red-800',       badge: 'bg-red-100 text-red-700'},
+                    unreachable:   {idle: 'border-amber-200 text-amber-700 hover:bg-amber-50', active: 'border-amber-400 bg-amber-100 text-amber-800', badge: 'bg-amber-100 text-amber-700'},
+                    error:         {idle: 'border-red-200 text-red-700 hover:bg-red-50',       active: 'border-red-400 bg-red-100 text-red-800',       badge: 'bg-red-100 text-red-700'},
+                },
+
+                jobStepStyle(step) {
+                    const known = this.JOB_LOG_STEPS[step];
+                    return (known && this.JOB_STEP_STYLE[known.colour]) || {};
+                },
+
+                jobLogStepLabel(step) {
+                    const known = this.JOB_LOG_STEPS[step];
+                    return known ? this.t('jobs.' + known.label) : step;
+                },
+
+                jobLogStepClass(step) {
+                    return this.jobStepStyle(step).badge || 'bg-gray-100 text-gray-500';
+                },
+
+                jobLogCount(step) {
+                    const log = (this.jobPanel.job && this.jobPanel.job.log) || [];
+                    return log.filter(entry => entry.step === step).length;
+                },
+
+                // One chip per step that actually occurred, in the order above and
+                // unknown steps after it.
+                jobLogGroups() {
+                    const log = (this.jobPanel.job && this.jobPanel.job.log) || [];
+                    const order = Object.keys(this.JOB_LOG_STEPS);
+                    const seen = [];
+                    for (const entry of log) {
+                        if (!seen.includes(entry.step)) seen.push(entry.step);
+                    }
+                    seen.sort((a, b) => {
+                        const ai = order.indexOf(a), bi = order.indexOf(b);
+                        return (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
+                    });
+                    return seen.map(step => {
+                        const style = this.jobStepStyle(step);
+                        return {
+                            step,
+                            label: this.jobLogStepLabel(step),
+                            count: this.jobLogCount(step),
+                            idle: style.idle || 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                            active: style.active || 'border-gray-400 bg-gray-100 text-gray-800',
+                        };
+                    });
+                },
+
+                toggleJobLogFilter(step) {
+                    this.jobPanel.filter = this.jobPanel.filter === step ? '' : step;
+                    this.jobPanel.showLog = true;
+                },
+
+                jobLogEntries() {
+                    const log = (this.jobPanel.job && this.jobPanel.job.log) || [];
+                    const step = this.jobPanel.filter;
+                    const needle = (this.jobPanel.search || '').trim().toLowerCase();
+                    return log.filter(entry => {
+                        if (step && entry.step !== step) return false;
+                        if (!needle) return true;
+                        return (entry.message || '').toLowerCase().includes(needle)
+                            || (entry.step || '').toLowerCase().includes(needle);
+                    });
+                },
+
+                // While it runs, what it is doing; once it is done, what it did.
+                jobTitle() {
+                    const job = this.jobPanel.job;
+                    if (this.isJobTerminal(job)) {
+                        return this.jobFailed(job) ? this.t('jobs.failed') : this.t('jobs.completed');
+                    }
+                    return this.jobPanel.titleKey ? this.t(this.jobPanel.titleKey) : this.t('jobs.working');
+                },
+
+                // The handlers answer with an English sentence meant for the API;
+                // the panel counts what they did and says it in the user's own
+                // language instead.
+                jobOutcome() {
+                    const job = this.jobPanel.job;
+                    if (!this.isJobTerminal(job)) {
+                        return (job && job.progress && job.progress.current) || this.t('jobs.working');
+                    }
+                    if (this.jobFailed(job)) return (job && job.error) || this.t('jobs.failed');
+                    const result = (job && job.result) || {};
+                    const done = (result.success || []).length
+                        || (result.enabled || []).length
+                        || result.entities_renamed || 0;
+                    const failed = (result.failed || []).length || result.entities_failed || 0;
+                    const parts = [];
+                    const did = (result.enabled || []).length ? 'jobs.count_enabled' : 'jobs.count_done';
+                    if (done) parts.push(this.t(did, {count: done}));
+                    if (failed) parts.push(this.t('jobs.count_failed', {count: failed}));
+                    if (this.jobLogCount('UNREACHABLE')) {
+                        parts.push(this.t('jobs.count_unreachable', {count: this.jobLogCount('UNREACHABLE')}));
+                    }
+                    return parts.length ? parts.join(' · ') : (result.message || this.t('jobs.completed'));
                 },
 
                 jobProgressPercent() {

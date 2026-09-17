@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <base href="{{ base_href }}">
     <title>Settings - Entity Manager</title>
-    <link href="static/css/styles.css?v={{ version }}" rel="stylesheet">
+    <link href="static/css/v{{ version }}/styles.css" rel="stylesheet">
     <link href="static/css/remixicon.css?v={{ version }}" rel="stylesheet">
     <script>window.assetVersion = "{{ version }}";</script>
-    <script src="static/js/translations.js?v={{ version }}"></script>
-    <script src="static/js/config.js?v={{ version }}"></script>
+    <script src="static/js/v{{ version }}/translations.js"></script>
+    <script src="static/js/v{{ version }}/config.js"></script>
     <script defer src="static/js/alpine.min.js"></script>
     <style>
         .settings-container {
@@ -47,9 +47,270 @@
             color: #3b82f6;
         }
 
-        .section-hint { color: #6b7280; font-size: 0.85rem; padding: 0 20px 12px; }
+        .section-hint { color: #6b7280; font-size: 0.85rem; padding: 14px 20px 12px; }
+
+        /* A setting that is on or off reads as a switch, not as a form field.
+           The input stays where it is - it carries the state, the keyboard and
+           the focus ring - and only its looks are taken over. */
+        .switch { position: relative; display: inline-flex; flex: none; width: 42px; height: 24px; }
+        .switch input {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            margin: 0; opacity: 0; cursor: pointer;
+        }
+        .switch .track {
+            position: absolute; inset: 0; border-radius: 9999px;
+            background: #d1d5db; transition: background 0.18s ease;
+        }
+        .switch .track::after {
+            content: ''; position: absolute; top: 3px; left: 3px;
+            width: 18px; height: 18px; border-radius: 50%; background: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+            transition: transform 0.18s ease;
+        }
+        .switch input:checked + .track { background: #4f46e5; }
+        .switch input:checked + .track::after { transform: translateX(18px); }
+        .switch input:focus-visible + .track { box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.35); }
+        .switch input:disabled { cursor: default; }
         .row-muted td { color: #9ca3af; }
         .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9999px; background: #eef2ff; color: #4f46e5; font-size: 0.7rem; }
+
+        /* One rule per row, read as a sentence rather than as five columns:
+           entity ids and long names have nowhere to be cut off here. */
+        .rule-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 4px 16px 20px;
+            background: #f8fafc;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        /* A card per rule, with a coloured edge saying what kind of rule it is:
+           the list has to be readable at a glance, not a wall of white. */
+        .rule-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-left: 3px solid #3b82f6;
+            border-radius: 10px;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+            transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        }
+
+        .rule-row:hover {
+            border-color: #bfdbfe;
+            box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+            transform: translateY(-1px);
+        }
+
+        /* A rule that reaches nothing is quieter, but still legible: it is the
+           one the user most likely came to look at. */
+        .rule-row-muted { border-left-color: #d1d5db; background: #fcfcfd; }
+        .rule-row-builtin { border-left-color: #a78bfa; }
+        .rule-body { flex: 1 1 auto; min-width: 0; }
+        .rule-actions { flex: none; }
+
+        .rule-says {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 4px 8px;
+        }
+
+        .rule-from {
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: #f3f4f6;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #4b5563;
+            overflow-wrap: anywhere;
+        }
+
+        .rule-arrow { color: #9ca3af; flex: none; }
+        .rule-to { color: #111827; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+
+        /* How far a rule actually reaches, as the one number worth seeing first. */
+        .reach-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            background: #ecfdf5;
+            color: #047857;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .reach-badge.empty { background: #f3f4f6; color: #6b7280; }
+        .reach-badge { border: none; font: inherit; font-size: 0.8rem; font-weight: 600; }
+        .reach-badge-open { cursor: pointer; }
+        .reach-badge-open:hover { background: #d1fae5; }
+
+        .reach-list {
+            margin-top: 10px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .reach-note { margin: 0; color: #6b7280; font-size: 0.8rem; }
+
+        /* Wider than a phone at four columns, and scrolled rather than wrapped:
+           a name broken over three lines is what made this unreadable. */
+        .reach-scroll { overflow-x: auto; }
+        .reach-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        .reach-table th {
+            text-align: left;
+            font-weight: 600;
+            color: #6b7280;
+            padding: 0 12px 6px 0;
+            white-space: nowrap;
+        }
+        .reach-table td {
+            padding: 6px 12px 6px 0;
+            border-top: 1px solid #f3f4f6;
+            color: #374151;
+            vertical-align: top;
+        }
+        .reach-domain {
+            display: inline-block;
+            padding: 1px 6px;
+            margin-right: 6px;
+            border-radius: 4px;
+            background: #eef2ff;
+            color: #4338ca;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .reach-id { font-family: monospace; color: #4f46e5; word-break: break-all; text-decoration: none; }
+        a.reach-id:hover { text-decoration: underline; }
+        .reach-key { font-family: monospace; color: #374151; word-break: break-all; }
+        .reach-kind { display: block; color: #9ca3af; font-size: 0.7rem; }
+        .reach-changes { color: #047857; font-weight: 600; }
+        .rule-entity { font-family: monospace; font-size: 0.85rem; color: #374151; word-break: break-all; }
+
+        .rule-reach {
+            margin-top: 8px;
+            color: #6b7280;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .rule-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 14px 2px 2px;
+            color: #374151;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .rule-group::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #e5e7eb;
+        }
+
+        .rule-group .tally {
+            padding: 1px 8px;
+            border-radius: 9999px;
+            background: #e5e7eb;
+            color: #4b5563;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0;
+        }
+
+        .rule-builtin { color: #9ca3af; }
+        .rule-warning { color: #d97706; }
+
+        /* One line above the list saying what could go, instead of a badge on
+           every row that could. */
+        .tidy-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 0 20px 12px;
+            padding: 10px 14px;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            color: #92400e;
+            font-size: 0.85rem;
+        }
+        .kind-badge.muted { background: #f3f4f6; color: #6b7280; }
+
+        /* The default reach, worn a shade quieter than a filter someone chose. */
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 4px 4px 12px;
+            border-radius: 9999px;
+            background: #eef2ff;
+            color: #4f46e5;
+            font-size: 0.8rem;
+            font-weight: 500;
+            line-height: 1.35;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+        }
+
+        /* No remove button on this one, so it keeps the same room on both sides. */
+        .filter-chip-default {
+            padding: 4px 12px;
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .filter-chip-remove {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border: none;
+            background: none;
+            color: inherit;
+            cursor: pointer;
+            border-radius: 9999px;
+            opacity: 0.6;
+        }
+
+        .filter-chip-remove:hover { opacity: 1; background: rgba(79, 70, 229, 0.15); }
+
+        .filter-add {
+            border: 1px dashed #c7d2fe;
+            background: none;
+            color: #4f46e5;
+            border-radius: 9999px;
+            padding: 4px 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            line-height: 1.35;
+            cursor: pointer;
+        }
+
+        .filter-add:hover { background: #eef2ff; }
         .conflict-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
         .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid #d1d5db; background: white; cursor: pointer; font-size: 0.85rem; }
         .chip-active { background: #2563eb; color: white; border-color: #2563eb; }
@@ -147,18 +408,6 @@
             font-weight: 500;
         }
 
-        .user-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 2px 8px;
-            background: #d1fae5;
-            color: #059669;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-
         .system-badge {
             display: inline-flex;
             align-items: center;
@@ -246,20 +495,28 @@
         .modal-overlay {
             position: fixed;
             inset: 0;
+            padding: 24px 16px;
             background: rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow-y: auto;
+            overscroll-behavior: contain;
             z-index: 100;
         }
+
+        body.modal-open { overflow: hidden; }
 
         .modal {
             background: white;
             border-radius: 12px;
             padding: 24px;
-            width: 400px;
-            max-width: 90vw;
+            width: 460px;
+            max-width: 92vw;
             box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            /* A suggestion list reaches past the dialog's own edge; clipping it
+               here is what swallowed it. */
+            overflow: visible;
         }
 
         .modal h3 {
@@ -330,23 +587,301 @@
         /* Filter/Search */
         .filter-bar {
             display: flex;
+            align-items: center;
             gap: 12px;
             padding: 16px 20px;
-            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .search-wrap { position: relative; flex: 1; }
+
+        .search-wrap > i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            pointer-events: none;
         }
 
         .search-input {
-            flex: 1;
-            padding: 10px 14px;
+            width: 100%;
+            padding: 10px 14px 10px 34px;
             border: 1px solid #d1d5db;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 0.9rem;
         }
 
         .search-input:focus {
             outline: none;
             border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
         }
+
+        /* One button for every way of narrowing the list, so the bar stays one
+           line and the choices have room to be explained inside. */
+        .filter-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: white;
+            color: #374151;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        .filter-btn:hover { border-color: #93c5fd; color: #1d4ed8; }
+        .filter-btn.on { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
+
+        .filter-count {
+            min-width: 20px;
+            padding: 0 6px;
+            border-radius: 9999px;
+            background: #3b82f6;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 18px;
+            text-align: center;
+        }
+
+        /* What is currently being filtered on, always visible and each one
+           removable on its own. */
+        .active-filters {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            padding: 0 20px 16px;
+        }
+
+        .active-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 6px 5px 12px;
+            border-radius: 9999px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .active-chip button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border: none;
+            border-radius: 9999px;
+            background: transparent;
+            color: #1d4ed8;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .active-chip button:hover { background: #dbeafe; }
+
+        .clear-filters {
+            border: none;
+            background: none;
+            color: #6b7280;
+            font-size: 0.8rem;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .clear-filters:hover { color: #374151; }
+
+        .log-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+
+        .log-step {
+            flex: none;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .log-message { color: #111827; font-size: 0.92rem; overflow-wrap: anywhere; }
+
+        .step-renamed { background: #e0e7ff; color: #4338ca; }
+        .step-carried { background: #d1fae5; color: #047857; }
+        .step-not-carried { background: #fee2e2; color: #b91c1c; }
+        .step-unreachable { background: #fef3c7; color: #b45309; }
+        .step-enabled { background: #dbeafe; color: #1d4ed8; }
+        .step-error { background: #fee2e2; color: #b91c1c; }
+        .step-other { background: #f3f4f6; color: #6b7280; }
+
+        .row-renamed { border-left-color: #6366f1; }
+        .row-carried { border-left-color: #10b981; }
+        .row-not-carried, .row-error { border-left-color: #ef4444; }
+        .row-enabled { border-left-color: #3b82f6; }
+        .row-unreachable { border-left-color: #f59e0b; }
+        .row-other { border-left-color: #d1d5db; }
+
+        .pager {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 16px 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .pager-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: white;
+            color: #374151;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .pager-btn:hover:not(:disabled) { border-color: #3b82f6; color: #1d4ed8; }
+        .pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .pager-where { color: #6b7280; font-size: 0.85rem; }
+
+        /* A list of integrations or models is far too long to scroll through in
+           a dropdown, so it is typed into and narrowed as you type, the way
+           devices are picked when one is swapped. */
+        .combo { position: relative; }
+
+        .combo-field { position: relative; }
+
+        .combo-field > i.ri-search-line {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            pointer-events: none;
+        }
+
+        .combo-field > i.ri-checkbox-circle-fill {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #10b981;
+        }
+
+        .combo-field input.combo-input {
+            width: 100%;
+            padding: 10px 36px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+
+        .combo-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        .combo-input.chosen { border-color: #6ee7b7; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12); }
+
+        .combo-list {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            z-index: 20;
+            margin-top: 4px;
+            max-height: 240px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
+        }
+
+        .combo-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+            padding: 9px 12px;
+            border: none;
+            border-bottom: 1px solid #f3f4f6;
+            background: none;
+            text-align: left;
+            font-size: 0.9rem;
+            color: #374151;
+            cursor: pointer;
+        }
+
+        .combo-item:last-child { border-bottom: none; }
+        .combo-item:hover, .combo-item:focus, .combo-item.at { background: #eff6ff; outline: none; }
+        .combo-item.at { box-shadow: inset 2px 0 0 #3b82f6; }
+        .combo-item.current { background: #dbeafe; font-weight: 600; }
+        .combo-item .tally { color: #9ca3af; font-size: 0.78rem; white-space: nowrap; }
+
+        .combo-maker {
+            margin-right: 6px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: #f3f4f6;
+            color: #6b7280;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .combo-empty, .combo-more {
+            padding: 9px 12px;
+            color: #9ca3af;
+            font-size: 0.85rem;
+        }
+
+        .combo-more { background: #f9fafb; }
+
+        /* Picking filters: groups of chips, several at a time. */
+        .modal-wide { width: 580px; }
+
+        .filter-group { margin-bottom: 18px; }
+
+        .filter-group h4 {
+            margin: 0 0 8px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+
+        .option-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+
+        .option-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 9999px;
+            background: white;
+            color: #374151;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        .option-chip:hover { border-color: #93c5fd; background: #f8fafc; }
+        .option-chip.picked { border-color: #3b82f6; background: #3b82f6; color: white; }
+        .option-chip .tally { font-size: 0.75rem; opacity: 0.7; }
+        .option-chip.picked .tally { opacity: 0.85; }
 
         .filter-select {
             padding: 10px 14px;
@@ -605,7 +1140,8 @@
     </style>
 </head>
 <body>
-    <div x-data="settingsManager()" x-init="init()" class="settings-container">
+    <div x-data="settingsManager()" x-init="init()" class="settings-container"
+         x-effect="document.body.classList.toggle('modal-open', modalOpen())">
         <!-- Header -->
         <div class="settings-header">
             <div>
@@ -626,6 +1162,10 @@
                @click.prevent="showSection('rules')">
                 <i class="ri-translate-2"></i> <span x-text="t('settings.tab_rules')">Type rules</span>
             </a>
+            <a href="settings/log" class="settings-tab" :class="section === 'log' ? 'is-active' : ''"
+               @click.prevent="showSection('log')">
+                <i class="ri-file-list-3-line"></i> <span x-text="t('settings.tab_log')">Log</span>
+            </a>
             <a href="settings/system" class="settings-tab" :class="section === 'system' ? 'is-active' : ''"
                @click.prevent="showSection('system')">
                 <i class="ri-settings-3-line"></i> <span x-text="t('settings.tab_system')">System</span>
@@ -635,17 +1175,16 @@
         <div class="mapping-section" style="margin-bottom: 24px;" x-show="section === 'naming'">
             <div class="section-header">
                 <h2>
-                    <i class="ri-global-line"></i>
-                    <span x-text="t('settings.language_section')">Language and spelling</span>
+                    <i class="ri-font-size"></i>
+                    <span x-text="t('settings.spelling_section')">Spelling</span>
                 </h2>
             </div>
-            <div style="padding: 20px;" class="language-selector">
-                <label x-text="t('settings.system_language')">Language:</label>
-                <span class="kind-badge" x-text="language"></span>
-            </div>
-            <div style="padding: 0 20px 20px;" class="language-selector">
-                <label x-text="t('settings.display_case')">Spelling:</label>
-                <select class="filter-select" x-model="displayCase" @change="changeDisplayCase()" :title="t('settings.display_case_hint')">
+            <div style="padding: 20px;">
+                <!-- What the setting does, said once and in the open, rather than
+                     a label repeating the heading and the reason in a tooltip. -->
+                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 12px;"
+                   x-text="t('settings.display_case_hint')"></p>
+                <select class="filter-select" x-model="displayCase" @change="changeDisplayCase()">
                     <option value="first_word" x-text="t('settings.display_case_first_word')">First word capitalised</option>
                     <option value="sentence" x-text="t('settings.display_case_sentence')">Sentence case</option>
                     <option value="off" x-text="t('settings.display_case_off')">As supplied</option>
@@ -761,14 +1300,14 @@
             <div class="section-header">
                 <h2>
                     <i class="ri-translate-2"></i>
-                    <span x-text="t('settings.type_rules')">Type rules</span>
+                    <span x-text="t('settings.rules')">Rules</span>
                 </h2>
                 <button class="add-btn" @click="openAddRule()">
                     <i class="ri-add-line"></i>
                     <span x-text="t('settings.add_rule')">Add rule</span>
                 </button>
             </div>
-            <p class="section-hint" x-text="t('settings.type_rules_hint')"></p>
+            <p class="section-hint" x-text="t('settings.rules_hint')"></p>
 
             <div class="stats-bar">
                 <div class="stat-item">
@@ -786,99 +1325,180 @@
             </div>
 
             <div class="filter-bar">
-                <input type="text"
-                       class="search-input"
-                       :placeholder="t('settings.search_placeholder')"
-                       x-model="searchQuery"
-                       @input="filterRules()">
-                <select class="filter-select" x-model="filterType" @change="filterRules()">
-                    <option value="all" x-text="t('settings.filter_all')">All</option>
-                    <option value="user" x-text="t('settings.filter_user_rules')">My rules</option>
-                    <option value="no_effect" x-text="t('settings.filter_no_effect')">Without effect</option>
-                    <option value="system" x-text="t('settings.filter_system')">Built-in</option>
+                <div class="search-wrap">
+                    <i class="ri-search-line"></i>
+                    <input type="text"
+                           class="search-input"
+                           :placeholder="t('settings.search_placeholder')"
+                           x-model="searchQuery"
+                           @input="filterRules()">
+                </div>
+                <button class="filter-btn" :class="pickedCount() ? 'on' : ''" @click="openFilters()">
+                    <i class="ri-equalizer-line"></i>
+                    <span x-text="t('settings.filters')">Filters</span>
+                    <span class="filter-count" x-show="pickedCount()" x-text="pickedCount()"></span>
+                </button>
+                <select class="filter-select" x-model="sortBy" @change="filterRules()">
+                    <option value="name" x-text="t('settings.sort_name')">By name</option>
+                    <option value="reach" x-text="t('settings.sort_reach')">By reach</option>
+                    <option value="recent" x-text="t('settings.sort_recent')">Most recently changed</option>
                 </select>
             </div>
 
-            <div class="cleanup-bar" x-show="filterType === 'no_effect' && unusedCount() > 0">
-                <p x-text="t('settings.cleanup_hint', {count: unusedCount()})"></p>
+            <!-- Everything the list is currently narrowed by, each removable on
+                 its own so undoing one choice does not mean opening the dialog. -->
+            <div class="active-filters" x-show="pickedCount() > 0">
+                <template x-for="chip in pickedChips()" :key="chip.group + ':' + chip.value">
+                    <span class="active-chip">
+                        <span x-text="chip.label"></span>
+                        <button @click="togglePick(chip.group, chip.value); filterRules()"
+                                :title="t('settings.filter_remove')">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </span>
+                </template>
+                <button class="clear-filters" @click="clearPicks()" x-text="t('settings.filters_clear')"></button>
+            </div>
+
+            <!-- What could go, said once above the list rather than marked on
+                 every row it applies to. -->
+            <div class="tidy-bar" x-show="unusedCount() > 0">
+                <span x-text="t('settings.cleanup_hint', {count: unusedCount()})"></span>
                 <button class="add-btn" @click="deleteUnusedRules()" :disabled="cleaning">
                     <i class="ri-delete-bin-line"></i>
                     <span x-text="t('settings.cleanup_button', {count: unusedCount()})"></span>
                 </button>
             </div>
 
-            <table class="mappings-table" x-show="filteredRules.length > 0">
-                <thead>
-                    <tr>
-                        <th style="width: 26%" x-text="t('settings.th_original')">Original</th>
-                        <th style="width: 26%" x-text="t('settings.th_my_name')">My name</th>
-                        <th style="width: 18%" x-text="t('settings.th_system_default')">Built-in</th>
-                        <th style="width: 10%" x-text="t('settings.th_affected')">Affects</th>
-                        <th style="width: 10%" x-text="t('settings.th_source')">Source</th>
-                        <th style="width: 10%" x-text="t('settings.th_actions')">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="row in filteredRules" :key="row.id">
-                        <tr :class="(row.isRule && !row.affected ? 'row-muted ' : '') + (row.id === highlightRuleId ? 'row-highlight' : '')">
-                            <td>
-                                <span class="type-key" x-text="row.key"></span>
-                                <span x-show="row.integration" class="kind-badge" x-text="row.integration"></span>
-                                <span x-show="row.model" class="kind-badge" :title="row.model" x-text="row.model"></span>
-                            </td>
-                            <td>
-                                <template x-if="editingKey !== row.id">
-                                    <span :class="row.isRule ? 'user-override' : 'translation-value'"
-                                          x-text="row.isRule ? row.value : '—'"></span>
+            <div class="rule-list" x-show="filteredRules.length > 0">
+                <template x-for="row in filteredRules" :key="row.id">
+                    <div>
+                    <div class="rule-group" x-show="row.group">
+                        <span x-text="row.group"></span>
+                        <span class="tally" x-text="row.groupCount"></span>
+                    </div>
+                    <div class="rule-row"
+                         :class="(!row.isRule ? 'rule-row-builtin ' : (!row.affected ? 'rule-row-muted ' : ''))
+                                 + (row.id === highlightRuleId ? 'row-highlight' : '')">
+                        <div class="rule-body">
+                            <!-- What the rule says, as one line: the word that comes
+                                 in, the word that goes out. -->
+                            <div class="rule-says" x-show="editingKey !== row.id">
+                                <span class="rule-from" x-text="row.key"></span>
+                                <i class="ri-arrow-right-line rule-arrow"></i>
+                                <span class="rule-to" x-text="row.isRule ? row.value : row.system_default"></span>
+                            </div>
+                            <div class="rule-says" x-show="editingKey === row.id">
+                                <span class="rule-from" x-text="row.key"></span>
+                                <i class="ri-arrow-right-line rule-arrow"></i>
+                                <input type="text" class="edit-input" style="flex: 1 1 200px;" x-model="editValue"
+                                       @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
+                            </div>
+                            <!-- And where it applies. A rule reaches a list of
+                                 places, so each is its own chip and goes on its own. -->
+                            <div class="rule-reach">
+                                <template x-if="!row.isRule">
+                                    <span x-text="t('settings.reach_builtin')"></span>
                                 </template>
-                                <template x-if="editingKey === row.id">
-                                    <input type="text"
-                                           class="edit-input"
-                                           x-model="editValue"
-                                           @keydown.enter="saveEdit(row)"
-                                           @keydown.escape="cancelEdit()">
+                                <!-- Everywhere is a place like any other in this
+                                     list, and the one a rule starts in. It carries
+                                     no remove button: the first real filter takes
+                                     its place. -->
+                                <template x-if="row.isRule && !row.filters.length">
+                                    <span class="filter-chip filter-chip-default"
+                                          x-text="t('settings.filter_everywhere')"></span>
                                 </template>
-                            </td>
-                            <td><span class="system-default" x-text="row.system_default || '—'"></span></td>
-                            <td>
-                                <span x-show="row.isRule" :class="row.affected === 0 ? 'text-amber-600' : ''"
-                                      :title="row.affected === null ? t('settings.affected_unknown') : ''"
-                                      x-text="row.affected === null ? '—' : row.affected"></span>
-                                <span x-show="row.isRule && row.affected === 0" class="text-amber-600 text-xs" :title="t('settings.no_effect_hint')">
-                                    <i class="ri-alert-line"></i>
-                                </span>
-                            </td>
-                            <td>
-                                <!-- Typed, learned or carried over: every rule is the user's. -->
-                                <span x-show="row.isRule" class="user-badge">
-                                    <i class="ri-user-line"></i> <span x-text="t('settings.source_user')"></span>
-                                </span>
-                                <span x-show="!row.isRule" class="system-badge">
-                                    <i class="ri-settings-3-line"></i> <span x-text="t('settings.source_system')">Built-in</span>
-                                </span>
-                            </td>
-                            <td>
-                                <template x-if="editingKey !== row.id">
-                                    <div class="action-btns">
-                                        <button class="action-btn" @click="startEdit(row)" :title="t('settings.edit')">
-                                            <i class="ri-pencil-line"></i>
+                                <template x-for="scope in row.filters" :key="filterLabel(scope, row)">
+                                    <span class="filter-chip">
+                                        <span x-text="filterLabel(scope, row)"></span>
+                                        <button class="filter-chip-remove" @click="removeFilter(row, scope)"
+                                                :title="t('settings.filter_remove')">
+                                            <i class="ri-close-line"></i>
                                         </button>
-                                        <button class="action-btn delete" @click="deleteRule(row)" x-show="row.isRule" :title="t('settings.remove_rule')">
-                                            <i class="ri-delete-bin-line"></i>
-                                        </button>
-                                    </div>
+                                    </span>
                                 </template>
-                                <template x-if="editingKey === row.id">
-                                    <div class="save-cancel-btns">
-                                        <button class="save-btn" @click="saveEdit(row)"><i class="ri-check-line"></i></button>
-                                        <button class="cancel-btn" @click="cancelEdit()"><i class="ri-close-line"></i></button>
-                                    </div>
-                                </template>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
+                                <button class="filter-add" x-show="row.isRule"
+                                        @click="openAddFilter(row)" x-text="t('settings.filter_add')"></button>
+                                <button type="button" class="reach-badge"
+                                        :class="(row.affected ? '' : 'empty') + (row.affected ? ' reach-badge-open' : '')"
+                                        x-show="row.isRule && row.affected !== null"
+                                        :disabled="!row.affected"
+                                        @click="toggleReach(row)"
+                                        :title="t('settings.reach_show')">
+                                    <i :class="reachOpen === row.id ? 'ri-arrow-down-s-line' : 'ri-focus-3-line'"></i>
+                                    <span x-text="t('settings.reach_entities', {count: row.affected})"></span>
+                                </button>
+                                <span class="rule-builtin" x-show="row.isRule && row.system_default && row.system_default !== row.value"
+                                      x-text="t('settings.builtin_is', {name: row.system_default})"></span>
+                                <span class="rule-warning" x-show="row.isRule && row.redundant"
+                                      x-text="t('settings.says_the_same')"></span>
+                            </div>
+                            <!-- Which entities the count stands for. Four values
+                                 per entity read as one run-on line, so they get
+                                 a column each. -->
+                            <div class="reach-list" x-show="reachOpen === row.id">
+                                <p class="reach-note" x-show="reachBusy" x-text="t('settings.reach_loading')"></p>
+                                <p class="reach-note" x-show="reachError" x-text="reachError"></p>
+                                <div class="reach-scroll" x-show="!reachBusy && reachRows.length">
+                                    <table class="reach-table">
+                                        <thead>
+                                            <tr>
+                                                <th x-text="t('settings.reach_col_entity')"></th>
+                                                <th x-text="t('settings.reach_col_caught')"></th>
+                                                <th x-text="t('settings.reach_col_today')"></th>
+                                                <th x-text="t('settings.reach_col_would_be')"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <template x-for="one in reachRows" :key="one.entity_id">
+                                                <tr>
+                                                    <td>
+                                                        <span class="reach-domain" x-text="one.domain"></span>
+                                                        <a :href="deviceLink(one)" class="reach-id"
+                                                           target="_blank" rel="noopener"
+                                                           :title="t('settings.reach_open_device', {device: one.device_name || ''})"
+                                                           x-text="one.entity_id.split('.').slice(1).join('.')"></a>
+                                                    </td>
+                                                    <td>
+                                                        <code class="reach-key" x-text="one.caught_value || '—'"></code>
+                                                        <span class="reach-kind"
+                                                              x-text="one.by_name
+                                                                      ? t('settings.reach_by_name')
+                                                                      : t('settings.caught_' + (one.caught_on || 'none'))"></span>
+                                                    </td>
+                                                    <td x-text="one.name || '—'"></td>
+                                                    <td :class="one.proposed && one.proposed !== one.name ? 'reach-changes' : ''"
+                                                        x-text="one.proposed || '—'"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="rule-actions">
+                            <template x-if="editingKey !== row.id">
+                                <div class="action-btns">
+                                    <button class="action-btn" @click="startEdit(row)" :title="t('settings.edit')">
+                                        <i class="ri-pencil-line"></i>
+                                    </button>
+                                    <button class="action-btn delete" @click="deleteRule(row)" x-show="row.isRule"
+                                            :title="t('settings.remove_rule')">
+                                        <i class="ri-delete-bin-line"></i>
+                                    </button>
+                                </div>
+                            </template>
+                            <template x-if="editingKey === row.id">
+                                <div class="save-cancel-btns">
+                                    <button class="save-btn" @click="saveEdit(row)"><i class="ri-check-line"></i></button>
+                                    <button class="cancel-btn" @click="cancelEdit()"><i class="ri-close-line"></i></button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    </div>
+                </template>
+            </div>
 
             <div class="empty-state" x-show="filteredRules.length === 0">
                 <i class="ri-search-line"></i>
@@ -886,67 +1506,115 @@
             </div>
         </div>
 
-        <!-- Entities named by hand, past every rule -->
-        <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'rules'">
+        <!-- What every run did. It used to exist only inside the panel that was
+             open while it ran; here it survives the panel being closed. -->
+        <div class="mapping-section" x-show="section === 'log'">
             <div class="section-header">
                 <h2>
-                    <i class="ri-user-star-line"></i>
-                    <span x-text="t('settings.exceptions')">Exceptions</span>
+                    <i class="ri-file-list-3-line"></i>
+                    <span x-text="t('settings.log_title')">Log</span>
                 </h2>
-                <button class="add-btn" @click="cleanUpExceptions()"
-                        x-show="tidyableExceptions.length > 0"
-                        :title="t('settings.exceptions_cleanup_hint')">
-                    <i class="ri-brush-line"></i>
-                    <span x-text="t('settings.exceptions_cleanup', {count: tidyableExceptions.length})">Clean up</span>
+                <button class="add-btn" @click="loadLog()" :disabled="logBusy">
+                    <i class="ri-refresh-line" :class="logBusy ? 'ri-spin' : ''"></i>
+                    <span x-text="t('settings.refresh')">Refresh</span>
                 </button>
             </div>
-            <p class="section-hint" x-text="t('settings.exceptions_hint')"></p>
+            <div class="filter-bar">
+                <div class="search-wrap">
+                    <i class="ri-search-line"></i>
+                    <input type="text" class="search-input"
+                           :placeholder="t('settings.log_search')"
+                           x-model="logQuery"
+                           @input="logSearchLater()">
+                </div>
+                <button class="filter-btn" :class="logPickedCount() ? 'on' : ''" @click="logModal = true">
+                    <i class="ri-equalizer-line"></i>
+                    <span x-text="t('settings.filters')">Filters</span>
+                    <span class="filter-count" x-show="logPickedCount()" x-text="logPickedCount()"></span>
+                </button>
+            </div>
 
-            <table class="mapping-table" x-show="exceptions.length > 0">
-                <thead>
-                    <tr>
-                        <th x-text="t('settings.exceptions_entity')">Entity</th>
-                        <th x-text="t('settings.exceptions_name')">Name</th>
-                        <th x-text="t('settings.exceptions_source')">From</th>
-                        <th x-text="t('settings.exceptions_without')">Without it</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="row in exceptions" :key="row.registry_id">
-                        <tr>
-                            <td>
-                                <code class="type-key" x-text="row.entity_id || row.registry_id"></code>
-                                <span x-show="row.orphan" class="badge badge-gray"
-                                      x-text="t('settings.exceptions_orphan')">gone</span>
-                            </td>
-                            <td>
-                                <span x-show="!row.keep_original" x-text="row.name"></span>
-                                <span x-show="row.keep_original" class="text-gray-500"
-                                      x-text="t('settings.exceptions_ignored')">ignored</span>
-                            </td>
-                            <td x-text="row.source === 'ha_ui' ? t('settings.exceptions_from_ha') : t('settings.exceptions_from_here')"></td>
-                            <td>
-                                <span x-text="row.would_be"></span>
-                                <span x-show="row.redundant" class="badge badge-gray"
-                                      x-text="t('settings.exceptions_redundant')">same</span>
-                            </td>
-                            <td>
-                                <div class="action-btns">
-                                    <button class="action-btn delete" @click="deleteException(row)"
-                                            :title="t('settings.exceptions_remove')">
-                                        <i class="ri-delete-bin-line"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
+            <div class="active-filters" x-show="logPickedCount() > 0">
+                <template x-for="chip in logChips()" :key="chip.group + ':' + chip.value">
+                    <span class="active-chip">
+                        <span x-text="chip.label"></span>
+                        <button @click="toggleLogPick(chip.group, chip.value)"
+                                :title="t('settings.filter_remove')">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </span>
+                </template>
+                <button class="clear-filters" @click="clearLogPicks()" x-text="t('settings.filters_clear')"></button>
+            </div>
 
-            <div class="empty-state" x-show="exceptions.length === 0">
-                <i class="ri-user-star-line"></i>
-                <p x-text="t('settings.exceptions_none')"></p>
+            <div class="rule-list" x-show="logEntries.length > 0">
+                <template x-for="(entry, at) in logEntries" :key="entry.job_id + ':' + at">
+                    <div class="rule-row" :class="logRowClass(entry.step)">
+                        <div class="rule-body">
+                            <div class="log-head">
+                                <span class="log-step" :class="logStepClass(entry.step)"
+                                      x-text="logStepLabel(entry.step)"></span>
+                                <span class="log-message" x-text="entry.message"></span>
+                            </div>
+                            <div class="rule-reach">
+                                <span x-text="logWhen(entry.ts)"></span>
+                                <span class="kind-badge muted" x-text="logKindLabel(entry.job_type)"></span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="empty-state" x-show="!logEntries.length && !logBusy">
+                <i class="ri-file-list-3-line"></i>
+                <p x-text="logQuery || logPickedCount() ? t('settings.no_results') : t('settings.log_empty')"></p>
+            </div>
+
+            <!-- One page at a time: a home that has been renamed a few times has
+                 thousands of these lines. -->
+            <div class="pager" x-show="logPages > 1">
+                <button class="pager-btn" @click="goToLogPage(logPage - 1)" :disabled="logPage <= 1">
+                    <i class="ri-arrow-left-s-line"></i>
+                    <span x-text="t('settings.page_back')">Back</span>
+                </button>
+                <span class="pager-where"
+                      x-text="t('settings.page_of', {page: logPage, pages: logPages, total: logTotal})"></span>
+                <button class="pager-btn" @click="goToLogPage(logPage + 1)" :disabled="logPage >= logPages">
+                    <span x-text="t('settings.page_next')">Next</span>
+                    <i class="ri-arrow-right-s-line"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Entities the user asked to be left alone. Not a name, so not a rule. -->
+        <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'rules' && ignored.length > 0">
+            <div class="section-header">
+                <h2>
+                    <i class="ri-eye-off-line"></i>
+                    <span x-text="t('settings.ignored_entities')">Left alone</span>
+                </h2>
+            </div>
+            <p class="section-hint" x-text="t('settings.ignored_hint')"></p>
+
+            <div class="rule-list">
+                <template x-for="row in ignored" :key="row.registry_id">
+                    <div class="rule-row">
+                        <div class="rule-body">
+                            <div class="rule-says">
+                                <code class="rule-entity" x-text="row.entity_id || row.registry_id"></code>
+                            </div>
+                            <div class="rule-reach" x-text="t('settings.ignored_reach')"></div>
+                        </div>
+                        <div class="rule-actions">
+                            <div class="action-btns">
+                                <button class="action-btn delete" @click="deleteException(row)"
+                                        :title="t('settings.exceptions_remove')">
+                                    <i class="ri-delete-bin-line"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
 
@@ -974,6 +1642,28 @@
                         <span x-show="conflict.resolved" class="text-green-600 text-xs"><i class="ri-check-line"></i></span>
                     </div>
                 </template>
+            </div>
+        </div>
+
+        <div class="mapping-section" style="margin-top: 24px;" x-show="section === 'system'">
+            <div class="section-header">
+                <h2>
+                    <i class="ri-window-line"></i>
+                    <span x-text="t('settings.behaviour')">Behaviour</span>
+                </h2>
+            </div>
+            <div style="padding: 20px;">
+                <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                    <span class="switch" style="margin-top: 2px;">
+                        <input type="checkbox" x-model="autoCloseOnSuccess" @change="saveAutoClose()">
+                        <span class="track"></span>
+                    </span>
+                    <span>
+                        <span style="font-weight: 600;" x-text="t('settings.auto_close')">Close on success</span>
+                        <span style="display: block; color: #6b7280; font-size: 0.9rem; margin-top: 2px;"
+                              x-text="t('settings.auto_close_hint')"></span>
+                    </span>
+                </label>
             </div>
         </div>
 
@@ -1182,6 +1872,171 @@
             </div>
         </div>
 
+        <!-- One more place for a rule to apply -->
+        <div class="modal-overlay" x-show="logModal" x-cloak @click.self="logModal = false">
+            <div class="modal modal-wide">
+                <h3>
+                    <i class="ri-equalizer-line"></i>
+                    <span x-text="t('settings.filters_title')">Narrow the list</span>
+                </h3>
+                <template x-for="group in logGroups()" :key="group.key">
+                    <div class="filter-group" x-show="group.options.length">
+                        <h4 x-text="group.label"></h4>
+                        <div class="option-grid">
+                            <template x-for="option in group.options" :key="option.value">
+                                <button class="option-chip"
+                                        :class="logPicked(group.key, option.value) ? 'picked' : ''"
+                                        @click="toggleLogPick(group.key, option.value)">
+                                    <i :class="logPicked(group.key, option.value) ? 'ri-check-line' : option.icon"></i>
+                                    <span x-text="option.label"></span>
+                                    <span class="tally" x-text="option.count"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <div class="modal-actions">
+                    <button class="btn-secondary" @click="clearLogPicks()" x-text="t('settings.filters_clear')"></button>
+                    <button class="btn-primary" @click="logModal = false"
+                            x-text="t('settings.filters_apply_log', {count: logTotal})"></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Narrowing the list: several choices at once, grouped by the question
+             they answer. Picking within a group widens, picking across groups
+             narrows, which is the only arrangement that reads the way people
+             expect. -->
+        <div class="modal-overlay" x-show="filterModal" x-cloak @click.self="filterModal = false">
+            <div class="modal modal-wide">
+                <h3>
+                    <i class="ri-equalizer-line"></i>
+                    <span x-text="t('settings.filters_title')">Narrow the list</span>
+                </h3>
+                <template x-for="group in filterGroups()" :key="group.key">
+                    <div class="filter-group" x-show="group.options.length">
+                        <h4 x-text="group.label"></h4>
+                        <div class="option-grid">
+                            <template x-for="option in group.options" :key="option.value">
+                                <button class="option-chip"
+                                        :class="isPicked(group.key, option.value) ? 'picked' : ''"
+                                        @click="togglePick(group.key, option.value); filterRules()">
+                                    <i :class="isPicked(group.key, option.value) ? 'ri-check-line' : option.icon"></i>
+                                    <span x-text="option.label"></span>
+                                    <span class="tally" x-text="option.count"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <div class="modal-actions">
+                    <button class="btn-secondary" @click="clearPicks()" x-text="t('settings.filters_clear')"></button>
+                    <button class="btn-primary" @click="filterModal = false"
+                            x-text="t('settings.filters_apply', {count: filteredRules.length})"></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" x-show="filterFor" x-cloak>
+            <div class="modal modal-wide">
+                <h3>
+                    <i class="ri-filter-line"></i>
+                    <span x-text="t('settings.filter_add_title')">Add filter</span>
+                </h3>
+                <p class="section-hint" style="padding: 10px 0 12px;"
+                   x-text="!filterFor ? '' : (filterFor.filters.length
+                            ? t('settings.filter_add_hint', {name: filterFor.value})
+                            : t('settings.filter_replaces_everywhere', {name: filterFor.value}))"></p>
+                <div class="form-group">
+                    <label for="filterIntegration" x-text="t('settings.filter_integration')">Integration</label>
+                    <div class="combo" @click.away="closeCombo('integration')"
+                         @keydown.escape.stop="closeCombo('integration')">
+                        <div class="combo-field">
+                            <i class="ri-search-line"></i>
+                            <input id="filterIntegration" type="text" class="combo-input" autocomplete="off"
+                                   :class="newFilter.integration ? 'chosen' : ''"
+                                   :placeholder="t('settings.filter_search_integration')"
+                                   x-model="integrationSearch"
+                                   @focus="comboOpen = 'integration'; comboAt = 0"
+                                   @input="comboOpen = 'integration'; comboAt = 0;
+                                           newFilter.integration = ''; newFilter.model = ''"
+                                   @keydown.arrow-down.prevent="comboOpen = 'integration';
+                                                                comboStep(1, matchingIntegrations().length)"
+                                   @keydown.arrow-up.prevent="comboStep(-1, matchingIntegrations().length)"
+                                   @keydown.enter.prevent="takeIntegration()">
+                            <i class="ri-checkbox-circle-fill" x-show="newFilter.integration"></i>
+                        </div>
+                        <div class="combo-list" x-show="comboOpen === 'integration'" x-cloak>
+                            <template x-for="(row, at) in matchingIntegrations()" :key="row.integration">
+                                <button type="button" class="combo-item"
+                                        :class="(row.integration === newFilter.integration ? 'current ' : '')
+                                                + (at === comboAt ? 'at' : '')"
+                                        @mousemove="comboAt = at"
+                                        @click="pickIntegration(row)">
+                                    <span x-text="row.integration"></span>
+                                    <span class="tally" x-show="(row.models || []).length"
+                                          x-text="t('settings.model_count', {count: (row.models || []).length})"></span>
+                                </button>
+                            </template>
+                            <div class="combo-empty" x-show="!matchingIntegrations().length"
+                                 x-text="t('settings.no_results')"></div>
+                            <div class="combo-more" x-show="integrationOverflow() > 0"
+                                 x-text="t('settings.more_matches', {count: integrationOverflow()})"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group" x-show="modelsOf(newFilter.integration).length">
+                    <label for="filterModel" x-text="t('settings.filter_model')">Model</label>
+                    <div class="combo" @click.away="closeCombo('model')"
+                         @keydown.escape.stop="closeCombo('model')">
+                        <div class="combo-field">
+                            <i class="ri-search-line"></i>
+                            <input id="filterModel" type="text" class="combo-input" autocomplete="off"
+                                   :class="newFilter.model ? 'chosen' : ''"
+                                   :placeholder="t('settings.filter_any_model')"
+                                   x-model="modelSearch"
+                                   @focus="comboOpen = 'model'; comboAt = 0"
+                                   @input="comboOpen = 'model'; comboAt = 0; newFilter.model = ''"
+                                   @keydown.arrow-down.prevent="comboOpen = 'model';
+                                                                comboStep(1, modelOptions().length)"
+                                   @keydown.arrow-up.prevent="comboStep(-1, modelOptions().length)"
+                                   @keydown.enter.prevent="takeModel()">
+                            <i class="ri-checkbox-circle-fill" x-show="newFilter.model"></i>
+                        </div>
+                        <div class="combo-list" x-show="comboOpen === 'model'" x-cloak>
+                            <template x-for="(row, at) in modelOptions()" :key="row.model || '*'">
+                                <button type="button" class="combo-item"
+                                        :class="(row.model === newFilter.model ? 'current ' : '')
+                                                + (at === comboAt ? 'at' : '')"
+                                        @mousemove="comboAt = at"
+                                        @click="pickModel(row.model)">
+                                    <span>
+                                        <span class="combo-maker" x-show="row.manufacturer"
+                                              x-text="row.manufacturer"></span>
+                                        <span x-text="row.model || t('settings.filter_any_model')"></span>
+                                    </span>
+                                    <span class="tally" x-show="row.count"
+                                          x-text="t('settings.reach_entities', {count: row.count})"></span>
+                                </button>
+                            </template>
+                            <div class="combo-empty" x-show="!matchingModels().length"
+                                 x-text="t('settings.no_results')"></div>
+                            <div class="combo-more" x-show="modelOverflow() > 0"
+                                 x-text="t('settings.more_matches', {count: modelOverflow()})"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-secondary" @click="filterFor = null">
+                        <span x-text="t('settings.cancel')">Cancel</span>
+                    </button>
+                    <button class="btn-primary" @click="addFilter()" :disabled="!newFilter.integration">
+                        <span x-text="t('settings.filter_add')">Add filter</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Loading Overlay -->
         <div class="modal-overlay" x-show="loading" x-cloak>
             <div style="text-align: center; color: white;">
@@ -1206,11 +2061,39 @@
                 language: 'de',
                 searchQuery: '',
                 section: '{{ section }}',
-                filterType: 'all',
+                autoCloseOnSuccess: false,
+                sortBy: 'name',
+                filterModal: false,
+                // The log is answered by the server a page at a time, so what is
+                // held here is one page plus what was asked for.
+                logEntries: [],
+                logFacets: {step: {}, type: {}},
+                logPicks: {step: [], type: []},
+                logQuery: '',
+                logPage: 1,
+                logPages: 1,
+                logTotal: 0,
+                logBusy: false,
+                logModal: false,
+                logTimer: null,
+                // Several answers per question, kept apart by the question they
+                // answer: within a group they widen, across groups they narrow.
+                picked: { status: [], reach: [], kind: [], integration: [], model: [] },
                 highlightRuleId: null,
                 displayCase: 'first_word',
                 editingKey: null,
+                reachOpen: null,   // the rule whose entities are shown
+                reachRows: [],
+                reachBusy: false,
+                reachError: '',
                 editValue: '',
+                filterFor: null,
+                comboOpen: '',
+                comboAt: 0,
+                integrationSearch: '',
+                modelSearch: '',
+                newFilter: {integration: '', model: ''},
+                availableFilters: [],
                 showAddModal: false,
                 newMapping: { key: '', translation: '' },
                 loading: false,
@@ -1264,22 +2147,24 @@
                     // so the state has to survive in storage, as on the main page.
                     // The address still wins when it carries something, for links.
                     this.restoreState();
+                    this.readAutoClose();
                     const params = new URLSearchParams(window.location.search);
                     const wanted = params.get('rule');
                     if (wanted) {
                         this.highlightRuleId = wanted;
-                        this.filterType = 'user';
+                        this.usePicks('status:user');
                     }
-                    if (params.get('filter')) this.filterType = params.get('filter');
+                    if (params.get('filter')) this.usePicks(params.get('filter'));
                     if (params.get('q')) this.searchQuery = params.get('q');
                     this.rememberState();
                     // Back and forward move between sections without a page load.
                     window.addEventListener('popstate', () => {
                         const last = window.location.pathname.split('/').pop();
-                        this.section = ['naming', 'rules', 'system'].includes(last) ? last : 'naming';
+                        this.section = ['naming', 'rules', 'log', 'system'].includes(last) ? last : 'naming';
                         this.rememberState();
                     });
                     await this.loadMappings();
+                    if (this.section === 'log') this.loadLog();
                     await this.syncRuleLanguage();
                     if (this.highlightRuleId) this.focusHighlightedRule();
                     await this.loadApiToken();
@@ -1290,13 +2175,6 @@
                     await this.loadNamingTemplates();
                     await this.loadSampleEntities();
                     await this.loadExceptions();
-                },
-
-                // An exception is the last word on a name, so the list has to
-                // say which ones still change anything before offering to
-                // sweep any of them away.
-                get tidyableExceptions() {
-                    return this.exceptions.filter(row => row.redundant || row.orphan);
                 },
 
                 async loadExceptions() {
@@ -1313,12 +2191,6 @@
                     const response = await fetch('api/naming/exceptions/' + encodeURIComponent(row.registry_id), {
                         method: 'DELETE'
                     });
-                    if (!response.ok) return;
-                    await this.loadExceptions();
-                },
-
-                async cleanUpExceptions() {
-                    const response = await fetch('api/naming/exceptions/cleanup', {method: 'POST'});
                     if (!response.ok) return;
                     await this.loadExceptions();
                 },
@@ -1526,6 +2398,39 @@
                 // user decides whether it goes.
                 unusedCount() {
                     return this.rules.filter(rule => rule.affected === 0 || rule.redundant).length;
+                },
+
+                // The list is for checking what a rule does to an entity, and
+                // that means looking at the entity's own data: its device page
+                // in Home Assistant, in a tab of its own so the rule list stays
+                // where it was.
+                deviceLink(one) {
+                    return one.device_id ? '/config/devices/device/' + one.device_id : '/config/entities';
+                },
+
+                // One list at a time, fetched when it is asked for: a home has
+                // hundreds of rules and the entities behind them are only of
+                // interest for the one being looked at.
+                async toggleReach(row) {
+                    if (this.reachOpen === row.id) {
+                        this.reachOpen = null;
+                        return;
+                    }
+                    this.reachOpen = row.id;
+                    this.reachRows = [];
+                    this.reachError = '';
+                    this.reachBusy = true;
+                    try {
+                        const response = await fetch('api/naming/rules/' + encodeURIComponent(row.id) + '/entities');
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'failed');
+                        if (this.reachOpen !== row.id) return;
+                        this.reachRows = data.entities || [];
+                    } catch (error) {
+                        this.reachError = 'Error: ' + error.message;
+                    } finally {
+                        this.reachBusy = false;
+                    }
                 },
 
                 async deleteUnusedRules() {
@@ -1802,6 +2707,171 @@
                     }
                 },
 
+                // A list nobody can scroll: typed into and cut to what fits, with a
+                // line saying how much was left out so the search can be narrowed.
+                COMBO_LIMIT: 30,
+
+                _matching(values, needle, pick) {
+                    const q = (needle || '').trim().toLowerCase();
+                    if (!q) return values;
+                    return values.filter(each => pick(each).toLowerCase().includes(q));
+                },
+
+                matchingIntegrations() {
+                    return this._matching(this.availableFilters, this.integrationSearch, row => row.integration)
+                        .slice(0, this.COMBO_LIMIT);
+                },
+
+                integrationOverflow() {
+                    return Math.max(0, this._matching(this.availableFilters, this.integrationSearch,
+                                                      row => row.integration).length - this.COMBO_LIMIT);
+                },
+
+                // Searched by maker as well: nobody remembers that the SONOFF valve
+                // is called "Zigbee smart water valve", and under one integration
+                // every model has a different maker.
+                _modelsFound() {
+                    return this._matching(this.modelsOf(this.newFilter.integration), this.modelSearch,
+                                          row => row.model + ' ' + (row.manufacturer || ''));
+                },
+
+                matchingModels() { return this._modelsFound().slice(0, this.COMBO_LIMIT); },
+
+                modelOverflow() { return Math.max(0, this._modelsFound().length - this.COMBO_LIMIT); },
+
+                closeCombo(which) {
+                    if (this.comboOpen === which) this.comboOpen = '';
+                },
+
+                // Arrow keys walk the list and Enter takes what they land on, so
+                // a search that leaves one match needs no reach for the mouse.
+                comboStep(by, total) {
+                    if (!total) return;
+                    this.comboAt = (this.comboAt + by + total) % total;
+                    this.$nextTick(() => {
+                        const at = document.querySelector('.combo-list .combo-item.at');
+                        if (at) at.scrollIntoView({block: 'nearest'});
+                    });
+                },
+
+                // "Any model" is the first entry rather than a button beside the
+                // list, so stepping and counting need no special case.
+                modelOptions() {
+                    return [{model: '', manufacturer: '', count: 0}].concat(this.matchingModels());
+                },
+
+                takeIntegration() {
+                    const found = this.matchingIntegrations();
+                    const row = found[this.comboAt] || (found.length === 1 ? found[0] : null);
+                    if (row) this.pickIntegration(row);
+                },
+
+                takeModel() {
+                    const found = this.modelOptions();
+                    const row = found[this.comboAt];
+                    if (row) this.pickModel(row.model);
+                },
+
+                pickIntegration(row) {
+                    this.newFilter.integration = row.integration;
+                    this.integrationSearch = row.integration;
+                    this.newFilter.model = '';
+                    this.modelSearch = '';
+                    this.comboOpen = '';
+                    this.comboAt = 0;
+                },
+
+                pickModel(model) {
+                    this.newFilter.model = model;
+                    this.modelSearch = model;
+                    this.comboOpen = '';
+                    this.comboAt = 0;
+                },
+
+                modelsOf(integration) {
+                    const row = this.availableFilters.find(each => each.integration === integration);
+                    return ((row && row.models) || []).map(model =>
+                        typeof model === 'string' ? {model, manufacturer: '', count: 0} : model);
+                },
+
+                async openAddFilter(row) {
+                    this.filterFor = row;
+                    this.newFilter = {integration: '', model: ''};
+                    this.integrationSearch = '';
+                    this.modelSearch = '';
+                    this.comboOpen = '';
+                    this.comboAt = 0;
+                    if (this.availableFilters.length) return;
+                    try {
+                        const response = await fetch('api/naming/filters');
+                        this.availableFilters = (await response.json()).integrations || [];
+                    } catch (error) {
+                        console.error('Could not load the filters on offer:', error);
+                    }
+                },
+
+                async addFilter() {
+                    const one = {integration: this.newFilter.integration};
+                    if (this.newFilter.model) one.model = this.newFilter.model;
+                    await this.changeFilter(this.filterFor, one, 'POST');
+                    this.filterFor = null;
+                },
+
+                async removeFilter(row, scope) {
+                    await this.changeFilter(row, scope, 'DELETE');
+                },
+
+                // Both directions answer with the rule as it now stands, or say
+                // it is gone because its last place went with the filter.
+                async changeFilter(row, one, method) {
+                    try {
+                        const response = await fetch('api/naming/rules/' + encodeURIComponent(row.id) + '/filters', {
+                            method,
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(one)
+                        });
+                        const answer = await response.json();
+                        if (!response.ok) {
+                            this.namingMessage = answer.error || '';
+                            this.namingError = true;
+                            return;
+                        }
+                        await this.loadMappings();
+                    } catch (error) {
+                        console.error('Could not change where the rule applies:', error);
+                    }
+                },
+
+                // How far a whole rule reaches, as the line under what it says.
+                reachOf(row) {
+                    if (!row.isRule) return this.t('settings.reach_builtin');
+                    const parts = [];
+                    if (!row.filters.length) parts.push(this.t('settings.reach_everywhere'));
+                    else parts.push(row.filters.map(one => this.filterLabel(one, row)).join(', '));
+                    if (row.affected !== null && row.affected !== undefined) {
+                        parts.push(this.t('settings.reach_entities', {count: row.affected}));
+                    }
+                    return parts.join(' \u00b7 ');
+                },
+
+                // Entities the user asked to be left alone. They are the only thing
+                // left in the override store now that a named entity is a rule.
+                get ignored() {
+                    return this.exceptions.filter(row => row.keep_original);
+                },
+
+                // How far one filter reaches, in one line. A filter names an
+                // integration, an integration and a model, or a single entity;
+                // a rule without any reaches everything of its type.
+                filterLabel(scope, row) {
+                    if (!scope) return '';
+                    if (scope.registry_id) {
+                        const named = ((row && row.entities) || []).find(e => e.registry_id === scope.registry_id);
+                        return this.t('settings.reach_only', {entity: (named && named.entity_id) || scope.registry_id});
+                    }
+                    return [scope.integration, scope.model].filter(Boolean).join(' \u00b7 ');
+                },
+
                 // One row per rule; built-in defaults without a rule show as their own rows.
                 ruleRows() {
                     const systemByKey = {};
@@ -1811,20 +2881,21 @@
                         isRule: true,
                         key: rule.match.value,
                         kind: rule.match.kind,
-                        integration: rule.match.integration,
-                        model: rule.match.model || null,
+                        filters: rule.filters || [],
+                        entities: rule.entities || [],
                         value: rule.targets[this.language] || Object.values(rule.targets)[0] || '',
                         system_default: systemByKey[rule.match.value] || null,
                         affected: rule.affected === null || rule.affected === undefined ? null : rule.affected,
                         redundant: !!rule.redundant,
-                        source: rule.source || 'user',
+                        updated: rule.updated_at || rule.created_at || '',
                         rule
                     }));
                     const covered = new Set(rows.map(r => r.key));
                     for (const entry of this.systemRules) {
                         if (covered.has(entry.key)) continue;
                         rows.push({ id: 'sys:' + entry.key, isRule: false, key: entry.key, kind: 'name',
-                                    integration: null, model: null, value: '', system_default: entry.value, affected: 0, source: 'system' });
+                                    filters: [], entities: [], value: '', system_default: entry.value,
+                                    affected: 0, updated: '' });
                     }
                     return rows;
                 },
@@ -1836,42 +2907,52 @@
                     this.section = name;
                     this.rememberState();
                     this.rememberQuery(name);
+                    if (name === 'log' && !this.logEntries.length) this.loadLog();
                 },
 
                 // The main page is where the user wants to be next; do not bounce back.
                 leaveSettings() {
-                    try {
-                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
-                        saved.lastPage = 'main';
-                        localStorage.setItem('entityManagerSettings', JSON.stringify(saved));
-                    } catch (e) { /* storage may be unavailable */ }
+                    this.patchStored({lastPage: 'main'});
                 },
 
                 restoreState() {
                     try {
                         const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
-                        if (saved.filter) this.filterType = saved.filter;
+                        if (saved.picks) this.usePicks(saved.picks);
+                        else if (saved.filter) this.usePicks('status:' + saved.filter);
+                        if (saved.sort) this.sortBy = saved.sort;
                         if (saved.q) this.searchQuery = saved.q;
                         if (saved.sample) this.namingSampleEntity = saved.sample;
                     } catch (e) { /* storage may be unavailable */ }
                 },
 
-                rememberState() {
+                // One key holds everything this app remembers, so a write puts
+                // its own fields in and leaves the rest alone. Replacing the
+                // whole object is what threw away the auto-close switch on the
+                // next section change.
+                patchStored(changes) {
                     try {
-                        localStorage.setItem('entityManagerSettings', JSON.stringify({
-                            lastPage: 'settings',
-                            section: this.section,
-                            filter: this.filterType,
-                            q: this.searchQuery,
-                            sample: this.namingSampleEntity
-                        }));
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        localStorage.setItem('entityManagerSettings', JSON.stringify({...saved, ...changes}));
                     } catch (e) { /* storage may be unavailable */ }
+                },
+
+                rememberState() {
+                    this.patchStored({
+                        lastPage: 'settings',
+                        section: this.section,
+                        picks: this.picksAsText(),
+                        sort: this.sortBy,
+                        q: this.searchQuery,
+                        sample: this.namingSampleEntity
+                    });
                 },
 
                 // Keep filter and search in the address without adding history entries.
                 rememberQuery(pushSection) {
                     const params = new URLSearchParams();
-                    if (this.filterType && this.filterType !== 'all') params.set('filter', this.filterType);
+                    const picks = this.picksAsText();
+                    if (picks) params.set('filter', picks);
                     if (this.searchQuery) params.set('q', this.searchQuery);
                     if (this.highlightRuleId) params.set('rule', this.highlightRuleId);
                     const query = params.toString();
@@ -1888,26 +2969,350 @@
                 filterRules() {
                     this.rememberQuery();
                     this.rememberState();
-                    let result = this.ruleRows();
-                    // Rules that only repeat the default are noise; they show under "without effect".
-                    if (this.filterType === 'all') result = result.filter(r => !r.redundant);
-                    else if (this.filterType === 'user') result = result.filter(r => r.isRule && !r.redundant);
-                    else if (this.filterType === 'no_effect') result = result.filter(r => r.isRule && (r.affected === 0 || r.redundant));
-                    else if (this.filterType === 'system') result = result.filter(r => !r.isRule);
+                    let result = this.ruleRows().filter(row => this.rowPasses(row));
                     if (this.searchQuery) {
                         const q = this.searchQuery.toLowerCase();
                         result = result.filter(r =>
                             r.key.toLowerCase().includes(q) ||
                             (r.value && r.value.toLowerCase().includes(q)) ||
-                            (r.system_default && r.system_default.toLowerCase().includes(q))
+                            (r.system_default && r.system_default.toLowerCase().includes(q)) ||
+                            r.entities.some(e => (e.entity_id || '').toLowerCase().includes(q))
                         );
                     }
-                    result.sort((a, b) => {
-                        if (a.isRule !== b.isRule) return a.isRule ? -1 : 1;
-                        if (a.isRule && (!!a.affected) !== (!!b.affected)) return a.affected ? -1 : 1;
-                        return a.key.localeCompare(b.key);
+                    result.sort(this.ruleOrder());
+                    this.filteredRules = this.withGroups(result);
+                },
+
+                // What a row can be asked about. Everything here is answered from the
+                // row alone, so a group is nothing more than a question and a test.
+                RULE_TESTS: {
+                    status: {
+                        user:      row => row.isRule && !row.redundant,
+                        no_effect: row => row.isRule && (row.affected === 0 || row.redundant),
+                        system:    row => !row.isRule,
+                    },
+                    reach: {
+                        everywhere: row => row.isRule && !row.filters.length,
+                        narrowed:   row => row.isRule && row.filters.length > 0
+                                            && !row.filters.every(one => one.registry_id),
+                        entity:     row => row.isRule && row.filters.some(one => one.registry_id),
+                    },
+                    kind: {
+                        name:            row => row.kind === 'name',
+                        device_class:    row => row.kind === 'device_class',
+                        translation_key: row => row.kind === 'translation_key',
+                    },
+                },
+
+                // A group narrows only if something in it is picked, and inside a
+                // group the picks add up rather than cancelling each other out.
+                rowPasses(row) {
+                    for (const group of ['status', 'reach', 'kind']) {
+                        const picks = this.picked[group];
+                        if (!picks.length) continue;
+                        if (!picks.some(value => (this.RULE_TESTS[group][value] || (() => false))(row))) return false;
+                    }
+                    if (this.picked.integration.length
+                        && !row.filters.some(one => this.picked.integration.includes(one.integration))) return false;
+                    if (this.picked.model.length
+                        && !row.filters.some(one => this.picked.model.includes(one.model))) return false;
+                    // A rule that only repeats the built-in default is noise unless
+                    // it is what the user went looking for.
+                    if (row.redundant && !this.isPicked('status', 'no_effect')) return false;
+                    return true;
+                },
+
+                // The dialog's contents: fixed questions first, then the
+                // integrations and models this home actually has rules for.
+                filterGroups() {
+                    const rows = this.ruleRows();
+                    const tally = test => rows.filter(test).length;
+                    const fixed = (key, values, icons) => ({
+                        key,
+                        label: this.t('settings.group_' + key),
+                        options: values.map(value => ({
+                            value,
+                            label: this.t('settings.pick_' + value),
+                            icon: icons[value],
+                            count: tally(this.RULE_TESTS[key][value]),
+                        })).filter(option => option.count > 0 || this.isPicked(key, option.value)),
                     });
-                    this.filteredRules = result;
+                    const seen = (field) => {
+                        const counts = {};
+                        for (const row of rows) {
+                            for (const one of row.filters) {
+                                if (!one[field]) continue;
+                                counts[one[field]] = (counts[one[field]] || 0) + 1;
+                            }
+                        }
+                        return Object.keys(counts).sort((a, b) => a.localeCompare(b, this.language))
+                            .map(value => ({ value, label: value, icon: 'ri-price-tag-3-line', count: counts[value] }));
+                    };
+                    return [
+                        fixed('status', ['user', 'no_effect', 'system'],
+                              { user: 'ri-user-line', no_effect: 'ri-eye-off-line', system: 'ri-shield-line' }),
+                        fixed('reach', ['everywhere', 'narrowed', 'entity'],
+                              { everywhere: 'ri-global-line', narrowed: 'ri-filter-line', entity: 'ri-focus-3-line' }),
+                        fixed('kind', ['name', 'device_class', 'translation_key'],
+                              { name: 'ri-text', device_class: 'ri-shapes-line', translation_key: 'ri-translate-2' }),
+                        { key: 'integration', label: this.t('settings.filter_integration'), options: seen('integration') },
+                        { key: 'model', label: this.t('settings.filter_model'), options: seen('model') },
+                    ];
+                },
+
+                openFilters() { this.filterModal = true; },
+
+                // What the steps are called and how they are worn, from config.js
+                // so this list and the progress panel cannot drift apart. A step
+                // no one has named yet keeps its own name rather than vanishing.
+                get LOG_STEPS() {
+                    return (window.EntityManagerConfig || {}).jobSteps || {};
+                },
+
+                LOG_KINDS: {
+                    execute_direct: 'kind_rename',
+                    rename_device: 'kind_device',
+                    enable_all: 'kind_enable',
+                    swap: 'kind_swap',
+                },
+
+                logStepLabel(step) {
+                    const known = this.LOG_STEPS[step];
+                    return known ? this.t('jobs.' + known.label) : step;
+                },
+
+                logStepClass(step) {
+                    const known = this.LOG_STEPS[step];
+                    return 'step-' + (known ? known.colour : 'other');
+                },
+
+                logRowClass(step) {
+                    const known = this.LOG_STEPS[step];
+                    return 'row-' + (known ? known.colour : 'other');
+                },
+
+                logKindLabel(type) {
+                    const known = this.LOG_KINDS[type];
+                    return known ? this.t('settings.' + known) : type;
+                },
+
+                logWhen(ts) {
+                    if (!ts) return '';
+                    const when = new Date(ts);
+                    if (isNaN(when)) return ts;
+                    return when.toLocaleString(this.language);
+                },
+
+                // Shared with the main page through the same key, so the switch
+                // set here is the one the panel reads there.
+                saveAutoClose() {
+                    this.patchStored({autoCloseOnSuccess: this.autoCloseOnSuccess});
+                },
+
+                readAutoClose() {
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('entityManagerSettings') || '{}');
+                        this.autoCloseOnSuccess = !!saved.autoCloseOnSuccess;
+                    } catch (error) {
+                        this.autoCloseOnSuccess = false;
+                    }
+                },
+
+                async loadLog() {
+                    this.logBusy = true;
+                    const params = new URLSearchParams();
+                    if (this.logQuery.trim()) params.set('q', this.logQuery.trim());
+                    if (this.logPicks.step.length) params.set('step', this.logPicks.step.join(','));
+                    if (this.logPicks.type.length) params.set('type', this.logPicks.type.join(','));
+                    params.set('page', this.logPage);
+                    try {
+                        const answer = await fetch('api/log?' + params.toString()).then(r => r.json());
+                        this.logEntries = answer.entries || [];
+                        this.logFacets = answer.facets || {step: {}, type: {}};
+                        this.logPage = answer.page || 1;
+                        this.logPages = answer.pages || 1;
+                        this.logTotal = answer.total || 0;
+                    } catch (error) {
+                        console.error('Could not load the log:', error);
+                        this.logEntries = [];
+                    } finally {
+                        this.logBusy = false;
+                    }
+                },
+
+                // Typing should not ask the server per keystroke.
+                logSearchLater() {
+                    clearTimeout(this.logTimer);
+                    this.logTimer = setTimeout(() => { this.logPage = 1; this.loadLog(); }, 250);
+                },
+
+                logGroups() {
+                    const counted = (where, value) => (this.logFacets[where] || {})[value] || 0;
+                    const steps = Object.keys(this.logFacets.step || {}).sort((a, b) =>
+                        counted('step', b) - counted('step', a));
+                    const kinds = Object.keys(this.logFacets.type || {}).sort((a, b) =>
+                        counted('type', b) - counted('type', a));
+                    return [
+                        {
+                            key: 'step',
+                            label: this.t('settings.group_step'),
+                            options: steps.map(step => ({
+                                value: step,
+                                label: this.logStepLabel(step),
+                                icon: (this.LOG_STEPS[step] || {}).icon || 'ri-hashtag',
+                                count: counted('step', step),
+                            })),
+                        },
+                        {
+                            key: 'type',
+                            label: this.t('settings.group_run'),
+                            options: kinds.map(kind => ({
+                                value: kind,
+                                label: this.logKindLabel(kind),
+                                icon: 'ri-play-circle-line',
+                                count: counted('type', kind),
+                            })),
+                        },
+                    ];
+                },
+
+                logPicked(group, value) { return this.logPicks[group].includes(value); },
+
+                toggleLogPick(group, value) {
+                    const picks = this.logPicks[group];
+                    const at = picks.indexOf(value);
+                    if (at < 0) picks.push(value); else picks.splice(at, 1);
+                    this.logPage = 1;
+                    this.loadLog();
+                },
+
+                logPickedCount() {
+                    return this.logPicks.step.length + this.logPicks.type.length;
+                },
+
+                logChips() {
+                    return [
+                        ...this.logPicks.step.map(value => ({group: 'step', value, label: this.logStepLabel(value)})),
+                        ...this.logPicks.type.map(value => ({group: 'type', value, label: this.logKindLabel(value)})),
+                    ];
+                },
+
+                clearLogPicks() {
+                    this.logPicks = {step: [], type: []};
+                    this.logPage = 1;
+                    this.loadLog();
+                },
+
+                goToLogPage(page) {
+                    if (page < 1 || page > this.logPages) return;
+                    this.logPage = page;
+                    this.loadLog();
+                    window.scrollTo({top: 0, behavior: 'smooth'});
+                },
+
+                // Any dialog covering the page. Kept in one place so a new one
+                // only has to be named here to hold the page still as well.
+                modalOpen() {
+                    return !!(this.filterModal || this.logModal || this.filterFor || this.showAddModal || this.loading);
+                },
+
+                isPicked(group, value) { return this.picked[group].includes(value); },
+
+                togglePick(group, value) {
+                    const picks = this.picked[group];
+                    const at = picks.indexOf(value);
+                    if (at < 0) picks.push(value); else picks.splice(at, 1);
+                },
+
+                pickedCount() {
+                    return Object.values(this.picked).reduce((sum, picks) => sum + picks.length, 0);
+                },
+
+                pickedChips() {
+                    const chips = [];
+                    for (const group of Object.keys(this.picked)) {
+                        for (const value of this.picked[group]) {
+                            chips.push({
+                                group,
+                                value,
+                                label: ['integration', 'model'].includes(group) ? value : this.t('settings.pick_' + value),
+                            });
+                        }
+                    }
+                    return chips;
+                },
+
+                clearPicks() {
+                    for (const group of Object.keys(this.picked)) this.picked[group] = [];
+                    this.filterRules();
+                },
+
+                // Picks travel in the address and in storage as "group:value,...".
+                picksAsText() {
+                    const parts = [];
+                    for (const group of Object.keys(this.picked)) {
+                        for (const value of this.picked[group]) parts.push(group + ':' + value);
+                    }
+                    return parts.join(',');
+                },
+
+                usePicks(text) {
+                    for (const group of Object.keys(this.picked)) this.picked[group] = [];
+                    for (const part of (text || '').split(',')) {
+                        const [group, ...rest] = part.split(':');
+                        const value = rest.join(':');
+                        if (!value || !(group in this.picked)) continue;
+                        if (!this.picked[group].includes(value)) this.picked[group].push(value);
+                    }
+                },
+
+                // The name a rule gives is what the user reads first, so that is
+                // what the list is ordered by. Reach and recency are the two other
+                // questions worth asking of the same list.
+                ruleOrder() {
+                    const named = row => (row.isRule ? row.value : row.system_default) || row.key || '';
+                    if (this.sortBy === 'reach') {
+                        return (a, b) => {
+                            if (a.isRule !== b.isRule) return a.isRule ? -1 : 1;
+                            return ((b.affected || 0) - (a.affected || 0))
+                                || named(a).localeCompare(named(b), this.language);
+                        };
+                    }
+                    if (this.sortBy === 'recent') {
+                        return (a, b) => (b.updated || '').localeCompare(a.updated || '')
+                            || named(a).localeCompare(named(b), this.language);
+                    }
+                    return (a, b) => named(a).localeCompare(named(b), this.language)
+                        || a.key.localeCompare(b.key, this.language);
+                },
+
+                // A heading on the first row of each group, so the order is visible
+                // rather than something the reader has to infer.
+                withGroups(rows) {
+                    const sizes = {};
+                    for (const row of rows) {
+                        const group = this.ruleGroup(row);
+                        sizes[group] = (sizes[group] || 0) + 1;
+                    }
+                    let previous = null;
+                    return rows.map(row => {
+                        const group = this.ruleGroup(row);
+                        const shown = group === previous ? '' : group;
+                        previous = group;
+                        return { ...row, group: shown, groupCount: sizes[group] };
+                    });
+                },
+
+                ruleGroup(row) {
+                    if (this.sortBy === 'reach') {
+                        if (!row.isRule) return this.t('settings.group_builtin');
+                        if (!row.affected) return this.t('settings.group_unused');
+                        if (row.affected === 1) return this.t('settings.group_single');
+                        return this.t('settings.group_many');
+                    }
+                    if (this.sortBy === 'recent') return (row.updated || '').slice(0, 10) || this.t('settings.group_undated');
+                    const named = (row.isRule ? row.value : row.system_default) || row.key || '';
+                    return named.slice(0, 1).toUpperCase() || '#';
                 },
 
                 async searchOriginals() {
@@ -1957,9 +3362,9 @@
                     let result = [...this.mappings];
 
                     // Filter by type
-                    if (this.filterType === 'user') {
+                    if (this.isPicked('status', 'user')) {
                         result = result.filter(m => m.has_user_override);
-                    } else if (this.filterType === 'system') {
+                    } else if (this.isPicked('status', 'system')) {
                         result = result.filter(m => !m.has_user_override);
                     }
 

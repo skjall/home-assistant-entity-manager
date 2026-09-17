@@ -63,7 +63,8 @@ def test_learn_derives_the_key_server_side(client):
 
     assert response.status_code == 200
     rule = response.get_json()["rule"]
-    assert rule["match"] == {"kind": "name", "value": "effect_speed", "integration": None, "model": None}
+    assert rule["match"] == {"kind": "name", "value": "effect_speed"}
+    assert rule["filters"] == []
     assert rule["targets"] == {"de": "Effektgeschwindigkeit"}
     # Both spellings of the supplied name are covered by the one rule.
     assert rule["affected"] == 2
@@ -110,7 +111,7 @@ def test_learn_scoped_to_integration(client):
         json={"entity_id": "number.a_effect_speed", "value": "Effekt-Tempo", "scope": "integration"},
     )
 
-    assert response.get_json()["rule"]["match"]["integration"] == "mqtt"
+    assert response.get_json()["rule"]["filters"] == [{"integration": "mqtt"}]
 
 
 def test_preview_uses_rule_and_reports_provenance(client):
@@ -206,7 +207,7 @@ def test_learning_for_one_integration_leaves_the_others_alone(client):
     )
 
     assert response.status_code == 200
-    assert response.get_json()["rule"]["match"]["integration"] == "matter"
+    assert response.get_json()["rule"]["filters"] == [{"integration": "matter"}]
     assert response.get_json()["rule"]["affected"] == 2
     restructurer.build_naming_context("binary_sensor.reg-c_tur", restructurer.entities["binary_sensor.reg-c_tur"])
     assert restructurer.last_resolutions["binary_sensor.reg-c_tur"]["value"] == "Zustand"
@@ -237,9 +238,7 @@ def test_learning_for_one_model_leaves_the_other_models_alone(client):
     )
 
     assert response.status_code == 200
-    match = response.get_json()["rule"]["match"]
-    assert match["integration"] == "matter"
-    assert match["model"] == "MYGGBETT door/window sensor"
+    assert response.get_json()["rule"]["filters"] == [{"integration": "matter", "model": "MYGGBETT door/window sensor"}]
     assert response.get_json()["rule"]["affected"] == 1
     assert routes_naming.type_key_model_counts(restructurer)[("name:tuer", "MYGGBETT door/window sensor")] == 1
 
@@ -286,8 +285,14 @@ def test_reach_is_unknown_while_no_entities_can_be_loaded(client, monkeypatch):
     assert rules and all(rule["affected"] is None for rule in rules)
 
 
-def test_counting_groups_entities_of_one_type(client):
-    """One lookup per type, integration and model instead of one per entity."""
+def test_counting_asks_the_naming_rather_than_the_rules(client):
+    """The count is what the naming decides, not what the rules would match.
+
+    Asking the rules directly is cheaper and wrong: a rule on a device class is
+    matched for entities the naming then refuses it, so the count stood above a
+    list of entities the rule does not touch. Resolving each entity is the only
+    answer that cannot drift from what the user sees.
+    """
     restructurer = web_ui.renamer_state["restructurer"]
     for index in range(20):
         entity_id = f"number.copy{index}_effect_speed"
@@ -316,7 +321,7 @@ def test_counting_groups_entities_of_one_type(client):
         rules.find = original_find
 
     assert rule["affected"] == 22  # the 20 copies plus both spellings in the fixture
-    assert len(calls) < 22  # not one lookup per entity
+    assert calls  # every entity is asked about, which is what makes the count true
 
 
 def test_template_sample_comes_from_a_real_entity(client):
@@ -395,7 +400,7 @@ def test_template_sample_falls_back_without_entities(client, monkeypatch):
     assert data["context"]["area"] == "Living room"
 
 
-def test_an_exception_is_saved_before_the_registry_is_loaded(client, monkeypatch):
+def test_a_name_for_one_entity_is_saved_before_the_registry_is_loaded(client, monkeypatch):
     """The route asks for the registry itself instead of reaching into an empty state."""
     loaded = web_ui.renamer_state["restructurer"]
     monkeypatch.setitem(web_ui.renamer_state, "restructurer", None)
@@ -409,6 +414,133 @@ def test_an_exception_is_saved_before_the_registry_is_loaded(client, monkeypatch
 
     assert response.status_code == 200
     assert "error" not in response.get_json()
-    stored = web_ui.renamer_state["naming_overrides"].get_entity_override("reg-unknown")
-    assert stored["name"] == "Taste 1"
-    assert stored["source"] == "user"
+    rule = web_ui.renamer_state["naming_rules"].for_entity("reg-unknown", "de")
+    assert rule["targets"]["de"] == "Taste 1"
+    assert rule["filters"] == [{"registry_id": "reg-unknown"}]
+
+
+def test_naming_one_entity_lands_on_the_rule_that_already_says_it(client):
+    """Two entities wanting one wording are two filters, not two rules."""
+    client.post("/api/set_entity_override", json={"registry_id": "reg-a", "override_name": "Tempo"})
+    client.post("/api/set_entity_override", json={"registry_id": "reg-b", "override_name": "Tempo"})
+
+    rules = web_ui.renamer_state["naming_rules"]
+    mine = [rule for rule in rules.rules if rule["targets"].get("de") == "Tempo"]
+
+    assert len(mine) == 1
+    assert mine[0]["filters"] == [{"registry_id": "reg-a"}, {"registry_id": "reg-b"}]
+
+
+def test_clearing_the_name_takes_that_entity_off_the_rule(client):
+    client.post("/api/set_entity_override", json={"registry_id": "reg-a", "override_name": "Tempo"})
+    client.post("/api/set_entity_override", json={"registry_id": "reg-b", "override_name": "Tempo"})
+
+    client.post("/api/set_entity_override", json={"registry_id": "reg-a", "override_name": ""})
+
+    rules = web_ui.renamer_state["naming_rules"]
+    mine = [rule for rule in rules.rules if rule["targets"].get("de") == "Tempo"]
+    assert len(mine) == 1
+    assert mine[0]["filters"] == [{"registry_id": "reg-b"}]
+
+    client.post("/api/set_entity_override", json={"registry_id": "reg-b", "override_name": ""})
+    assert not [rule for rule in rules.rules if rule["targets"].get("de") == "Tempo"]
+
+
+def test_a_rule_for_one_entity_counts_as_reaching_it(client):
+    """Otherwise it looks like a rule that changes nothing and gets swept away.
+
+    It is found by its entity rather than by what the integration supplies, so
+    the grouping that counts every other rule never reaches it.
+    """
+    rules = web_ui.renamer_state["naming_rules"]
+    mine = rules.add_filter("name", "effect_speed", "de", "Nur hier", {"registry_id": "reg-a"})
+
+    listed = client.get("/api/naming/rules").get_json()["rules"]
+    found = next(rule for rule in listed if rule["id"] == mine["id"])
+    unused = client.get("/api/naming/rules/unused").get_json()["rules"]
+
+    assert found["affected"] == 1
+    assert found["entities"] == [{"registry_id": "reg-a", "entity_id": "number.a_effect_speed"}]
+    assert not [rule for rule in unused if rule["id"] == mine["id"]]
+
+
+def test_a_filter_can_be_added_to_a_rule(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+
+    response = client.post(f"/api/naming/rules/{rule['id']}/filters", json={"integration": "matter"})
+
+    assert response.status_code == 200
+    assert response.get_json()["rule"]["filters"] == [{"registry_id": "reg-a"}, {"integration": "matter"}]
+
+
+def test_a_filter_can_be_removed_from_a_rule(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+    rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-b"})
+
+    response = client.delete(f"/api/naming/rules/{rule['id']}/filters", json={"registry_id": "reg-a"})
+
+    assert response.status_code == 200
+    assert response.get_json()["rule"]["filters"] == [{"registry_id": "reg-b"}]
+
+
+def test_removing_the_last_filter_removes_the_rule(client):
+    """A rule left without one would apply to every entity of its type."""
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+
+    response = client.delete(f"/api/naming/rules/{rule['id']}/filters", json={"registry_id": "reg-a"})
+
+    assert response.status_code == 200
+    assert response.get_json() == {"deleted": True, "rule_id": rule["id"]}
+    assert rules.get(rule["id"]) is None
+
+
+def test_a_filter_the_rule_does_not_have_is_refused(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+
+    response = client.delete(f"/api/naming/rules/{rule['id']}/filters", json={"registry_id": "reg-b"})
+
+    assert response.status_code == 400
+    assert rules.get(rule["id"])["filters"] == [{"registry_id": "reg-a"}]
+
+
+def test_a_request_without_a_filter_is_refused(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+
+    assert client.post(f"/api/naming/rules/{rule['id']}/filters", json={}).status_code == 400
+
+
+def test_the_filters_on_offer_are_the_ones_this_home_has(client):
+    response = client.get("/api/naming/filters")
+
+    assert response.status_code == 200
+    assert response.get_json()["integrations"] == [{"integration": "mqtt", "models": []}]
+
+
+def test_a_model_is_offered_with_its_maker(client):
+    """ "Zigbee smart water valve" is not what anyone looks for - "SONOFF" is."""
+    restructurer = web_ui.renamer_state["restructurer"]
+    restructurer.devices["d"]["model"] = "Zigbee smart water valve"
+    restructurer.devices["d"]["manufacturer"] = "SONOFF"
+
+    response = client.get("/api/naming/filters")
+
+    models = response.get_json()["integrations"][0]["models"]
+    assert models == [{"model": "Zigbee smart water valve", "manufacturer": "SONOFF", "count": 2}]
+
+
+def test_a_rules_wording_can_be_changed_without_touching_where_it_applies(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-a"})
+    rules.add_filter("name", "effect_speed", "de", "Tempo", {"registry_id": "reg-b"})
+
+    response = client.put(f"/api/naming/rules/{rule['id']}", json={"targets": {"de": "Geschwindigkeit"}})
+
+    assert response.status_code == 200
+    changed = response.get_json()["rule"]
+    assert changed["targets"]["de"] == "Geschwindigkeit"
+    assert changed["filters"] == [{"registry_id": "reg-a"}, {"registry_id": "reg-b"}]

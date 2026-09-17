@@ -5,7 +5,6 @@ tools; they are cut to length, stripped of control characters and checked
 against Home Assistant's own shapes before anything is done with them.
 """
 
-import html
 import re
 import unicodedata
 
@@ -50,24 +49,21 @@ def sanitize_string(value: str, max_length: int = MAX_NAME_LENGTH) -> str:
 
 
 def sanitize_name(value: str, max_length: int = MAX_NAME_LENGTH) -> str:
+    """Clean a display name that is about to be stored.
+
+    A name goes into Home Assistant's registry and comes back out through its
+    API - it is data, not markup, and it is kept exactly as the user wrote it.
+    An apostrophe stays an apostrophe: a coffee machine's "Calc'n'Clean in 5
+    Tassen" used to be stored as "Calc&#x27;n&#x27;Clean in 5 Tassen" and read
+    that way everywhere afterwards, in Home Assistant itself and in every
+    automation that showed the name.
+
+    Escaping belongs where a name is rendered, and that is already handled:
+    Alpine's x-text and Jinja's autoescaping put text in as text, and the one
+    place that builds markup - the diff between two names - escapes every
+    piece it inserts.
     """
-    Sanitize a display name (friendly name, area name, device name).
-    - All general sanitization
-    - Escape HTML to prevent XSS
-    - Remove script tags and event handlers
-    """
-    value = sanitize_string(value, max_length)
-    if value is None:
-        return None
-
-    # Remove any script tags or event handlers (case insensitive)
-    value = re.sub(r"<script[^>]*>.*?</script>", "", value, flags=re.IGNORECASE | re.DOTALL)
-    value = re.sub(r"on\w+\s*=", "", value, flags=re.IGNORECASE)
-
-    # Escape HTML entities to prevent XSS
-    value = html.escape(value, quote=True)
-
-    return value
+    return sanitize_string(value, max_length)
 
 
 def sanitize_entity_id(value: str) -> str:
