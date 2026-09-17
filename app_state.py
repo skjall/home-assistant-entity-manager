@@ -21,6 +21,7 @@ from naming_overrides import NamingOverrides
 from naming_rules import NamingRules
 from naming_state import NamingState
 from naming_templates import NamingTemplates
+from reference_checker import ReferenceChecker
 from rename_log import RenameLog
 from supplied_names import SuppliedNames
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
@@ -74,6 +75,9 @@ renamer_state["worker"] = JobWorker(renamer_state["job_store"])
 # Share the audit log with every EntityRegistry instance so all rename paths
 # (single, batch, device cascade) get recorded centrally.
 EntityRegistry.rename_log = renamer_state["rename_log"]
+# The reference checker answers "what became of this?" out of the same log,
+# rather than guessing from how alike two names look.
+ReferenceChecker.rename_log = renamer_state["rename_log"]
 
 # And the titles that name interface-built helpers, so a rename carries them
 # along instead of leaving the supplied name behind.

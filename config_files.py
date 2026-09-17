@@ -305,6 +305,10 @@ class ConfigFiles:
                     domain, _, object_id = entity_id.partition(".")
                     if allowed is not None and domain not in allowed:
                         continue
+                    # `'sensor.the_robot_' ~ suffix` in a template is a name
+                    # being built, not a name. No entity ends in an underscore.
+                    if object_id.endswith("_"):
+                        continue
                     if object_id in READ_OFF_AN_ENTITY:
                         continue
                     if _CALLS_A_SERVICE.search(line[: match.start()]):

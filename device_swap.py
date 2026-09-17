@@ -437,6 +437,7 @@ class SwapExecutor:
                     self._log(job, STATE_UPDATING_DEPENDENCIES, f"Dashboard update failed for {old_id}: {e}")
             pair["new_entity_id_target"] = new_id
             pair["status"] = "deps_done"
+            self._note_the_succession(old_id, new_id)
             self._log(job, STATE_UPDATING_DEPENDENCIES, f"Rewired references {old_id} -> {new_id}")
             self._persist(job)
 
@@ -475,6 +476,26 @@ class SwapExecutor:
                     self._log(job, STATE_UPDATING_DEPENDENCIES, f"YAML dashboard scan failed: {e}")
             job["yaml_scanned"] = True
             self._persist(job)
+
+    def _note_the_succession(self, old_id: str, new_id: str) -> None:
+        """Write down which entity took over from which.
+
+        FREEING_OLD_NAME parks the old entity on `<id>_swapout` and that rename
+        is recorded like any other, so the log ended the chain at an interim id
+        that is deleted with the old device. Anything later asking "what became
+        of this?" - a reference still naming the old id, in YAML we cannot
+        write - was answered with something gone.
+
+        The log resolves an id by its latest record, so writing the real
+        succession here supersedes the interim hop.
+        """
+        log = getattr(self.entity_registry, "rename_log", None)
+        if log is None or old_id == new_id:
+            return
+        try:
+            log.record(old_id, new_id)
+        except Exception as error:  # noqa: BLE001 - the swap itself stands
+            logger.warning("Could not record the succession %s -> %s: %s", old_id, new_id, error)
 
     async def _dispose_old_device(self, job: Dict[str, Any]) -> None:
         """Altes Gerät je nach Wahl behalten/deaktivieren/löschen (HA-Registry-Ebene)."""

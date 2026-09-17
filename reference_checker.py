@@ -60,8 +60,19 @@ class Suggestion:
         return asdict(self)
 
 
+# How much two names must have in common before one is offered for the other.
+# Three words of five - `kammer_it_steckdose_zustand` against
+# `kammer_it_steckdose_schalter` - is the shape of a real rename; two of nine is
+# two entities that happen to sit in the same room.
+CLOSE_ENOUGH = 0.6
+
+
 class ReferenceChecker:
     """Prüft Automations/Scenes/Scripts/Helfer auf verwaiste Entity-Referenzen."""
+
+    # Set once the application state is built, as EntityRegistry's is. Without
+    # it only a guess is available, which is what a fresh installation has.
+    rename_log = None
 
     # Entity-ID Pattern für Extraktion
     ENTITY_ID_PATTERN = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
@@ -578,70 +589,59 @@ class ReferenceChecker:
         return previous_row[-1]
 
     def _calculate_similarity(self, missing_id: str, candidate_id: str) -> Tuple[float, List[str]]:
-        """Berechnet die Ähnlichkeit zwischen zwei Entity-IDs."""
-        score = 0.0
-        reasons = []
+        """How much two ids have in common, counted in words.
 
-        missing_parts = missing_id.split(".")
-        candidate_parts = candidate_id.split(".")
+        Letters were counted before, and two ids that share a place and a
+        suffix scored alike however little they had to do with each other:
+        `buro_linkes_fenster_status` was answered with
+        `buro_bambu_lab_h2c_drucker_firmware_status` at 0.74. Two thirds of that
+        was handed out for the domain - which every candidate has, since only
+        the same domain is considered at all - and for the first word, which
+        every entity in the same room has.
 
-        missing_domain = missing_parts[0]
-        candidate_domain = candidate_parts[0]
-        missing_name = missing_parts[1] if len(missing_parts) > 1 else ""
-        candidate_name = candidate_parts[1] if len(candidate_parts) > 1 else ""
-
-        # 1. Domain Match (+30%)
-        if missing_domain == candidate_domain:
-            score += 0.30
-            reasons.append("same_domain")
-
-        # 2. Area Match (+25%) - Prüfe ob der erste Teil des Namens übereinstimmt
-        missing_area = missing_name.split("_")[0] if "_" in missing_name else ""
-        candidate_area = candidate_name.split("_")[0] if "_" in candidate_name else ""
-        if missing_area and candidate_area and missing_area == candidate_area:
-            score += 0.25
-            reasons.append("same_area")
-
-        # 3. Name Similarity - Levenshtein (+0-45%)
-        if missing_name and candidate_name:
-            max_len = max(len(missing_name), len(candidate_name))
-            if max_len > 0:
-                distance = self._levenshtein_distance(missing_name, candidate_name)
-                lev_ratio = 1 - (distance / max_len)
-                score += lev_ratio * 0.45
-                if lev_ratio > 0.5:
-                    reasons.append("similar_name")
-
-        return (score, reasons)
+        What is left is what actually distinguishes them: the words themselves.
+        A missing `fenster` costs, where a shared `buro` does not pay.
+        """
+        missing_words = set(missing_id.split(".", 1)[-1].split("_"))
+        candidate_words = set(candidate_id.split(".", 1)[-1].split("_"))
+        shared = missing_words & candidate_words
+        both = missing_words | candidate_words
+        if not shared or not both:
+            return (0.0, [])
+        return (len(shared) / len(both), sorted(shared))
 
     async def get_suggestions(self, missing_entity_id: str, limit: int = 5) -> List[Suggestion]:
-        """Generiert Ersatz-Vorschläge basierend auf Ähnlichkeit.
+        """What this entity became, or what it plausibly is now.
 
-        Nur Entities mit der gleichen Domain werden vorgeschlagen.
-        Andere Domains können über die Suchfunktion gefunden werden.
+        The rename log is asked first and settles it outright where it can: a
+        record of what was actually renamed to what beats any resemblance
+        between two names. Only where the log has nothing to say - the entity
+        was renamed elsewhere, or never was - is a guess offered at all, and
+        only one close enough to be worth looking at. Nothing is better than
+        something wrong: a bad suggestion sends the user to an entity that has
+        nothing to do with the one they lost.
         """
         existing = await self._load_existing_entities()
         if self._entity_details is None:
             await self._load_existing_entities()
 
+        carried = self._where_it_went(missing_entity_id, existing)
+        if carried:
+            return [carried]
+
         suggestions = []
         missing_domain = missing_entity_id.split(".")[0]
 
         for entity_id in existing:
-            # Überspringe gleiche Entity
             if entity_id == missing_entity_id:
                 continue
 
-            # Nur Entities mit gleicher Domain vorschlagen
-            candidate_domain = entity_id.split(".")[0]
-            if candidate_domain != missing_domain:
+            # Another domain is never the same entity under a new name.
+            if entity_id.split(".")[0] != missing_domain:
                 continue
 
-            # Berechne Ähnlichkeit
             score, reasons = self._calculate_similarity(missing_entity_id, entity_id)
-
-            # Nur Vorschläge mit Mindest-Score
-            if score >= 0.2:
+            if score >= CLOSE_ENOUGH:
                 details = self._entity_details.get(entity_id, {})
                 suggestions.append(
                     Suggestion(
@@ -652,10 +652,38 @@ class ReferenceChecker:
                     )
                 )
 
-        # Sortiere nach Score (absteigend)
         suggestions.sort(key=lambda s: s.score, reverse=True)
 
         return suggestions[:limit]
+
+    def _where_it_went(self, missing_entity_id: str, existing: Set[str]) -> Optional[Suggestion]:
+        """What the rename log says this entity became, if it still exists.
+
+        The log records one hop at a time and an entity can be renamed again, so
+        the chain is followed to its end. It ends nowhere often enough to check:
+        a device swap parks an entity on an interim id, and where the way back
+        was never recorded the chain stops at something that is gone.
+        """
+        if self.rename_log is None:
+            return None
+        try:
+            answer = self.rename_log.search(missing_entity_id)
+        except Exception as error:  # noqa: BLE001 - a guess is still possible
+            logger.debug("Could not read the rename log for %s: %s", missing_entity_id, error)
+            return None
+        if not answer.get("found"):
+            return None
+        current = answer.get("current_entity_id")
+        if not current or current not in existing:
+            logger.debug("The rename chain for %s ends at %s, which is gone", missing_entity_id, current)
+            return None
+        details = (self._entity_details or {}).get(current, {})
+        return Suggestion(
+            entity_id=current,
+            friendly_name=details.get("friendly_name", current),
+            score=1.0,
+            reasons=["renamed_here"],
+        )
 
     async def get_all_entities(self) -> List[Dict]:
         """Gibt alle Entities für Autocomplete zurück."""
