@@ -144,6 +144,37 @@ GET /api/rename_log?entity_id=light.kitchen_old
 The lookup follows multi-hop rename chains (`a → b → c`) and returns
 `"found": false` when the id was never renamed.
 
+#### Your own YAML: packages, includes and YAML dashboards
+
+Renaming an entity rewrites the automations, scripts, scenes and dashboards
+Home Assistant itself writes, because the configuration API hands those out and
+takes them back. A package, an `!include`d file or a YAML-mode dashboard is not
+one of those: Home Assistant only ever reads it, and the file belongs to you. A
+rename therefore leaves the old id sitting in it, and you find out when
+something stops working.
+
+Two settings, both **beta and off**, let the add-on do something about that.
+
+| Option | What it decides | Default |
+| --- | --- | --- |
+| `scan_yaml` | Whether the add-on reads your configuration directory at all. `beta` means a broken reference also says which file and which line names the entity. `off` means the add-on sees only what the configuration API shows it. | `off` |
+| `fix_yaml` | Whether the add-on may rewrite that line for you. `beta` replaces the id and nothing else, keeping a copy of the file in `/data/yaml_backups` first. `off` shows the line and leaves the editing to you. | `off` |
+
+Rewriting needs the reading: with `scan_yaml` off nothing is found, so nothing
+is rewritten, and the add-on says so in its log.
+
+A rewrite touches one line. Comments, blank lines, quoting, anchors, tags and
+line endings stay exactly as they were, the file is parsed before it is written,
+and a file that would not parse is refused rather than saved. What cannot be
+done safely is not done at all: the interface names the file and the line, and
+you edit it yourself.
+
+**The mount is not part of the switch.** The Supervisor fixes it when the
+container is built, so the add-on holds write access to the configuration
+directory from the moment you install it, whether or not either setting is on.
+That is what the settings are for: the permission exists, and the add-on uses it
+only where you have said to. Off, it does not open the directory.
+
 #### External access: the API and assistants
 
 By default the web interface and the API are reachable **only through Home
