@@ -42,6 +42,7 @@ class BrokenReference:
     line_text: Optional[str] = None
     in_comment: bool = False
     fixable: bool = True
+    object_id: Optional[str] = None  # script.x, where the file's shape names one
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -537,19 +538,23 @@ class ReferenceChecker:
                 continue
             for one in mentions:
                 shown = self.config_files.shown_as(one.path)
+                holder = self.config_files.holder_of(one)
                 found.append(
                     BrokenReference(
                         config_type="yaml",
                         config_id=f"{shown}:{one.line}",
-                        config_name=shown.rsplit("/", 1)[-1],
+                        # What the object is called, where the file says so at
+                        # all; the file name is the last resort.
+                        config_name=(holder.described() if holder else "") or shown.rsplit("/", 1)[-1],
                         missing_entity_id=entity_id,
                         context="yaml",
-                        yaml_path=shown,
+                        yaml_path=(" → ".join(holder.trail) if holder else shown),
                         file_path=shown,
                         file_line=one.line,
                         line_text=one.text,
                         in_comment=one.in_comment,
                         fixable=False,
+                        object_id=(holder.object_id if holder else None),
                     )
                 )
         return found

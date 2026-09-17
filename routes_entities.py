@@ -715,7 +715,9 @@ async def rename_device_handler(job, ctx):
                         references_by_hand.append(one)
                         ctx.log(
                             "BY_HAND",
-                            f"{one['path']}:{one['line']} - {one['replace']} -> {one['with']}",
+                            f"{one['in_object'] or one['path']}"
+                            f" - {one['path']}:{one['line']}"
+                            f" - {one['replace']} -> {one['with']}",
                         )
 
             except Exception as e:

@@ -24,6 +24,8 @@ import re
 import time
 from typing import Dict, Iterable, List, Optional
 
+from yaml_structure import Structures
+
 logger = logging.getLogger(__name__)
 
 # What a default installation puts behind `automation:`, `script:` and `scene:`.
@@ -139,6 +141,9 @@ class ConfigFiles:
         self._managed: Optional[set] = None
         self._index: Optional[Dict[str, List[Mention]]] = None
         self._read_at = 0.0
+        # What holds a line is worked out only for the lines actually reported,
+        # because parsing every file costs far more than reading it.
+        self.structures = Structures(self.root)
 
     def available(self) -> bool:
         """Whether the mount is there and readable."""
@@ -148,11 +153,16 @@ class ConfigFiles:
         """The path as the user knows it, which is the one inside Home Assistant."""
         return "/config/" + relative.replace(os.sep, "/")
 
+    def holder_of(self, mention: "Mention"):
+        """The object a mention sits in, or None when the file will not parse."""
+        return self.structures.what_holds(mention.path, mention.line)
+
     def forget(self) -> None:
         self._files = None
         self._managed = None
         self._index = None
         self._read_at = 0.0
+        self.structures.forget()
 
     def managed_files(self) -> set:
         """The files the interface writes, as configuration.yaml sets them up."""
@@ -303,14 +313,22 @@ def out_of_reach(old_entity_id: str, new_entity_id: str, files: Optional[ConfigF
     reading = files if files is not None else shared()
     if not reading.available() or old_entity_id == new_entity_id:
         return []
-    return [
-        {
-            "path": reading.shown_as(one.path),
-            "line": one.line,
-            "text": one.text,
-            "replace": old_entity_id,
-            "with": new_entity_id,
-            "in_comment": one.in_comment,
-        }
-        for one in reading.mentions(old_entity_id)
-    ]
+    found = []
+    for one in reading.mentions(old_entity_id):
+        holder = reading.holder_of(one)
+        found.append(
+            {
+                "path": reading.shown_as(one.path),
+                "line": one.line,
+                "text": one.text,
+                "replace": old_entity_id,
+                "with": new_entity_id,
+                "in_comment": one.in_comment,
+                # What the line belongs to, as far as the file says. Empty where
+                # the file does not parse or names nothing.
+                "in_object": holder.described() if holder else "",
+                "object_id": (holder.object_id if holder else None),
+                "trail": " → ".join(holder.trail) if holder else "",
+            }
+        )
+    return found

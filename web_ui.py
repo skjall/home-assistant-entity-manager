@@ -1324,7 +1324,9 @@ async def execute_direct_handler(job, ctx):
                     results["references_by_hand"].append(by_hand)
                     ctx.log(
                         "BY_HAND",
-                        f"{by_hand['path']}:{by_hand['line']} - {by_hand['replace']} -> {by_hand['with']}",
+                        f"{by_hand['in_object'] or by_hand['path']}"
+                        f" - {by_hand['path']}:{by_hand['line']}"
+                        f" - {by_hand['replace']} -> {by_hand['with']}",
                     )
 
             except Exception as e:

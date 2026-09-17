@@ -2072,8 +2072,13 @@
                                             <div class="affected-config-item">
                                                 <i :class="[getConfigIcon(ref.config_type), isByHand(ref) ? 'text-amber-500' : 'text-gray-400']"></i>
                                                 <div class="config-info">
-                                                    <span class="config-name"
-                                                          x-text="isByHand(ref) ? ref.file_path + ':' + ref.file_line : ref.config_name"></span>
+                                                    <!-- What it is comes first; where it is follows. A
+                                                         line number alone is no help to someone looking
+                                                         for a script they know by name. -->
+                                                    <span class="config-name" x-text="ref.config_name"></span>
+                                                    <span class="text-xs text-gray-400 ml-1"
+                                                          x-show="isByHand(ref)"
+                                                          x-text="ref.file_path + ':' + ref.file_line"></span>
                                                     <span class="yaml-path text-xs text-gray-400 ml-1"
                                                           x-show="ref.yaml_path && !isByHand(ref)"
                                                           x-text="'(' + ref.yaml_path + ')'"></span>
@@ -2106,12 +2111,15 @@
                                                     <div class="mt-1" x-text="t('broken_refs.by_hand_hint')"></div>
                                                     <ul class="mt-2 space-y-1">
                                                         <template x-for="ref in byHandIn(group)" :key="ref.config_id">
-                                                            <li class="font-mono">
-                                                                <span x-text="ref.file_path + ':' + ref.file_line"></span>
-                                                                <span x-show="ref.in_comment"
-                                                                      class="ml-1 not-italic text-amber-600"
-                                                                      x-text="t('broken_refs.in_comment')"></span>
-                                                                <div class="text-amber-700 truncate" x-text="ref.line_text"></div>
+                                                            <li>
+                                                                <div class="font-semibold" x-text="ref.config_name"></div>
+                                                                <div class="font-mono">
+                                                                    <span x-text="ref.file_path + ':' + ref.file_line"></span>
+                                                                    <span x-show="ref.in_comment"
+                                                                          class="ml-1 not-italic text-amber-600"
+                                                                          x-text="t('broken_refs.in_comment')"></span>
+                                                                </div>
+                                                                <div class="font-mono text-amber-700 truncate" x-text="ref.line_text"></div>
                                                             </li>
                                                         </template>
                                                     </ul>
