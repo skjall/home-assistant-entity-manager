@@ -601,9 +601,19 @@ class ReferenceChecker:
 
         What is left is what actually distinguishes them: the words themselves.
         A missing `fenster` costs, where a shared `buro` does not pay.
+
+        The first word still has to match, though it earns nothing.
+        `buro_mittleres_fenster_zustand` and `kinderzimmer_mittleres_fenster_zustand`
+        share three words of five and are two different windows in two different
+        rooms. A name here starts with where the thing is, so a candidate that
+        starts somewhere else is not the same thing under a new name.
         """
-        missing_words = set(missing_id.split(".", 1)[-1].split("_"))
-        candidate_words = set(candidate_id.split(".", 1)[-1].split("_"))
+        missing_name = missing_id.split(".", 1)[-1]
+        candidate_name = candidate_id.split(".", 1)[-1]
+        if missing_name.split("_")[0] != candidate_name.split("_")[0]:
+            return (0.0, [])
+        missing_words = set(missing_name.split("_"))
+        candidate_words = set(candidate_name.split("_"))
         shared = missing_words & candidate_words
         both = missing_words | candidate_words
         if not shared or not both:

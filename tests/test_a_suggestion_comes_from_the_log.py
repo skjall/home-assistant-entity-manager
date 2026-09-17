@@ -210,3 +210,27 @@ def test_a_swap_without_a_log_carries_on():
     executor.entity_registry = Registry()
 
     executor._note_the_succession("binary_sensor.one", "binary_sensor.two")
+
+
+async def test_the_same_window_in_another_room_is_not_offered(checker):
+    """Three words of five, and two different windows in two different rooms.
+
+    A name starts with where the thing is, so a candidate that starts somewhere
+    else is not the one that was lost.
+    """
+    checker._existing_entities = {"binary_sensor.kinderzimmer_mittleres_fenster_zustand"}
+    checker._entity_details = {
+        "binary_sensor.kinderzimmer_mittleres_fenster_zustand": {"friendly_name": "Kinderzimmer"}
+    }
+
+    assert await checker.get_suggestions("binary_sensor.buro_mittleres_fenster_zustand") == []
+
+
+def test_a_different_first_word_scores_nothing(checker):
+    score, reasons = checker._calculate_similarity(
+        "binary_sensor.buro_mittleres_fenster_zustand",
+        "binary_sensor.kinderzimmer_mittleres_fenster_zustand",
+    )
+
+    assert score == 0.0
+    assert reasons == []
