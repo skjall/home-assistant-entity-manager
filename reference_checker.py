@@ -14,6 +14,7 @@ import aiohttp
 from dotenv import load_dotenv
 
 from config_files import shared as shared_config_files
+from device_swap import INTERIM_SUFFIX
 from helper_options import HelperOptions
 
 logging.basicConfig(level=logging.INFO)
@@ -650,6 +651,10 @@ class ReferenceChecker:
             if entity_id.split(".")[0] != missing_domain:
                 continue
 
+            # An entity parked mid-swap is the one being replaced.
+            if entity_id.endswith(INTERIM_SUFFIX):
+                continue
+
             score, reasons = self._calculate_similarity(missing_entity_id, entity_id)
             if score >= CLOSE_ENOUGH:
                 details = self._entity_details.get(entity_id, {})
@@ -686,6 +691,12 @@ class ReferenceChecker:
         current = answer.get("current_entity_id")
         if not current or current not in existing:
             logger.debug("The rename chain for %s ends at %s, which is gone", missing_entity_id, current)
+            return None
+        # A swap that never finished leaves the old entity sitting on its interim
+        # id. It exists, so the check above lets it through, and it is still the
+        # entity being replaced rather than the one that replaced it.
+        if current.endswith(INTERIM_SUFFIX):
+            logger.debug("The rename chain for %s ends mid-swap at %s", missing_entity_id, current)
             return None
         details = (self._entity_details or {}).get(current, {})
         return Suggestion(

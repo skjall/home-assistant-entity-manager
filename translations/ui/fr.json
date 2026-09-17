@@ -149,7 +149,10 @@
     "by_hand_badge": "à toi de l'éditer",
     "by_hand_remaining": "{count} restent pour toi",
     "by_hand_beta": "sera écrit (bêta)",
-    "by_hand_written": "{count} seront écrits aussi"
+    "by_hand_written": "{count} seront écrits aussi",
+    "places": "{count} endroits",
+    "line": "ligne {line}",
+    "lines": "lignes {lines}"
   },
   "messages": {
     "loading": "Chargement...",

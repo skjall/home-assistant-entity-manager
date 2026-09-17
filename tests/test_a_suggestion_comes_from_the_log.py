@@ -234,3 +234,17 @@ def test_a_different_first_word_scores_nothing(checker):
 
     assert score == 0.0
     assert reasons == []
+
+
+async def test_an_entity_parked_mid_swap_is_not_offered(checker):
+    """A swap that never finished leaves the old entity on its interim id.
+
+    It exists, so it passes the check that the chain ends somewhere real - and
+    it is still the entity being replaced, not the one that replaced it.
+    """
+    parked = "binary_sensor.buro_rechtes_fenster_status_swapout"
+    checker._existing_entities = {parked}
+    checker._entity_details = {parked: {"friendly_name": parked}}
+    checker.rename_log = Log({"binary_sensor.buro_rechtes_fenster_status": parked})
+
+    assert await checker.get_suggestions("binary_sensor.buro_rechtes_fenster_status") == []

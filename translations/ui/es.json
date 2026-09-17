@@ -149,7 +149,10 @@
     "by_hand_badge": "solo a mano",
     "by_hand_remaining": "{count} quedan para ti",
     "by_hand_beta": "se escribirá (beta)",
-    "by_hand_written": "{count} se escribirán también"
+    "by_hand_written": "{count} se escribirán también",
+    "places": "{count} lugares",
+    "line": "línea {line}",
+    "lines": "líneas {lines}"
   },
   "messages": {
     "loading": "Cargando...",

@@ -2033,7 +2033,8 @@
                                         <div class="missing-entity-header">
                                             <i class="ri-error-warning-line text-red-500"></i>
                                             <code class="missing-entity-id" x-text="group.missing_entity_id"></code>
-                                            <span class="ref-count" x-text="'(' + group.refs.length + ')'"></span>
+                                            <span class="ref-count"
+                                                  x-text="t('broken_refs.places', {count: group.refs.length})"></span>
                                         </div>
 
                                         <!-- Arrow and Replacement -->
@@ -2056,7 +2057,6 @@
                                                     :disabled="!selectedReplacement[group.missing_entity_id]"
                                                     :title="t('broken_refs.fix')">
                                                 <i class="ri-check-line"></i>
-                                                <span x-show="group.refs.length > 1" class="ml-1" x-text="'(' + group.refs.length + ')'"></span>
                                             </button>
                                             <!-- Expand indicator -->
                                             <div class="expand-indicator"
@@ -2066,31 +2066,48 @@
                                         </div>
                                     </div>
 
-                                    <!-- Affected Configs List -->
+                                    <!-- Where it is named. Grouped by where that is:
+                                         one line per thing the repair can rewrite, and
+                                         one block per file it cannot, since saying "yours
+                                         to edit" six times says it five times too often. -->
                                     <div class="affected-configs">
-                                        <template x-for="ref in group.refs" :key="ref.config_id + ref.yaml_path">
+                                        <template x-for="ref in fixableIn(group)" :key="ref.config_id + ref.yaml_path">
                                             <div class="affected-config-item">
-                                                <i :class="[getConfigIcon(ref.config_type), isByHand(ref) ? 'text-amber-500' : 'text-gray-400']"></i>
+                                                <i :class="getConfigIcon(ref.config_type)" class="text-gray-400"></i>
                                                 <div class="config-info">
-                                                    <!-- What it is, where it is, and the line as it
-                                                         stands. Said once. -->
                                                     <span class="config-name" x-text="ref.config_name"></span>
-                                                    <span class="text-xs text-amber-600 ml-1"
-                                                          x-show="isByHand(ref)"
-                                                          x-text="writesYaml ? t('broken_refs.by_hand_beta') : t('broken_refs.by_hand_badge')"></span>
                                                     <span class="yaml-path text-xs text-gray-400 ml-1"
-                                                          x-show="ref.yaml_path && !isByHand(ref)"
-                                                          x-text="'(' + ref.yaml_path + ')'"></span>
-                                                    <div x-show="isByHand(ref)" class="text-xs text-gray-400 font-mono truncate"
-                                                         x-text="ref.file_path + ':' + ref.file_line"></div>
+                                                          x-show="ref.yaml_path"
+                                                          x-text="ref.yaml_path"></span>
                                                 </div>
-                                                <a x-show="!isByHand(ref)"
-                                                   :href="getHAConfigUrl(ref)" target="_blank"
+                                                <a :href="getHAConfigUrl(ref)" target="_blank"
                                                    @click.stop
                                                    class="external-link ml-auto"
                                                    :title="t('broken_refs.open_in_ha')">
                                                     <i class="ri-external-link-line"></i>
                                                 </a>
+                                            </div>
+                                        </template>
+
+                                        <template x-for="file in byHandFiles(group)" :key="file.path">
+                                            <div class="affected-config-item items-start">
+                                                <i class="ri-file-edit-line text-amber-500 mt-0.5"></i>
+                                                <div class="config-info">
+                                                    <div class="flex items-center gap-2 flex-wrap">
+                                                        <span class="config-name font-mono" x-text="file.path"></span>
+                                                        <span class="text-xs text-amber-600"
+                                                              x-text="writesYaml ? t('broken_refs.by_hand_beta') : t('broken_refs.by_hand_badge')"></span>
+                                                    </div>
+                                                    <template x-for="place in file.places" :key="place.lines.join(',')">
+                                                        <div class="text-xs text-gray-500">
+                                                            <span x-show="place.name" x-text="place.name"></span>
+                                                            <span x-show="place.name" class="text-gray-300"> · </span>
+                                                            <span x-text="place.lines.length > 1
+                                                                ? t('broken_refs.lines', {lines: place.lines.join(', ')})
+                                                                : t('broken_refs.line', {line: place.lines[0]})"></span>
+                                                        </div>
+                                                    </template>
+                                                </div>
                                             </div>
                                         </template>
                                     </div>
@@ -3952,6 +3969,33 @@
 
                 byHandIn(group) {
                     return (group.refs || []).filter(ref => this.isByHand(ref));
+                },
+
+                fixableIn(group) {
+                    return (group.refs || []).filter(ref => !this.isByHand(ref));
+                },
+
+                // One block per file, and inside it one line per thing named,
+                // with its line numbers gathered. Four rows saying the same
+                // script and the same badge are one row and four numbers.
+                byHandFiles(group) {
+                    const files = new Map();
+                    for (const ref of this.byHandIn(group)) {
+                        const path = ref.file_path || '';
+                        if (!files.has(path)) files.set(path, new Map());
+                        const places = files.get(path);
+                        // A path standing in for a name says nothing a line
+                        // number does not; the number alone is less to read.
+                        const name = (ref.config_name || '').includes('→') ? '' : (ref.config_name || '');
+                        if (!places.has(name)) places.set(name, []);
+                        places.get(name).push(ref.file_line);
+                    }
+                    return [...files.entries()].map(([path, places]) => ({
+                        path,
+                        places: [...places.entries()]
+                            .map(([name, lines]) => ({name, lines: lines.sort((a, b) => a - b)}))
+                            .sort((a, b) => (b.name ? 1 : 0) - (a.name ? 1 : 0)),
+                    }));
                 },
 
                 getHAConfigUrl(ref) {

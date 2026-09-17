@@ -21,6 +21,11 @@ from typing import Any, Dict, List, Optional
 
 from jobs import JobStore
 
+# What an entity of the old device is parked on while the new one takes its id.
+# An entity wearing this is mid-swap: it is the one being replaced, so it is
+# never the answer to "what became of this?".
+INTERIM_SUFFIX = "_swapout"
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
@@ -306,7 +311,7 @@ class SwapExecutor:
             if old_id in freed:
                 continue  # idempotent (Resume)
             domain, _, obj = old_id.partition(".")
-            temp_id = f"{domain}.{obj}_swapout"
+            temp_id = f"{domain}.{obj}{INTERIM_SUFFIX}"
             await self.entity_registry.rename_entity(old_id, temp_id)
             freed[old_id] = temp_id
             self._log(job, STATE_FREEING_OLD_NAME, f"Freed old entity {old_id} -> {temp_id}")

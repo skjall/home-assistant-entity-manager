@@ -149,7 +149,10 @@
     "by_hand_badge": "yours to edit",
     "by_hand_remaining": "{count} left for you",
     "by_hand_beta": "will be written (beta)",
-    "by_hand_written": "{count} will be written too"
+    "by_hand_written": "{count} will be written too",
+    "places": "{count} places",
+    "line": "line {line}",
+    "lines": "lines {lines}"
   },
   "messages": {
     "loading": "Loading...",
