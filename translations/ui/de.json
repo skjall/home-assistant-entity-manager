@@ -152,7 +152,9 @@
     "by_hand_written": "{count} werden mitgeschrieben",
     "places": "{count} Stellen",
     "line": "Zeile {line}",
-    "lines": "Zeilen {lines}"
+    "lines": "Zeilen {lines}",
+    "renamed_here": "umbenannt",
+    "pick_yourself": "Kein Eintrag im Verlauf – Ersatz selbst wählen:"
   },
   "messages": {
     "loading": "Lädt...",

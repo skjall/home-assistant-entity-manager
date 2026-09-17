@@ -35,7 +35,6 @@ from jobs import new_job
 import mcp_server
 import naming_service
 from reference_cache import get_reference_checker, invalidate_reference_checker_cache
-from reference_checker import Suggestion
 from registry import sync_ha_language
 from routes_entities import entities as entity_routes
 from routes_naming import (
@@ -1594,22 +1593,10 @@ async def _get_suggestions_async(missing_entity_id):
     """Async implementation of get_suggestions."""
     try:
         checker = get_reference_checker()
+        # The checker reads the rename log itself, follows the chain to its end
+        # and drops an answer that is gone or is the entity a swap replaced.
+        # Reading the log a second time here undid all three.
         suggestions = await checker.get_suggestions(missing_entity_id)
-
-        # A rename this add-on carried out is not a guess: the log says what the
-        # entity is called now, so that answer goes first and the similarity
-        # scores stay as the fallback for everything else.
-        answer = renamer_state["rename_log"].search(missing_entity_id)
-        current = answer.get("current_entity_id") if answer.get("renamed") else None
-        if current:
-            suggestions = [sug for sug in suggestions if sug.entity_id != current]
-            renamed_to = Suggestion(
-                entity_id=current,
-                friendly_name=(answer["history"][-1].get("friendly_name") or ""),
-                score=1.0,
-                reasons=["renamed_here"],
-            )
-            suggestions.insert(0, renamed_to)
 
         return jsonify({"suggestions": [sug.to_dict() for sug in suggestions], "missing_entity_id": missing_entity_id})
     except Exception as e:

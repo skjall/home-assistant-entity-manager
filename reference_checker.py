@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 import aiohttp
 from dotenv import load_dotenv
@@ -59,13 +59,6 @@ class Suggestion:
 
     def to_dict(self) -> Dict:
         return asdict(self)
-
-
-# How much two names must have in common before one is offered for the other.
-# Three words of five - `kammer_it_steckdose_zustand` against
-# `kammer_it_steckdose_schalter` - is the shape of a real rename; two of nine is
-# two entities that happen to sit in the same room.
-CLOSE_ENOUGH = 0.6
 
 
 class ReferenceChecker:
@@ -569,107 +562,27 @@ class ReferenceChecker:
                 )
         return found
 
-    def _levenshtein_distance(self, s1: str, s2: str) -> int:
-        """Berechnet die Levenshtein-Distanz zwischen zwei Strings."""
-        if len(s1) < len(s2):
-            return self._levenshtein_distance(s2, s1)
+    async def get_suggestions(self, missing_entity_id: str) -> List[Suggestion]:
+        """What this entity became, according to what was actually renamed.
 
-        if len(s2) == 0:
-            return len(s1)
+        Only the rename log answers. Resembling names were weighed before, and
+        the weighing could not tell apart what the names themselves do not say:
+        `buro_rechtes_fenster_status` was answered with that window's
+        `hardwarefehler`, `netzwerkfehler`, `funkmodulfehler` and `zustand`, all
+        four scoring the same and ordered by nothing. A name carries a place, a
+        device and a type, and counting shared words reads a shared place as
+        evidence while the type - the part that differs - costs the same as any
+        other word.
 
-        previous_row = range(len(s2) + 1)
-        for i, c1 in enumerate(s1):
-            current_row = [i + 1]
-            for j, c2 in enumerate(s2):
-                insertions = previous_row[j + 1] + 1
-                deletions = current_row[j] + 1
-                substitutions = previous_row[j] + (c1 != c2)
-                current_row.append(min(insertions, deletions, substitutions))
-            previous_row = current_row
-
-        return previous_row[-1]
-
-    def _calculate_similarity(self, missing_id: str, candidate_id: str) -> Tuple[float, List[str]]:
-        """How much two ids have in common, counted in words.
-
-        Letters were counted before, and two ids that share a place and a
-        suffix scored alike however little they had to do with each other:
-        `buro_linkes_fenster_status` was answered with
-        `buro_bambu_lab_h2c_drucker_firmware_status` at 0.74. Two thirds of that
-        was handed out for the domain - which every candidate has, since only
-        the same domain is considered at all - and for the first word, which
-        every entity in the same room has.
-
-        What is left is what actually distinguishes them: the words themselves.
-        A missing `fenster` costs, where a shared `buro` does not pay.
-
-        The first word still has to match, though it earns nothing.
-        `buro_mittleres_fenster_zustand` and `kinderzimmer_mittleres_fenster_zustand`
-        share three words of five and are two different windows in two different
-        rooms. A name here starts with where the thing is, so a candidate that
-        starts somewhere else is not the same thing under a new name.
-        """
-        missing_name = missing_id.split(".", 1)[-1]
-        candidate_name = candidate_id.split(".", 1)[-1]
-        if missing_name.split("_")[0] != candidate_name.split("_")[0]:
-            return (0.0, [])
-        missing_words = set(missing_name.split("_"))
-        candidate_words = set(candidate_name.split("_"))
-        shared = missing_words & candidate_words
-        both = missing_words | candidate_words
-        if not shared or not both:
-            return (0.0, [])
-        return (len(shared) / len(both), sorted(shared))
-
-    async def get_suggestions(self, missing_entity_id: str, limit: int = 5) -> List[Suggestion]:
-        """What this entity became, or what it plausibly is now.
-
-        The rename log is asked first and settles it outright where it can: a
-        record of what was actually renamed to what beats any resemblance
-        between two names. Only where the log has nothing to say - the entity
-        was renamed elsewhere, or never was - is a guess offered at all, and
-        only one close enough to be worth looking at. Nothing is better than
-        something wrong: a bad suggestion sends the user to an entity that has
-        nothing to do with the one they lost.
+        So where the log has nothing to say, neither does this. Nothing is
+        better than something wrong: a bad suggestion sends the user to an
+        entity that has nothing to do with the one they lost.
         """
         existing = await self._load_existing_entities()
         if self._entity_details is None:
             await self._load_existing_entities()
 
-        carried = self._where_it_went(missing_entity_id, existing)
-        if carried:
-            return [carried]
-
-        suggestions = []
-        missing_domain = missing_entity_id.split(".")[0]
-
-        for entity_id in existing:
-            if entity_id == missing_entity_id:
-                continue
-
-            # Another domain is never the same entity under a new name.
-            if entity_id.split(".")[0] != missing_domain:
-                continue
-
-            # An entity left on the interim id is the one that was replaced.
-            if entity_id.endswith(INTERIM_SUFFIX):
-                continue
-
-            score, reasons = self._calculate_similarity(missing_entity_id, entity_id)
-            if score >= CLOSE_ENOUGH:
-                details = self._entity_details.get(entity_id, {})
-                suggestions.append(
-                    Suggestion(
-                        entity_id=entity_id,
-                        friendly_name=details.get("friendly_name", entity_id),
-                        score=round(score, 3),
-                        reasons=reasons,
-                    )
-                )
-
-        suggestions.sort(key=lambda s: s.score, reverse=True)
-
-        return suggestions[:limit]
+        return [carried] if (carried := self._where_it_went(missing_entity_id, existing)) else []
 
     def _where_it_went(self, missing_entity_id: str, existing: Set[str]) -> Optional[Suggestion]:
         """What the rename log says this entity became, if it still exists.
@@ -683,7 +596,7 @@ class ReferenceChecker:
             return None
         try:
             answer = self.rename_log.search(missing_entity_id)
-        except Exception as error:  # noqa: BLE001 - a guess is still possible
+        except Exception as error:  # noqa: BLE001 - an unreadable log is not a broken scan
             logger.debug("Could not read the rename log for %s: %s", missing_entity_id, error)
             return None
         if not answer.get("found"):

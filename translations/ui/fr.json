@@ -152,7 +152,9 @@
     "by_hand_written": "{count} seront écrits aussi",
     "places": "{count} endroits",
     "line": "ligne {line}",
-    "lines": "lignes {lines}"
+    "lines": "lignes {lines}",
+    "renamed_here": "renommé",
+    "pick_yourself": "Rien dans le journal – choisissez un remplacement :"
   },
   "messages": {
     "loading": "Chargement...",

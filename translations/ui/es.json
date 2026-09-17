@@ -152,7 +152,9 @@
     "by_hand_written": "{count} se escribirán también",
     "places": "{count} lugares",
     "line": "línea {line}",
-    "lines": "líneas {lines}"
+    "lines": "líneas {lines}",
+    "renamed_here": "renombrado",
+    "pick_yourself": "Nada en el registro – elige un reemplazo:"
   },
   "messages": {
     "loading": "Cargando...",

@@ -99,49 +99,7 @@ async def test_a_chain_that_returns_to_where_it_started_is_not_offered(checker):
     assert await checker.get_suggestions("sensor.round") == []
 
 
-async def test_an_unreadable_log_still_allows_a_guess(checker):
-    """The log failing is not a reason to answer nothing at all."""
-    checker.rename_log = Log(raises=True)
-
-    found = await checker.get_suggestions("switch.kammer_it_steckdose_zustand")
-
-    assert [one.entity_id for one in found] == ["switch.kammer_it_steckdose_schalter"]
-
-
-async def test_a_printer_is_not_offered_for_a_window(checker):
-    """Two words of nine is two entities that share a room."""
-    found = await checker.get_suggestions("binary_sensor.buro_linkes_fenster_status")
-
-    assert found == []
-
-
-async def test_a_rename_that_changed_one_word_is_still_found(checker):
-    """Three words of five is the shape of a real rename."""
-    found = await checker.get_suggestions("switch.kammer_it_steckdose_zustand")
-
-    assert [one.entity_id for one in found] == ["switch.kammer_it_steckdose_schalter"]
-    assert found[0].score == 0.6
-    assert found[0].reasons == ["it", "kammer", "steckdose"]
-
-
-def test_the_domain_is_not_scored(checker):
-    """Only same-domain candidates are considered, so scoring it said nothing."""
-    score, reasons = checker._calculate_similarity("sensor.one_two", "sensor.one_two")
-
-    assert score == 1.0
-    assert "same_domain" not in reasons
-
-
-def test_sharing_only_a_room_scores_near_nothing(checker):
-    score, _reasons = checker._calculate_similarity(
-        "binary_sensor.buro_linkes_fenster_status",
-        "binary_sensor.buro_bambu_lab_h2c_drucker_firmware_status",
-    )
-
-    assert score < 0.3
-
-
-def test_without_a_log_a_guess_is_all_there_is(checker):
+def test_without_a_log_there_is_nothing_to_answer_from(checker):
     """A fresh installation has renamed nothing yet."""
     checker.rename_log = None
 
@@ -212,11 +170,11 @@ def test_a_swap_without_a_log_carries_on():
     executor._note_the_succession("binary_sensor.one", "binary_sensor.two")
 
 
-async def test_the_same_window_in_another_room_is_not_offered(checker):
-    """Three words of five, and two different windows in two different rooms.
+async def test_a_name_that_resembles_it_is_not_offered(checker):
+    """Resemblance was weighed once and could not tell these two apart.
 
-    A name starts with where the thing is, so a candidate that starts somewhere
-    else is not the one that was lost.
+    Three words of five, and two different windows in two different rooms.
+    Only what was actually renamed answers now.
     """
     checker._existing_entities = {"binary_sensor.kinderzimmer_mittleres_fenster_zustand"}
     checker._entity_details = {
@@ -224,16 +182,6 @@ async def test_the_same_window_in_another_room_is_not_offered(checker):
     }
 
     assert await checker.get_suggestions("binary_sensor.buro_mittleres_fenster_zustand") == []
-
-
-def test_a_different_first_word_scores_nothing(checker):
-    score, reasons = checker._calculate_similarity(
-        "binary_sensor.buro_mittleres_fenster_zustand",
-        "binary_sensor.kinderzimmer_mittleres_fenster_zustand",
-    )
-
-    assert score == 0.0
-    assert reasons == []
 
 
 async def test_the_replaced_entity_is_not_offered(checker):
@@ -249,3 +197,22 @@ async def test_the_replaced_entity_is_not_offered(checker):
     checker.rename_log = Log({"binary_sensor.buro_rechtes_fenster_status": parked})
 
     assert await checker.get_suggestions("binary_sensor.buro_rechtes_fenster_status") == []
+
+
+async def test_an_unreadable_log_answers_nothing(checker):
+    """A log that cannot be read has nothing to say, and neither has this."""
+    checker.rename_log = Log(raises=True)
+
+    assert await checker.get_suggestions("switch.kammer_it_steckdose_zustand") == []
+
+
+async def test_a_name_one_word_away_is_not_offered(checker):
+    """`kammer_it_steckdose_zustand` against `..._schalter` was a guess worth 0.6.
+
+    It happened to be right. `buro_rechtes_fenster_status` against that window's
+    `hardwarefehler`, `netzwerkfehler`, `funkmodulfehler` and `zustand` scored
+    the same four times over, and three of those four were wrong.
+    """
+    checker.rename_log = Log({})
+
+    assert await checker.get_suggestions("switch.kammer_it_steckdose_zustand") == []

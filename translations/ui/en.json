@@ -152,7 +152,9 @@
     "by_hand_written": "{count} will be written too",
     "places": "{count} places",
     "line": "line {line}",
-    "lines": "lines {lines}"
+    "lines": "lines {lines}",
+    "renamed_here": "renamed",
+    "pick_yourself": "Nothing in the rename log – pick a replacement:"
   },
   "messages": {
     "loading": "Loading...",

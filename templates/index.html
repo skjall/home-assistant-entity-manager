@@ -2125,7 +2125,10 @@
                                                 ? t('broken_refs.by_hand_written', {count: byHandIn(group).length})
                                                 : t('broken_refs.by_hand_remaining', {count: byHandIn(group).length})"></span>
                                         </div>
-                                        <label class="text-xs text-gray-500 block mb-2" x-text="t('broken_refs.suggestions')">Suggestions</label>
+                                        <label class="text-xs text-gray-500 block mb-2"
+                                               x-text="getSuggestionsFor(group.missing_entity_id).length
+                                                   ? t('broken_refs.suggestions')
+                                                   : t('broken_refs.pick_yourself')"></label>
                                         <div class="suggestion-list">
                                             <template x-for="sug in getSuggestionsFor(group.missing_entity_id)" :key="sug.entity_id">
                                                 <div class="suggestion-item"
@@ -2138,9 +2141,8 @@
                                                         <code class="suggestion-entity" x-text="sug.entity_id"></code>
                                                         <span class="suggestion-name" x-text="sug.friendly_name"></span>
                                                     </div>
-                                                    <div class="suggestion-score"
-                                                         :class="sug.score >= 0.7 ? 'score-high' : sug.score >= 0.4 ? 'score-medium' : 'score-low'"
-                                                         x-text="Math.round(sug.score * 100) + '%'"></div>
+                                                    <div class="suggestion-score score-high"
+                                                         x-text="t('broken_refs.renamed_here')"></div>
                                                 </div>
                                             </template>
 
@@ -3879,8 +3881,8 @@
                                 [missingEntityId]: suggestions
                             };
 
-                            // Auto-select best match if score is high (green, >= 0.7)
-                            if (suggestions.length > 0 && suggestions[0].score >= 0.7) {
+                            // The log's answer is what was renamed to what, not a guess.
+                            if (suggestions.length > 0) {
                                 this.selectedReplacement = {
                                     ...this.selectedReplacement,
                                     [missingEntityId]: suggestions[0].entity_id
