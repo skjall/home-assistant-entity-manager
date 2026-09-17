@@ -63,13 +63,18 @@ template:
 """
 
 
+# What Home Assistant would recognise as a domain. An id is built only under one
+# of these, so a dashboard's own mapping of names is not read as an entity.
+DOMAINS = {"automation", "binary_sensor", "input_boolean", "light", "lock", "scene", "script", "sensor", "switch"}
+
+
 @pytest.fixture
 def files(tmp_path):
     (tmp_path / "package.yaml").write_text(PACKAGE, encoding="utf-8")
     (tmp_path / "automations.yaml").write_text(LIST_OF_AUTOMATIONS, encoding="utf-8")
     (tmp_path / "board.yaml").write_text(DASHBOARD, encoding="utf-8")
     (tmp_path / "tagged.yaml").write_text(WITH_TAGS, encoding="utf-8")
-    return Structures(str(tmp_path))
+    return Structures(str(tmp_path), DOMAINS)
 
 
 def test_a_script_in_a_package_is_named_and_identified(files):
@@ -172,3 +177,32 @@ def test_a_path_through_nothing_named_is_cut_short(tmp_path):
     assert where.described().endswith("→ …")
     assert where.described().count("→") == 3
     assert where.trail[0] == "views"
+
+
+def test_a_mapping_of_names_under_some_other_key_is_not_an_entity(tmp_path):
+    """A dashboard keeps its card templates as a mapping like any other.
+
+    Reading `button_card_templates: stat_card: ...` as an entity id said
+    something untrue, and the user went looking for an entity that never was.
+    """
+    (tmp_path / "board.yaml").write_text(
+        "button_card_templates:\n"
+        "  stat_card:\n"
+        "    show_state: true\n"
+        "    state:\n"
+        "      - value: sensor.gone_away\n",
+        encoding="utf-8",
+    )
+    where = Structures(str(tmp_path), DOMAINS).what_holds("board.yaml", 5)
+
+    assert where.object_id is None
+
+
+def test_without_a_list_of_domains_no_id_is_claimed(tmp_path):
+    """A wrong id is worse than none: it sends the user after something absent."""
+    (tmp_path / "package.yaml").write_text(PACKAGE, encoding="utf-8")
+
+    where = Structures(str(tmp_path)).what_holds("package.yaml", 7)
+
+    assert where.object_id is None
+    assert where.name == "Prime the pump"

@@ -18,7 +18,7 @@ than guessed, and a file that does not parse falls back to the line alone.
 
 import logging
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import yaml
 
@@ -140,7 +140,7 @@ def _is_an_object_id(word: str) -> bool:
     return bool(word) and not word.startswith("[") and all(one.isalnum() or one == "_" for one in word)
 
 
-def _name_the_holder(steps: List[Tuple[str, object]]) -> Where:
+def _name_the_holder(steps: List[Tuple[str, object]], domains: Optional[set] = None) -> Where:
     """What to call the thing a line sits in, from the path down to it.
 
     Two shapes carry a name. A mapping of object ids under a domain key - what
@@ -151,6 +151,10 @@ def _name_the_holder(steps: List[Tuple[str, object]]) -> Where:
 
     Anything else keeps the path and no name, which still says more than a line
     number on its own.
+
+    An id is only built under a key Home Assistant would recognise as a domain.
+    A dashboard's `button_card_templates:` is a mapping of names under a key
+    like any other, and reading one as an entity id said something untrue.
     """
     trail = [step for step, _node in steps]
     if not steps:
@@ -167,13 +171,13 @@ def _name_the_holder(steps: List[Tuple[str, object]]) -> Where:
         name = found
         if depth >= 1:
             above = steps[depth - 1][0]
-            if _is_an_object_id(step) and _is_an_object_id(above) and depth == 1:
+            if depth == 1 and _names_an_entity(above, step, domains):
                 object_id = f"{above}.{step}"
         break
 
     if name is None:
         # A block with no name of its own may still be keyed by an object id.
-        if len(steps) >= 2 and _is_an_object_id(steps[0][0]) and _is_an_object_id(steps[1][0]):
+        if len(steps) >= 2 and _names_an_entity(steps[0][0], steps[1][0], domains):
             object_id = f"{steps[0][0]}.{steps[1][0]}"
         elif len(steps) >= 1:
             name = _scalar_under(steps[0][1], ID_FIELDS)
@@ -181,11 +185,24 @@ def _name_the_holder(steps: List[Tuple[str, object]]) -> Where:
     return Where(trail, name, object_id)
 
 
+def _names_an_entity(domain: str, object_id: str, domains: Optional[set]) -> bool:
+    """Whether a key and the key under it read as an entity id.
+
+    Without a list of domains to hold it to, nothing is claimed: a wrong id is
+    worse than none, because the user goes looking for something that is not
+    there.
+    """
+    if not domains:
+        return False
+    return domain in domains and _is_an_object_id(domain) and _is_an_object_id(object_id)
+
+
 class Structures:
     """Reads files for what holds a line, parsing each one at most once."""
 
-    def __init__(self, root: Optional[str]):
+    def __init__(self, root: Optional[str], domains: Optional[Iterable[str]] = None):
         self.root = root
+        self.domains = set(domains) if domains else None
         self._trees: Dict[str, Optional[object]] = {}
 
     def forget(self) -> None:
@@ -214,4 +231,4 @@ class Structures:
         steps = _descend(tree, line, [])
         if not steps:
             return None
-        return _name_the_holder(steps)
+        return _name_the_holder(steps, self.domains)

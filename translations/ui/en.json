@@ -147,9 +147,8 @@
     "select_replacement": "Please select a replacement entity",
     "open_in_ha": "Open in Home Assistant",
     "by_hand_badge": "yours to edit",
-    "by_hand_title": "These I cannot change",
-    "by_hand_hint": "They sit in YAML Home Assistant only reads - packages, includes or a YAML-mode dashboard. Replace the old entity there with the one you pick below.",
-    "in_comment": "(commented out)"
+    "in_comment": "commented out",
+    "by_hand_remaining": "{count} left for you"
   },
   "messages": {
     "loading": "Loading...",

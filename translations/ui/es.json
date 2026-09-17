@@ -147,9 +147,8 @@
     "select_replacement": "Por favor seleccione una entidad de reemplazo",
     "open_in_ha": "Abrir en Home Assistant",
     "by_hand_badge": "solo a mano",
-    "by_hand_title": "Estas no las puedo cambiar",
-    "by_hand_hint": "Están en YAML que Home Assistant solo lee: paquetes, includes o un panel en modo YAML. Sustituye allí la entidad antigua por la que elijas abajo.",
-    "in_comment": "(comentada)"
+    "in_comment": "comentada",
+    "by_hand_remaining": "{count} quedan para ti"
   },
   "messages": {
     "loading": "Cargando...",

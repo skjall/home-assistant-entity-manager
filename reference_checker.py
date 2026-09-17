@@ -171,7 +171,7 @@ class ReferenceChecker:
         self.helpers = HelperOptions(self.base_url, self.token)
         # The YAML the configuration API does not hand out: packages, includes
         # and YAML-mode dashboards. Present only when the mount is there.
-        self.config_files = shared_config_files()
+        self.config_files = shared_config_files(self.VALID_DOMAINS)
         # Cache
         self._existing_entities: Optional[Set[str]] = None
         self._entity_details: Optional[Dict[str, Dict]] = None

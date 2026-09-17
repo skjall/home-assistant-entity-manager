@@ -62,6 +62,21 @@ _ENTITY_ID = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
 # as one reported every script that turns an automation on as broken.
 _CALLS_A_SERVICE = re.compile(r"(?:service|action|service_template)\s*:\s*[\"\']?$")
 
+# What a card template reads off an entity it was handed: `lock.state` in a
+# dashboard is an attribute, not an entity called "state" in the lock domain.
+# These are Home Assistant's own field names, not anything installation-specific.
+READ_OFF_AN_ENTITY = {
+    "attributes",
+    "context",
+    "domain",
+    "entity_id",
+    "last_changed",
+    "last_updated",
+    "name",
+    "object_id",
+    "state",
+}
+
 # How a file pulls in another one. Only these reach Home Assistant; a file
 # nothing includes is not part of the configuration, and reporting its dead
 # references would bury the ones that matter.
@@ -135,7 +150,7 @@ def find_the_root() -> Optional[str]:
 class ConfigFiles:
     """Reads the configuration directory for entity names."""
 
-    def __init__(self, root: Optional[str] = None):
+    def __init__(self, root: Optional[str] = None, domains: Optional[Iterable[str]] = None):
         self.root = root if root is not None else find_the_root()
         self._files: Optional[List[str]] = None
         self._managed: Optional[set] = None
@@ -143,7 +158,7 @@ class ConfigFiles:
         self._read_at = 0.0
         # What holds a line is worked out only for the lines actually reported,
         # because parsing every file costs far more than reading it.
-        self.structures = Structures(self.root)
+        self.structures = Structures(self.root, domains)
 
     def available(self) -> bool:
         """Whether the mount is there and readable."""
@@ -283,7 +298,10 @@ class ConfigFiles:
                     entity_id = match.group(1)
                     if entity_id in seen_here:
                         continue
-                    if allowed is not None and entity_id.split(".", 1)[0] not in allowed:
+                    domain, _, object_id = entity_id.partition(".")
+                    if allowed is not None and domain not in allowed:
+                        continue
+                    if object_id in READ_OFF_AN_ENTITY:
                         continue
                     if _CALLS_A_SERVICE.search(line[: match.start()]):
                         continue
@@ -295,11 +313,11 @@ class ConfigFiles:
 _shared: Optional[ConfigFiles] = None
 
 
-def shared() -> ConfigFiles:
+def shared(domains: Optional[Iterable[str]] = None) -> ConfigFiles:
     """One reading of the directory for the whole process, aged out by itself."""
     global _shared
     if _shared is None:
-        _shared = ConfigFiles()
+        _shared = ConfigFiles(domains=domains)
     return _shared
 
 

@@ -147,9 +147,8 @@
     "select_replacement": "Bitte eine Ersatz-Entity auswählen",
     "open_in_ha": "In Home Assistant öffnen",
     "by_hand_badge": "nur von Hand",
-    "by_hand_title": "Diese Stellen kann ich nicht ändern",
-    "by_hand_hint": "Sie stehen in YAML, die Home Assistant nur liest - Pakete, Includes oder ein YAML-Dashboard. Ersetze dort die alte Entität durch die, die du unten wählst.",
-    "in_comment": "(auskommentiert)"
+    "in_comment": "auskommentiert",
+    "by_hand_remaining": "{count} bleiben für dich"
   },
   "messages": {
     "loading": "Lädt...",
