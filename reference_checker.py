@@ -40,7 +40,6 @@ class BrokenReference:
     file_path: Optional[str] = None  # As the user sees it, e.g. "/config/packages/water.yaml"
     file_line: Optional[int] = None
     line_text: Optional[str] = None
-    in_comment: bool = False
     fixable: bool = True
     object_id: Optional[str] = None  # script.x, where the file's shape names one
 
@@ -552,7 +551,6 @@ class ReferenceChecker:
                         file_path=shown,
                         file_line=one.line,
                         line_text=one.text,
-                        in_comment=one.in_comment,
                         fixable=False,
                         object_id=(holder.object_id if holder else None),
                     )

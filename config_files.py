@@ -91,6 +91,11 @@ _NAMES_A_FILE = re.compile(r"filename\s*:\s*[\"\']?(?P<target>[^\s\"\'#]+\.ya?ml
 # What `lovelace: mode: yaml` reads when no filename says otherwise.
 DEFAULT_DASHBOARD = "ui-lovelace.yaml"
 
+# Where a comment starts: a `#` at the start of the line, or one with a space
+# in front of it. That is YAML's own rule, and it keeps `color: \'#ffc107\'` -
+# where the `#` follows a quote - out of it.
+_COMMENT_STARTS = re.compile(r"(?:^|(?<=\s))#")
+
 # A line long enough to be a minified dashboard blob is not a line a user edits.
 _LONGEST_USEFUL_LINE = 4000
 
@@ -101,21 +106,15 @@ INDEX_HOLDS_FOR = 60.0
 
 
 class Mention:
-    """One line of one file that names an entity.
+    """One line of one file that names an entity."""
 
-    `in_comment` marks a line that is commented out: it names the entity without
-    Home Assistant acting on it, so it is worth showing but not worth blocking a
-    rename over.
-    """
+    __slots__ = ("path", "line", "text", "entity_id")
 
-    __slots__ = ("path", "line", "text", "entity_id", "in_comment")
-
-    def __init__(self, path: str, line: int, text: str, entity_id: str, in_comment: bool = False):
+    def __init__(self, path: str, line: int, text: str, entity_id: str):
         self.path = path
         self.line = line
         self.text = text
         self.entity_id = entity_id
-        self.in_comment = in_comment
 
     def to_dict(self) -> Dict:
         return {
@@ -124,7 +123,6 @@ class Mention:
             "line": self.line,
             "text": self.text,
             "entity_id": self.entity_id,
-            "in_comment": self.in_comment,
         }
 
     def __repr__(self) -> str:  # pragma: no cover - for test output
@@ -291,8 +289,14 @@ class ConfigFiles:
             for number, line in self._lines(relative):
                 if len(line) > _LONGEST_USEFUL_LINE:
                     continue
+                # Home Assistant does not read a comment, so nothing in one is
+                # a reference: nothing breaks there and there is nothing to fix.
+                comment = _COMMENT_STARTS.search(line)
+                if comment:
+                    line = line[: comment.start()]
                 stripped = line.strip()
-                in_comment = stripped.startswith("#")
+                if not stripped:
+                    continue
                 seen_here = set()
                 for match in _ENTITY_ID.finditer(line):
                     entity_id = match.group(1)
@@ -306,7 +310,7 @@ class ConfigFiles:
                     if _CALLS_A_SERVICE.search(line[: match.start()]):
                         continue
                     seen_here.add(entity_id)
-                    found.setdefault(entity_id, []).append(Mention(relative, number, stripped, entity_id, in_comment))
+                    found.setdefault(entity_id, []).append(Mention(relative, number, stripped, entity_id))
         return found
 
 
@@ -341,7 +345,6 @@ def out_of_reach(old_entity_id: str, new_entity_id: str, files: Optional[ConfigF
                 "text": one.text,
                 "replace": old_entity_id,
                 "with": new_entity_id,
-                "in_comment": one.in_comment,
                 # What the line belongs to, as far as the file says. Empty where
                 # the file does not parse or names nothing.
                 "in_object": holder.described() if holder else "",

@@ -98,7 +98,8 @@ def test_a_longer_id_is_not_matched_by_a_shorter_one(config):
     assert len(config.mentions("sensor.bad_ventil_geratestatus")) == 1
 
 
-def test_a_commented_out_line_is_marked_as_such(tmp_path):
+def test_a_commented_out_line_is_not_a_reference(tmp_path):
+    """Home Assistant does not read a comment, so nothing there can break."""
     (tmp_path / "configuration.yaml").write_text(CONFIGURATION, encoding="utf-8")
     (tmp_path / "packages").mkdir()
     (tmp_path / "packages" / "one.yaml").write_text(
@@ -106,7 +107,32 @@ def test_a_commented_out_line_is_marked_as_such(tmp_path):
     )
     found = ConfigFiles(str(tmp_path)).mentions("sensor.old_one")
 
-    assert [one.in_comment for one in found] == [True, False]
+    assert [one.line for one in found] == [2]
+
+
+def test_a_comment_at_the_end_of_a_line_is_cut_off(tmp_path):
+    """What stands before the comment is read; what stands after it is not."""
+    (tmp_path / "configuration.yaml").write_text(CONFIGURATION, encoding="utf-8")
+    (tmp_path / "packages").mkdir()
+    (tmp_path / "packages" / "one.yaml").write_text(
+        "entity_id: sensor.still_here  # was sensor.long_gone\n", encoding="utf-8"
+    )
+    files = ConfigFiles(str(tmp_path))
+
+    assert len(files.mentions("sensor.still_here")) == 1
+    assert files.mentions("sensor.long_gone") == []
+
+
+def test_a_colour_is_not_a_comment(tmp_path):
+    """`\'#ffc107\'` in a dashboard template has no space before the hash."""
+    (tmp_path / "configuration.yaml").write_text(CONFIGURATION, encoding="utf-8")
+    (tmp_path / "packages").mkdir()
+    (tmp_path / "packages" / "one.yaml").write_text(
+        "state: \"[[[ return x ? '#ffc107' : states['sensor.still_here'].state ]]]\"\n",
+        encoding="utf-8",
+    )
+
+    assert len(ConfigFiles(str(tmp_path)).mentions("sensor.still_here")) == 1
 
 
 def test_every_entity_named_anywhere_is_listed(config):

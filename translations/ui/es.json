@@ -147,7 +147,6 @@
     "select_replacement": "Por favor seleccione una entidad de reemplazo",
     "open_in_ha": "Abrir en Home Assistant",
     "by_hand_badge": "solo a mano",
-    "in_comment": "comentada",
     "by_hand_remaining": "{count} quedan para ti"
   },
   "messages": {

@@ -147,7 +147,6 @@
     "select_replacement": "Veuillez sélectionner une entité de remplacement",
     "open_in_ha": "Ouvrir dans Home Assistant",
     "by_hand_badge": "à toi de l'éditer",
-    "in_comment": "en commentaire",
     "by_hand_remaining": "{count} restent pour toi"
   },
   "messages": {
