@@ -1,5 +1,7 @@
-# Local checks mirroring the CI (lint + tests). Install once with:
-#   pip install pre-commit && pre-commit install
+# Local checks mirroring the CI (lint + tests), plus the two things CI can only
+# complain about after the fact: what a branch is called and what a commit says
+# it is. Install once with:
+#   pip install pre-commit && pre-commit install --hook-type pre-commit --hook-type commit-msg
 # Run on all files:
 #   pre-commit run --all-files
 exclude: '^(venv.*|legacy|node_modules|static)/'
@@ -27,6 +29,21 @@ repos:
 
   - repo: local
     hooks:
+      # The release notes are built from the commit messages, and the changelog
+      # is what Home Assistant shows before an update.
+      - id: commit-message
+        name: the commit message says what kind of change it is
+        entry: python3 scripts/check_commit_message.py
+        language: system
+        stages: [commit-msg]
+
+      - id: branch-name
+        name: the branch is one to work on
+        entry: python3 scripts/check_branch_name.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: pytest
         name: pytest
         entry: pytest
