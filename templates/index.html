@@ -5101,17 +5101,40 @@
                     }
                 },
 
+                // How far the rule that names this entity reaches, as one of the
+                // scope buttons - or null where no rule of the user's does.
+                scopeThatApplied(entity) {
+                    const resolution = entity?.resolution;
+                    if (!resolution || resolution.won_by !== 'rule:user' || !resolution.rule_id) return null;
+                    const match = resolution.matched_on;
+                    if (!match) return null;
+                    const named = (match.filters || []).some(one => one.registry_id === entity.registry_id);
+                    if (named) return 'here';
+                    if (match.model) return 'model';
+                    if (match.integration) return 'integration';
+                    return 'all';
+                },
+
                 // Toggle entity expand state
                 toggleEntityExpand(entity) {
                     entity._expanded = !entity._expanded;
                     if (entity._expanded && entity._ruleScope === undefined) {
-                        // A type that several integrations supply means different things
-                        // per integration ("Tür" is a contact sensor here, a fridge there),
-                        // so that is the safer default.
-                        const perIntegration = entity.type_integration_count || 0;
-                        entity._ruleScope = (entity.type_count || 0) > 1
-                            ? (perIntegration && perIntegration < entity.type_count ? 'integration' : 'all')
-                            : 'here';
+                        // Where a rule already names this entity, its own reach is the
+                        // answer: changing the word is a change to that rule, and
+                        // offering a wider reach than the one in force would quietly
+                        // rename entities the user was not looking at.
+                        const already = this.scopeThatApplied(entity);
+                        if (already) {
+                            entity._ruleScope = already;
+                        } else {
+                            // A type that several integrations supply means different things
+                            // per integration ("Tür" is a contact sensor here, a fridge there),
+                            // so that is the safer default.
+                            const perIntegration = entity.type_integration_count || 0;
+                            entity._ruleScope = (entity.type_count || 0) > 1
+                                ? (perIntegration && perIntegration < entity.type_count ? 'integration' : 'all')
+                                : 'here';
+                        }
                     }
                     if (entity._expanded && entity._currentSuffix === undefined) {
                         const initialSuffix = this.getEntitySuffix(entity);
