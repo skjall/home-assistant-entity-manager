@@ -321,11 +321,34 @@ class ConfigFiles:
 _shared: Optional[ConfigFiles] = None
 
 
+# Reading the configuration directory is opt-in. The Supervisor fixes the mount
+# when the container is built, so the directory is there either way; whether the
+# add-on reads it is the user's call. Off, the add-on sees exactly what the
+# configuration API shows it, which is what it saw before this existed.
+SCANNING_OFF = "off"
+SCANNING_BETA = "beta"
+SCANNING_MODES = (SCANNING_OFF, SCANNING_BETA)
+
+
+def scanning() -> bool:
+    """Whether the user has switched the reading on."""
+    configured = (os.getenv("SCAN_YAML") or "").strip().lower()
+    if configured in SCANNING_MODES:
+        return configured == SCANNING_BETA
+    if configured:
+        logger.warning("Unknown scan_yaml value %r, reading nothing", configured)
+    return False
+
+
 def shared(domains: Optional[Iterable[str]] = None) -> ConfigFiles:
-    """One reading of the directory for the whole process, aged out by itself."""
+    """One reading of the directory for the whole process, aged out by itself.
+
+    An empty root where the setting is off: nothing is opened, `available()` is
+    false, and every caller already handles a directory that is not mounted.
+    """
     global _shared
     if _shared is None:
-        _shared = ConfigFiles(domains=domains)
+        _shared = ConfigFiles(domains=domains) if scanning() else ConfigFiles(root="", domains=domains)
     return _shared
 
 

@@ -9,8 +9,13 @@ export Z2M_BASE_TOPIC=$(bashio::config 'z2m_base_topic' || echo 'zigbee2mqtt')
 export EXTERNAL_ACCESS=$(bashio::config 'external_access' | paste -sd, -)
 export EXTERNAL_API=$(bashio::config 'external_api' || echo 'read')
 export MCP=$(bashio::config 'mcp' || echo 'off')
-# Whether the add-on may rewrite the user's own YAML. Off unless asked.
+# Whether the add-on reads the user's own YAML, and whether it may rewrite it.
+# Both off unless asked. Rewriting needs the reading: nothing is found without it.
+export SCAN_YAML=$(bashio::config 'scan_yaml' || echo 'off')
 export FIX_YAML=$(bashio::config 'fix_yaml' || echo 'off')
+if [ "${FIX_YAML}" = "beta" ] && [ "${SCAN_YAML}" != "beta" ]; then
+    bashio::log.warning "fix_yaml is on and scan_yaml is off: nothing is scanned, so nothing is rewritten"
+fi
 
 bashio::log.info "Starting Entity Manager..."
 

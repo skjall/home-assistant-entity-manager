@@ -45,6 +45,7 @@
     "external_access": [],
     "mcp": "off",
     "external_api": "read",
+    "scan_yaml": "off",
     "fix_yaml": "off"
   },
   "schema": {
@@ -57,6 +58,7 @@
     ],
     "mcp": "list(off|read|write)?",
     "external_api": "list(off|read|write)?",
+    "scan_yaml": "list(off|beta)?",
     "fix_yaml": "list(off|beta)?"
   },
   "environment": {

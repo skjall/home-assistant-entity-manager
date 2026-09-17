@@ -253,3 +253,59 @@ def test_without_the_mount_nothing_is_claimed(tmp_path):
 def test_the_path_is_shown_the_way_home_assistant_names_it(config):
     """The mount is at /homeassistant; the user knows the directory as /config."""
     assert config.shown_as("packages/balkon_wasser.yaml") == "/config/packages/balkon_wasser.yaml"
+
+
+# --- the reading is opt-in ---------------------------------------------------
+#
+# The Supervisor fixes the mount when the container is built, so the directory
+# is there whether or not the user wants it read. These say what decides.
+
+
+def a_root_with_a_configuration(tmp_path):
+    (tmp_path / "configuration.yaml").write_text("script: !include_dir_merge_named packages/\n")
+    return tmp_path
+
+
+def test_nothing_is_read_unless_it_is_switched_on(tmp_path, monkeypatch):
+    import config_files
+
+    a_root_with_a_configuration(tmp_path)
+    monkeypatch.setenv("HA_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("SCAN_YAML", raising=False)
+    monkeypatch.setattr(config_files, "_shared", None)
+
+    assert config_files.scanning() is False
+    assert config_files.shared().available() is False
+
+
+def test_beta_switches_the_reading_on(tmp_path, monkeypatch):
+    import config_files
+
+    a_root_with_a_configuration(tmp_path)
+    monkeypatch.setenv("HA_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("SCAN_YAML", "beta")
+    monkeypatch.setattr(config_files, "_shared", None)
+
+    assert config_files.scanning() is True
+    assert config_files.shared().available() is True
+
+
+def test_a_value_nobody_recognises_reads_nothing(monkeypatch):
+    import config_files
+
+    monkeypatch.setenv("SCAN_YAML", "yes please")
+
+    assert config_files.scanning() is False
+
+
+def test_a_directory_handed_over_is_read_either_way(tmp_path, monkeypatch):
+    """The switch is about what the add-on decides to open, not about the class.
+
+    Tests hand `ConfigFiles` a directory outright, and so could a deployment.
+    """
+    import config_files
+
+    a_root_with_a_configuration(tmp_path)
+    monkeypatch.delenv("SCAN_YAML", raising=False)
+
+    assert config_files.ConfigFiles(root=str(tmp_path)).available() is True
