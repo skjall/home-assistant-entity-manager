@@ -78,6 +78,11 @@ def _field_names(template: str) -> Tuple[str, ...]:
         raise NamingTemplateError(f"Invalid template syntax: {error}") from error
 
 
+# Stands in for the field being looked for while the pattern is built. Not a
+# character a name can carry, so it survives the cleaning unchanged.
+_MARKER = "\x00field\x00"
+
+
 def _clean_rendered_name(value: str) -> str:
     """Clean whitespace and separators left behind by empty placeholders."""
     value = re.sub(r"\s+", " ", value).strip()
@@ -293,17 +298,28 @@ class NamingTemplates:
         for template in candidates:
             if _field_names(template).count(field_name) != 1:
                 continue
-            pattern_parts = []
-            for literal, field, _, _ in Formatter().parse(template):
-                pattern_parts.append(re.escape(literal))
-                if not field:
-                    continue
-                if field == field_name:
-                    pattern_parts.append(r"(?P<target>.+?)")
-                else:
-                    value = str(context.get(field) or "")
-                    pattern_parts.append(re.escape(value))
-            match = re.fullmatch("".join(pattern_parts), rendered_name.strip(), flags=re.IGNORECASE)
+            # Taking a name apart is rendering it backwards, so the pattern is
+            # built the way the name was: render the template with everything
+            # known and a marker where the wanted field goes, then clean it as
+            # a rendered name is cleaned. Building the pattern straight from
+            # the template instead left the separators of empty fields in it -
+            # "{area} {device} {entity}" for an automation, which has no
+            # device, wanted two spaces where the name has one, matched
+            # nothing, and fell through to the bare "{entity}", which answers
+            # with the whole name. The area was then rendered in front of a
+            # name that already carried it: "Badezimmer Badezimmer
+            # Heizungssteuerung".
+            values = {field: str(context.get(field) or "") for field in ALLOWED_FIELDS}
+            values[field_name] = _MARKER
+            try:
+                rendered = _clean_rendered_name(template.format_map(values))
+            except (KeyError, IndexError, ValueError):
+                continue
+            if rendered.count(_MARKER) != 1:
+                continue
+            before, after = rendered.split(_MARKER)
+            pattern = re.escape(before) + r"(?P<target>.+?)" + re.escape(after)
+            match = re.fullmatch(pattern, rendered_name.strip(), flags=re.IGNORECASE)
             if match:
                 return _clean_rendered_name(match.group("target"))
         return None
