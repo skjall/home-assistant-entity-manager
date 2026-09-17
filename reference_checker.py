@@ -651,7 +651,7 @@ class ReferenceChecker:
             if entity_id.split(".")[0] != missing_domain:
                 continue
 
-            # An entity parked mid-swap is the one being replaced.
+            # An entity left on the interim id is the one that was replaced.
             if entity_id.endswith(INTERIM_SUFFIX):
                 continue
 
@@ -676,8 +676,8 @@ class ReferenceChecker:
 
         The log records one hop at a time and an entity can be renamed again, so
         the chain is followed to its end. It ends nowhere often enough to check:
-        a device swap parks an entity on an interim id, and where the way back
-        was never recorded the chain stops at something that is gone.
+        a device swap parks the old entity on an interim id, and where the old
+        device was deleted the chain stops at something that is gone.
         """
         if self.rename_log is None:
             return None
@@ -692,11 +692,12 @@ class ReferenceChecker:
         if not current or current not in existing:
             logger.debug("The rename chain for %s ends at %s, which is gone", missing_entity_id, current)
             return None
-        # A swap that never finished leaves the old entity sitting on its interim
-        # id. It exists, so the check above lets it through, and it is still the
-        # entity being replaced rather than the one that replaced it.
+        # A swap can keep the old device, renamed, and then the chain ends on the
+        # interim id. It exists, so the check above lets it through, and it is
+        # still the entity that was replaced rather than the one replacing it.
+        # Where the new device has no matching entity there is nothing to offer.
         if current.endswith(INTERIM_SUFFIX):
-            logger.debug("The rename chain for %s ends mid-swap at %s", missing_entity_id, current)
+            logger.debug("The rename chain for %s ends on the replaced entity %s", missing_entity_id, current)
             return None
         details = (self._entity_details or {}).get(current, {})
         return Suggestion(

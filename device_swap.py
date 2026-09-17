@@ -22,8 +22,9 @@ from typing import Any, Dict, List, Optional
 from jobs import JobStore
 
 # What an entity of the old device is parked on while the new one takes its id.
-# An entity wearing this is mid-swap: it is the one being replaced, so it is
-# never the answer to "what became of this?".
+# Keeping the old device under that name is one of the choices the swap offers,
+# so an entity can wear this for good. It is still the one that was replaced,
+# so it is never the answer to "what became of this?".
 INTERIM_SUFFIX = "_swapout"
 
 logger = logging.getLogger(__name__)

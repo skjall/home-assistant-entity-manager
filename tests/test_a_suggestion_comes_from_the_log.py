@@ -83,7 +83,7 @@ async def test_a_chain_is_followed_to_its_end(checker):
 
 
 async def test_a_chain_ending_at_something_gone_is_not_offered(checker):
-    """A device swap parks an entity on an interim id and may never come back."""
+    """A swap parks the old entity on an interim id, and deleting it ends the chain nowhere."""
     checker.rename_log = Log(
         {"binary_sensor.buro_rechtes_fenster_status": "binary_sensor.buro_rechtes_fenster_status_swapout"}
     )
@@ -236,11 +236,12 @@ def test_a_different_first_word_scores_nothing(checker):
     assert reasons == []
 
 
-async def test_an_entity_parked_mid_swap_is_not_offered(checker):
-    """A swap that never finished leaves the old entity on its interim id.
+async def test_the_replaced_entity_is_not_offered(checker):
+    """A swap may keep the old device under its interim id, and often does.
 
     It exists, so it passes the check that the chain ends somewhere real - and
-    it is still the entity being replaced, not the one that replaced it.
+    it is still the entity that was replaced, not the one replacing it. Where
+    the new device has no matching entity, there is no answer to give.
     """
     parked = "binary_sensor.buro_rechtes_fenster_status_swapout"
     checker._existing_entities = {parked}
