@@ -3591,8 +3591,11 @@
                         return this.brokenReferences;
                     }
 
-                    // Filter by area_id (assigned area of the automation/scene/script)
-                    return this.brokenReferences.filter(ref => ref.area_id === this.selectedArea);
+                    // Filter by area_id (assigned area of the automation/scene/script).
+                    // A reference in a file belongs to no area, and neither does
+                    // a helper: those stay visible whichever area is picked,
+                    // because filtering them out hid them everywhere at once.
+                    return this.brokenReferences.filter(ref => !ref.area_id || ref.area_id === this.selectedArea);
                 },
 
                 // Computed: Broken references grouped by missing_entity_id
