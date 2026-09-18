@@ -223,7 +223,11 @@
     "select_device": "Sélectionner un appareil",
     "select_area": "Sélectionner une zone",
     "disabled_badge": "désactivé",
-    "filter_placeholder": "Filtrer les appareils..."
+    "filter_placeholder": "Filtrer les appareils...",
+    "enable": "Activer l’appareil",
+    "enabling": "Activation…",
+    "enabled": "Appareil activé",
+    "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil."
   },
   "units": {
     "entities": "Entités",

@@ -223,7 +223,11 @@
     "select_device": "Select a device",
     "select_area": "Select an area",
     "disabled_badge": "disabled",
-    "filter_placeholder": "Filter devices..."
+    "filter_placeholder": "Filter devices...",
+    "enable": "Enable device",
+    "enabling": "Enabling…",
+    "enabled": "Device enabled",
+    "enable_it_first": "The device is disabled – enable the device first."
   },
   "units": {
     "entities": "Entities",

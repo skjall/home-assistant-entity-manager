@@ -1842,6 +1842,16 @@
                                                 <span x-text="device.base_name"></span>
                                                 <span x-show="device.disabled_by" class="disabled-badge" x-text="t('device.disabled_badge')">disabled</span>
                                             </div>
+                                            <!-- The only thing that can be done to a device
+                                                 somebody switched off. Its entities cannot be
+                                                 enabled before it is. -->
+                                            <button x-show="device.disabled_by"
+                                                    @click.stop="enableDevice(device.id)"
+                                                    class="btn btn-secondary btn-sm mt-1"
+                                                    :disabled="enablingDeviceId === device.id"
+                                                    x-text="enablingDeviceId === device.id
+                                                        ? t('device.enabling')
+                                                        : t('device.enable')"></button>
                                             <div class="device-meta" x-show="device.manufacturer || device.integrations?.length">
                                                 <span x-show="device.manufacturer" x-text="device.manufacturer"></span>
                                                 <span x-show="device.manufacturer && device.integrations?.length"> · </span>
@@ -2966,6 +2976,8 @@
                 // Filters
                 onlyChanges: false,
                 showDisabled: false,
+                // Which device is being switched on, so its button can say so.
+                enablingDeviceId: null,
                 deviceFilter: '',
 
                 // Stats
@@ -3371,7 +3383,10 @@
                         devices = this.hierarchy.devices.filter(d => d.area_id === this.selectedArea);
                     }
 
-                    // Filter out disabled devices unless showDisabled is true
+                    // A disabled device is shown only under "show disabled", and
+                    // then it offers the one thing that works on it: switching it
+                    // back on. Its entities stay hidden either way - Home Assistant
+                    // refuses to enable one while the device is off.
                     if (!this.showDisabled) {
                         devices = devices.filter(d => !d.disabled_by);
                     }
@@ -3531,6 +3546,7 @@
                         }
 
                         // Apply filters
+                        entities = entities.filter(e => !this.onADisabledDevice(e));
                         if (!this.showDisabled) {
                             entities = entities.filter(e => !e.disabled_by);
                         }
@@ -3583,6 +3599,7 @@
                     }
 
                     // Apply filters
+                    entities = entities.filter(e => !this.onADisabledDevice(e));
                     if (!this.showDisabled) {
                         entities = entities.filter(e => !e.disabled_by);
                     }
@@ -4317,6 +4334,19 @@
                 },
 
                 // Check if entity needs rename (uses entity's own device/area context)
+                // Whether this entity sits on a device somebody switched off.
+                //
+                // Home Assistant disables the entities with the device, marking
+                // them `config_entry`, and refuses to enable one while the device
+                // is off: "Device is disabled". Showing them means offering work
+                // that cannot be done - the batch tried six of them and reported
+                // six failures.
+                onADisabledDevice(entity) {
+                    if (!entity?.device_id) return false;
+                    const device = (this.hierarchy.devices || []).find(one => one.id === entity.device_id);
+                    return !!device?.disabled_by;
+                },
+
                 entityNeedsRename(entity) {
                     // Touch previewVersion to ensure Alpine re-evaluates when previews change
                     const _ = this.previewVersion;
@@ -5059,10 +5089,10 @@
                             entity.disabled_by = null;
                             this.showMessage(`Enabled: ${entity.original_name || entity.id}`, 'success');
                         } else if (data.error === 'device_disabled') {
-                            // Device is disabled - offer to enable it
-                            if (confirm('The device is disabled. Enable the device first?')) {
-                                await this.enableDevice(entity.device_id);
-                            }
+                            // Not reachable from the list any more, since a disabled
+                            // device's entities are not shown. Say what has to happen
+                            // rather than asking through a browser dialog.
+                            this.showMessage(this.t('device.enable_it_first'), 'error');
                         } else {
                             throw new Error(data.message || data.error || 'Failed to enable entity');
                         }
@@ -5072,7 +5102,8 @@
                 },
 
                 async enableDevice(deviceId) {
-                    if (!deviceId) return;
+                    if (!deviceId || this.enablingDeviceId) return;
+                    this.enablingDeviceId = deviceId;
 
                     try {
                         const response = await fetch('api/enable_device', {
@@ -5085,22 +5116,19 @@
 
                         const data = await response.json();
                         if (data.success) {
-                            // Update device in hierarchy
-                            const device = this.hierarchy.devices.find(d => d.id === deviceId);
-                            if (device) {
-                                device.disabled_by = null;
-                            }
-                            // Also enable all entities of this device
-                            this.hierarchy.entities
-                                .filter(e => e.device_id === deviceId)
-                                .forEach(e => e.disabled_by = null);
-
-                            this.showMessage('Device enabled! Entities can now be enabled.', 'success');
+                            // Which of its entities came back on is Home Assistant's
+                            // answer, not ours: it re-enables the ones it disabled
+                            // with the device and leaves the rest off. Marking them
+                            // all enabled here showed entities that were not.
+                            this.showMessage(this.t('device.enabled'), 'success');
+                            await this.loadHierarchy();
                         } else {
                             throw new Error(data.error || 'Failed to enable device');
                         }
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
+                    } finally {
+                        this.enablingDeviceId = null;
                     }
                 },
 
