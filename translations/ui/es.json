@@ -120,7 +120,7 @@
     "renamed_differently": "Home Assistant guardó «{name}»",
     "explain_translation_key": "{integration} llama a este tipo «{value}» ({key}) — desde la integración",
     "explain_builtin_class": "Home Assistant llama «{value}» a la clase de dispositivo {device_class}",
-    "supplied_stale": "La integración sigue entregando «{supplied}» — se actualiza al aplicar"
+    "supplied_stale": "El nombre es el título de la entrada del auxiliar: «{supplied}»: al aplicar también se reescribe el título."
   },
   "virtual_devices": {
     "automations": "Automatizaciones",
@@ -223,7 +223,11 @@
     "select_device": "Seleccionar un dispositivo",
     "select_area": "Seleccionar un área",
     "disabled_badge": "desactivado",
-    "filter_placeholder": "Filtrar dispositivos..."
+    "filter_placeholder": "Filtrar dispositivos...",
+    "enable": "Activar dispositivo",
+    "enabling": "Activando…",
+    "enabled": "Dispositivo activado",
+    "enable_it_first": "El dispositivo está desactivado: actívalo primero."
   },
   "units": {
     "entities": "Entidades",
