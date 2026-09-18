@@ -3842,6 +3842,25 @@
                             }
                         }
                     }
+
+                    this.showWhatWasRestored();
+                },
+
+                // Which of the three panes a phone shows. The selection came
+                // back from localStorage but this did not, so pulling the app
+                // down to reload landed on the area list however deep in a
+                // device the reader was.
+                //
+                // Read off what was actually restored rather than stored
+                // alongside it: a device that has since been removed leaves the
+                // selection empty, and the pane follows it back.
+                showWhatWasRestored() {
+                    if (!this.isMobileView()) return;
+                    if (this.selectedDevice) {
+                        this.mobileView = 'entities';
+                    } else if (this.selectedArea) {
+                        this.mobileView = 'devices';
+                    }
                 },
 
                 // ===== BROKEN REFERENCES METHODS =====
