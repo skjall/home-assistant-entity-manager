@@ -4064,8 +4064,12 @@
                 },
 
                 // Load hierarchy data
-                async loadHierarchy() {
-                    this.loading = true;
+                // `quietly` reads the list again without emptying the screen
+                // first. After one entity was renamed the reader is looking at
+                // the result, and a spinner over the whole list to fetch what
+                // they already see is the part that grates.
+                async loadHierarchy(quietly = false) {
+                    if (!quietly) this.loading = true;
                     try {
                         const [hierarchyResponse, namingResponse] = await Promise.all([
                             fetch('api/hierarchy'),
@@ -4079,13 +4083,36 @@
                             throw new Error(data.error);
                         }
 
+                        // A quiet read keeps what the reader is in the middle of:
+                        // which card is open, what stands unsaved in its field, and
+                        // which entity was just renamed. Those live on the entity
+                        // object and would otherwise be dropped with it.
+                        const held = new Map();
+                        if (quietly) {
+                            for (const one of this.hierarchy.entities || []) {
+                                held.set(one.id, {
+                                    _expanded: one._expanded,
+                                    _currentSuffix: one._currentSuffix,
+                                    _ruleScope: one._ruleScope,
+                                    _justRenamed: one._justRenamed,
+                                });
+                            }
+                        }
+
                         Object.assign(this, {
                             namingConfig: namingData,
                             hierarchy: {
                                 floors: data.floors || [],
                                 areas: data.areas || [],
                                 devices: data.devices || [],
-                                entities: (data.entities || []).map(e => ({...e, selected: false, _editing: false, _remember: false, _applying: false}))
+                                entities: (data.entities || []).map(e => ({
+                                    ...e,
+                                    selected: false,
+                                    _editing: false,
+                                    _remember: false,
+                                    _applying: false,
+                                    ...(held.get(e.id) || {}),
+                                }))
                             },
                             stats: data.stats || {}
                         });
@@ -4979,7 +5006,7 @@
                         if (!response.ok || data.error) throw new Error(data.error || 'Exception not removed');
                         entity._currentSuffix = undefined;
                         this.showMessage(this.t('entity.exception_removed'), 'success');
-                        await this.loadHierarchy();
+                        await this.loadHierarchy(true);
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     } finally {
@@ -5184,7 +5211,7 @@
                         const answer = await response.json();
                         if (!response.ok || answer.error) throw new Error(answer.error || 'Not saved');
                         this.showMessage(this.t('entity.ignored'), 'success');
-                        await this.loadHierarchy();
+                        await this.loadHierarchy(true);
                     } catch (error) {
                         this.showMessage(error.message, 'error');
                     } finally {
@@ -5257,7 +5284,7 @@
                         if (!idChanged && !nameChanged) {
                             entity._expanded = false;
                             entity._currentSuffix = undefined;
-                            if (ruleScopeApplied === 'all') await this.loadHierarchy();
+                            if (ruleScopeApplied === 'all') await this.loadHierarchy(true);
                             this.showMessage(this.t('entity.no_change'), 'success');
                             return;
                         }
@@ -5286,9 +5313,11 @@
                             }
                             entity._currentSuffix = undefined;
                             entity._justRenamed = true;
-                            if (ruleScopeApplied === 'all') {
+                            if (ruleScopeApplied === 'all' && (entity.type_count || 1) > 1) {
                                 // Other entities of this type now render differently.
-                                await this.loadHierarchy();
+                                // Where the rule reaches this one alone there is
+                                // nothing else to read back.
+                                await this.loadHierarchy(true);
                             } else if (ruleScopeApplied === 'here') {
                                 entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: typed};
                             }
