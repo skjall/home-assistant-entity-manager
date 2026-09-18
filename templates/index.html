@@ -1751,7 +1751,7 @@
                                                   x-text="area.isSpecial ? area.deviceCount + ' Devices' : getAreaEntityCount(area.id)"></span>
                                             <a x-show="!area.isSpecial"
                                                :href="'/config/areas/area/' + area.id"
-                                               target="_blank"
+                                               :target="linkTarget()"
                                                @click.stop
                                                class="text-gray-400 hover:text-blue-500 transition-colors"
                                                :title="t('area.open_in_ha')">
@@ -1850,7 +1850,7 @@
                                         </div>
                                         <!-- External link -->
                                         <a :href="'/config/devices/device/' + device.id"
-                                           target="_blank"
+                                           :target="linkTarget()"
                                            @click.stop
                                            class="device-link"
                                            :title="t('device.open_in_ha')">
@@ -2080,7 +2080,7 @@
                                                           x-show="ref.yaml_path"
                                                           x-text="ref.yaml_path"></span>
                                                 </div>
-                                                <a :href="getHAConfigUrl(ref)" target="_blank"
+                                                <a :href="getHAConfigUrl(ref)" :target="linkTarget()"
                                                    @click.stop
                                                    class="external-link ml-auto"
                                                    :title="t('broken_refs.open_in_ha')">
@@ -3998,6 +3998,19 @@
                             .map(([name, lines]) => ({name, lines: lines.sort((a, b) => a - b)}))
                             .sort((a, b) => (b.name ? 1 : 0) - (a.name ? 1 : 0)),
                     }));
+                },
+
+                // Where a link to one of Home Assistant's own pages opens.
+                //
+                // In the app the add-on is an Ingress iframe, and a new tab
+                // there is the phone's browser: the reader is handed a logged-out
+                // window instead of the device they tapped. `_top` navigates the
+                // app itself, which is what going to a device means on a phone.
+                //
+                // A desktop browser has tabs and a window wide enough to want
+                // them, so the panel stays open behind the new one.
+                linkTarget() {
+                    return this.isMobileView() ? '_top' : '_blank';
                 },
 
                 getHAConfigUrl(ref) {
