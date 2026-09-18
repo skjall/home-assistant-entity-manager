@@ -1500,6 +1500,12 @@
 
             .entity-card-simple .edit-input-group {
                 flex-direction: column;
+                /* `align-items: center` comes from the shared rule, where the
+                   group is a row and centring is vertical. Stacked, it is
+                   horizontal: the field and the button shrink to their content
+                   and sit in the middle of the card, so a type name longer than
+                   the field is cut off with room to spare on both sides. */
+                align-items: stretch;
             }
 
             .entity-card-simple .suffix-input {
