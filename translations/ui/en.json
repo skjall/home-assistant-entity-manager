@@ -120,7 +120,7 @@
     "renamed_differently": "Home Assistant stored “{name}”",
     "explain_translation_key": "{integration} calls this type “{value}” ({key}) — from the integration",
     "explain_builtin_class": "Home Assistant calls the device class {device_class} “{value}”",
-    "supplied_stale": "The integration still supplies “{supplied}” — carried along when this is applied",
+    "supplied_stale": "The name is the helper’s entry title: “{supplied}” — applying rewrites the title too.",
     "scope_domain_hint": "Only the {count} {domain} entities on devices of type {model}."
   },
   "virtual_devices": {
@@ -224,7 +224,11 @@
     "select_device": "Select a device",
     "select_area": "Select an area",
     "disabled_badge": "disabled",
-    "filter_placeholder": "Filter devices..."
+    "filter_placeholder": "Filter devices...",
+    "enable": "Enable device",
+    "enabling": "Enabling…",
+    "enabled": "Device enabled",
+    "enable_it_first": "The device is disabled – enable the device first."
   },
   "units": {
     "entities": "Entities",

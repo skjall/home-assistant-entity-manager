@@ -1500,6 +1500,12 @@
 
             .entity-card-simple .edit-input-group {
                 flex-direction: column;
+                /* `align-items: center` comes from the shared rule, where the
+                   group is a row and centring is vertical. Stacked, it is
+                   horizontal: the field and the button shrink to their content
+                   and sit in the middle of the card, so a type name longer than
+                   the field is cut off with room to spare on both sides. */
+                align-items: stretch;
             }
 
             .entity-card-simple .suffix-input {
@@ -1751,7 +1757,7 @@
                                                   x-text="area.isSpecial ? area.deviceCount + ' Devices' : getAreaEntityCount(area.id)"></span>
                                             <a x-show="!area.isSpecial"
                                                :href="'/config/areas/area/' + area.id"
-                                               target="_blank"
+                                               :target="linkTarget()"
                                                @click.stop
                                                class="text-gray-400 hover:text-blue-500 transition-colors"
                                                :title="t('area.open_in_ha')">
@@ -1842,6 +1848,16 @@
                                                 <span x-text="device.base_name"></span>
                                                 <span x-show="device.disabled_by" class="disabled-badge" x-text="t('device.disabled_badge')">disabled</span>
                                             </div>
+                                            <!-- The only thing that can be done to a device
+                                                 somebody switched off. Its entities cannot be
+                                                 enabled before it is. -->
+                                            <button x-show="device.disabled_by"
+                                                    @click.stop="enableDevice(device.id)"
+                                                    class="btn btn-secondary btn-sm mt-1"
+                                                    :disabled="enablingDeviceId === device.id"
+                                                    x-text="enablingDeviceId === device.id
+                                                        ? t('device.enabling')
+                                                        : t('device.enable')"></button>
                                             <div class="device-meta" x-show="device.manufacturer || device.integrations?.length">
                                                 <span x-show="device.manufacturer" x-text="device.manufacturer"></span>
                                                 <span x-show="device.manufacturer && device.integrations?.length"> · </span>
@@ -1850,7 +1866,7 @@
                                         </div>
                                         <!-- External link -->
                                         <a :href="'/config/devices/device/' + device.id"
-                                           target="_blank"
+                                           :target="linkTarget()"
                                            @click.stop
                                            class="device-link"
                                            :title="t('device.open_in_ha')">
@@ -2080,7 +2096,7 @@
                                                           x-show="ref.yaml_path"
                                                           x-text="ref.yaml_path"></span>
                                                 </div>
-                                                <a :href="getHAConfigUrl(ref)" target="_blank"
+                                                <a :href="getHAConfigUrl(ref)" :target="linkTarget()"
                                                    @click.stop
                                                    class="external-link ml-auto"
                                                    :title="t('broken_refs.open_in_ha')">
@@ -2342,7 +2358,7 @@
                                                         x-text="t('entity.drift_overwrite')">Overwrite</button>
                                             </div>
                                         </div>
-                                        <p class="text-xs text-gray-500 mt-1">
+                                        <p class="text-xs text-gray-500 mt-1" x-show="resolutionExplain(entity)">
                                             <span x-text="resolutionExplain(entity)"></span>
                                             <a x-show="entity.resolution?.rule_id"
                                                :href="'settings/rules?rule=' + entity.resolution?.rule_id"
@@ -2977,6 +2993,8 @@
                 // Filters
                 onlyChanges: false,
                 showDisabled: false,
+                // Which device is being switched on, so its button can say so.
+                enablingDeviceId: null,
                 deviceFilter: '',
 
                 // Stats
@@ -3382,7 +3400,10 @@
                         devices = this.hierarchy.devices.filter(d => d.area_id === this.selectedArea);
                     }
 
-                    // Filter out disabled devices unless showDisabled is true
+                    // A disabled device is shown only under "show disabled", and
+                    // then it offers the one thing that works on it: switching it
+                    // back on. Its entities stay hidden either way - Home Assistant
+                    // refuses to enable one while the device is off.
                     if (!this.showDisabled) {
                         devices = devices.filter(d => !d.disabled_by);
                     }
@@ -3542,6 +3563,7 @@
                         }
 
                         // Apply filters
+                        entities = entities.filter(e => !this.onADisabledDevice(e));
                         if (!this.showDisabled) {
                             entities = entities.filter(e => !e.disabled_by);
                         }
@@ -3594,6 +3616,7 @@
                     }
 
                     // Apply filters
+                    entities = entities.filter(e => !this.onADisabledDevice(e));
                     if (!this.showDisabled) {
                         entities = entities.filter(e => !e.disabled_by);
                     }
@@ -3830,6 +3853,25 @@
                             }
                         }
                     }
+
+                    this.showWhatWasRestored();
+                },
+
+                // Which of the three panes a phone shows. The selection came
+                // back from localStorage but this did not, so pulling the app
+                // down to reload landed on the area list however deep in a
+                // device the reader was.
+                //
+                // Read off what was actually restored rather than stored
+                // alongside it: a device that has since been removed leaves the
+                // selection empty, and the pane follows it back.
+                showWhatWasRestored() {
+                    if (!this.isMobileView()) return;
+                    if (this.selectedDevice) {
+                        this.mobileView = 'entities';
+                    } else if (this.selectedArea) {
+                        this.mobileView = 'devices';
+                    }
                 },
 
                 // ===== BROKEN REFERENCES METHODS =====
@@ -4011,6 +4053,19 @@
                     }));
                 },
 
+                // Where a link to one of Home Assistant's own pages opens.
+                //
+                // In the app the add-on is an Ingress iframe, and a new tab
+                // there is the phone's browser: the reader is handed a logged-out
+                // window instead of the device they tapped. `_top` navigates the
+                // app itself, which is what going to a device means on a phone.
+                //
+                // A desktop browser has tabs and a window wide enough to want
+                // them, so the panel stays open behind the new one.
+                linkTarget() {
+                    return this.isMobileView() ? '_top' : '_blank';
+                },
+
                 getHAConfigUrl(ref) {
                     const baseUrl = window.location.origin.replace(/:\d+$/, ':8123');
                     if (ref.config_type === 'automation') {
@@ -4075,8 +4130,12 @@
                 },
 
                 // Load hierarchy data
-                async loadHierarchy() {
-                    this.loading = true;
+                // `quietly` reads the list again without emptying the screen
+                // first. After one entity was renamed the reader is looking at
+                // the result, and a spinner over the whole list to fetch what
+                // they already see is the part that grates.
+                async loadHierarchy(quietly = false) {
+                    if (!quietly) this.loading = true;
                     try {
                         const [hierarchyResponse, namingResponse] = await Promise.all([
                             fetch('api/hierarchy'),
@@ -4090,13 +4149,36 @@
                             throw new Error(data.error);
                         }
 
+                        // A quiet read keeps what the reader is in the middle of:
+                        // which card is open, what stands unsaved in its field, and
+                        // which entity was just renamed. Those live on the entity
+                        // object and would otherwise be dropped with it.
+                        const held = new Map();
+                        if (quietly) {
+                            for (const one of this.hierarchy.entities || []) {
+                                held.set(one.id, {
+                                    _expanded: one._expanded,
+                                    _currentSuffix: one._currentSuffix,
+                                    _ruleScope: one._ruleScope,
+                                    _justRenamed: one._justRenamed,
+                                });
+                            }
+                        }
+
                         Object.assign(this, {
                             namingConfig: namingData,
                             hierarchy: {
                                 floors: data.floors || [],
                                 areas: data.areas || [],
                                 devices: data.devices || [],
-                                entities: (data.entities || []).map(e => ({...e, selected: false, _editing: false, _remember: false, _applying: false}))
+                                entities: (data.entities || []).map(e => ({
+                                    ...e,
+                                    selected: false,
+                                    _editing: false,
+                                    _remember: false,
+                                    _applying: false,
+                                    ...(held.get(e.id) || {}),
+                                }))
                             },
                             stats: data.stats || {}
                         });
@@ -4328,6 +4410,19 @@
                 },
 
                 // Check if entity needs rename (uses entity's own device/area context)
+                // Whether this entity sits on a device somebody switched off.
+                //
+                // Home Assistant disables the entities with the device, marking
+                // them `config_entry`, and refuses to enable one while the device
+                // is off: "Device is disabled". Showing them means offering work
+                // that cannot be done - the batch tried six of them and reported
+                // six failures.
+                onADisabledDevice(entity) {
+                    if (!entity?.device_id) return false;
+                    const device = (this.hierarchy.devices || []).find(one => one.id === entity.device_id);
+                    return !!device?.disabled_by;
+                },
+
                 entityNeedsRename(entity) {
                     // Touch previewVersion to ensure Alpine re-evaluates when previews change
                     const _ = this.previewVersion;
@@ -4577,9 +4672,15 @@
                         case 'device_class':
                             return this.t('entity.explain_device_class', {value});
                         default:
-                            return r.normalized
-                                ? this.t('entity.explain_spelling', {original, value})
-                                : this.t('entity.explain_supplied', {source, value});
+                            if (r.normalized) return this.t('entity.explain_spelling', {original, value});
+                            // Where the supplied name is the entry title and we
+                            // offer to correct it, the line below says where the
+                            // name comes from and what happens to it. Saying
+                            // "supplies X" here as well left two sentences that
+                            // name the same thing differently: the type on its
+                            // own against the whole title it was cut out of.
+                            if (entity.supplied_correctable) return '';
+                            return this.t('entity.explain_supplied', {source, value});
                     }
                 },
 
@@ -4994,7 +5095,7 @@
                         if (!response.ok || data.error) throw new Error(data.error || 'Exception not removed');
                         entity._currentSuffix = undefined;
                         this.showMessage(this.t('entity.exception_removed'), 'success');
-                        await this.loadHierarchy();
+                        await this.loadHierarchy(true);
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     } finally {
@@ -5074,10 +5175,10 @@
                             entity.disabled_by = null;
                             this.showMessage(`Enabled: ${entity.original_name || entity.id}`, 'success');
                         } else if (data.error === 'device_disabled') {
-                            // Device is disabled - offer to enable it
-                            if (confirm('The device is disabled. Enable the device first?')) {
-                                await this.enableDevice(entity.device_id);
-                            }
+                            // Not reachable from the list any more, since a disabled
+                            // device's entities are not shown. Say what has to happen
+                            // rather than asking through a browser dialog.
+                            this.showMessage(this.t('device.enable_it_first'), 'error');
                         } else {
                             throw new Error(data.message || data.error || 'Failed to enable entity');
                         }
@@ -5087,7 +5188,8 @@
                 },
 
                 async enableDevice(deviceId) {
-                    if (!deviceId) return;
+                    if (!deviceId || this.enablingDeviceId) return;
+                    this.enablingDeviceId = deviceId;
 
                     try {
                         const response = await fetch('api/enable_device', {
@@ -5100,22 +5202,19 @@
 
                         const data = await response.json();
                         if (data.success) {
-                            // Update device in hierarchy
-                            const device = this.hierarchy.devices.find(d => d.id === deviceId);
-                            if (device) {
-                                device.disabled_by = null;
-                            }
-                            // Also enable all entities of this device
-                            this.hierarchy.entities
-                                .filter(e => e.device_id === deviceId)
-                                .forEach(e => e.disabled_by = null);
-
-                            this.showMessage('Device enabled! Entities can now be enabled.', 'success');
+                            // Which of its entities came back on is Home Assistant's
+                            // answer, not ours: it re-enables the ones it disabled
+                            // with the device and leaves the rest off. Marking them
+                            // all enabled here showed entities that were not.
+                            this.showMessage(this.t('device.enabled'), 'success');
+                            await this.loadHierarchy();
                         } else {
                             throw new Error(data.error || 'Failed to enable device');
                         }
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
+                    } finally {
+                        this.enablingDeviceId = null;
                     }
                 },
 
@@ -5199,7 +5298,7 @@
                         const answer = await response.json();
                         if (!response.ok || answer.error) throw new Error(answer.error || 'Not saved');
                         this.showMessage(this.t('entity.ignored'), 'success');
-                        await this.loadHierarchy();
+                        await this.loadHierarchy(true);
                     } catch (error) {
                         this.showMessage(error.message, 'error');
                     } finally {
@@ -5272,7 +5371,7 @@
                         if (!idChanged && !nameChanged) {
                             entity._expanded = false;
                             entity._currentSuffix = undefined;
-                            if (ruleScopeApplied === 'all') await this.loadHierarchy();
+                            if (ruleScopeApplied === 'all') await this.loadHierarchy(true);
                             this.showMessage(this.t('entity.no_change'), 'success');
                             return;
                         }
@@ -5301,9 +5400,11 @@
                             }
                             entity._currentSuffix = undefined;
                             entity._justRenamed = true;
-                            if (ruleScopeApplied === 'all') {
+                            if (ruleScopeApplied === 'all' && (entity.type_count || 1) > 1) {
                                 // Other entities of this type now render differently.
-                                await this.loadHierarchy();
+                                // Where the rule reaches this one alone there is
+                                // nothing else to read back.
+                                await this.loadHierarchy(true);
                             } else if (ruleScopeApplied === 'here') {
                                 entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: typed};
                             }
@@ -5779,8 +5880,61 @@
 
                 // Sternchen im Entity-Edit: aktuelles Suffix als feste Übersetzung merken.
                 // Schlüssel = Original-Basisname (z.B. "effect color"), Wert = eingegebener Suffix.
+                // What was typed into a type field, kept the way the tick keeps
+                // it: as a rule for everything that shares the type, or as an
+                // exception for this entity alone.
+                //
+                // Returns what was written, or null where nothing was typed.
+                async rememberTypedType(entity) {
+                    const typed = entity._currentSuffix !== undefined ? entity._currentSuffix.trim() : null;
+                    if (!this.typeEdited(entity) || !typed) return null;
+                    if (entity._ruleScope !== 'here') {
+                        const learn = await fetch('api/naming/learn', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                entity_id: entity.id,
+                                value: typed,
+                                scope: entity._ruleScope || 'global'
+                            })
+                        });
+                        const learned = await learn.json();
+                        if (!learn.ok) throw new Error(learned.error || 'Rule not saved');
+                        return 'all';
+                    }
+                    const set = await fetch('api/set_entity_override', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ registry_id: entity.registry_id, override_name: typed })
+                    });
+                    const saved = await set.json();
+                    if (!set.ok || saved.error) throw new Error(saved.error || 'Exception not saved');
+                    return 'here';
+                },
+
                 // Execute ALL pending changes with batch processing to avoid timeouts
                 async executeAllChanges() {
+                    // A type typed into a field but not yet applied is a rule or an
+                    // exception waiting to be written. The batch renamed with the
+                    // word and threw the rule away, so the next entity of that type
+                    // was proposed the old name again.
+                    let wroteARule = false;
+                    for (const one of this.filteredEntities) {
+                        if (!this.typeEdited(one)) continue;
+                        try {
+                            if (await this.rememberTypedType(one)) wroteARule = true;
+                        } catch (error) {
+                            this.showMessage('Error: ' + error.message, 'error');
+                            return;
+                        }
+                    }
+                    if (wroteARule) {
+                        // Read the names back rather than working them out here:
+                        // a rule reaches every entity of its type, and the server
+                        // renders them, numbering included.
+                        await this.loadHierarchy();
+                    }
+
                     // Find all entities that need renaming
                     const entitiesToChange = this.filteredEntities.filter(e => this.entityNeedsRename(e));
                     // Z2M devices in the current view whose Z2M name drifted from the HA name
