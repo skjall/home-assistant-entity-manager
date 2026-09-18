@@ -5817,8 +5817,61 @@
 
                 // Sternchen im Entity-Edit: aktuelles Suffix als feste Übersetzung merken.
                 // Schlüssel = Original-Basisname (z.B. "effect color"), Wert = eingegebener Suffix.
+                // What was typed into a type field, kept the way the tick keeps
+                // it: as a rule for everything that shares the type, or as an
+                // exception for this entity alone.
+                //
+                // Returns what was written, or null where nothing was typed.
+                async rememberTypedType(entity) {
+                    const typed = entity._currentSuffix !== undefined ? entity._currentSuffix.trim() : null;
+                    if (!this.typeEdited(entity) || !typed) return null;
+                    if (entity._ruleScope !== 'here') {
+                        const learn = await fetch('api/naming/learn', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                entity_id: entity.id,
+                                value: typed,
+                                scope: entity._ruleScope || 'global'
+                            })
+                        });
+                        const learned = await learn.json();
+                        if (!learn.ok) throw new Error(learned.error || 'Rule not saved');
+                        return 'all';
+                    }
+                    const set = await fetch('api/set_entity_override', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ registry_id: entity.registry_id, override_name: typed })
+                    });
+                    const saved = await set.json();
+                    if (!set.ok || saved.error) throw new Error(saved.error || 'Exception not saved');
+                    return 'here';
+                },
+
                 // Execute ALL pending changes with batch processing to avoid timeouts
                 async executeAllChanges() {
+                    // A type typed into a field but not yet applied is a rule or an
+                    // exception waiting to be written. The batch renamed with the
+                    // word and threw the rule away, so the next entity of that type
+                    // was proposed the old name again.
+                    let wroteARule = false;
+                    for (const one of this.filteredEntities) {
+                        if (!this.typeEdited(one)) continue;
+                        try {
+                            if (await this.rememberTypedType(one)) wroteARule = true;
+                        } catch (error) {
+                            this.showMessage('Error: ' + error.message, 'error');
+                            return;
+                        }
+                    }
+                    if (wroteARule) {
+                        // Read the names back rather than working them out here:
+                        // a rule reaches every entity of its type, and the server
+                        // renders them, numbering included.
+                        await this.loadHierarchy();
+                    }
+
                     // Find all entities that need renaming
                     const entitiesToChange = this.filteredEntities.filter(e => this.entityNeedsRename(e));
                     // Z2M devices in the current view whose Z2M name drifted from the HA name
