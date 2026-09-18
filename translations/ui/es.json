@@ -80,7 +80,6 @@
     "enable": "Activar",
     "no_name": "(sin nombre)",
     "type_label": "Tipo:",
-    "apply": "Aplicar",
     "scope_here": "Solo aquí",
     "source_rule_system": "Predeterminado",
     "source_legacy_parse": "derivado",

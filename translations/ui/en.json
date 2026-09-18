@@ -80,7 +80,6 @@
     "enable": "Enable",
     "no_name": "(no name)",
     "type_label": "Type:",
-    "apply": "Apply",
     "scope_here": "Here only",
     "source_rule_system": "Built-in",
     "source_legacy_parse": "derived",
