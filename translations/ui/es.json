@@ -223,7 +223,11 @@
     "select_device": "Seleccionar un dispositivo",
     "select_area": "Seleccionar un área",
     "disabled_badge": "desactivado",
-    "filter_placeholder": "Filtrar dispositivos..."
+    "filter_placeholder": "Filtrar dispositivos...",
+    "enable": "Activar dispositivo",
+    "enabling": "Activando…",
+    "enabled": "Dispositivo activado",
+    "enable_it_first": "El dispositivo está desactivado: actívalo primero."
   },
   "units": {
     "entities": "Entidades",
