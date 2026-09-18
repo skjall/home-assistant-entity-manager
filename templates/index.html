@@ -1498,14 +1498,12 @@
                 gap: 8px;
             }
 
+            /* The group stacked here for a full-width Apply button beneath the
+               field. What is left beside the field is one icon, and stacking
+               left it alone under the field with nothing to belong to. A row
+               gives the field the whole width and the icon its own end of it. */
             .entity-card-simple .edit-input-group {
-                flex-direction: column;
-                /* `align-items: center` comes from the shared rule, where the
-                   group is a row and centring is vertical. Stacked, it is
-                   horizontal: the field and the button shrink to their content
-                   and sit in the middle of the card, so a type name longer than
-                   the field is cut off with room to spare on both sides. */
-                align-items: stretch;
+                align-items: center;
             }
 
             .entity-card-simple .suffix-input {
@@ -2269,7 +2267,7 @@
                                             </span>
                                             <div class="btn-group">
                                                 <!-- Quick apply button - hide in no-area mode -->
-                                                <template x-if="selectedArea !== '__no_area__' && entityNeedsRename(entity)">
+                                                <template x-if="selectedArea !== '__no_area__' && (entityNeedsRename(entity) || typeEdited(entity))">
                                                     <button @click.stop="quickApplyEntity(entity)"
                                                             class="action-btn"
                                                             :class="{
@@ -2311,7 +2309,7 @@
                                                        :value="entity._currentSuffix !== undefined ? entity._currentSuffix : (entity.base_name || '')"
                                                        @input="updateEntityPreview(entity, $event.target.value)"
                                                        @blur="$event.target.value = $event.target.value.trim(); updateEntityPreview(entity, $event.target.value)"
-                                                       @keyup.enter="saveEntitySuffix(entity)"
+                                                       @keyup.enter="quickApplyEntity(entity)"
                                                        :placeholder="t('entity.suffix_placeholder')">
                                                 <button @click="keepWhatItIsCalled(entity)"
                                                         class="btn btn-ghost btn-sm"
@@ -2326,12 +2324,6 @@
                                                         :disabled="applyingEntityId"
                                                         :title="typeEdited(entity) ? t('entity.revert') : t('entity.remove_exception')">
                                                     <i :class="typeEdited(entity) ? 'ri-arrow-go-back-line' : 'ri-delete-bin-line'"></i>
-                                                </button>
-                                                <button @click="saveEntitySuffix(entity)"
-                                                        class="btn btn-primary btn-sm"
-                                                        :disabled="applyingEntityId || renamingDevice || executing">
-                                                    <i x-show="applyingEntityId === entity.id" class="ri-loader-4-line animate-spin"></i>
-                                                    <span x-text="applyingEntityId === entity.id ? t('entity.applying') : t('entity.apply')">Apply</span>
                                                 </button>
                                             </div>
                                             <span x-show="isEntityIdTaken(entity)" class="text-red-500 text-xs">
@@ -2403,6 +2395,17 @@
                                                         :title="t('entity.scope_model_hint', {model: entity.device_model, count: entity.type_model_count || 0})">
                                                     <span class="scope-model" x-text="entity.device_model"></span>
                                                     <span class="scope-count" x-text="entity.type_model_count || 0"></span>
+                                                </button>
+                                                <!-- An integration supplies one name for what it measures
+                                                     and what it sets; the domain is what tells them apart. -->
+                                                <button type="button" class="scope-option"
+                                                        x-show="entity.device_model && entity.type_model_domain_count"
+                                                        :class="entity._ruleScope === 'domain' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'domain'"
+                                                        :title="t('entity.scope_domain_hint', {domain: entityDomain(entity), model: entity.device_model, integration: entity.platform, count: entity.type_model_domain_count || 0})">
+                                                    <span x-text="entityDomain(entity)"></span>
+                                                    <span class="scope-model" x-text="entity.device_model"></span>
+                                                    <span class="scope-count" x-text="entity.type_model_domain_count || 0"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
                                                         :class="entity._ruleScope === 'here' ? 'is-active' : ''"
@@ -3359,7 +3362,7 @@
                                 if (!this.showDisabled) {
                                     deviceEntities = deviceEntities.filter(e => !e.disabled_by);
                                 }
-                                return deviceEntities.some(e => this.entityNeedsRename(e));
+                                return deviceEntities.some(e => this.staysInChangesFilter(e));
                             });
                         });
                     }
@@ -3436,7 +3439,7 @@
                             if (!this.showDisabled) {
                                 deviceEntities = deviceEntities.filter(e => !e.disabled_by);
                             }
-                            return deviceEntities.some(e => this.entityNeedsRename(e));
+                            return deviceEntities.some(e => this.staysInChangesFilter(e));
                         });
                     }
 
@@ -3566,7 +3569,7 @@
 
                         // For onlyChanges, check if any entities need rename
                         if (this.onlyChanges) {
-                            entities = entities.filter(e => this.entityNeedsRename(e));
+                            entities = entities.filter(e => this.staysInChangesFilter(e));
                         }
 
                         if (entities.length > 0) {
@@ -3617,7 +3620,7 @@
                         entities = entities.filter(e => !e.disabled_by);
                     }
                     if (this.onlyChanges) {
-                        entities = entities.filter(e => this.entityNeedsRename(e));
+                        entities = entities.filter(e => this.staysInChangesFilter(e));
                     }
 
                     // Sort alphabetically by base_name or original_name (using browser locale)
@@ -4062,22 +4065,31 @@
                     return this.isMobileView() ? '_top' : '_blank';
                 },
 
+                // A path, not a URL. The add-on is served through Ingress, so
+                // Home Assistant's own pages sit on the host the reader already
+                // has - whatever address, scheme and port that is.
+                //
+                // This built an origin instead, replacing whatever port was
+                // there with 8123. Home Assistant's port is the user's to
+                // choose, and behind a proxy there is no port in the address at
+                // all, so the link led somewhere nobody is listening. The two
+                // links beside it, to an area and to a device, have always been
+                // plain paths.
                 getHAConfigUrl(ref) {
-                    const baseUrl = window.location.origin.replace(/:\d+$/, ':8123');
                     if (ref.config_type === 'automation') {
                         // Use numeric_id for automation edit links (required by HA)
                         const id = ref.numeric_id || ref.config_id.replace('automation.', '');
-                        return `${baseUrl}/config/automation/edit/${id}`;
+                        return `/config/automation/edit/${id}`;
                     } else if (ref.config_type === 'scene') {
                         // Use numeric_id for scene edit links (required by HA)
                         const id = ref.numeric_id || ref.config_id.replace('scene.', '');
-                        return `${baseUrl}/config/scene/edit/${id}`;
+                        return `/config/scene/edit/${id}`;
                     } else if (ref.config_type === 'script') {
-                        return `${baseUrl}/config/script/edit/${ref.config_id.replace('script.', '')}`;
+                        return `/config/script/edit/${ref.config_id.replace('script.', '')}`;
                     } else if (ref.config_type === 'helper') {
                         // A helper is a config entry, and Home Assistant opens
                         // those from its helper list rather than by their id.
-                        return `${baseUrl}/config/helpers`;
+                        return '/config/helpers';
                     }
                     return '#';
                 },
@@ -4405,7 +4417,20 @@
                     return slug ? `${domain}.${slug}` : entity.id;
                 },
 
-                // Check if entity needs rename (uses entity's own device/area context)
+                // Whether "only changes" keeps this entity on screen.
+                //
+                // Typing into the type field recomputes the preview as you go,
+                // so entering the name the entity already has made the preview
+                // match it, the entity stop needing a rename and the card
+                // disappear mid-word. That is exactly the case for keeping a
+                // name the integration supplies in English: the rule changes
+                // every other entity of that type and leaves this one alone.
+                //
+                // An unsaved edit therefore holds the card, however it renders.
+                staysInChangesFilter(entity) {
+                    return this.entityNeedsRename(entity) || this.typeEdited(entity);
+                },
+
                 // Whether this entity sits on a device somebody switched off.
                 //
                 // Home Assistant disables the entities with the device, marking
@@ -4419,6 +4444,7 @@
                     return !!device?.disabled_by;
                 },
 
+                // Check if entity needs rename (uses entity's own device/area context)
                 entityNeedsRename(entity) {
                     // Touch previewVersion to ensure Alpine re-evaluates when previews change
                     const _ = this.previewVersion;
@@ -4706,6 +4732,10 @@
                     entity._currentSuffix = current;
                 },
 
+                entityDomain(entity) {
+                    return (entity.id || '').split('.')[0];
+                },
+
                 typeEdited(entity) {
                     return entity._currentSuffix !== undefined
                         && entity._currentSuffix.trim() !== (entity.base_name || '').trim();
@@ -4927,6 +4957,13 @@
                 },
 
                 // Quick apply entity rename
+                // The one thing the tick does, whatever was typed before it.
+                //
+                // There were two buttons here: the tick renamed, and Apply saved
+                // a changed type as a rule or an exception and then renamed.
+                // Nothing on screen said which was which, and changing the type
+                // and pressing the tick - the obvious thing to do - threw the
+                // change away.
                 async quickApplyEntity(entity) {
                     if (!entity || this.applyingEntityId) return;
 
@@ -4941,21 +4978,71 @@
                         return;
                     }
 
-                    // Use preview values if available (from expanded edit), otherwise calculate using entity's own context
-                    const newId = entity._previewId || this.getNewEntityIdForEntity(entity);
-                    const newName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
-                    const idChanged = entity.id !== newId;
-                    const nameChanged = entity.original_name !== newName;
-
-                    if (!idChanged && !nameChanged && !entity.supplied_correctable) {
-                        this.showMessage('No changes needed', 'info');
-                        return;
-                    }
-
                     const owned = !this.applyingEntityId;
                     if (owned) this.applyingEntityId = entity.id;
                     try {
-                        // Note: No entity-specific overrides are saved - only type mappings are used
+                        // A changed type is kept before it is used, as far as the
+                        // scope bar says: a rule for everything that shares the
+                        // type, or an exception for this entity alone.
+                        const typed = entity._currentSuffix !== undefined ? entity._currentSuffix : null;
+                        let ruleScopeApplied = null;
+                        if (this.typeEdited(entity) && typed) {
+                            if (entity._ruleScope !== 'here') {
+                                const learn = await fetch('api/naming/learn', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({
+                                        entity_id: entity.id,
+                                        value: typed,
+                                        scope: entity._ruleScope || 'global'
+                                    })
+                                });
+                                const learned = await learn.json();
+                                if (!learn.ok) throw new Error(learned.error || 'Rule not saved');
+                                ruleScopeApplied = 'all';
+                            } else {
+                                const set = await fetch('api/set_entity_override', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ registry_id: entity.registry_id, override_name: typed })
+                                });
+                                const saved = await set.json();
+                                if (!set.ok || saved.error) throw new Error(saved.error || 'Exception not saved');
+                                ruleScopeApplied = 'here';
+                            }
+                        }
+
+                        // With a rule just saved the name has to come from the
+                        // server, which knows it and the collision numbering.
+                        // Without one the preview already holds it.
+                        let newId, newName;
+                        if (ruleScopeApplied) {
+                            const rendered = await this.previewEntityNaming(entity, null);
+                            newId = rendered.entity_id;
+                            newName = rendered.entity_name;
+                        } else {
+                            newId = entity._previewId || this.getNewEntityIdForEntity(entity);
+                            newName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
+                        }
+                        const idChanged = entity.id !== newId;
+                        const nameChanged = entity.original_name !== newName;
+
+                        if (!idChanged && !nameChanged && !entity.supplied_correctable) {
+                            // A rule can leave this entity reading as before and
+                            // still change what its neighbours are called.
+                            entity._expanded = false;
+                            entity._currentSuffix = undefined;
+                            if (ruleScopeApplied === 'all') await this.loadHierarchy();
+                            this.showMessage(this.t('entity.no_change'), 'info');
+                            return;
+                        }
+
+                        if (newId !== entity.id &&
+                            this.hierarchy.entities.some(e => e.id === newId && e.registry_id !== entity.registry_id)) {
+                            this.showMessage(this.t('entity.id_conflict'), 'error');
+                            return;
+                        }
+
                         // Rename in HA
                         const response = await fetch('api/rename_entity', {
                             method: 'POST',
@@ -4990,6 +5077,12 @@
 
                             // Recompute previews for other entities (IDs may have changed)
                             this.invalidateEntityPreviews();
+                            if (ruleScopeApplied === 'all') {
+                                // Other entities of this type now render differently.
+                                await this.loadHierarchy();
+                            } else if (ruleScopeApplied === 'here') {
+                                entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: typed};
+                            }
 
                             // A name Home Assistant changed on the way in is said
                             // out loud, rather than quietly showing the wish.
@@ -5320,115 +5413,12 @@
                 },
 
                 async overwriteDriftedName(entity) {
-                    // The proposal is what the rules say; applying it is the
-                    // same work as the Apply button, so it goes the same way.
+                    // The proposal is what the rules say; writing it is the same
+                    // work the tick does, so it goes the same way.
                     if (!entity) return;
                     entity._currentSuffix = undefined;
-                    await this.saveEntitySuffix(entity);
+                    await this.quickApplyEntity(entity);
                     entity.drift = false;
-                },
-
-                async saveEntitySuffix(entity) {
-                    // The button stays pressed until the rule, the preview and the
-                    // rename are through; a second press would repeat all three.
-                    if (!entity || this.applyingEntityId) return;
-                    this.applyingEntityId = entity.id;
-
-                    try {
-                        const typed = entity._currentSuffix !== undefined ? entity._currentSuffix.trim() : null;
-                        const edited = this.typeEdited(entity);
-                        let ruleScopeApplied = null;
-                        if (edited && typed) {
-                            if (entity._ruleScope !== 'here') {
-                                const learn = await fetch('api/naming/learn', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({
-                                        entity_id: entity.id,
-                                        value: typed,
-                                        scope: entity._ruleScope === 'here' ? 'here' : (entity._ruleScope || 'global')
-                                    })
-                                });
-                                const learned = await learn.json();
-                                if (!learn.ok) throw new Error(learned.error || 'Rule not saved');
-                                ruleScopeApplied = 'all';
-                            } else {
-                                const set = await fetch('api/set_entity_override', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({ registry_id: entity.registry_id, override_name: typed })
-                                });
-                                const saved = await set.json();
-                                if (!set.ok || saved.error) throw new Error(saved.error || 'Exception not saved');
-                                ruleScopeApplied = 'here';
-                            }
-                        }
-
-                        // Name and ID come fresh from the server so they include the rule
-                        // or exception just saved and the collision numbering.
-                        const rendered = await this.previewEntityNaming(entity, null);
-                        const newName = rendered.entity_name;
-                        const newId = rendered.entity_id;
-
-                        // Prevent renaming to an entity ID that another entity already uses
-                        if (newId !== entity.id &&
-                            this.hierarchy.entities.some(e => e.id === newId && e.registry_id !== entity.registry_id)) {
-                            this.showMessage(this.t('entity.id_conflict'), 'error');
-                            return;
-                        }
-
-                        // Check if rename is actually needed
-                        const idChanged = entity.id !== newId;
-                        const nameChanged = entity.original_name !== newName;
-
-                        if (!idChanged && !nameChanged) {
-                            entity._expanded = false;
-                            entity._currentSuffix = undefined;
-                            if (ruleScopeApplied === 'all') await this.loadHierarchy(true);
-                            this.showMessage(this.t('entity.no_change'), 'success');
-                            return;
-                        }
-
-                        // Execute the actual rename in HA
-                        const renameResponse = await fetch('api/rename_entity', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                old_entity_id: entity.id,
-                                new_entity_id: idChanged ? newId : null,
-                                new_friendly_name: newName
-                            })
-                        });
-
-                        const renameData = await renameResponse.json();
-
-                        if (renameData.success) {
-                            entity._expanded = false;
-                            this.showMessage(`Renamed to "${newName}"`, 'success');
-
-                            entity.id = newId;
-                            entity.original_name = newName;
-                            if (entity._currentSuffix !== undefined) {
-                                entity.base_name = entity._currentSuffix;
-                            }
-                            entity._currentSuffix = undefined;
-                            entity._justRenamed = true;
-                            if (ruleScopeApplied === 'all' && (entity.type_count || 1) > 1) {
-                                // Other entities of this type now render differently.
-                                // Where the rule reaches this one alone there is
-                                // nothing else to read back.
-                                await this.loadHierarchy(true);
-                            } else if (ruleScopeApplied === 'here') {
-                                entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: typed};
-                            }
-                        } else {
-                            throw new Error(renameData.error || 'Rename failed');
-                        }
-                    } catch (error) {
-                        this.showMessage('Error: ' + error.message, 'error');
-                    } finally {
-                        this.applyingEntityId = null;
-                    }
                 },
 
                 // Save device override

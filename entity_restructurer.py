@@ -570,43 +570,46 @@ class EntityRestructurer:
         integration = registry.get("platform") or None
         device = self.devices.get(registry.get("device_id") or "", {})
         model = device.get("model") or None
+        # An integration supplies one name for what it measures and what it
+        # sets, so a rule may say which of the two it means.
+        domain = entity_id.partition(".")[0] or None
         rules = getattr(self.type_mappings, "rules", None) if self.type_mappings else None
         shown = normalize_display(name, rules.display_case if rules is not None else DEFAULT_CASE)
         if self.type_mappings:
             language = self.language
             if rules is not None:
                 translation_key = registry.get("translation_key")
-                rule = rules.find("translation_key", translation_key, integration, language, model)
+                rule = rules.find("translation_key", translation_key, integration, language, model, domain)
                 if rule:
                     candidates.append(
                         {
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model),
+                            "matched_on": rules.why(rule, integration, model, domain),
                         }
                     )
-                rule = rules.find("name", name, integration, language, model)
+                rule = rules.find("name", name, integration, language, model, domain)
                 if rule:
                     candidates.append(
                         {
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model),
+                            "matched_on": rules.why(rule, integration, model, domain),
                         }
                     )
                 # The device class is the widest anchor: it says what a value
                 # measures where neither a key nor a name matched.
                 device_class = registry.get("device_class") or registry.get("original_device_class")
-                rule = rules.find("device_class", device_class, integration, language, model)
+                rule = rules.find("device_class", device_class, integration, language, model, domain)
                 if rule and self._names_the_class(name, entity_id, device_class, rule["targets"].get(language, "")):
                     candidates.append(
                         {
                             "value": rule["targets"][language],
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model),
+                            "matched_on": rules.why(rule, integration, model, domain),
                         }
                     )
             # Home Assistant knows its own entities in every language it speaks,
@@ -723,7 +726,7 @@ class EntityRestructurer:
             ("name", name),
             ("device_class", device_class),
         ):
-            rule = rules.find(kind, value, integration, self.language, model)
+            rule = rules.find(kind, value, integration, self.language, model, entity_id.partition(".")[0] or None)
             if rule is None:
                 continue
             if kind == "device_class" and not self._names_the_class(

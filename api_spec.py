@@ -304,11 +304,14 @@ OPERATIONS: List[Operation] = [
         "post",
         "learn_from_correction",
         "Turn a corrected name into a rule, letting the server pick the key.",
-        "scope is entity, integration or global, and decides how far the new rule reaches.",
+        "scope is entity, integration, model or global, and decides how far the new rule reaches. "
+        "domain narrows whichever of those was chosen to this entity's own domain, which is what "
+        "tells a measured value from a settable one where an integration supplies one name for both.",
         body={
             "entity_id": text("The entity whose type was corrected."),
             "value": text("The name it should have."),
-            "scope": text("How far the rule reaches: entity, integration or global."),
+            "scope": text("How far the rule reaches: entity, integration, model or global."),
+            "domain": flag("Whether the rule is about this entity's domain alone."),
         },
         required=("entity_id", "value"),
         tag="Naming",

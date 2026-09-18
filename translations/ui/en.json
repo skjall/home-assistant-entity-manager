@@ -80,7 +80,6 @@
     "enable": "Enable",
     "no_name": "(no name)",
     "type_label": "Type:",
-    "apply": "Apply",
     "scope_here": "Here only",
     "source_rule_system": "Built-in",
     "source_legacy_parse": "derived",
@@ -121,6 +120,7 @@
     "explain_translation_key": "{integration} calls this type “{value}” ({key}) — from the integration",
     "explain_builtin_class": "Home Assistant calls the device class {device_class} “{value}”",
     "supplied_stale": "The name is the helper’s entry title: “{supplied}” — applying rewrites the title too.",
+    "scope_domain_hint": "Only the {count} {domain} entities on devices of type {model}.",
     "keep_current_hint": "Put “{name}” in the field – what it is called today"
   },
   "virtual_devices": {
