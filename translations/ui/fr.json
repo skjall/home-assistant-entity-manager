@@ -119,7 +119,7 @@
     "renamed_differently": "Home Assistant a enregistré « {name} »",
     "explain_translation_key": "{integration} nomme ce type « {value} » ({key}) — depuis l'intégration",
     "explain_builtin_class": "Home Assistant nomme la classe d'appareil {device_class} « {value} »",
-    "supplied_stale": "L'intégration fournit encore « {supplied} » — repris lors de l'application"
+    "supplied_stale": "Le nom est le titre de l’entrée de l’auxiliaire : « {supplied} » — appliquer réécrit aussi le titre."
   },
   "virtual_devices": {
     "automations": "Automatisations",
@@ -222,7 +222,11 @@
     "select_device": "Sélectionner un appareil",
     "select_area": "Sélectionner une zone",
     "disabled_badge": "désactivé",
-    "filter_placeholder": "Filtrer les appareils..."
+    "filter_placeholder": "Filtrer les appareils...",
+    "enable": "Activer l’appareil",
+    "enabling": "Activation…",
+    "enabled": "Appareil activé",
+    "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil."
   },
   "units": {
     "entities": "Entités",
