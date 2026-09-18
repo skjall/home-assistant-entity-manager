@@ -52,11 +52,16 @@ KINDS = ("translation_key", "name", "device_class")
 KIND_PRIORITY = {"translation_key": 0, "name": 1, "device_class": 2}
 
 # What a filter may say. A registry id names one entity and stands alone; the
-# other two describe a kind of device and may be combined.
-FILTER_FIELDS = ("registry_id", "integration", "model")
+# others describe a kind of entity and may be combined.
+#
+# The domain is there because an integration supplies one name for what it
+# measures and what it sets: ecoflow_cloud calls both "Custom Load Power", one a
+# sensor and one a number. Without it the two cannot be told apart by a rule,
+# only one entity at a time.
+FILTER_FIELDS = ("registry_id", "integration", "model", "domain")
 
 # Narrowest first. Nothing at all is widest and comes last.
-EVERYWHERE_RANK = 4
+EVERYWHERE_RANK = 8
 
 
 class NamingRuleError(ValueError):
@@ -81,8 +86,11 @@ def clean_filter(raw: Any) -> Dict[str, str]:
     registry_id = str(raw.get("registry_id") or "").strip()
     integration = str(raw.get("integration") or "").strip()
     model = str(raw.get("model") or "").strip()
+    # A domain is written one way by Home Assistant and there is nothing to
+    # match loosely: `Sensor` and `sensor` are the same domain.
+    domain = str(raw.get("domain") or "").strip().lower()
     if registry_id:
-        if integration or model:
+        if integration or model or domain:
             raise NamingRuleError("A filter names one entity or a kind of device, not both")
         return {"registry_id": registry_id}
     cleaned = {}
@@ -90,23 +98,33 @@ def clean_filter(raw: Any) -> Dict[str, str]:
         cleaned["integration"] = integration
     if model:
         cleaned["model"] = model
+    if domain:
+        cleaned["domain"] = domain
     if not cleaned:
         raise NamingRuleError("A filter that says nothing is the rule without filters")
     return cleaned
 
 
 def filter_rank(one: Mapping[str, str]) -> int:
-    """How narrow a filter is: 0 is one entity, 4 is everything."""
+    """How narrow a filter is: 0 is one entity, 8 is everything.
+
+    A device is narrower than an integration, and naming a domain narrows
+    whichever of those a filter already says - "sensors of this model" reaches
+    fewer entities than "this model".
+    """
     if one.get("registry_id"):
         return 0
     integration = one.get("integration")
     model = one.get("model")
+    domain = one.get("domain")
     if integration and model:
-        return 1
+        return 1 if domain else 2
     if model:
-        return 2
+        return 3 if domain else 4
     if integration:
-        return 3
+        return 5 if domain else 6
+    if domain:
+        return 7
     return EVERYWHERE_RANK
 
 
@@ -377,6 +395,7 @@ class NamingRules:
         source: str = "user",
         learned_from: Optional[str] = None,
         model: Optional[str] = None,
+        domain: Optional[str] = None,
         filters: Any = None,
     ) -> Dict[str, Any]:
         if kind not in KINDS:
@@ -393,6 +412,8 @@ class NamingRules:
                 scope["integration"] = integration
             if model:
                 scope["model"] = model
+            if domain:
+                scope["domain"] = str(domain).lower()
             filters = [scope] if scope else []
         rule = {
             "id": _new_id(),
@@ -460,8 +481,14 @@ class NamingRules:
         return next((rule for rule in self.rules if rule["id"] == rule_id), None)
 
     @staticmethod
-    def _index_key(kind: str, value: str, integration: Optional[str], model: Optional[str]):
-        return (kind, value, integration or None, canon(model or ""))
+    def _index_key(
+        kind: str,
+        value: str,
+        integration: Optional[str],
+        model: Optional[str],
+        domain: Optional[str] = None,
+    ):
+        return (kind, value, integration or None, canon(model or ""), (domain or "").lower() or None)
 
     @classmethod
     def _keys_of(cls, rule: Mapping[str, Any]) -> List[tuple]:
@@ -476,7 +503,14 @@ class NamingRules:
         if not filters and not cls._entities_of(rule):
             filters = [{}]
         return [
-            cls._index_key(match["kind"], match["value"], one.get("integration"), one.get("model")) for one in filters
+            cls._index_key(
+                match["kind"],
+                match["value"],
+                one.get("integration"),
+                one.get("model"),
+                one.get("domain"),
+            )
+            for one in filters
         ]
 
     @staticmethod
@@ -546,9 +580,20 @@ class NamingRules:
             raise NamingRuleError(f"Rule {other['id']} already covers one of those filters")
 
     @staticmethod
-    def _scopes(integration: Optional[str], model: Optional[str]):
-        """Scopes from narrow to wide: this model, then this integration, then everywhere."""
-        candidates = [(integration, model), (None, model), (integration, None), (None, None)]
+    def _scopes(integration: Optional[str], model: Optional[str], domain: Optional[str] = None):
+        """Scopes from narrow to wide.
+
+        This model, then this integration, then everywhere - and each of those
+        first for this domain alone, since "sensors of this model" is narrower
+        than "this model". A rule written before domains existed says nothing
+        about one and is found by the second half of each pair.
+        """
+        places = [(integration, model), (None, model), (integration, None), (None, None)]
+        candidates = []
+        for place in places:
+            if domain:
+                candidates.append(place + (domain,))
+            candidates.append(place + (None,))
         seen = []
         for scope in candidates:
             if scope not in seen:
@@ -556,13 +601,21 @@ class NamingRules:
         return seen
 
     def _matching(
-        self, kind: str, value: str, integration: Optional[str], model: Optional[str] = None
+        self,
+        kind: str,
+        value: str,
+        integration: Optional[str],
+        model: Optional[str] = None,
+        domain: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        return self._index().get(self._index_key(kind, value, integration, model))
+        return self._index().get(self._index_key(kind, value, integration, model, domain))
 
     @staticmethod
     def matching_filter(
-        rule: Mapping[str, Any], integration: Optional[str] = None, model: Optional[str] = None
+        rule: Mapping[str, Any],
+        integration: Optional[str] = None,
+        model: Optional[str] = None,
+        domain: Optional[str] = None,
     ) -> Dict[str, str]:
         """The narrowest filter of this rule that covers such an entity.
 
@@ -577,6 +630,8 @@ class NamingRules:
             if one.get("integration") and one["integration"] != (integration or None):
                 continue
             if one.get("model") and canon(one["model"]) != canon(model or ""):
+                continue
+            if one.get("domain") and one["domain"] != (domain or "").lower():
                 continue
             if best is None or filter_rank(one) < filter_rank(best):
                 best = one
@@ -594,14 +649,19 @@ class NamingRules:
 
     @classmethod
     def why(
-        cls, rule: Mapping[str, Any], integration: Optional[str] = None, model: Optional[str] = None
+        cls,
+        rule: Mapping[str, Any],
+        integration: Optional[str] = None,
+        model: Optional[str] = None,
+        domain: Optional[str] = None,
     ) -> Dict[str, Any]:
         """What a rule matched on, for a reader: its type and the filter that caught this entity."""
-        one = cls.matching_filter(rule, integration, model)
+        one = cls.matching_filter(rule, integration, model, domain)
         return {
             **rule["match"],
             "integration": one.get("integration"),
             "model": one.get("model"),
+            "domain": one.get("domain"),
             "filters": [dict(each) for each in rule.get("filters") or []],
         }
 
@@ -612,6 +672,7 @@ class NamingRules:
         integration: Optional[str],
         language: str,
         model: Optional[str] = None,
+        domain: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Return the rule for ``kind``/``value``, the narrowest scope first."""
         if not value:
@@ -619,8 +680,10 @@ class NamingRules:
         key = value if kind == "translation_key" else canon(value)
         if not key:
             return None
-        for scope_integration, scope_model in self._scopes(integration or None, model or None):
-            rule = self._matching(kind, key, scope_integration, scope_model)
+        for scope_integration, scope_model, scope_domain in self._scopes(
+            integration or None, model or None, domain or None
+        ):
+            rule = self._matching(kind, key, scope_integration, scope_model, scope_domain)
             if rule and rule["targets"].get(language):
                 return rule
         return None
@@ -636,12 +699,15 @@ class NamingRules:
         source: str = "user",
         learned_from: Optional[str] = None,
         model: Optional[str] = None,
+        domain: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create or update the rule for one match, setting its target for ``language``."""
         key = value if kind == "translation_key" else canon(value)
-        rule = self._matching(kind, key, integration or None, model or None)
+        rule = self._matching(kind, key, integration or None, model or None, domain or None)
         if rule is None:
-            rule = self._make_rule(kind, key, integration, {language: target}, source, learned_from, model)
+            rule = self._make_rule(
+                kind, key, integration, {language: target}, source, learned_from, model, domain=domain
+            )
             self._refuse_collision(rule)
             self.rules.append(rule)
         else:

@@ -371,6 +371,22 @@ def type_key_model_counts(restructurer) -> dict:
     return counts
 
 
+def type_key_model_domain_counts(restructurer) -> dict:
+    """Entities per type, device model and domain: the narrowest scope but one.
+
+    An integration supplies one name for what it measures and what it sets, so
+    a model on its own reaches both. Adding the domain separates them.
+    """
+    counts: dict = {}
+    for entity_id, entity_data in restructurer.entities.items():
+        key = entity_type_key(entity_data)
+        model = entity_model(restructurer, entity_data)
+        domain = entity_id.partition(".")[0]
+        if key and model and domain:
+            counts[(key, model, domain)] = counts.get((key, model, domain), 0) + 1
+    return counts
+
+
 def _rule_key_for(entity: dict) -> tuple:
     """What a rule learned from this entity should match on.
 
@@ -563,6 +579,7 @@ def naming_rules_collection():
                 sanitize_string(target),
                 source="user",
                 model=sanitize_string(match.get("model") or "", max_length=128) or None,
+                domain=sanitize_string(match.get("domain") or "", max_length=64) or None,
             )
         except NamingRuleError as error:
             return jsonify({"error": str(error)}), 400
@@ -689,7 +706,7 @@ def _filter_from(data: dict) -> dict:
     """The one filter a request is about, sanitised."""
     return {
         key: sanitize_string(data.get(key) or "", max_length=128)
-        for key in ("registry_id", "integration", "model")
+        for key in ("registry_id", "integration", "model", "domain")
         if data.get(key)
     }
 
@@ -811,14 +828,19 @@ def naming_learn():
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
     # Where the correction should apply, as the one filter it is. "Everywhere"
-    # is no filter at all.
+    # is no filter at all, and each step below it narrows the one above:
+    # this integration, this model, this model's entities of one domain - an
+    # integration supplies one name for what it measures and what it sets, and
+    # only the domain tells the two apart - and finally this entity alone.
     one = None
     if scope == "entity":
         one = {"registry_id": entity.get("id") or ""}
-    elif scope in ("integration", "model"):
+    elif scope in ("integration", "model", "domain"):
         one = {"integration": entity.get("platform") or ""}
-        if scope == "model":
+        if scope in ("model", "domain"):
             one["model"] = entity_model(restructurer, entity) or ""
+        if scope == "domain":
+            one["domain"] = entity_id.partition(".")[0]
     rules = renamer_state["naming_rules"]
     try:
         # The rule that already says this gains the place; a second rule saying
