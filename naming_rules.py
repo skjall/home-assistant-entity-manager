@@ -785,6 +785,10 @@ class NamingRules:
                 learned_from=learned_from,
                 filters=[wanted] if wanted else [],
             )
+            reworded = self._reword_in_place(rule, wanted, language, target)
+            if reworded is not None:
+                self._forget_index()
+                return reworded
             self._refuse_collision(rule)
             self.rules.append(rule)
         elif wanted is None:
@@ -808,6 +812,39 @@ class NamingRules:
             rule["updated_at"] = _now()
         self._forget_index()
         return rule
+
+    def _reword_in_place(
+        self,
+        wanting: Mapping[str, Any],
+        one: Optional[Dict[str, str]],
+        language: str,
+        target: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Say this type differently where a rule already says it, or None.
+
+        A type is called one thing in one place, so choosing another word for a
+        place that is already spoken for is not a second rule but a change of
+        mind about the one there. Refusing it left the user at "Rule r_9e6e6268
+        already covers one of those filters", with nothing to do about it.
+
+        Where the rule that holds the place holds others too, the place is
+        lifted out of it rather than reworded with it: the user asked about
+        this one, and the rest keep the word they had.
+        """
+        held = self.claimed_by(wanting)
+        if held is None or held["match"] != wanting["match"]:
+            return None
+        others = [each for each in (held.get("filters") or []) if each != one]
+        if not others:
+            held["targets"][language] = target
+            held["updated_at"] = _now()
+            return held
+        # It said this word in more places than the one asked about, so that
+        # one leaves and takes the new word with it.
+        held["filters"] = others
+        held["updated_at"] = _now()
+        self.rules.append(dict(wanting))
+        return self.rules[-1]
 
     @guarded
     def merge_duplicates(self) -> List[Dict[str, Any]]:
