@@ -71,6 +71,14 @@ class ReferenceChecker:
     # Entity-ID Pattern für Extraktion
     ENTITY_ID_PATTERN = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
 
+    # A whole id and nothing else: what an `entity_id:` has to hold to name one.
+    WHOLE_ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+
+    # Where a template picks up. A name built out of one is finished at runtime,
+    # so the part standing in the YAML is not an id and never will be.
+    TEMPLATE_STARTS = "{"
+    TEMPLATE_ENDS = "}"
+
     # Known services that look like entity IDs but aren't
     KNOWN_SERVICES = {
         "toggle",
@@ -229,6 +237,32 @@ class ReferenceChecker:
         service_name = parts[1]
         return service_name in self.KNOWN_SERVICES
 
+    def _runs_into_a_template(self, text: str, start: int, end: int) -> bool:
+        """Whether the match is one half of a name a template finishes.
+
+        `input_text.negativstrom_{{ dev.name | lower }}_titel` matches as far as
+        the brace and looks like an id from there on, so a helper that exists is
+        reported missing under a name nobody wrote.
+
+        An id inside a template is a different thing and stays: `states(
+        'sensor.real')` names `sensor.real`, and the quote around it is what
+        says so.
+        """
+        before = text[start - 1] if start else ""
+        after = text[end] if end < len(text) else ""
+        return after == self.TEMPLATE_STARTS or before == self.TEMPLATE_ENDS
+
+    def _names_one_entity(self, value: str) -> bool:
+        """Whether an `entity_id:` value is an id rather than something to render.
+
+        The value was taken as read before, so `entity_id: input_boolean.x_{{ y }}_z`
+        became a missing entity. A target either names an entity outright or is
+        worked out at runtime, and only the first is something to check.
+        """
+        if not self.WHOLE_ENTITY_ID.match(value):
+            return False
+        return value.split(".")[0] in self.VALID_DOMAINS and not self._is_service_call(value)
+
     def _extract_entity_ids_with_path(self, data: Any, current_path: str = "") -> Dict[str, str]:
         """Extrahiert alle Entity-IDs mit ihrem YAML-Pfad aus einer Datenstruktur.
 
@@ -251,13 +285,17 @@ class ReferenceChecker:
                 return entity_paths
 
             # Finde alle Entity-ID-Patterns im String
-            matches = self.ENTITY_ID_PATTERN.findall(data)
-            for match in matches:
+            for found in self.ENTITY_ID_PATTERN.finditer(data):
+                match = found.group(1)
                 domain = match.split(".")[0]
-                if domain in self.VALID_DOMAINS:
-                    # Skip if it's a known service call
-                    if not self._is_service_call(match):
-                        entity_paths[match] = current_path or "(root)"
+                if domain not in self.VALID_DOMAINS:
+                    continue
+                # Skip if it's a known service call
+                if self._is_service_call(match):
+                    continue
+                if self._runs_into_a_template(data, found.start(), found.end()):
+                    continue
+                entity_paths[match] = current_path or "(root)"
 
         elif isinstance(data, dict):
             # Spezielle Keys die Entity-IDs enthalten
@@ -265,15 +303,12 @@ class ReferenceChecker:
                 entity_id_path = f"{current_path} -> entity_id" if current_path else "entity_id"
                 val = data["entity_id"]
                 if isinstance(val, str):
-                    domain = val.split(".")[0]
-                    if domain in self.VALID_DOMAINS and not self._is_service_call(val):
+                    if self._names_one_entity(val):
                         entity_paths[val] = entity_id_path
                 elif isinstance(val, list):
                     for v in val:
-                        if isinstance(v, str):
-                            domain = v.split(".")[0]
-                            if domain in self.VALID_DOMAINS and not self._is_service_call(v):
-                                entity_paths[v] = entity_id_path
+                        if isinstance(v, str) and self._names_one_entity(v):
+                            entity_paths[v] = entity_id_path
 
             # Rekursiv alle Werte durchsuchen, aber bestimmte Keys überspringen
             for key, value in data.items():
