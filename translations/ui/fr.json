@@ -120,7 +120,7 @@
     "renamed_differently": "Home Assistant a enregistré « {name} »",
     "explain_translation_key": "{integration} nomme ce type « {value} » ({key}) — depuis l'intégration",
     "explain_builtin_class": "Home Assistant nomme la classe d'appareil {device_class} « {value} »",
-    "supplied_stale": "L'intégration fournit encore « {supplied} » — repris lors de l'application"
+    "supplied_stale": "Le nom est le titre de l’entrée de l’auxiliaire : « {supplied} » — appliquer réécrit aussi le titre."
   },
   "virtual_devices": {
     "automations": "Automatisations",
