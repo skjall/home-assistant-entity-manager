@@ -4000,22 +4000,31 @@
                     }));
                 },
 
+                // A path, not a URL. The add-on is served through Ingress, so
+                // Home Assistant's own pages sit on the host the reader already
+                // has - whatever address, scheme and port that is.
+                //
+                // This built an origin instead, replacing whatever port was
+                // there with 8123. Home Assistant's port is the user's to
+                // choose, and behind a proxy there is no port in the address at
+                // all, so the link led somewhere nobody is listening. The two
+                // links beside it, to an area and to a device, have always been
+                // plain paths.
                 getHAConfigUrl(ref) {
-                    const baseUrl = window.location.origin.replace(/:\d+$/, ':8123');
                     if (ref.config_type === 'automation') {
                         // Use numeric_id for automation edit links (required by HA)
                         const id = ref.numeric_id || ref.config_id.replace('automation.', '');
-                        return `${baseUrl}/config/automation/edit/${id}`;
+                        return `/config/automation/edit/${id}`;
                     } else if (ref.config_type === 'scene') {
                         // Use numeric_id for scene edit links (required by HA)
                         const id = ref.numeric_id || ref.config_id.replace('scene.', '');
-                        return `${baseUrl}/config/scene/edit/${id}`;
+                        return `/config/scene/edit/${id}`;
                     } else if (ref.config_type === 'script') {
-                        return `${baseUrl}/config/script/edit/${ref.config_id.replace('script.', '')}`;
+                        return `/config/script/edit/${ref.config_id.replace('script.', '')}`;
                     } else if (ref.config_type === 'helper') {
                         // A helper is a config entry, and Home Assistant opens
                         // those from its helper list rather than by their id.
-                        return `${baseUrl}/config/helpers`;
+                        return '/config/helpers';
                     }
                     return '#';
                 },
