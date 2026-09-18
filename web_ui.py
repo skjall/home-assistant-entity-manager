@@ -2075,6 +2075,9 @@ async def _get_hierarchy_async():
                     "device_class": device_class,
                     "original_name": original_name,  # Original HA friendly name
                     "base_name": base_name,  # Stripped base name for editing
+                    # What the entity is called today, so "keep this" has a word
+                    # to put in the field.
+                    "current_type": restructurer.type_in_the_current_name(entity_id, entity_context),
                     "suggested_name": suggested_entity_name,
                     "suggested_entity_id": suggested_entity_id,
                     "override_name": override.get("name") if override else None,

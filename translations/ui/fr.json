@@ -120,7 +120,8 @@
     "explain_translation_key": "{integration} nomme ce type « {value} » ({key}) — depuis l'intégration",
     "explain_builtin_class": "Home Assistant nomme la classe d'appareil {device_class} « {value} »",
     "supplied_stale": "Le nom est le titre de l’entrée de l’auxiliaire : « {supplied} » — appliquer réécrit aussi le titre.",
-    "scope_domain_hint": "Seulement les {count} entités {domain} sur les appareils de type {model}."
+    "scope_domain_hint": "Seulement les {count} entités {domain} sur les appareils de type {model}.",
+    "keep_current_hint": "Mettre « {name} » dans le champ : son nom actuel"
   },
   "virtual_devices": {
     "automations": "Automatisations",
