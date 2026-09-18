@@ -3355,7 +3355,7 @@
                                 if (!this.showDisabled) {
                                     deviceEntities = deviceEntities.filter(e => !e.disabled_by);
                                 }
-                                return deviceEntities.some(e => this.entityNeedsRename(e));
+                                return deviceEntities.some(e => this.staysInChangesFilter(e));
                             });
                         });
                     }
@@ -3432,7 +3432,7 @@
                             if (!this.showDisabled) {
                                 deviceEntities = deviceEntities.filter(e => !e.disabled_by);
                             }
-                            return deviceEntities.some(e => this.entityNeedsRename(e));
+                            return deviceEntities.some(e => this.staysInChangesFilter(e));
                         });
                     }
 
@@ -3562,7 +3562,7 @@
 
                         // For onlyChanges, check if any entities need rename
                         if (this.onlyChanges) {
-                            entities = entities.filter(e => this.entityNeedsRename(e));
+                            entities = entities.filter(e => this.staysInChangesFilter(e));
                         }
 
                         if (entities.length > 0) {
@@ -3613,7 +3613,7 @@
                         entities = entities.filter(e => !e.disabled_by);
                     }
                     if (this.onlyChanges) {
-                        entities = entities.filter(e => this.entityNeedsRename(e));
+                        entities = entities.filter(e => this.staysInChangesFilter(e));
                     }
 
                     // Sort alphabetically by base_name or original_name (using browser locale)
@@ -4410,7 +4410,20 @@
                     return slug ? `${domain}.${slug}` : entity.id;
                 },
 
-                // Check if entity needs rename (uses entity's own device/area context)
+                // Whether "only changes" keeps this entity on screen.
+                //
+                // Typing into the type field recomputes the preview as you go,
+                // so entering the name the entity already has made the preview
+                // match it, the entity stop needing a rename and the card
+                // disappear mid-word. That is exactly the case for keeping a
+                // name the integration supplies in English: the rule changes
+                // every other entity of that type and leaves this one alone.
+                //
+                // An unsaved edit therefore holds the card, however it renders.
+                staysInChangesFilter(entity) {
+                    return this.entityNeedsRename(entity) || this.typeEdited(entity);
+                },
+
                 // Whether this entity sits on a device somebody switched off.
                 //
                 // Home Assistant disables the entities with the device, marking
@@ -4424,6 +4437,7 @@
                     return !!device?.disabled_by;
                 },
 
+                // Check if entity needs rename (uses entity's own device/area context)
                 entityNeedsRename(entity) {
                     // Touch previewVersion to ensure Alpine re-evaluates when previews change
                     const _ = this.previewVersion;
