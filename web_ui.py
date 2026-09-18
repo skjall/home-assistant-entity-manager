@@ -45,6 +45,7 @@ from routes_naming import (
     type_key_counts,
     type_key_integration_counts,
     type_key_model_counts,
+    type_key_model_domain_counts,
 )
 from routes_swap import swap as swap_routes
 from routes_system import system as system_routes
@@ -2041,6 +2042,7 @@ async def _get_hierarchy_async():
         type_counts = type_key_counts(restructurer)
         type_integration_counts = type_key_integration_counts(restructurer)
         type_model_counts = type_key_model_counts(restructurer)
+        type_model_domain_counts = type_key_model_domain_counts(restructurer)
 
         # One mark for the templates as they are now; every entity compares its
         # stored one against it.
@@ -2091,6 +2093,13 @@ async def _get_hierarchy_async():
                         type_integration_counts.get((type_key, entity_data.get("platform")), 0) if type_key else 0
                     ),
                     "device_model": entity_model(restructurer, entity_data),
+                    "type_model_domain_count": (
+                        type_model_domain_counts.get(
+                            (type_key, entity_model(restructurer, entity_data), entity_id.partition(".")[0]), 0
+                        )
+                        if type_key
+                        else 0
+                    ),
                     "type_model_count": (
                         type_model_counts.get((type_key, entity_model(restructurer, entity_data)), 0) if type_key else 0
                     ),

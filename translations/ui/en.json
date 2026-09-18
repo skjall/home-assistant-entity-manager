@@ -120,7 +120,8 @@
     "renamed_differently": "Home Assistant stored “{name}”",
     "explain_translation_key": "{integration} calls this type “{value}” ({key}) — from the integration",
     "explain_builtin_class": "Home Assistant calls the device class {device_class} “{value}”",
-    "supplied_stale": "The name is the helper’s entry title: “{supplied}” — applying rewrites the title too."
+    "supplied_stale": "The name is the helper’s entry title: “{supplied}” — applying rewrites the title too.",
+    "scope_domain_hint": "Only the {count} {domain} entities on devices of type {model}."
   },
   "virtual_devices": {
     "automations": "Automations",

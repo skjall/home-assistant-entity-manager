@@ -120,7 +120,8 @@
     "renamed_differently": "Home Assistant guardó «{name}»",
     "explain_translation_key": "{integration} llama a este tipo «{value}» ({key}) — desde la integración",
     "explain_builtin_class": "Home Assistant llama «{value}» a la clase de dispositivo {device_class}",
-    "supplied_stale": "El nombre es el título de la entrada del auxiliar: «{supplied}»: al aplicar también se reescribe el título."
+    "supplied_stale": "El nombre es el título de la entrada del auxiliar: «{supplied}»: al aplicar también se reescribe el título.",
+    "scope_domain_hint": "Solo las {count} entidades {domain} en dispositivos del tipo {model}."
   },
   "virtual_devices": {
     "automations": "Automatizaciones",
