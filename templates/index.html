@@ -2342,7 +2342,7 @@
                                                         x-text="t('entity.drift_overwrite')">Overwrite</button>
                                             </div>
                                         </div>
-                                        <p class="text-xs text-gray-500 mt-1">
+                                        <p class="text-xs text-gray-500 mt-1" x-show="resolutionExplain(entity)">
                                             <span x-text="resolutionExplain(entity)"></span>
                                             <a x-show="entity.resolution?.rule_id"
                                                :href="'settings/rules?rule=' + entity.resolution?.rule_id"
@@ -4579,9 +4579,15 @@
                         case 'device_class':
                             return this.t('entity.explain_device_class', {value});
                         default:
-                            return r.normalized
-                                ? this.t('entity.explain_spelling', {original, value})
-                                : this.t('entity.explain_supplied', {source, value});
+                            if (r.normalized) return this.t('entity.explain_spelling', {original, value});
+                            // Where the supplied name is the entry title and we
+                            // offer to correct it, the line below says where the
+                            // name comes from and what happens to it. Saying
+                            // "supplies X" here as well left two sentences that
+                            // name the same thing differently: the type on its
+                            // own against the whole title it was cut out of.
+                            if (entity.supplied_correctable) return '';
+                            return this.t('entity.explain_supplied', {source, value});
                     }
                 },
 
