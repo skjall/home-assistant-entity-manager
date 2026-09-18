@@ -2297,6 +2297,13 @@
                                                        @blur="$event.target.value = $event.target.value.trim(); updateEntityPreview(entity, $event.target.value)"
                                                        @keyup.enter="saveEntitySuffix(entity)"
                                                        :placeholder="t('entity.suffix_placeholder')">
+                                                <button @click="keepWhatItIsCalled(entity)"
+                                                        class="btn btn-ghost btn-sm"
+                                                        x-show="canKeepCurrentType(entity)"
+                                                        :disabled="applyingEntityId"
+                                                        :title="t('entity.keep_current_hint', {name: entity.current_type})">
+                                                    <i class="ri-pushpin-line"></i>
+                                                </button>
                                                 <button @click="revertEntitySuffix(entity)"
                                                         class="btn btn-ghost btn-sm"
                                                         x-show="typeEdited(entity) || hasException(entity)"
@@ -4575,6 +4582,27 @@
                 // The name the integration supplies, as the rule will key on it.
                 typeOriginal(entity) {
                     return entity.resolution?.input || entity.original_name || '';
+                },
+
+                // Whether there is a name to keep: one the entity carries today
+                // that the proposal would replace. Nothing to offer otherwise.
+                canKeepCurrentType(entity) {
+                    const current = (entity.current_type || '').trim();
+                    if (!current) return false;
+                    const inTheField = entity._currentSuffix !== undefined
+                        ? entity._currentSuffix.trim()
+                        : (entity.base_name || '').trim();
+                    return current !== inTheField;
+                },
+
+                // Put it in the field and stop there. What happens to it - a rule
+                // for every entity of this type or an exception for this one - is
+                // the scope bar's question, and the tick asks it.
+                keepWhatItIsCalled(entity) {
+                    const current = (entity.current_type || '').trim();
+                    if (!current) return;
+                    this.updateEntityPreview(entity, current);
+                    entity._currentSuffix = current;
                 },
 
                 typeEdited(entity) {

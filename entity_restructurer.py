@@ -509,6 +509,53 @@ class EntityRestructurer:
                 name = name[len(prefix) :].strip()
         return name
 
+    def type_in_the_current_name(
+        self,
+        entity_id: str,
+        context: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """The type part of the name the entity carries today.
+
+        `build_naming_context` answers what an entity would be called. This
+        answers what it is called: the same name with the hierarchy taken off
+        and no rule applied. Somebody who wants to keep the German name an
+        English-speaking integration supplies needs that word to hand, and
+        nothing else in the list holds it.
+        """
+        registry = self.entities.get(entity_id, {})
+        written = registry.get("name") or ""
+        if not written:
+            return ""
+        if context is None:
+            context = self.build_naming_context(entity_id, {})
+        device = self.devices.get(registry.get("device_id") or "", {})
+        raw_device_name = device.get("name_by_user") or device.get("name") or device.get("model") or ""
+        prefixes = (
+            raw_device_name,
+            context.get("area", ""),
+            context.get("device", ""),
+            device.get("name", ""),
+            device.get("model", ""),
+        )
+        # The template is tried first, which answers for a name this add-on
+        # wrote. It hands back the whole name when nothing matches, and a name
+        # the user typed in Home Assistant is exactly that case, so the parts
+        # are taken off by hand afterwards - as many as sit in front, since an
+        # integration may have written both the area and a device name of the
+        # day into it.
+        kept = self._strip_applied_entity_name(written, prefixes, context)
+        known = sorted({prefix for prefix in prefixes if prefix}, key=len, reverse=True)
+        taken = True
+        while kept and taken:
+            taken = False
+            for prefix in known:
+                if kept.lower() == prefix.lower():
+                    return ""
+                if kept.lower().startswith(prefix.lower() + " "):
+                    kept = kept[len(prefix) :].strip()
+                    taken = True
+        return kept
+
     def _resolve_supplied_name(
         self, name: str, entity_id: str, registry: Dict[str, Any], won_by: str = "original"
     ) -> Dict[str, Any]:
