@@ -965,6 +965,14 @@ class EntityRestructurer:
         resolution = self._resolve_base_entity_name(
             entity_id, registry, state, override, device_class, prefixes, context
         )
+        # A bracket that is the only thing telling two entities apart is kept
+        # here, where every answer comes past, rather than at each return of
+        # the resolver. Two of them did not, and an entity this add-on had
+        # already renamed once lost what named it: devolo's three uplink
+        # sensors all read "PLC-Uplink PHY-Rate", so two of them were numbered
+        # away - while the same three on a device never renamed kept their
+        # peer.
+        resolution = self._with_discriminator(resolution, entity_id, registry, prefixes)
         self.last_resolutions[entity_id] = resolution
         return resolution["value"]
 
@@ -1109,7 +1117,7 @@ class EntityRestructurer:
             if keep_number:
                 resolution = dict(resolution)
                 resolution["value"] = f"{resolution['value']} {keep_number}".strip()
-            return self._with_discriminator(resolution, entity_id, registry, prefixes)
+            return resolution
 
         # ``name`` fields may hold a name this add-on wrote on a previous run.
         # Unwind the entity template before reusing them, otherwise each run
