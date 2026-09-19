@@ -1941,7 +1941,9 @@
                                class="edit-input flex-1"
                                x-ref="deviceNameInput"
                                :value="devicePreviewBaseName !== null ? devicePreviewBaseName : selectedDeviceData?.base_name"
-                               @input="devicePreviewBaseName = $event.target.value"
+                               @input="devicePreviewBaseName = $event.target.value;
+                                        clearTimeout(_deviceNameTimer);
+                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(), 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
                                :placeholder="selectedDeviceData?.base_name"
                                :disabled="renamingDevice || applyingEntityId || executing">
@@ -1950,12 +1952,13 @@
                                 style="background: #10b981; color: white;"
                                 :disabled="renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)"
                                 :class="{'opacity-50 cursor-not-allowed': renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)}"
-                                :title="isDeviceNameTaken(selectedDeviceData) ? t('device.name_conflict') : ''">
+                                :title="isDeviceNameTaken(selectedDeviceData) ? t('device.id_conflict', {id: deviceNameClashId()}) : ''">
                             <i class="ri-check-line"></i>
                         </button>
                     </div>
                     <span x-show="isDeviceNameTaken(selectedDeviceData)" class="text-red-500 text-xs mt-1 block">
-                        <i class="ri-error-warning-line"></i> <span x-text="t('device.name_conflict')">A device with this name already exists</span>
+                        <i class="ri-error-warning-line"></i>
+                        <span x-text="t('device.id_conflict', {id: deviceNameClashId()})">An entity id would be taken twice</span>
                     </span>
                     <!-- Z2M-Namens-Drift: Z2M-friendly_name weicht vom HA-Namen ab -->
                     <div x-show="selectedDeviceData?.z2m_drift" class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
@@ -2986,6 +2989,8 @@
                 selectedDeviceData: null,
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
+                deviceNameClash: [],  // Ids the name in the field would take from someone else
+                _deviceNameTimer: null,
                 renamingDevice: false,  // Loading state for device rename
                 syncingZ2m: false,  // Loading state for Z2M name sync
                 applyingEntityId: null,  // ID of entity currently being renamed
@@ -4369,6 +4374,7 @@
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
+                    this.deviceNameClash = [];
                     this.saveState();
 
                     // Mobile: Navigate to entities
@@ -4382,6 +4388,7 @@
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
+                    this.deviceNameClash = [];
                     this.saveState();
 
                     // Mobile: Navigate to entities
@@ -4896,12 +4903,55 @@
                     return device.name !== expectedName;
                 },
 
-                // Check if the target device name is already taken by another device
+                // Whether the name in the field would take an id that is held.
+                //
+                // Not whether another device is called this - two devices may
+                // share a name, and since Home Assistant started splitting one
+                // device into several, two of them legitimately do. What may
+                // not be shared is an entity id, and that is what this asks:
+                // would any entity of this device end up on an id that an
+                // entity of another device already has?
                 isDeviceNameTaken(device) {
                     if (!device) return false;
-                    const newName = this.getExpectedDeviceName(device);
-                    if (!newName || newName === device.name) return false; // No change, no conflict
-                    return this.hierarchy.devices.some(d => d.id !== device.id && d.name === newName);
+                    return this.deviceNameClash.length > 0
+                        && this.deviceNameClash[0].device_id === device.id;
+                },
+
+                // The first id that would collide, for the warning to name.
+                deviceNameClashId() {
+                    return this.deviceNameClash.length ? this.deviceNameClash[0].id : '';
+                },
+
+                // Asked while typing, so the answer has to come from the name
+                // in the field rather than from the previews, which are built
+                // from the name that is stored.
+                async checkDeviceNameClash() {
+                    const device = this.selectedDeviceData;
+                    this.deviceNameClash = [];
+                    if (!device || this.isVirtualDevice(this.selectedDevice)) return;
+                    const wanted = this.getExpectedDeviceName(device);
+                    if (!wanted || wanted === device.name) return;
+
+                    const mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
+                    if (!mine.length) return;
+
+                    // The slug rules live in the backend; see fetchNormalized.
+                    const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e)));
+                    const taken = new Map();
+                    for (const other of this.hierarchy.entities) {
+                        if (other.device_id === device.id) continue;
+                        taken.set(other.id, other);
+                    }
+
+                    const clashes = [];
+                    mine.forEach((entity, index) => {
+                        const wantedId = this.composeEntityId(entity, slugs[index]);
+                        const holder = taken.get(wantedId);
+                        if (holder) {
+                            clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
+                        }
+                    });
+                    this.deviceNameClash = clashes;
                 },
 
                 deviceNeedsRename(device) {
@@ -5945,9 +5995,16 @@
                         return;
                     }
 
-                    // Prevent renaming to a name that another device already uses
-                    if (this.hierarchy.devices.some(d => d.id !== this.selectedDevice && d.name === newFullName)) {
-                        this.showMessage(this.t('device.name_conflict'), 'error');
+                    // Two devices may share a name; two entities may not share
+                    // an id. Asked here as well as at the button, because this
+                    // is the door the rename actually goes through.
+                    const wasPreviewed = this.devicePreviewBaseName;
+                    this.devicePreviewBaseName = newBaseName;
+                    await this.checkDeviceNameClash();
+                    if (this.deviceNameClash.length) {
+                        const taken = this.deviceNameClashId();
+                        this.devicePreviewBaseName = wasPreviewed;
+                        this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
                         return;
                     }
 

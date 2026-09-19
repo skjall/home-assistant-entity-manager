@@ -231,7 +231,8 @@
     "enable": "Activer l’appareil",
     "enabling": "Activation…",
     "enabled": "Appareil activé",
-    "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil."
+    "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil.",
+    "id_conflict": "Ce nom prendrait un identifiant d'entité déjà attribué : {id}"
   },
   "units": {
     "entities": "Entités",
