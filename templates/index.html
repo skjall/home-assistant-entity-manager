@@ -1632,6 +1632,13 @@
         .text-on-colour.hover\:bg-red-700:hover { background-color: var(--fill-red); filter: brightness(1.15); }
         .text-on-colour.hover\:bg-amber-600:hover { background-color: var(--fill-amber); filter: brightness(1.15); }
 
+        /* Only for a logo that would otherwise be black on a dark card. */
+        .brand-plate {
+            background: var(--color-gray-200);
+            padding: 1px;
+            box-sizing: content-box;
+        }
+
         .theme-switch {
             display: inline-flex;
             border: 1px solid var(--color-gray-300);
@@ -1932,9 +1939,13 @@
                                         <!-- Icon -->
                                         <div class="device-icon">
                                             <template x-if="device.integrations && device.integrations.length > 0">
-                                                <img :src="'https://brands.home-assistant.io/' + device.integrations[0] + '/icon.png'"
+                                                <img :src="brandIconUrl(device.integrations[0])"
+                                                     :data-brand="device.integrations[0]"
                                                      class="w-5 h-5 rounded"
+                                                     :class="brandNeedsPlate[device.integrations[0]] ? 'brand-plate' : ''"
+                                                     crossorigin="anonymous"
                                                      :alt="device.integrations[0]"
+                                                     @load="weighBrandIcon($el, device.integrations[0])"
                                                      @error="$el.style.display='none'; $el.nextElementSibling.style.display='inline'">
                                             </template>
                                             <i class="ri-device-line text-green-500"
@@ -3793,6 +3804,74 @@
                 // setting, which is the same one Home Assistant follows.
                 theme: 'auto',
 
+                // Which integrations would disappear, by domain. Measured, not
+                // listed: the answer differs per icon and changes when brands
+                // gains a dark version.
+                brandNeedsPlate: {},
+
+                darkNow() {
+                    if (this.theme === 'dark') return true;
+                    if (this.theme === 'light') return false;
+                    try {
+                        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    } catch (error) {
+                        return false;
+                    }
+                },
+
+                // The dark version where brands holds one; it serves the
+                // ordinary icon under the same path where it does not, so this
+                // never asks for something that is not there.
+                brandIconUrl(domain) {
+                    const file = this.darkNow() ? 'dark_icon.png' : 'icon.png';
+                    return 'https://brands.home-assistant.io/' + domain + '/' + file;
+                },
+
+                // The icons on screen, asked directly. One the browser already
+                // holds is complete before it is bound and never fires load.
+                sweepBrandIcons() {
+                    document.querySelectorAll('.device-icon img[data-brand]').forEach(image => {
+                        const domain = image.dataset.brand;
+                        if (image.complete && image.naturalWidth) {
+                            this.weighBrandIcon(image, domain);
+                        } else {
+                            image.addEventListener('load', () => this.weighBrandIcon(image, domain), {once: true});
+                        }
+                    });
+                },
+
+                // How light the pixels that are actually drawn are. Anything
+                // under a third of full brightness needs something behind it.
+                weighBrandIcon(image, domain) {
+                    if (!this.darkNow()) {
+                        if (this.brandNeedsPlate[domain]) {
+                            this.brandNeedsPlate = {...this.brandNeedsPlate, [domain]: false};
+                        }
+                        return;
+                    }
+                    if (domain in this.brandNeedsPlate) return;
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 32;
+                        canvas.height = 32;
+                        const ctx = canvas.getContext('2d', {willReadFrequently: true});
+                        ctx.drawImage(image, 0, 0, 32, 32);
+                        const pixels = ctx.getImageData(0, 0, 32, 32).data;
+                        let sum = 0, seen = 0;
+                        for (let i = 0; i < pixels.length; i += 4) {
+                            if (pixels[i + 3] < 32) continue;
+                            sum += (0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2]) / 255;
+                            seen++;
+                        }
+                        const light = seen ? sum / seen : 1;
+                        this.brandNeedsPlate = {...this.brandNeedsPlate, [domain]: light < 0.35};
+                    } catch (error) {
+                        // A reading that cannot be taken is not a reason to
+                        // put a plate behind every logo.
+                        this.brandNeedsPlate = {...this.brandNeedsPlate, [domain]: false};
+                    }
+                },
+
                 readTheme() {
                     try {
                         const chosen = localStorage.getItem('entityManagerTheme');
@@ -3818,6 +3897,9 @@
                 },
 
                 applyTheme() {
+                    // Different icons, so the verdicts are taken again.
+                    this.brandNeedsPlate = {};
+                    setTimeout(() => this.sweepBrandIcons(), 60);
                     if (this.theme === 'auto') {
                         document.documentElement.removeAttribute('data-theme');
                     } else {
@@ -3827,6 +3909,9 @@
 
                 async init() {
                     this.readTheme();
+                    // Icons drawn from cache on the first paint report nothing
+                    // either, so they are asked once the list stands.
+                    setTimeout(() => this.sweepBrandIcons(), 1200);
                     // Home Assistant always opens this app at its root, so a reload
                     // from the settings would drop the user here. Go back.
                     if (this.resumeSettings()) return;
