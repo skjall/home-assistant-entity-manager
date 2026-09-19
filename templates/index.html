@@ -2335,10 +2335,6 @@
                                                       x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
                                                               ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'old')
                                                               : escapeHtml(entity.original_name || t('entity.no_name'))"></span>
-                                                <span x-show="entity.blocked"
-                                                      class="text-xs px-1.5 py-0.5 rounded ml-2 align-middle bg-red-100 text-red-700"
-                                                      :title="t('entity.blocked_hint', {wanted: entity.blocked?.wanted || '', holder: entity.blocked?.holder || ''})"
-                                                      x-text="t('entity.blocked_badge')">numbered</span>
                                                 <span x-show="isOrphanEntity(entity)"
                                                       class="text-xs text-amber-600 ml-2"
                                                       :title="t('entity.orphan_hint')">
@@ -2448,7 +2444,7 @@
                                         </div>
                                         <div x-show="entity.blocked" class="drift-bar is-blocked">
                                             <span class="drift-text"
-                                                  x-text="t('entity.blocked_explain', {wanted: entity.blocked?.wanted || '', holder: entity.blocked?.holder || ''})"></span>
+                                                  x-text="t('entity.blocked_explain')"></span>
                                             <div class="drift-actions">
                                                 <button type="button" class="btn btn-secondary btn-sm"
                                                         @click="ignoreEntity(entity)"
