@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.4.0...v1.5.0) (2026-09-19)
+
+
+### Features
+
+* the panel can be light, dark, or whatever the system says ([#141](https://github.com/skjall/home-assistant-entity-manager/issues/141)) ([6899d76](https://github.com/skjall/home-assistant-entity-manager/commit/6899d76080dcfb6bce9b5fbb8d890f16caba49e0))
+
+
+### Bug Fixes
+
+* a bracket that names the peer survives a rename of ours ([#140](https://github.com/skjall/home-assistant-entity-manager/issues/140)) ([f7e44c5](https://github.com/skjall/home-assistant-entity-manager/commit/f7e44c50565dda9f100fa8f92bf0960a036b91b6))
+
+
+### Reverts
+
+* take back what was pushed without being asked ([#143](https://github.com/skjall/home-assistant-entity-manager/issues/143)) ([e81a105](https://github.com/skjall/home-assistant-entity-manager/commit/e81a105ce9a39ccb5492a5c9f306b14739223b99))
+
 ## [1.4.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.3.0...v1.4.0) (2026-09-19)
 
 
