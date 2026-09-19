@@ -2267,7 +2267,7 @@
                                             </span>
                                             <div class="btn-group">
                                                 <!-- Quick apply button - hide in no-area mode -->
-                                                <template x-if="selectedArea !== '__no_area__' && (entityNeedsRename(entity) || typeEdited(entity))">
+                                                <template x-if="selectedArea !== '__no_area__' && staysInChangesFilter(entity)">
                                                     <button @click.stop="quickApplyEntity(entity)"
                                                             class="action-btn"
                                                             :class="{
@@ -3664,7 +3664,10 @@
 
                 // Computed: Count of entities that need renaming + Z2M-Geräte mit Namens-Drift
                 get pendingChangesCount() {
-                    const entityChanges = this.filteredEntities.filter(e => this.entityNeedsRename(e)).length;
+                    // Whatever puts a tick on a card is a pending change, so
+                    // "apply all" is offered exactly when one of them is: a name
+                    // to write, or a type typed in and waiting to become a rule.
+                    const entityChanges = this.filteredEntities.filter(e => this.staysInChangesFilter(e)).length;
                     const z2mDrift = this.filteredDevices.filter(d => d.z2m_drift).length;
                     return entityChanges + z2mDrift;
                 },
@@ -4982,35 +4985,11 @@
                     if (owned) this.applyingEntityId = entity.id;
                     try {
                         // A changed type is kept before it is used, as far as the
-                        // scope bar says: a rule for everything that shares the
-                        // type, or an exception for this entity alone.
+                        // scope bar says. Applying everything keeps it the same
+                        // way, so both ask the same function rather than each
+                        // carrying its own copy of the decision.
                         const typed = entity._currentSuffix !== undefined ? entity._currentSuffix : null;
-                        let ruleScopeApplied = null;
-                        if (this.typeEdited(entity) && typed) {
-                            if (entity._ruleScope !== 'here') {
-                                const learn = await fetch('api/naming/learn', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({
-                                        entity_id: entity.id,
-                                        value: typed,
-                                        scope: entity._ruleScope || 'global'
-                                    })
-                                });
-                                const learned = await learn.json();
-                                if (!learn.ok) throw new Error(learned.error || 'Rule not saved');
-                                ruleScopeApplied = 'all';
-                            } else {
-                                const set = await fetch('api/set_entity_override', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({ registry_id: entity.registry_id, override_name: typed })
-                                });
-                                const saved = await set.json();
-                                if (!set.ok || saved.error) throw new Error(saved.error || 'Exception not saved');
-                                ruleScopeApplied = 'here';
-                            }
-                        }
+                        const ruleScopeApplied = await this.rememberTypedType(entity);
 
                         // With a rule just saved the name has to come from the
                         // server, which knows it and the collision numbering.
@@ -5966,7 +5945,13 @@
                     // Z2M devices in the current view whose Z2M name drifted from the HA name
                     const z2mDriftDevices = this.filteredDevices.filter(d => d.z2m_drift);
                     if (entitiesToChange.length === 0 && z2mDriftDevices.length === 0) {
-                        this.showMessage('No changes to apply', 'info');
+                        // Rules were written even where no name came out different:
+                        // they decide what the next entity of that type is called.
+                        // Saying "nothing to apply" here denied work that was done.
+                        this.showMessage(
+                            wroteARule ? this.t('messages.rules_saved') : this.t('messages.nothing_to_apply'),
+                            wroteARule ? 'success' : 'info',
+                            true);
                         return;
                     }
 
