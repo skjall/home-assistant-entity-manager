@@ -189,6 +189,7 @@
     "dependencies_update_warning_title": "Las dependencias no pudieron actualizarse automáticamente",
     "dependencies_update_warning_desc": "Por favor revise las siguientes entidades manualmente en Home Assistant:",
     "entity_marked_for_acceptance": "Entidad marcada para aceptación",
+    "core_starting": "Home Assistant se está iniciando. Continuará en cuanto responda.",
     "rules_saved": "Reglas guardadas",
     "nothing_to_apply": "Nada que aplicar"
   },

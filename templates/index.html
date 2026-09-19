@@ -1729,12 +1729,14 @@
                     </div>
                 </div>
                 <div class="panel-content">
-                    <template x-if="loading">
-                        <div class="flex items-center justify-center py-8">
+                    <template x-if="loading || coreStarting">
+                        <div class="flex flex-col items-center justify-center gap-3 py-8">
                             <i class="ri-loader-4-line animate-spin text-2xl text-blue-600"></i>
+                            <span x-show="coreStarting" class="text-sm text-gray-500 text-center px-4"
+                                  x-text="t('messages.core_starting')"></span>
                         </div>
                     </template>
-                    <template x-if="!loading">
+                    <template x-if="!loading && !coreStarting">
                         <div>
                             <template x-for="area in sortedAreas" :key="area.id">
                                 <div class="hierarchy-item"
@@ -3347,23 +3349,8 @@
                                 areaDevices = areaDevices.filter(d => !d.disabled_by);
                             }
 
-                            // Use same logic as filteredDevices: device needs rename OR has entities that need rename
-                            return areaDevices.some(device => {
-                                // Check if device name itself needs renaming
-                                if (this.deviceNameNeedsRename(device)) {
-                                    return true;
-                                }
-                                // Z2M-Namens-Drift zählt als Änderung
-                                if (device.z2m_drift) {
-                                    return true;
-                                }
-                                // Check if any entities need renaming
-                                let deviceEntities = this.hierarchy.entities.filter(e => e.device_id === device.id);
-                                if (!this.showDisabled) {
-                                    deviceEntities = deviceEntities.filter(e => !e.disabled_by);
-                                }
-                                return deviceEntities.some(e => this.staysInChangesFilter(e));
-                            });
+                            // The same question the device list asks.
+                            return areaDevices.some(device => this.deviceStaysInChangesFilter(device));
                         });
                     }
 
@@ -3424,23 +3411,7 @@
 
                     // Only show devices that need renaming (device name or entities)
                     if (this.onlyChanges) {
-                        devices = devices.filter(d => {
-                            // Check if device name itself needs renaming
-                            if (this.deviceNameNeedsRename(d)) {
-                                return true;
-                            }
-                            // Z2M-Namens-Drift zählt als Änderung
-                            if (d.z2m_drift) {
-                                return true;
-                            }
-                            // Check if any entities need renaming
-                            let deviceEntities = this.hierarchy.entities.filter(e => e.device_id === d.id);
-                            // Apply same filters as entity list
-                            if (!this.showDisabled) {
-                                deviceEntities = deviceEntities.filter(e => !e.disabled_by);
-                            }
-                            return deviceEntities.some(e => this.staysInChangesFilter(e));
-                        });
+                        devices = devices.filter(d => this.deviceStaysInChangesFilter(d));
                     }
 
                     return devices.sort((a, b) => {
@@ -3710,6 +3681,12 @@
                 },
 
                 // Initialize
+                // Home Assistant is restarting and has not answered yet. Not an
+                // error anybody can act on, so the panel says what it is waiting
+                // for and keeps asking.
+                coreStarting: false,
+                _waitingForCore: null,
+
                 async init() {
                     // Home Assistant always opens this app at its root, so a reload
                     // from the settings would drop the user here. Go back.
@@ -3899,7 +3876,21 @@
                     try {
                         const url = forceRefresh ? 'api/broken_references?refresh=true' : 'api/broken_references';
                         const response = await fetch(url);
+
+                        if ([502, 503, 504].includes(response.status)) {
+                            // Home Assistant is still starting. The hierarchy is
+                            // already waiting on it and reads these again when it
+                            // answers; a second message says nothing more.
+                            this.waitForCore();
+                            return;
+                        }
+
                         const data = await response.json();
+
+                        if (data.core_starting) {
+                            this.waitForCore();
+                            return;
+                        }
 
                         if (data.error) {
                             throw new Error(data.error);
@@ -4140,6 +4131,82 @@
                     }
                 },
 
+
+                // What belongs to the reader, not to the server: which card is
+                // open, what stands unsaved in its field, what was just renamed.
+                // A read must leave these alone.
+                THEIRS_NOT_OURS: [
+                    'selected', '_editing', '_remember', '_applying', '_expanded',
+                    '_currentSuffix', '_ruleScope', '_justRenamed', '_previewName',
+                    '_previewId',
+                ],
+
+                // Write onto `mine` only the fields that actually differ, and say
+                // whether anything did.
+                //
+                // Replacing the object instead - which is what reading the list
+                // again used to do - hands Alpine a new one for every entity, so
+                // every card re-renders and every preview is computed again,
+                // to arrive at what is on screen already.
+                absorb(mine, fresh) {
+                    let changed = false;
+                    for (const [field, value] of Object.entries(fresh)) {
+                        if (this.THEIRS_NOT_OURS.includes(field)) continue;
+                        const here = mine[field];
+                        const same = (here === value)
+                            || (here && value && typeof here === 'object' && typeof value === 'object'
+                                && JSON.stringify(here) === JSON.stringify(value));
+                        if (same) continue;
+                        mine[field] = value;
+                        changed = true;
+                    }
+                    return changed;
+                },
+
+                // Read the list again without rebuilding it: take the entities
+                // that are already here, write what moved, add what is new, drop
+                // what is gone. Only what changed is computed again.
+                absorbEntities(fresh) {
+                    const here = new Map((this.hierarchy.entities || []).map(one => [one.registry_id, one]));
+                    const moved = [];
+                    const list = [];
+
+                    for (const one of fresh) {
+                        const mine = here.get(one.registry_id);
+                        if (!mine) {
+                            list.push({
+                                ...one,
+                                selected: false,
+                                _editing: false,
+                                _remember: false,
+                                _applying: false,
+                            });
+                            moved.push(list[list.length - 1]);
+                            continue;
+                        }
+                        here.delete(one.registry_id);
+                        if (this.absorb(mine, one)) moved.push(mine);
+                        list.push(mine);
+                    }
+
+                    // Order can change too, and entities can disappear; what is
+                    // left in `here` is no longer in the list.
+                    this.hierarchy.entities = list;
+                    return moved;
+                },
+
+                // The same for areas and devices, which the lists on either side
+                // render.
+                absorbAll(mine, fresh, key) {
+                    const here = new Map((mine || []).map(one => [one[key], one]));
+                    return fresh.map(one => {
+                        const seen = here.get(one[key]);
+                        if (!seen) return one;
+                        this.absorb(seen, one);
+                        return seen;
+                    });
+                },
+
                 // Load hierarchy data
                 // `quietly` reads the list again without emptying the screen
                 // first. After one entity was renamed the reader is looking at
@@ -4153,32 +4220,47 @@
                             fetch('api/naming_templates')
                         ]);
 
+                        // While Home Assistant is coming back its own proxy
+                        // answers for the add-on, and what it sends is a page,
+                        // not our JSON. Read the status before the body.
+                        if ([502, 503, 504].includes(hierarchyResponse.status)) {
+                            this.waitForCore();
+                            return;
+                        }
+
                         const data = await hierarchyResponse.json();
+
+                        if (data.core_starting) {
+                            // Updating an add-on restarts Home Assistant, and Core
+                            // takes a while to answer again. Wait it out on screen
+                            // instead of handing the reader a gateway error.
+                            this.waitForCore();
+                            return;
+                        }
+
                         const namingData = await namingResponse.json();
 
                         if (data.error) {
                             throw new Error(data.error);
                         }
 
-                        // A quiet read keeps what the reader is in the middle of:
-                        // which card is open, what stands unsaved in its field, and
-                        // which entity was just renamed. Those live on the entity
-                        // object and would otherwise be dropped with it.
-                        const held = new Map();
-                        if (quietly) {
-                            for (const one of this.hierarchy.entities || []) {
-                                held.set(one.id, {
-                                    _expanded: one._expanded,
-                                    _currentSuffix: one._currentSuffix,
-                                    _ruleScope: one._ruleScope,
-                                    _justRenamed: one._justRenamed,
-                                });
-                            }
-                        }
+                        const wasWaiting = this.coreStarting;
+                        this.stopWaitingForCore();
 
-                        Object.assign(this, {
-                            namingConfig: namingData,
-                            hierarchy: {
+                        this.namingConfig = namingData;
+                        this.stats = data.stats || {};
+
+                        if (quietly && this.hierarchy?.entities?.length) {
+                            // The list is already on screen. Write what moved onto
+                            // the entities that are there, and compute previews for
+                            // those alone.
+                            this.hierarchy.floors = data.floors || [];
+                            this.hierarchy.areas = this.absorbAll(this.hierarchy.areas, data.areas || [], 'id');
+                            this.hierarchy.devices = this.absorbAll(this.hierarchy.devices, data.devices || [], 'id');
+                            const moved = this.absorbEntities(data.entities || []);
+                            this.computePreviewsFor(moved);
+                        } else {
+                            this.hierarchy = {
                                 floors: data.floors || [],
                                 areas: data.areas || [],
                                 devices: data.devices || [],
@@ -4188,14 +4270,10 @@
                                     _editing: false,
                                     _remember: false,
                                     _applying: false,
-                                    ...(held.get(e.id) || {}),
                                 }))
-                            },
-                            stats: data.stats || {}
-                        });
-
-                        // Precompute preview values for all entities (performance optimization)
-                        this.precomputeEntityPreviews();
+                            };
+                            this.precomputeEntityPreviews();
+                        }
 
                         // selectedDeviceData ist eine gespeicherte Referenz -> aus der frisch
                         // geladenen Liste neu auflösen, damit Detail-Ansicht/Drift-Box aktuell sind
@@ -4204,11 +4282,36 @@
                             if (updated) this.selectedDeviceData = updated;
                         }
 
+                        // The references were skipped while Home Assistant was
+                        // down, and the count beside them would stay empty.
+                        if (wasWaiting) this.loadBrokenReferences();
+
                     } catch (error) {
                         console.error('Error loading hierarchy:', error);
                         this.showMessage('Error loading data: ' + error.message, 'error');
                     } finally {
                         this.loading = false;
+                    }
+                },
+
+                // Ask again in a moment, and keep the screen saying why. One
+                // timer at a time: a load that lands while one is pending would
+                // otherwise start a second.
+                waitForCore() {
+                    this.coreStarting = true;
+                    this.loading = false;
+                    if (this._waitingForCore) return;
+                    this._waitingForCore = setTimeout(() => {
+                        this._waitingForCore = null;
+                        this.loadHierarchy();
+                    }, 5000);
+                },
+
+                stopWaitingForCore() {
+                    this.coreStarting = false;
+                    if (this._waitingForCore) {
+                        clearTimeout(this._waitingForCore);
+                        this._waitingForCore = null;
                     }
                 },
 
@@ -4430,6 +4533,26 @@
                 // every other entity of that type and leaves this one alone.
                 //
                 // An unsaved edit therefore holds the card, however it renders.
+                // Whether "only changes" keeps this device on screen.
+                //
+                // A device somebody switched off has nothing to change: its
+                // entities cannot be renamed before it is back on, and the list
+                // does not show them (onADisabledDevice). Counting them here
+                // left the device standing under "only changes" above an empty
+                // list - "0 entities", nothing to do, no way to tell why.
+                deviceStaysInChangesFilter(device) {
+                    if (!device) return false;
+                    if (device.disabled_by) return false;
+                    if (this.deviceNameNeedsRename(device)) return true;
+                    // Z2M-Namens-Drift zählt als Änderung
+                    if (device.z2m_drift) return true;
+                    let mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
+                    if (!this.showDisabled) {
+                        mine = mine.filter(e => !e.disabled_by);
+                    }
+                    return mine.some(e => this.staysInChangesFilter(e));
+                },
+
                 staysInChangesFilter(entity) {
                     return this.entityNeedsRename(entity) || this.typeEdited(entity);
                 },
@@ -4512,9 +4635,22 @@
                 // Precompute preview values for all entities (called once after loading)
                 precomputeEntityPreviews() {
                     if (!this.hierarchy?.entities) return;
+                    this.computePreviewsFor(this.hierarchy.entities);
+                },
+
+                // What a set of entities would be called. Their own previews are
+                // dropped first: the answer changed, which is why they are here.
+                computePreviewsFor(entities) {
+                    if (!entities?.length) return;
+
+                    for (const entity of entities) {
+                        if (entity._justRenamed || entity._currentSuffix !== undefined) continue;
+                        entity._previewName = null;
+                        entity._previewId = null;
+                    }
 
                     const pending = [];
-                    for (const entity of this.hierarchy.entities) {
+                    for (const entity of entities) {
                         // Skip if already computed (e.g. from user edit) or just renamed
                         if (entity._previewName || entity._justRenamed) continue;
 
@@ -5011,7 +5147,7 @@
                             // still change what its neighbours are called.
                             entity._expanded = false;
                             entity._currentSuffix = undefined;
-                            if (ruleScopeApplied === 'all') await this.loadHierarchy();
+                            if (ruleScopeApplied === 'all') await this.loadHierarchy(true);
                             this.showMessage(this.t('entity.no_change'), 'info');
                             return;
                         }
@@ -5058,7 +5194,7 @@
                             this.invalidateEntityPreviews();
                             if (ruleScopeApplied === 'all') {
                                 // Other entities of this type now render differently.
-                                await this.loadHierarchy();
+                                await this.loadHierarchy(true);
                             } else if (ruleScopeApplied === 'here') {
                                 entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: typed};
                             }
@@ -5109,10 +5245,20 @@
                             // A type that several integrations supply means different things
                             // per integration ("Tür" is a contact sensor here, a fridge there),
                             // so that is the safer default.
+                            //
+                            // A word only one entity carries today is still the
+                            // integration's word, not that entity's: dyson_local
+                            // says "Next Deep Clean" for every fan it knows, and
+                            // the next one will arrive called that. An exception
+                            // here would name this one entity and leave the next
+                            // to be corrected again, so the integration is where
+                            // the answer belongs. Only a name with no integration
+                            // behind it is this entity's own business.
                             const perIntegration = entity.type_integration_count || 0;
+                            const fromAnIntegration = !!entity.platform;
                             entity._ruleScope = (entity.type_count || 0) > 1
                                 ? (perIntegration && perIntegration < entity.type_count ? 'integration' : 'all')
-                                : 'here';
+                                : (fromAnIntegration ? 'integration' : 'here');
                         }
                     }
                     if (entity._expanded && entity._currentSuffix === undefined) {

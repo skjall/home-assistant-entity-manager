@@ -189,6 +189,7 @@
     "dependencies_update_warning_title": "Abhängigkeiten konnten nicht automatisch aktualisiert werden",
     "dependencies_update_warning_desc": "Bitte überprüfen Sie die folgenden Entitäten manuell im Home Assistant:",
     "entity_marked_for_acceptance": "Entität zum Akzeptieren markiert",
+    "core_starting": "Home Assistant startet gerade. Sobald es antwortet, geht es weiter.",
     "rules_saved": "Regeln gespeichert",
     "nothing_to_apply": "Nichts zu übernehmen"
   },
