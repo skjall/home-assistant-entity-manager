@@ -231,7 +231,8 @@
     "enable": "Enable device",
     "enabling": "Enabling…",
     "enabled": "Device enabled",
-    "enable_it_first": "The device is disabled – enable the device first."
+    "enable_it_first": "The device is disabled – enable the device first.",
+    "id_conflict": "This name would take an entity id that is already held: {id}"
   },
   "units": {
     "entities": "Entities",
