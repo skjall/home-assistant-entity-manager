@@ -1,26 +1,32 @@
 # Local checks mirroring the CI (lint + tests), plus the two things CI can only
 # complain about after the fact: what a branch is called and what a commit says
 # it is. Install once with:
-#   pip install pre-commit && pre-commit install --hook-type pre-commit --hook-type commit-msg
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt -r requirements-test.txt
+#   .venv/bin/pre-commit install --hook-type pre-commit --hook-type commit-msg
+#
+# The three revisions below are the versions in requirements-dev.txt, which is
+# what the CI installs. They move together, by `pre-commit autoupdate` followed
+# by the same numbers in that file - otherwise a file passes here and fails
+# there, which is what happened when the hooks sat three versions behind.
 # Run on all files:
 #   pre-commit run --all-files
 exclude: '^(venv.*|legacy|node_modules|static)/'
 
 repos:
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 26.5.1
     hooks:
       - id: black
         args: ["--line-length=120", "--target-version=py312"]
 
   - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+    rev: 9.0.1
     hooks:
       - id: isort
         args: ["--profile=black", "--line-length=120"]
 
   - repo: https://github.com/pycqa/flake8
-    rev: 7.1.1
+    rev: 7.3.0
     hooks:
       - id: flake8
         args:
@@ -44,9 +50,18 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # The panel's behaviour lives inside the template, where a stray
+      # bracket is a blank screen rather than a failing test.
+      - id: template-scripts
+        name: the inline scripts parse
+        entry: python3 scripts/check_template_scripts.py
+        language: system
+        files: ^templates/.*\.html$
+        pass_filenames: false
+
       - id: pytest
         name: pytest
-        entry: pytest
+        entry: python3 scripts/run_tests.py
         language: system
         types: [python]
         pass_filenames: false
