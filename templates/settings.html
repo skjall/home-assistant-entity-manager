@@ -26,6 +26,11 @@
     <script src="static/js/v{{ version }}/config.js"></script>
     <script defer src="static/js/alpine.min.js"></script>
     <style>
+        /* Ink for anything sitting on a colour that dark does not turn over. */
+        .text-on-colour {
+            color: var(--ink-on-colour);
+        }
+
         .settings-container {
             max-width: 1200px;
             margin: 0 auto;
@@ -106,17 +111,17 @@
             align-items: flex-start;
             gap: 12px;
             padding: 14px 16px;
-            background: white;
+            background: var(--color-white);
             border: 1px solid var(--color-gray-200);
             border-left: 3px solid var(--color-blue-500);
             border-radius: 10px;
-            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+            box-shadow: 0 1px 2px var(--shadow-colour);
             transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
         }
 
         .rule-row:hover {
             border-color: var(--color-blue-200);
-            box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+            box-shadow: 0 4px 12px var(--shadow-colour);
             transform: translateY(-1px);
         }
 
@@ -326,14 +331,14 @@
 
         .filter-add:hover { background: var(--color-indigo-50); }
         .conflict-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--color-gray-100); }
-        .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid var(--color-gray-300); background: white; cursor: pointer; font-size: 0.85rem; }
-        .chip-active { background: var(--color-blue-600); color: white; border-color: var(--color-blue-600); }
+        .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid var(--color-gray-300); background: var(--color-white); cursor: pointer; font-size: 0.85rem; }
+        .chip-active { background: var(--fill-blue); color: var(--ink-on-colour); border-color: var(--color-blue-600); }
         .originals-list { margin-top: 6px; border: 1px solid var(--color-gray-200); border-radius: 6px; max-height: 220px; overflow-y: auto; }
-        .originals-item { display: flex; justify-content: space-between; width: 100%; text-align: left; padding: 8px 10px; background: white; border: 0; border-bottom: 1px solid var(--color-gray-100); cursor: pointer; font-size: 0.9rem; }
+        .originals-item { display: flex; justify-content: space-between; width: 100%; text-align: left; padding: 8px 10px; background: var(--color-white); border: 0; border-bottom: 1px solid var(--color-gray-100); cursor: pointer; font-size: 0.9rem; }
         .originals-item:hover { background: var(--color-blue-50); }
         .originals-meta { color: var(--color-gray-400); font-size: 0.75rem; margin-left: 12px; white-space: nowrap; }
         .mapping-section {
-            background: white;
+            background: var(--color-white);
             border-radius: 12px;
             box-shadow: 0 1px 3px var(--shadow-colour);
             overflow: hidden;
@@ -359,8 +364,8 @@
             align-items: center;
             gap: 6px;
             padding: 8px 16px;
-            background: var(--color-blue-500);
-            color: white;
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 6px;
             cursor: pointer;
@@ -479,8 +484,8 @@
 
         .save-btn {
             padding: 6px 12px;
-            background: var(--color-emerald-500);
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -522,7 +527,7 @@
         body.modal-open { overflow: hidden; }
 
         .modal {
-            background: white;
+            background: var(--color-white);
             border-radius: 12px;
             padding: 24px;
             width: 460px;
@@ -573,8 +578,8 @@
 
         .btn-primary {
             padding: 10px 20px;
-            background: var(--color-blue-500);
-            color: white;
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 6px;
             cursor: pointer;
@@ -640,7 +645,7 @@
             padding: 10px 14px;
             border: 1px solid var(--color-gray-300);
             border-radius: 8px;
-            background: white;
+            background: var(--color-white);
             color: var(--color-gray-700);
             font-size: 0.9rem;
             cursor: pointer;
@@ -654,8 +659,8 @@
             min-width: 20px;
             padding: 0 6px;
             border-radius: 9999px;
-            background: var(--color-blue-500);
-            color: white;
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
             font-size: 0.75rem;
             font-weight: 600;
             line-height: 18px;
@@ -757,7 +762,7 @@
             padding: 8px 14px;
             border: 1px solid var(--color-gray-300);
             border-radius: 8px;
-            background: white;
+            background: var(--color-white);
             color: var(--color-gray-700);
             font-size: 0.9rem;
             cursor: pointer;
@@ -816,10 +821,10 @@
             margin-top: 4px;
             max-height: 240px;
             overflow-y: auto;
-            background: white;
+            background: var(--color-white);
             border: 1px solid var(--color-gray-200);
             border-radius: 8px;
-            box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
+            box-shadow: 0 10px 24px var(--shadow-colour);
         }
 
         .combo-item {
@@ -885,7 +890,7 @@
             padding: 7px 12px;
             border: 1px solid var(--color-gray-200);
             border-radius: 9999px;
-            background: white;
+            background: var(--color-white);
             color: var(--color-gray-700);
             font-size: 0.85rem;
             cursor: pointer;
@@ -893,7 +898,7 @@
         }
 
         .option-chip:hover { border-color: var(--color-blue-300); background: var(--color-gray-50); }
-        .option-chip.picked { border-color: var(--color-blue-500); background: var(--color-blue-500); color: white; }
+        .option-chip.picked { border-color: var(--color-blue-500); background: var(--fill-blue); color: var(--ink-on-colour); }
         .option-chip .tally { font-size: 0.75rem; opacity: 0.7; }
         .option-chip.picked .tally { opacity: 0.85; }
 
@@ -902,7 +907,7 @@
             border: 1px solid var(--color-gray-300);
             border-radius: 6px;
             font-size: 0.9rem;
-            background: white;
+            background: var(--color-white);
         }
 
         .empty-state {
@@ -1696,7 +1701,7 @@
                           style="width: 100%; height: 200px; font-family: monospace; font-size: 0.9rem; padding: 12px; border: 1px solid var(--color-gray-300); border-radius: 6px; resize: vertical;"
                           :placeholder="t('settings.import_export_placeholder')"></textarea>
                 <div style="display: flex; gap: 12px; margin-top: 12px;">
-                    <button class="add-btn" @click="exportMappings()" style="background: var(--color-gray-500);">
+                    <button class="add-btn" @click="exportMappings()" style="background: var(--fill-muted);">
                         <i class="ri-download-line"></i>
                         <span x-text="t('settings.export')">Export</span>
                     </button>
@@ -1768,7 +1773,7 @@
                             <i class="ri-key-2-line"></i>
                             <span x-text="apiToken.configured ? t('settings.api_token_regenerate') : t('settings.api_token_generate')">Generate token</span>
                         </button>
-                        <button class="add-btn" x-show="apiToken.configured" @click="revokeApiToken()" style="background: var(--color-red-500);">
+                        <button class="add-btn" x-show="apiToken.configured" @click="revokeApiToken()" style="background: var(--fill-red);">
                             <i class="ri-delete-bin-line"></i>
                             <span x-text="t('settings.api_token_revoke')">Revoke</span>
                         </button>
@@ -1782,7 +1787,7 @@
                     <div style="display: flex; gap: 8px;">
                         <input type="text" readonly :value="newApiToken" x-ref="tokenField"
                                style="flex: 1; font-family: monospace; font-size: 0.85rem; padding: 8px; border: 1px solid var(--color-gray-300); border-radius: 6px;">
-                        <button class="add-btn" @click="copyApiToken()" style="background: var(--color-gray-500);">
+                        <button class="add-btn" @click="copyApiToken()" style="background: var(--fill-muted);">
                             <i class="ri-file-copy-line"></i>
                             <span x-text="tokenCopied ? t('settings.api_token_copied') : t('settings.api_token_copy')">Copy</span>
                         </button>
@@ -2053,7 +2058,7 @@
 
         <!-- Loading Overlay -->
         <div class="modal-overlay" x-show="loading" x-cloak>
-            <div style="text-align: center; color: white;">
+            <div style="text-align: center; color: var(--ink-on-colour);">
                 <i class="ri-loader-4-line" style="font-size: 2rem; animation: spin 1s linear infinite;"></i>
                 <p x-text="t('settings.loading')">Loading...</p>
             </div>

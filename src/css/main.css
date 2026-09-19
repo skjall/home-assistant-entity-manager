@@ -36,6 +36,19 @@
     --surface: var(--color-white);
     --surface-sunken: var(--color-gray-50);
     --shadow-colour: rgb(0 0 0 / 0.1);
+    --veil: rgb(255 255 255 / 0.25);
+    /* Ink that sits on a colour, and the bar that carries the path. */
+    --ink-on-colour: #ffffff;
+    --banner-from: #3b82f6;
+    --banner-to: #8b5cf6;
+    /* What a filled button is made of. Dark keeps these dark, because the
+       light ink on them does not turn over. */
+    --fill-blue: #3b82f6;
+    --fill-red: #ef4444;
+    --fill-green: #10b981;
+    --fill-amber: #f59e0b;
+    --fill-indigo: #4f46e5;
+    --fill-muted: #6b7280;
 }
 
 /* Dark is one reading of the same names: the greys turn over, the accents stay
@@ -57,31 +70,22 @@
 
         --color-blue-50: #1e3a5f;
         --color-blue-100: #1e40af;
-        --color-blue-500: #60a5fa;
-        --color-blue-600: var(--color-blue-500);
 
         --color-amber-50: #422006;
         --color-amber-100: #4d3208;
         --color-amber-200: #78350f;
-        --color-amber-500: #fbbf24;
         --color-amber-800: #fcd34d;
 
         --color-red-50: #3f1d1d;
         --color-red-100: #4c1d1d;
         --color-red-200: #7f1d1d;
-        --color-red-500: #f87171;
-        --color-red-600: #ef4444;
         --color-red-700: #fca5a5;
 
         --color-emerald-50: #052e23;
         --color-emerald-100: #064e3b;
-        --color-emerald-500: #34d399;
-        --color-emerald-600: #10b981;
         --color-emerald-800: #6ee7b7;
 
         --color-violet-100: #3730a3;
-        --color-violet-500: #a78bfa;
-        --color-violet-600: #8b5cf6;
 
         --color-yellow-50: #3f3a06;
     --color-amber-300: #b45309;
@@ -91,16 +95,12 @@
     --color-violet-400: #c4b5fd;
     --color-blue-300: #1e40af;
     --color-emerald-300: #047857;
-    --color-green-600: #4ade80;
     --color-indigo-50: #1e1b4b;
     --color-indigo-100: #312e81;
     --color-indigo-200: #3730a3;
-    --color-indigo-500: #818cf8;
-    --color-indigo-600: #6366f1;
     --color-indigo-700: #a5b4fc;
     --color-indigo-800: #c7d2fe;
     --color-amber-400: #fbbf24;
-    --color-amber-600: #fbbf24;
     --color-amber-700: #fcd34d;
     --color-amber-900: #fde68a;
     --color-blue-200: #1e40af;
@@ -111,17 +111,40 @@
     --color-green-100: #14532d;
     --color-green-200: #166534;
     --color-green-400: #4ade80;
-    --color-green-500: #4ade80;
     --color-green-700: #86efac;
     --color-green-800: #bbf7d0;
-    --color-orange-500: #fb923c;
-    --color-purple-500: #c084fc;
     --color-red-400: #fca5a5;
     --color-red-800: #fecaca;
 
         --surface: #1f2937;
         --surface-sunken: #111827;
         --shadow-colour: rgb(0 0 0 / 0.4);
+    --veil: rgb(255 255 255 / 0.10);
+    --ink-on-colour: #f8fafc;
+    --banner-from: #1e40af;
+    --banner-to: #5b21b6;
+    --color-blue-500: #60a5fa;
+    --color-blue-600: #3b82f6;
+    --color-red-500: #f87171;
+    --color-red-600: #ef4444;
+    --color-emerald-500: #34d399;
+    --color-emerald-600: #10b981;
+    --color-green-500: #4ade80;
+    --color-green-600: #4ade80;
+    --color-amber-500: #fbbf24;
+    --color-amber-600: #fbbf24;
+    --color-violet-500: #a78bfa;
+    --color-violet-600: #8b5cf6;
+    --color-indigo-500: #818cf8;
+    --color-indigo-600: #6366f1;
+    --color-orange-500: #fb923c;
+    --color-purple-500: #c084fc;
+    --fill-blue: #1d4ed8;
+    --fill-red: #b91c1c;
+    --fill-green: #047857;
+    --fill-amber: #b45309;
+    --fill-indigo: #4338ca;
+    --fill-muted: #4b5563;
     }
 }
 
@@ -140,31 +163,22 @@
 
     --color-blue-50: #1e3a5f;
     --color-blue-100: #1e40af;
-    --color-blue-500: #60a5fa;
-    --color-blue-600: var(--color-blue-500);
 
     --color-amber-50: #422006;
     --color-amber-100: #4d3208;
     --color-amber-200: #78350f;
-    --color-amber-500: #fbbf24;
     --color-amber-800: #fcd34d;
 
     --color-red-50: #3f1d1d;
     --color-red-100: #4c1d1d;
     --color-red-200: #7f1d1d;
-    --color-red-500: #f87171;
-    --color-red-600: #ef4444;
     --color-red-700: #fca5a5;
 
     --color-emerald-50: #052e23;
     --color-emerald-100: #064e3b;
-    --color-emerald-500: #34d399;
-    --color-emerald-600: #10b981;
     --color-emerald-800: #6ee7b7;
 
     --color-violet-100: #3730a3;
-    --color-violet-500: #a78bfa;
-    --color-violet-600: #8b5cf6;
 
     --color-yellow-50: #3f3a06;
     --color-amber-300: #b45309;
@@ -174,16 +188,12 @@
     --color-violet-400: #c4b5fd;
     --color-blue-300: #1e40af;
     --color-emerald-300: #047857;
-    --color-green-600: #4ade80;
     --color-indigo-50: #1e1b4b;
     --color-indigo-100: #312e81;
     --color-indigo-200: #3730a3;
-    --color-indigo-500: #818cf8;
-    --color-indigo-600: #6366f1;
     --color-indigo-700: #a5b4fc;
     --color-indigo-800: #c7d2fe;
     --color-amber-400: #fbbf24;
-    --color-amber-600: #fbbf24;
     --color-amber-700: #fcd34d;
     --color-amber-900: #fde68a;
     --color-blue-200: #1e40af;
@@ -194,17 +204,40 @@
     --color-green-100: #14532d;
     --color-green-200: #166534;
     --color-green-400: #4ade80;
-    --color-green-500: #4ade80;
     --color-green-700: #86efac;
     --color-green-800: #bbf7d0;
-    --color-orange-500: #fb923c;
-    --color-purple-500: #c084fc;
     --color-red-400: #fca5a5;
     --color-red-800: #fecaca;
 
     --surface: #1f2937;
     --surface-sunken: #111827;
     --shadow-colour: rgb(0 0 0 / 0.4);
+    --veil: rgb(255 255 255 / 0.10);
+    --ink-on-colour: #f8fafc;
+    --banner-from: #1e40af;
+    --banner-to: #5b21b6;
+    --color-blue-500: #60a5fa;
+    --color-blue-600: #3b82f6;
+    --color-red-500: #f87171;
+    --color-red-600: #ef4444;
+    --color-emerald-500: #34d399;
+    --color-emerald-600: #10b981;
+    --color-green-500: #4ade80;
+    --color-green-600: #4ade80;
+    --color-amber-500: #fbbf24;
+    --color-amber-600: #fbbf24;
+    --color-violet-500: #a78bfa;
+    --color-violet-600: #8b5cf6;
+    --color-indigo-500: #818cf8;
+    --color-indigo-600: #6366f1;
+    --color-orange-500: #fb923c;
+    --color-purple-500: #c084fc;
+    --fill-blue: #1d4ed8;
+    --fill-red: #b91c1c;
+    --fill-green: #047857;
+    --fill-amber: #b45309;
+    --fill-indigo: #4338ca;
+    --fill-muted: #4b5563;
 }
 
 /* The page itself, so nothing shines white behind the panel. */

@@ -70,7 +70,7 @@
         }
 
         .panel {
-            background-color: white;
+            background-color: var(--color-white);
             overflow-y: auto;
             display: flex;
             flex-direction: column;
@@ -79,7 +79,7 @@
         .panel-header {
             position: sticky;
             top: 0;
-            background: white;
+            background: var(--color-white);
             z-index: 10;
             border-bottom: 1px solid var(--color-gray-200);
             padding: 12px 16px;
@@ -201,7 +201,7 @@
             padding: 6px 10px;
             border: 1px solid var(--color-gray-300);
             border-radius: 6px;
-            background: white;
+            background: var(--color-white);
             color: var(--color-gray-700);
             cursor: pointer;
             transition: border-color 0.15s;
@@ -222,7 +222,7 @@
             margin: 4px 0;
             border-radius: 6px;
             border: 1px solid var(--color-gray-200);
-            background: white;
+            background: var(--color-white);
             transition: all 0.15s ease;
             cursor: pointer;
         }
@@ -306,7 +306,7 @@
             margin: 8px 0;
             border-radius: 8px;
             border: 1px solid var(--color-gray-200);
-            background: white;
+            background: var(--color-white);
             overflow: hidden;
         }
 
@@ -348,10 +348,10 @@
             transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         }
 
-        .btn-primary { background: var(--color-blue-500); color: white; }
+        .btn-primary { background: var(--fill-blue); color: var(--ink-on-colour); }
         .btn-primary:hover { background: var(--color-blue-600); }
 
-        .btn-ghost { background: white; border-color: var(--color-gray-300); color: var(--color-gray-700); }
+        .btn-ghost { background: var(--color-white); border-color: var(--color-gray-300); color: var(--color-gray-700); }
         .btn-ghost:hover { border-color: var(--color-gray-400); }
 
         .suggestion-list {
@@ -365,7 +365,7 @@
             align-items: center;
             gap: 12px;
             padding: 10px 12px;
-            background: white;
+            background: var(--color-white);
             border: 1px solid var(--color-gray-200);
             border-radius: 6px;
             cursor: pointer;
@@ -540,7 +540,7 @@
 
         /* Grouped Broken References */
         .broken-ref-group {
-            background: white;
+            background: var(--color-white);
             border: 1px solid var(--color-gray-200);
             border-radius: 8px;
             margin-bottom: 8px;
@@ -671,8 +671,8 @@
         }
 
         .broken-ref-group .btn-filled-green {
-            background: var(--color-emerald-500);
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
             border: 1px solid var(--color-emerald-500);
         }
         .broken-ref-group .btn-filled-green:hover {
@@ -812,8 +812,8 @@
             align-items: center;
             gap: 6px;
             padding: 8px 16px;
-            background: var(--color-emerald-500);
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 6px;
             font-size: 0.85rem;
@@ -849,8 +849,8 @@
         .entity-card-simple .disabled-banner .enable-btn {
             margin-left: auto;
             padding: 2px 10px;
-            background: var(--color-emerald-600);
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 4px;
             font-size: 0.75rem;
@@ -976,8 +976,8 @@
         }
 
         .entity-card-simple .btn-filled-green {
-            background: var(--color-emerald-500);
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
             border: 1px solid var(--color-emerald-500);
         }
         .entity-card-simple .btn-filled-green:hover {
@@ -986,8 +986,8 @@
         }
 
         .entity-card-simple .btn-filled-red {
-            background: var(--color-red-500);
-            color: white;
+            background: var(--fill-red);
+            color: var(--ink-on-colour);
             border: 1px solid var(--color-red-500);
         }
         .entity-card-simple .btn-filled-red:hover {
@@ -1007,13 +1007,13 @@
 
         /* Hover transitions for outline → filled */
         .entity-card-simple .btn-outline-gray.hover\:btn-filled-green:hover {
-            background: var(--color-emerald-500);
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
             border-color: var(--color-emerald-500);
         }
         .entity-card-simple .btn-outline-gray.hover\:btn-filled-red:hover {
-            background: var(--color-red-500);
-            color: white;
+            background: var(--fill-red);
+            color: var(--ink-on-colour);
             border-color: var(--color-red-500);
         }
 
@@ -1057,8 +1057,8 @@
 
         .entity-card-simple .save-btn {
             padding: 8px 16px;
-            background: var(--color-blue-500);
-            color: white;
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 6px;
             cursor: pointer;
@@ -1150,18 +1150,18 @@
         }
 
         .confidence-badge.confidence-high {
-            background: var(--color-emerald-500);
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
         }
 
         .confidence-badge.confidence-medium {
-            background: var(--color-amber-500);
-            color: white;
+            background: var(--fill-amber);
+            color: var(--ink-on-colour);
         }
 
         .confidence-badge.confidence-low {
-            background: var(--color-red-500);
-            color: white;
+            background: var(--fill-red);
+            color: var(--ink-on-colour);
         }
 
         .entity-group .entity-card {
@@ -1175,8 +1175,8 @@
         }
 
         .inheritance-bar {
-            background: linear-gradient(90deg, var(--color-blue-500), var(--color-violet-500));
-            color: white;
+            background: linear-gradient(90deg, var(--banner-from), var(--banner-to));
+            color: var(--ink-on-colour);
             padding: 8px 16px;
             font-size: 13px;
             display: flex;
@@ -1205,7 +1205,7 @@
         .badge-gray { background: var(--color-gray-100); color: var(--color-gray-600); }
 
         .edit-input {
-            background: white;
+            background: var(--color-white);
             border: 1px solid var(--color-gray-300);
             border-radius: 6px;
             padding: 6px 10px;
@@ -1233,8 +1233,8 @@
         }
 
         .btn-primary {
-            background: var(--color-blue-500);
-            color: white;
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
         }
 
         .btn-primary:hover {
@@ -1242,8 +1242,8 @@
         }
 
         .btn-success {
-            background: var(--color-emerald-500);
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
         }
 
         .btn-success:hover {
@@ -1332,7 +1332,7 @@
                 display: flex;
                 align-items: center;
                 padding: 12px 16px;
-                background: white;
+                background: var(--color-white);
                 border-bottom: 1px solid var(--color-gray-200);
                 min-height: 56px;
                 gap: 12px;
@@ -1397,7 +1397,7 @@
                 bottom: 0;
                 transform: translateX(100%);
                 transition: transform 0.3s ease;
-                background: white;
+                background: var(--color-white);
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
@@ -1543,7 +1543,7 @@
                 left: 0;
                 right: 0;
                 z-index: 50;
-                background: white;
+                background: var(--color-white);
                 border-top: 1px solid var(--color-gray-200);
                 box-shadow: 0 -4px 6px -1px var(--shadow-colour);
             }
@@ -1597,6 +1597,21 @@
             gap: 6px;
             margin-left: auto;
         }
+        /* Ink for anything sitting on a colour that dark does not turn over. */
+        .text-on-colour {
+            color: var(--ink-on-colour);
+        }
+
+        /* A utility fill carrying that ink follows the same rule. */
+        .text-on-colour.bg-blue-500, .text-on-colour.bg-blue-600 { background-color: var(--fill-blue); }
+        .text-on-colour.bg-red-500, .text-on-colour.bg-red-600 { background-color: var(--fill-red); }
+        .text-on-colour.bg-green-500, .text-on-colour.bg-green-600,
+        .text-on-colour.bg-emerald-500, .text-on-colour.bg-emerald-600 { background-color: var(--fill-green); }
+        .text-on-colour.bg-amber-500, .text-on-colour.bg-amber-600 { background-color: var(--fill-amber); }
+        .text-on-colour.hover\:bg-blue-700:hover { background-color: var(--fill-blue); filter: brightness(1.15); }
+        .text-on-colour.hover\:bg-red-700:hover { background-color: var(--fill-red); filter: brightness(1.15); }
+        .text-on-colour.hover\:bg-amber-600:hover { background-color: var(--fill-amber); filter: brightness(1.15); }
+
         .theme-switch {
             display: inline-flex;
             border: 1px solid var(--color-gray-300);
@@ -1662,12 +1677,12 @@
         .scope-option:first-child { border-left: 0; }
         .scope-option:hover { background: var(--color-gray-100); }
         .scope-option.is-active {
-            background: var(--color-blue-600);
-            color: var(--color-white);
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
         }
         .scope-option.is-active .scope-count {
-            background: rgba(255, 255, 255, 0.25);
-            color: var(--color-white);
+            background: var(--veil);
+            color: var(--ink-on-colour);
         }
         .scope-count {
             font-size: 0.7rem;
@@ -2010,7 +2025,7 @@
                                :disabled="renamingDevice || applyingEntityId || executing">
                         <button @click="renameDeviceInHA($refs.deviceNameInput.value)"
                                 class="btn btn-sm"
-                                style="background: var(--color-emerald-500); color: var(--color-white);"
+                                style="background: var(--fill-green); color: var(--ink-on-colour);"
                                 :disabled="renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)"
                                 :class="{'opacity-50 cursor-not-allowed': renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)}"
                                 :title="isDeviceNameTaken(selectedDeviceData) ? t('device.name_conflict') : ''">
@@ -2033,7 +2048,7 @@
                             </div>
                             <button @click="syncZ2mName(selectedDeviceData)"
                                     :disabled="syncingZ2m"
-                                    class="shrink-0 text-xs px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
+                                    class="shrink-0 text-xs px-2 py-1 rounded bg-amber-500 text-on-colour hover:bg-amber-600"
                                     :class="{'opacity-50 cursor-not-allowed': syncingZ2m}">
                                 <i class="mr-1" :class="syncingZ2m ? 'ri-loader-4-line animate-spin' : 'ri-check-line'"></i><span
                                     x-text="t('entity.apply_rename')">Apply rename</span>
@@ -2535,7 +2550,7 @@
              x-show="message"
              x-transition
              class="fixed bottom-20 right-4 max-w-md p-4 rounded-lg shadow-lg z-50"
-             :class="messageType === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'">
+             :class="messageType === 'success' ? 'bg-green-600 text-on-colour' : 'bg-red-600 text-on-colour'">
             <div class="flex items-center gap-2">
                 <i :class="messageType === 'success' ? 'ri-check-circle-line' : 'ri-error-warning-line'" class="text-xl"></i>
                 <span x-text="message"></span>
@@ -2693,7 +2708,7 @@
                         Cancel
                     </button>
                     <button @click="executeDeleteEntity()"
-                            class="btn bg-red-600 text-white hover:bg-red-700">
+                            class="btn bg-red-600 text-on-colour hover:bg-red-700">
                         <i class="ri-delete-bin-line mr-2"></i>
                         <span x-text="t('delete_modal.delete')">Delete</span>
                     </button>
@@ -2743,7 +2758,7 @@
                             <div class="flex items-center" :class="i < swap.steps.length - 1 ? 'flex-1' : ''">
                                 <div class="flex flex-col items-center gap-1.5 shrink-0">
                                     <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-all"
-                                         :class="swap.step > s.n ? 'bg-green-500 text-white' : swap.step === s.n ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-white text-gray-400 border border-gray-300'">
+                                         :class="swap.step > s.n ? 'bg-green-500 text-on-colour' : swap.step === s.n ? 'bg-blue-600 text-on-colour ring-4 ring-blue-100' : 'bg-white text-gray-400 border border-gray-300'">
                                         <i x-show="swap.step > s.n" class="ri-check-line text-lg"></i>
                                         <i x-show="swap.step === s.n" :class="s.icon"></i>
                                         <span x-show="swap.step < s.n" x-text="s.n"></span>
@@ -2996,7 +3011,7 @@
                 </div>
                 <div x-show="swap.step === 3" class="flex justify-between gap-2 px-6 py-4 border-t border-gray-100">
                     <button @click="swap.step=2" class="btn btn-ghost"><i class="ri-arrow-left-line mr-1"></i>Zurück</button>
-                    <button @click="swapExecute()" class="btn" :class="swap.disposition==='delete' ? 'bg-red-600 text-white hover:bg-red-700' : 'btn-primary'" :disabled="swap.busy">
+                    <button @click="swapExecute()" class="btn" :class="swap.disposition==='delete' ? 'bg-red-600 text-on-colour hover:bg-red-700' : 'btn-primary'" :disabled="swap.busy">
                         <i x-show="swap.busy" class="ri-loader-4-line animate-spin mr-1"></i><span x-text="swap.busy ? 'Wird ausgeführt…' : 'Austausch starten'"></span>
                     </button>
                 </div>
