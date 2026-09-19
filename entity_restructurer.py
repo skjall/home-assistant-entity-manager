@@ -1236,9 +1236,19 @@ class EntityRestructurer:
         renders one ID for all of them. Home Assistant refuses every rename
         after the first, and the proposal returns unchanged on the next run.
 
-        Duplicates are numbered the way Home Assistant numbers them. An entity
-        that already holds the plain ID keeps it, and the order follows the
-        current entity IDs, so the numbering is the same on every run.
+        Where several proposals want one ID, every one of them is numbered and
+        the counting starts at one: a pair reads _1 and _2, not the plain ID
+        and _2. Home Assistant counts the other way, but a list in which the
+        first of two carries no number reads as though only the second were a
+        duplicate - and an entity the integration already called "(1)" loses
+        its one.
+
+        A single proposal keeps the plain ID. It only takes a number when an
+        entity outside this batch holds the ID already, and then from two,
+        because the one holding it is the unnumbered first.
+
+        The order follows the current entity IDs, so the numbering is the same
+        on every run.
 
         Args:
             proposals: (entity_id, new_entity_id, friendly_name) triples
@@ -1253,20 +1263,40 @@ class EntityRestructurer:
         for entity_id, new_entity_id, _ in proposals:
             by_target[new_entity_id].append(entity_id)
 
-        assigned: Dict[str, Tuple[str, int]] = {}
+        # entity_id -> (id it gets, the number it carries or None)
+        assigned: Dict[str, Tuple[str, Optional[int]]] = {}
+        peers: Dict[str, str] = {}
         for target, holders in by_target.items():
             domain, _, object_id = target.partition(".")
-            # Whoever already owns the target keeps it; the rest follow in a
+            # Whoever already owns the target goes first; the rest follow in a
             # stable order rather than in dictionary order.
             ordered = sorted(holders, key=lambda entity_id: (entity_id != target, entity_id))
+            several = len(ordered) > 1
+            if several:
+                # Who the note names: the first of them, and for the first the
+                # one after it, since a note pointing at itself says nothing.
+                for position, entity_id in enumerate(ordered):
+                    peers[entity_id] = ordered[1] if position == 0 else ordered[0]
+            number = 1
             for entity_id in ordered:
-                candidate = target
-                suffix = 1
-                while candidate in taken:
-                    suffix += 1
-                    candidate = f"{domain}.{object_id}_{suffix}"
+                if several:
+                    # Each of them says which one it is, from the first.
+                    candidate = f"{domain}.{object_id}_{number}"
+                    while candidate in taken:
+                        number += 1
+                        candidate = f"{domain}.{object_id}_{number}"
+                    carried = number
+                    number += 1
+                else:
+                    candidate = target
+                    carried = None
+                    suffix = 1
+                    while candidate in taken:
+                        suffix += 1
+                        candidate = f"{domain}.{object_id}_{suffix}"
+                        carried = suffix
                 taken.add(candidate)
-                assigned[entity_id] = (candidate, suffix)
+                assigned[entity_id] = (candidate, carried)
                 if candidate != target:
                     logger.info("Entity ID %s already taken, using %s for %s", target, candidate, entity_id)
 
@@ -1277,19 +1307,23 @@ class EntityRestructurer:
         self.last_numbering = {}
         resolved = []
         for entity_id, new_entity_id, friendly_name in proposals:
-            candidate, suffix = assigned.get(entity_id, (new_entity_id, 1))
+            candidate, carried = assigned.get(entity_id, (new_entity_id, None))
             # The friendly name carries the number too, so it matches the ID and
             # tells the two entities apart in the UI.
-            if suffix > 1 and friendly_name:
-                friendly_name = f"{friendly_name} {suffix}"
-            if suffix > 1:
+            if carried and friendly_name:
+                friendly_name = f"{friendly_name} {carried}"
+            if carried:
                 # The number is a way out, not an answer: two entities of one
                 # device really do render the same name, and only the user can
                 # say what tells them apart.
                 self.last_numbering[entity_id] = {
                     "wanted": new_entity_id,
-                    "holder": holders.get(new_entity_id) or (new_entity_id if new_entity_id in self.entities else None),
-                    "suffix": suffix,
+                    "holder": (
+                        peers.get(entity_id)
+                        or holders.get(new_entity_id)
+                        or (new_entity_id if new_entity_id in self.entities else None)
+                    ),
+                    "suffix": carried,
                 }
             resolved.append((entity_id, candidate, friendly_name))
         return resolved
