@@ -1729,12 +1729,14 @@
                     </div>
                 </div>
                 <div class="panel-content">
-                    <template x-if="loading">
-                        <div class="flex items-center justify-center py-8">
+                    <template x-if="loading || coreStarting">
+                        <div class="flex flex-col items-center justify-center gap-3 py-8">
                             <i class="ri-loader-4-line animate-spin text-2xl text-blue-600"></i>
+                            <span x-show="coreStarting" class="text-sm text-gray-500 text-center px-4"
+                                  x-text="t('messages.core_starting')"></span>
                         </div>
                     </template>
-                    <template x-if="!loading">
+                    <template x-if="!loading && !coreStarting">
                         <div>
                             <template x-for="area in sortedAreas" :key="area.id">
                                 <div class="hierarchy-item"
@@ -3707,6 +3709,12 @@
                 },
 
                 // Initialize
+                // Home Assistant is restarting and has not answered yet. Not an
+                // error anybody can act on, so the panel says what it is waiting
+                // for and keeps asking.
+                coreStarting: false,
+                _waitingForCore: null,
+
                 async init() {
                     // Home Assistant always opens this app at its root, so a reload
                     // from the settings would drop the user here. Go back.
@@ -3896,7 +3904,21 @@
                     try {
                         const url = forceRefresh ? 'api/broken_references?refresh=true' : 'api/broken_references';
                         const response = await fetch(url);
+
+                        if ([502, 503, 504].includes(response.status)) {
+                            // Home Assistant is still starting. The hierarchy is
+                            // already waiting on it and reads these again when it
+                            // answers; a second message says nothing more.
+                            this.waitForCore();
+                            return;
+                        }
+
                         const data = await response.json();
+
+                        if (data.core_starting) {
+                            this.waitForCore();
+                            return;
+                        }
 
                         if (data.error) {
                             throw new Error(data.error);
@@ -4226,12 +4248,32 @@
                             fetch('api/naming_templates')
                         ]);
 
+                        // While Home Assistant is coming back its own proxy
+                        // answers for the add-on, and what it sends is a page,
+                        // not our JSON. Read the status before the body.
+                        if ([502, 503, 504].includes(hierarchyResponse.status)) {
+                            this.waitForCore();
+                            return;
+                        }
+
                         const data = await hierarchyResponse.json();
+
+                        if (data.core_starting) {
+                            // Updating an add-on restarts Home Assistant, and Core
+                            // takes a while to answer again. Wait it out on screen
+                            // instead of handing the reader a gateway error.
+                            this.waitForCore();
+                            return;
+                        }
+
                         const namingData = await namingResponse.json();
 
                         if (data.error) {
                             throw new Error(data.error);
                         }
+
+                        const wasWaiting = this.coreStarting;
+                        this.stopWaitingForCore();
 
                         this.namingConfig = namingData;
                         this.stats = data.stats || {};
@@ -4268,11 +4310,36 @@
                             if (updated) this.selectedDeviceData = updated;
                         }
 
+                        // The references were skipped while Home Assistant was
+                        // down, and the count beside them would stay empty.
+                        if (wasWaiting) this.loadBrokenReferences();
+
                     } catch (error) {
                         console.error('Error loading hierarchy:', error);
                         this.showMessage('Error loading data: ' + error.message, 'error');
                     } finally {
                         this.loading = false;
+                    }
+                },
+
+                // Ask again in a moment, and keep the screen saying why. One
+                // timer at a time: a load that lands while one is pending would
+                // otherwise start a second.
+                waitForCore() {
+                    this.coreStarting = true;
+                    this.loading = false;
+                    if (this._waitingForCore) return;
+                    this._waitingForCore = setTimeout(() => {
+                        this._waitingForCore = null;
+                        this.loadHierarchy();
+                    }, 5000);
+                },
+
+                stopWaitingForCore() {
+                    this.coreStarting = false;
+                    if (this._waitingForCore) {
+                        clearTimeout(this._waitingForCore);
+                        this._waitingForCore = null;
                     }
                 },
 

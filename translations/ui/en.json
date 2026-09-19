@@ -188,7 +188,8 @@
     "dependency_warnings": "dependency warnings",
     "dependencies_update_warning_title": "Dependencies could not be automatically updated",
     "dependencies_update_warning_desc": "Please check the following entities manually in Home Assistant:",
-    "entity_marked_for_acceptance": "Entity marked for acceptance"
+    "entity_marked_for_acceptance": "Entity marked for acceptance",
+    "core_starting": "Home Assistant is starting up. This continues as soon as it answers."
   },
   "dependencies": {
     "title": "Dependencies for",

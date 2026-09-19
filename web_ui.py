@@ -26,6 +26,7 @@ import access
 from app_state import UNASSIGNED_AREA, ensure_mqtt_bridge, init_client, renamer_state
 import asgi
 from config_files import out_of_reach as references_out_of_reach
+import core_readiness
 from dependency_updater import DependencyUpdater
 from device_registry import DeviceRegistry
 from entity_registry import EntityRegistry
@@ -313,6 +314,18 @@ async def load_areas_and_entities():
     except Exception as e:
         logger.error(f"Error in load_areas_and_entities: {str(e)}", exc_info=True)
         raise
+
+
+def still_starting(error):
+    """The answer for a request Home Assistant cannot serve yet, or None.
+
+    A restart is a wait, not a failure: the panel keeps asking rather than
+    reporting a gateway error the reader can do nothing with.
+    """
+    if not core_readiness.core_is_starting(error):
+        return None
+    logger.info("Home Assistant is not answering yet: %s", error)
+    return jsonify({"core_starting": True, "error": str(error)}), 503
 
 
 @app.route("/")
@@ -1575,6 +1588,9 @@ async def _get_broken_references_async():
             }
         )
     except Exception as e:
+        waiting = still_starting(e)
+        if waiting:
+            return waiting
         logger.error(f"Error scanning broken references: {e}")
         return jsonify({"error": str(e)}), 500
 
@@ -2137,6 +2153,11 @@ async def _get_hierarchy_async():
         )
 
     except Exception as e:
+        # Updating the add-on restarts Home Assistant, and this is what the wait
+        # looks like from in here.
+        waiting = still_starting(e)
+        if waiting:
+            return waiting
         logger.error(f"Error getting hierarchy: {e}")
         return jsonify({"error": str(e)}), 500
 
