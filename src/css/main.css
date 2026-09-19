@@ -4,6 +4,262 @@
 @source "../../templates/**/*.html";
 @source "../../src/**/*.js";
 
+/* Colours Tailwind does not ship as variables, so the page can name them too. */
+:root {
+    --color-emerald-50: #ecfdf5;
+    --color-emerald-100: #d1fae5;
+    --color-emerald-500: #10b981;
+    --color-emerald-600: #059669;
+    --color-emerald-800: #065f46;
+    --color-violet-100: #ede9fe;
+    --color-violet-500: #8b5cf6;
+    --color-violet-600: #7c3aed;
+    --color-yellow-50: #fefce8;
+    --color-amber-300: #fcd34d;
+    --color-emerald-200: #a7f3d0;
+    --color-emerald-400: #34d399;
+    --color-emerald-700: #047857;
+    --color-violet-400: #a78bfa;
+    --color-amber-200: #fde68a;
+    --color-red-200: #fecaca;
+    --color-blue-300: #93c5fd;
+    --color-emerald-300: #6ee7b7;
+    --color-green-600: #16a34a;
+    --color-indigo-50: #eef2ff;
+    --color-indigo-100: #e0e7ff;
+    --color-indigo-200: #c7d2fe;
+    --color-indigo-500: #6366f1;
+    --color-indigo-600: #4f46e5;
+    --color-indigo-700: #4338ca;
+    --color-indigo-800: #3730a3;
+    /* What a card, a page and a shadow are made of, so dark can say it once. */
+    --surface: var(--color-white);
+    --surface-sunken: var(--color-gray-50);
+    --shadow-colour: rgb(0 0 0 / 0.1);
+    --veil: rgb(255 255 255 / 0.25);
+    --badge-resting: #f3f4f6;
+    /* Ink that sits on a colour, and the bar that carries the path. */
+    --ink-on-colour: #ffffff;
+    --banner-from: #3b82f6;
+    --banner-to: #8b5cf6;
+    /* What a filled button is made of. Dark keeps these dark, because the
+       light ink on them does not turn over. */
+    --fill-blue: #3b82f6;
+    --fill-red: #ef4444;
+    --fill-green: #10b981;
+    --fill-amber: #f59e0b;
+    --fill-indigo: #4f46e5;
+    --fill-muted: #6b7280;
+}
+
+/* Dark is one reading of the same names: the greys turn over, the accents stay
+   themselves but step back from white. Home Assistant's own setting is the
+   system one, which "auto" follows; light and dark say it outright. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --color-white: #1f2937;
+        --color-gray-50: #111827;
+        --color-gray-100: #1f2937;
+        --color-gray-200: #374151;
+        --color-gray-300: #4b5563;
+        --color-gray-400: #9ca3af;
+        --color-gray-500: #9ca3af;
+        --color-gray-600: #d1d5db;
+        --color-gray-700: #e5e7eb;
+        --color-gray-800: #f3f4f6;
+        --color-gray-900: #f9fafb;
+
+        --color-blue-50: #1e3a5f;
+        --color-blue-100: #1e40af;
+
+        --color-amber-50: #422006;
+        --color-amber-100: #4d3208;
+        --color-amber-200: #78350f;
+        --color-amber-800: #fcd34d;
+
+        --color-red-50: #3f1d1d;
+        --color-red-100: #4c1d1d;
+        --color-red-200: #7f1d1d;
+        --color-red-700: #fca5a5;
+
+        --color-emerald-50: #052e23;
+        --color-emerald-100: #064e3b;
+        --color-emerald-800: #6ee7b7;
+
+        --color-violet-100: #3730a3;
+
+        --color-yellow-50: #3f3a06;
+    --color-amber-300: #b45309;
+    --color-emerald-200: #065f46;
+    --color-emerald-400: #6ee7b7;
+    --color-emerald-700: #34d399;
+    --color-violet-400: #c4b5fd;
+    --color-blue-300: #1e40af;
+    --color-emerald-300: #047857;
+    --color-indigo-50: #1e1b4b;
+    --color-indigo-100: #312e81;
+    --color-indigo-200: #3730a3;
+    --color-indigo-700: #a5b4fc;
+    --color-indigo-800: #c7d2fe;
+    --color-amber-400: #fbbf24;
+    --color-amber-700: #fcd34d;
+    --color-amber-900: #fde68a;
+    --color-blue-200: #1e40af;
+    --color-blue-400: #93c5fd;
+    --color-blue-700: #93c5fd;
+    --color-blue-800: #bfdbfe;
+    --color-green-50: #052e16;
+    --color-green-100: #14532d;
+    --color-green-200: #166534;
+    --color-green-400: #4ade80;
+    --color-green-700: #86efac;
+    --color-green-800: #bbf7d0;
+    --color-red-400: #fca5a5;
+    --color-red-800: #fecaca;
+
+        --surface: #1f2937;
+        --surface-sunken: #111827;
+        --shadow-colour: rgb(0 0 0 / 0.4);
+    --veil: rgb(255 255 255 / 0.10);
+    --badge-resting: #374151;
+    --ink-on-colour: #f8fafc;
+    --banner-from: #1e40af;
+    --banner-to: #5b21b6;
+    --color-blue-500: #60a5fa;
+    --color-blue-600: #3b82f6;
+    --color-red-500: #f87171;
+    --color-red-600: #ef4444;
+    --color-emerald-500: #34d399;
+    --color-emerald-600: #10b981;
+    --color-green-500: #4ade80;
+    --color-green-600: #4ade80;
+    --color-amber-500: #fbbf24;
+    --color-amber-600: #fbbf24;
+    --color-violet-500: #a78bfa;
+    --color-violet-600: #8b5cf6;
+    --color-indigo-500: #a5b4fc;
+    --color-indigo-600: #a5b4fc;
+    --color-orange-500: #fb923c;
+    --color-purple-500: #c084fc;
+    --fill-blue: #1d4ed8;
+    --fill-red: #b91c1c;
+    --fill-green: #047857;
+    --fill-amber: #b45309;
+    --fill-indigo: #4338ca;
+    --fill-muted: #4b5563;
+    }
+}
+
+:root[data-theme="dark"] {
+    --color-white: #1f2937;
+    --color-gray-50: #111827;
+    --color-gray-100: #1f2937;
+    --color-gray-200: #374151;
+    --color-gray-300: #4b5563;
+    --color-gray-400: #9ca3af;
+    --color-gray-500: #9ca3af;
+    --color-gray-600: #d1d5db;
+    --color-gray-700: #e5e7eb;
+    --color-gray-800: #f3f4f6;
+    --color-gray-900: #f9fafb;
+
+    --color-blue-50: #1e3a5f;
+    --color-blue-100: #1e40af;
+
+    --color-amber-50: #422006;
+    --color-amber-100: #4d3208;
+    --color-amber-200: #78350f;
+    --color-amber-800: #fcd34d;
+
+    --color-red-50: #3f1d1d;
+    --color-red-100: #4c1d1d;
+    --color-red-200: #7f1d1d;
+    --color-red-700: #fca5a5;
+
+    --color-emerald-50: #052e23;
+    --color-emerald-100: #064e3b;
+    --color-emerald-800: #6ee7b7;
+
+    --color-violet-100: #3730a3;
+
+    --color-yellow-50: #3f3a06;
+    --color-amber-300: #b45309;
+    --color-emerald-200: #065f46;
+    --color-emerald-400: #6ee7b7;
+    --color-emerald-700: #34d399;
+    --color-violet-400: #c4b5fd;
+    --color-blue-300: #1e40af;
+    --color-emerald-300: #047857;
+    --color-indigo-50: #1e1b4b;
+    --color-indigo-100: #312e81;
+    --color-indigo-200: #3730a3;
+    --color-indigo-700: #a5b4fc;
+    --color-indigo-800: #c7d2fe;
+    --color-amber-400: #fbbf24;
+    --color-amber-700: #fcd34d;
+    --color-amber-900: #fde68a;
+    --color-blue-200: #1e40af;
+    --color-blue-400: #93c5fd;
+    --color-blue-700: #93c5fd;
+    --color-blue-800: #bfdbfe;
+    --color-green-50: #052e16;
+    --color-green-100: #14532d;
+    --color-green-200: #166534;
+    --color-green-400: #4ade80;
+    --color-green-700: #86efac;
+    --color-green-800: #bbf7d0;
+    --color-red-400: #fca5a5;
+    --color-red-800: #fecaca;
+
+    --surface: #1f2937;
+    --surface-sunken: #111827;
+    --shadow-colour: rgb(0 0 0 / 0.4);
+    --veil: rgb(255 255 255 / 0.10);
+    --badge-resting: #374151;
+    --ink-on-colour: #f8fafc;
+    --banner-from: #1e40af;
+    --banner-to: #5b21b6;
+    --color-blue-500: #60a5fa;
+    --color-blue-600: #3b82f6;
+    --color-red-500: #f87171;
+    --color-red-600: #ef4444;
+    --color-emerald-500: #34d399;
+    --color-emerald-600: #10b981;
+    --color-green-500: #4ade80;
+    --color-green-600: #4ade80;
+    --color-amber-500: #fbbf24;
+    --color-amber-600: #fbbf24;
+    --color-violet-500: #a78bfa;
+    --color-violet-600: #8b5cf6;
+    --color-indigo-500: #a5b4fc;
+    --color-indigo-600: #a5b4fc;
+    --color-orange-500: #fb923c;
+    --color-purple-500: #c084fc;
+    --fill-blue: #1d4ed8;
+    --fill-red: #b91c1c;
+    --fill-green: #047857;
+    --fill-amber: #b45309;
+    --fill-indigo: #4338ca;
+    --fill-muted: #4b5563;
+}
+
+/* The page itself, so nothing shines white behind the panel. */
+html, body {
+    background-color: var(--surface-sunken);
+    color: var(--color-gray-800);
+}
+
+/* A field the browser draws itself follows the theme too. */
+:root[data-theme="dark"], :root[data-theme="dark"] * {
+    color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]), :root:not([data-theme="light"]) * {
+        color-scheme: dark;
+    }
+}
+
 /* Custom styles for Entity Manager */
 [x-cloak] { display: none !important; }
 
@@ -15,28 +271,28 @@
 
 .entity-card:hover {
     transform: translateX(4px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 6px -1px var(--shadow-colour), 0 2px 4px -1px var(--shadow-colour);
 }
 
 .entity-card.selected {
-    border: 2px solid #3b82f6;
-    background: linear-gradient(to right, #eff6ff 0%, #ffffff 100%);
+    border: 2px solid var(--color-blue-500);
+    background: linear-gradient(to right, var(--color-blue-50) 0%, var(--surface) 100%);
 }
 
 .needs-rename {
-    background: linear-gradient(to right, #fef3c7 0%, #ffffff 100%);
+    background: linear-gradient(to right, var(--color-amber-100) 0%, var(--surface) 100%);
 }
 
 .needs-rename.selected {
-    background: linear-gradient(to right, #dbeafe 0%, #fef3c7 50%, #ffffff 100%);
+    background: linear-gradient(to right, var(--color-blue-100) 0%, var(--color-amber-100) 50%, var(--surface) 100%);
 }
 
 .already-correct {
-    background: linear-gradient(to right, #d1fae5 0%, #ffffff 100%);
+    background: linear-gradient(to right, var(--color-emerald-100) 0%, var(--surface) 100%);
 }
 
 .already-correct.selected {
-    background: linear-gradient(to right, #dbeafe 0%, #d1fae5 50%, #ffffff 100%);
+    background: linear-gradient(to right, var(--color-blue-100) 0%, var(--color-emerald-100) 50%, var(--surface) 100%);
 }
 
 .edit-input-group {

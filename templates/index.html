@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+        // Read and applied before the first paint: a page that renders light
+        // and turns dark a moment later is worse than either.
+        (function () {
+            try {
+                var chosen = localStorage.getItem('entityManagerTheme');
+                if (chosen === 'light' || chosen === 'dark') {
+                    document.documentElement.setAttribute('data-theme', chosen);
+                }
+            } catch (e) {
+                // A browser that refuses storage still gets the system setting.
+            }
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home Assistant Entity Manager</title>
@@ -51,12 +65,12 @@
             flex: 1;
             min-height: 0; /* Critical: allows flex child to shrink below content size */
             gap: 1px;
-            background-color: #e5e7eb;
+            background-color: var(--color-gray-200);
             overflow: hidden;
         }
 
         .panel {
-            background-color: white;
+            background-color: var(--color-white);
             overflow-y: auto;
             display: flex;
             flex-direction: column;
@@ -65,9 +79,9 @@
         .panel-header {
             position: sticky;
             top: 0;
-            background: white;
+            background: var(--color-white);
             z-index: 10;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid var(--color-gray-200);
             padding: 12px 16px;
         }
 
@@ -88,20 +102,20 @@
         }
 
         .hierarchy-item:hover {
-            background-color: #f3f4f6;
+            background-color: var(--color-gray-100);
         }
 
         .hierarchy-item.selected {
-            background-color: #dbeafe;
-            border-color: #3b82f6;
+            background-color: var(--color-blue-100);
+            border-color: var(--color-blue-500);
         }
 
         .hierarchy-item.has-changes {
-            border-left: 3px solid #f59e0b;
+            border-left: 3px solid var(--color-amber-500);
         }
 
         .hierarchy-item.no-changes {
-            border-left: 3px solid #10b981;
+            border-left: 3px solid var(--color-emerald-500);
         }
 
         /* Device Item Layout */
@@ -135,7 +149,7 @@
         .device-name {
             font-weight: 500;
             font-size: 0.9rem;
-            color: #1f2937;
+            color: var(--color-gray-800);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -147,8 +161,8 @@
         .device-name .disabled-badge {
             font-size: 0.65rem;
             font-weight: 400;
-            color: #ef4444;
-            background: #fef2f2;
+            color: var(--color-red-500);
+            background: var(--color-red-50);
             padding: 1px 5px;
             border-radius: 3px;
             flex-shrink: 0;
@@ -156,7 +170,7 @@
 
         .device-meta {
             font-size: 0.75rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -164,17 +178,17 @@
         }
 
         .device-meta .integration-name {
-            color: #8b5cf6;
+            color: var(--color-violet-500);
         }
 
         .device-link {
             flex-shrink: 0;
-            color: #9ca3af;
+            color: var(--color-gray-400);
             transition: color 0.15s;
         }
 
         .device-link:hover {
-            color: #3b82f6;
+            color: var(--color-blue-500);
         }
 
         .device-area-row {
@@ -185,21 +199,21 @@
             width: 100%;
             font-size: 0.8rem;
             padding: 6px 10px;
-            border: 1px solid #d1d5db;
+            border: 1px solid var(--color-gray-300);
             border-radius: 6px;
-            background: white;
-            color: #374151;
+            background: var(--color-white);
+            color: var(--color-gray-700);
             cursor: pointer;
             transition: border-color 0.15s;
         }
 
         .area-select:hover {
-            border-color: #9ca3af;
+            border-color: var(--color-gray-400);
         }
 
         .area-select:focus {
             outline: none;
-            border-color: #3b82f6;
+            border-color: var(--color-blue-500);
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
         }
 
@@ -207,27 +221,27 @@
             padding: 10px 12px;
             margin: 4px 0;
             border-radius: 6px;
-            border: 1px solid #e5e7eb;
-            background: white;
+            border: 1px solid var(--color-gray-200);
+            background: var(--color-white);
             transition: all 0.15s ease;
             cursor: pointer;
         }
 
         .entity-card:hover {
-            background: #f9fafb;
+            background: var(--color-gray-50);
         }
 
         .entity-card.needs-rename {
-            border-left: 3px solid #f59e0b;
+            border-left: 3px solid var(--color-amber-500);
         }
 
         .entity-card.correct {
-            border-left: 3px solid #10b981;
+            border-left: 3px solid var(--color-emerald-500);
         }
 
         .entity-card.expanded {
-            background: #f9fafb;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            background: var(--color-gray-50);
+            box-shadow: 0 2px 8px var(--shadow-colour);
         }
 
         .entity-card .entity-main {
@@ -243,7 +257,7 @@
         }
 
         .entity-card .entity-current {
-            color: #6b7280;
+            color: var(--color-gray-500);
             font-family: monospace;
             white-space: nowrap;
             overflow: hidden;
@@ -251,7 +265,7 @@
         }
 
         .entity-card .entity-new {
-            color: #d97706;
+            color: var(--color-amber-600);
             font-family: monospace;
             font-weight: 500;
             display: flex;
@@ -267,20 +281,20 @@
         .entity-card .entity-editor {
             margin-top: 10px;
             padding-top: 10px;
-            border-top: 1px solid #e5e7eb;
+            border-top: 1px solid var(--color-gray-200);
         }
 
         .entity-card .mini-badge {
             font-size: 0.65rem;
             padding: 2px 6px;
             border-radius: 3px;
-            background: #f3f4f6;
-            color: #6b7280;
+            background: var(--color-gray-100);
+            color: var(--color-gray-500);
         }
 
         .entity-card .mini-badge.override {
-            background: #ede9fe;
-            color: #7c3aed;
+            background: var(--color-violet-100);
+            color: var(--color-violet-600);
         }
 
         .rotate-180 {
@@ -291,30 +305,30 @@
         .entity-card-simple {
             margin: 8px 0;
             border-radius: 8px;
-            border: 1px solid #e5e7eb;
-            background: white;
+            border: 1px solid var(--color-gray-200);
+            background: var(--color-white);
             overflow: hidden;
         }
 
         .entity-card-simple.has-changes {
-            border-left: 4px solid #f59e0b;
+            border-left: 4px solid var(--color-amber-500);
         }
 
         .entity-card-simple.no-changes {
-            border-left: 4px solid #10b981;
+            border-left: 4px solid var(--color-emerald-500);
         }
 
         .entity-card-simple.broken-reference {
-            border-left: 4px solid #ef4444;
+            border-left: 4px solid var(--color-red-500);
         }
 
         .entity-card-simple .new-state.broken .friendly-name {
-            color: #ef4444;
+            color: var(--color-red-500);
         }
 
         .entity-card-simple .new-state.broken .entity-id {
-            background: #fee2e2;
-            color: #dc2626;
+            background: var(--color-red-100);
+            color: var(--color-red-600);
         }
 
         /* Broken References - Suggestion List */
@@ -334,11 +348,11 @@
             transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         }
 
-        .btn-primary { background: #3b82f6; color: white; }
-        .btn-primary:hover { background: #2563eb; }
+        .btn-primary { background: var(--fill-blue); color: var(--ink-on-colour); }
+        .btn-primary:hover { background: var(--color-blue-600); }
 
-        .btn-ghost { background: white; border-color: #d1d5db; color: #374151; }
-        .btn-ghost:hover { border-color: #9ca3af; }
+        .btn-ghost { background: var(--color-white); border-color: var(--color-gray-300); color: var(--color-gray-700); }
+        .btn-ghost:hover { border-color: var(--color-gray-400); }
 
         .suggestion-list {
             display: flex;
@@ -351,27 +365,27 @@
             align-items: center;
             gap: 12px;
             padding: 10px 12px;
-            background: white;
-            border: 1px solid #e5e7eb;
+            background: var(--color-white);
+            border: 1px solid var(--color-gray-200);
             border-radius: 6px;
             cursor: pointer;
             transition: all 0.15s ease;
         }
 
         .suggestion-item:hover {
-            border-color: #d1d5db;
-            background: #f9fafb;
+            border-color: var(--color-gray-300);
+            background: var(--color-gray-50);
         }
 
         .suggestion-item.selected {
-            border-color: #10b981;
-            background: #ecfdf5;
+            border-color: var(--color-emerald-500);
+            background: var(--color-emerald-50);
         }
 
         .suggestion-radio {
             width: 18px;
             height: 18px;
-            border: 2px solid #d1d5db;
+            border: 2px solid var(--color-gray-300);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -380,13 +394,13 @@
         }
 
         .suggestion-item.selected .suggestion-radio {
-            border-color: #10b981;
+            border-color: var(--color-emerald-500);
         }
 
         .radio-dot {
             width: 10px;
             height: 10px;
-            background: #10b981;
+            background: var(--color-emerald-500);
             border-radius: 50%;
         }
 
@@ -401,8 +415,8 @@
         .suggestion-entity {
             font-size: 0.85rem;
             font-family: monospace;
-            color: #374151;
-            background: #f3f4f6;
+            color: var(--color-gray-700);
+            background: var(--color-gray-100);
             padding: 2px 6px;
             border-radius: 4px;
             display: inline-block;
@@ -410,13 +424,13 @@
         }
 
         .suggestion-item.selected .suggestion-entity {
-            background: #d1fae5;
-            color: #065f46;
+            background: var(--color-emerald-100);
+            color: var(--color-emerald-800);
         }
 
         .suggestion-name {
             font-size: 0.75rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
 
         .suggestion-score {
@@ -428,18 +442,18 @@
         }
 
         .suggestion-score.score-high {
-            background: #d1fae5;
-            color: #065f46;
+            background: var(--color-emerald-100);
+            color: var(--color-emerald-800);
         }
 
         .suggestion-score.score-medium {
-            background: #fef3c7;
-            color: #92400e;
+            background: var(--color-amber-100);
+            color: var(--color-amber-800);
         }
 
         .suggestion-score.score-low {
-            background: #f3f4f6;
-            color: #6b7280;
+            background: var(--color-gray-100);
+            color: var(--color-gray-500);
         }
 
         /* Scanning Overlay */
@@ -457,12 +471,12 @@
             flex-direction: column;
             align-items: center;
             gap: 12px;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
 
         .scanning-spinner {
             font-size: 2.5rem;
-            color: #3b82f6;
+            color: var(--color-blue-500);
             animation: spin 1s linear infinite;
         }
 
@@ -491,7 +505,7 @@
 
         .broken-ref-title .config-name {
             font-weight: 500;
-            color: #374151;
+            color: var(--color-gray-700);
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -499,23 +513,23 @@
 
         .broken-ref-title .external-link {
             margin-left: auto;
-            color: #9ca3af;
+            color: var(--color-gray-400);
             transition: color 0.15s;
             flex-shrink: 0;
         }
 
         .broken-ref-title .external-link:hover {
-            color: #3b82f6;
+            color: var(--color-blue-500);
         }
 
         .broken-reference .current-state.broken code {
-            color: #dc2626;
-            background: #fef2f2;
+            color: var(--color-red-600);
+            background: var(--color-red-50);
         }
 
         .broken-reference .new-state.has-selection code {
-            color: #059669;
-            background: #ecfdf5;
+            color: var(--color-emerald-600);
+            background: var(--color-emerald-50);
         }
 
         .broken-reference .no-selection {
@@ -526,8 +540,8 @@
 
         /* Grouped Broken References */
         .broken-ref-group {
-            background: white;
-            border: 1px solid #e5e7eb;
+            background: var(--color-white);
+            border: 1px solid var(--color-gray-200);
             border-radius: 8px;
             margin-bottom: 8px;
             cursor: pointer;
@@ -535,15 +549,15 @@
         }
 
         .broken-ref-group:hover {
-            border-color: #d1d5db;
+            border-color: var(--color-gray-300);
         }
 
         .broken-ref-group.has-changes {
-            border-left: 3px solid #10b981;
+            border-left: 3px solid var(--color-emerald-500);
         }
 
         .broken-ref-group.no-changes {
-            border-left: 3px solid #f59e0b;
+            border-left: 3px solid var(--color-amber-500);
         }
 
         .broken-ref-group-header {
@@ -566,15 +580,15 @@
 
         .missing-entity-id {
             font-size: 0.9rem;
-            color: #dc2626;
-            background: #fef2f2;
+            color: var(--color-red-600);
+            background: var(--color-red-50);
             padding: 2px 8px;
             border-radius: 4px;
         }
 
         .ref-count {
             font-size: 0.8rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
 
         .replacement-preview {
@@ -585,16 +599,16 @@
 
         .replacement-entity-id {
             font-size: 0.9rem;
-            background: #ecfdf5;
+            background: var(--color-emerald-50);
             padding: 2px 8px;
             border-radius: 4px;
         }
 
         /* Affected Configs List */
         .affected-configs {
-            border-top: 1px solid #f3f4f6;
+            border-top: 1px solid var(--color-gray-100);
             padding: 8px 16px;
-            background: #f9fafb;
+            background: var(--color-gray-50);
         }
 
         .affected-config-item {
@@ -606,19 +620,19 @@
         }
 
         .affected-config-item .config-name {
-            color: #374151;
+            color: var(--color-gray-700);
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
         .affected-config-item .external-link {
-            color: #9ca3af;
+            color: var(--color-gray-400);
             font-size: 0.9rem;
         }
 
         .affected-config-item .external-link:hover {
-            color: #3b82f6;
+            color: var(--color-blue-500);
         }
 
         .affected-config-item .config-info {
@@ -631,16 +645,16 @@
 
         .affected-config-item .yaml-path {
             font-family: ui-monospace, monospace;
-            color: #9ca3af;
+            color: var(--color-gray-400);
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
         .broken-ref-group .edit-panel {
-            border-top: 1px solid #e5e7eb;
+            border-top: 1px solid var(--color-gray-200);
             padding: 12px 16px;
-            background: #f9fafb;
+            background: var(--color-gray-50);
             border-radius: 0 0 8px 8px;
         }
 
@@ -657,23 +671,23 @@
         }
 
         .broken-ref-group .btn-filled-green {
-            background: #10b981;
-            color: white;
-            border: 1px solid #10b981;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
+            border: 1px solid var(--color-emerald-500);
         }
         .broken-ref-group .btn-filled-green:hover {
-            background: #059669;
-            border-color: #059669;
+            background: var(--color-emerald-600);
+            border-color: var(--color-emerald-600);
         }
 
         .broken-ref-group .btn-outline-gray {
             background: transparent;
-            color: #9ca3af;
-            border: 1px solid #d1d5db;
+            color: var(--color-gray-400);
+            border: 1px solid var(--color-gray-300);
         }
 
         .expand-indicator {
-            color: #9ca3af;
+            color: var(--color-gray-400);
             transition: transform 0.2s ease;
             font-size: 1.1rem;
         }
@@ -685,7 +699,7 @@
         .suggestion-search {
             margin-top: 8px;
             padding-top: 8px;
-            border-top: 1px solid #e5e7eb;
+            border-top: 1px solid var(--color-gray-200);
         }
 
         .search-toggle {
@@ -693,7 +707,7 @@
             align-items: center;
             gap: 6px;
             font-size: 0.8rem;
-            color: #3b82f6;
+            color: var(--color-blue-500);
             background: none;
             border: none;
             cursor: pointer;
@@ -701,7 +715,7 @@
         }
 
         .search-toggle:hover {
-            color: #2563eb;
+            color: var(--color-blue-600);
         }
 
         .search-input-group {
@@ -713,7 +727,7 @@
         .search-input-group .search-icon {
             position: absolute;
             left: 10px;
-            color: #9ca3af;
+            color: var(--color-gray-400);
             pointer-events: none;
         }
 
@@ -724,22 +738,22 @@
         .search-input {
             width: 100%;
             padding: 8px 12px;
-            border: 1px solid #d1d5db;
+            border: 1px solid var(--color-gray-300);
             border-radius: 6px;
             font-size: 0.9rem;
         }
 
         .search-input:focus {
             outline: none;
-            border-color: #3b82f6;
+            border-color: var(--color-blue-500);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .search-results {
             width: 100%;
             margin-top: 4px;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
+            background: var(--color-gray-50);
+            border: 1px solid var(--color-gray-200);
             border-radius: 6px;
             max-height: 200px;
             overflow-y: auto;
@@ -754,17 +768,17 @@
         }
 
         .search-result-item:hover {
-            background: #f3f4f6;
+            background: var(--color-gray-100);
         }
 
         .search-result-item code {
             font-size: 0.85rem;
-            color: #374151;
+            color: var(--color-gray-700);
         }
 
         .search-result-item span {
             font-size: 0.75rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
 
         /* Fix Preview */
@@ -773,21 +787,21 @@
             align-items: center;
             gap: 12px;
             padding: 12px;
-            background: #ecfdf5;
+            background: var(--color-emerald-50);
             border-radius: 6px;
             margin-top: 12px;
         }
 
         .fix-label {
             font-size: 0.8rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
 
         .fix-entity {
             font-size: 0.85rem;
             font-family: monospace;
-            background: #d1fae5;
-            color: #065f46;
+            background: var(--color-emerald-100);
+            color: var(--color-emerald-800);
             padding: 4px 8px;
             border-radius: 4px;
         }
@@ -798,8 +812,8 @@
             align-items: center;
             gap: 6px;
             padding: 8px 16px;
-            background: #10b981;
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 6px;
             font-size: 0.85rem;
@@ -809,7 +823,7 @@
         }
 
         .fix-button:hover {
-            background: #059669;
+            background: var(--color-emerald-600);
         }
 
         .entity-card-simple.is-disabled,
@@ -826,17 +840,17 @@
             align-items: center;
             gap: 8px;
             padding: 6px 12px;
-            background: #fef3c7;
-            border-bottom: 1px solid #fcd34d;
+            background: var(--color-amber-100);
+            border-bottom: 1px solid var(--color-amber-300);
             font-size: 0.8rem;
-            color: #92400e;
+            color: var(--color-amber-800);
         }
 
         .entity-card-simple .disabled-banner .enable-btn {
             margin-left: auto;
             padding: 2px 10px;
-            background: #059669;
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 4px;
             font-size: 0.75rem;
@@ -844,7 +858,7 @@
         }
 
         .entity-card-simple .disabled-banner .enable-btn:hover {
-            background: #047857;
+            background: var(--color-emerald-700);
         }
 
         .entity-card-simple .entity-names {
@@ -856,7 +870,7 @@
         }
 
         .entity-card-simple .entity-names:hover {
-            background: #f9fafb;
+            background: var(--color-gray-50);
         }
 
         .entity-card-simple .current-state,
@@ -867,7 +881,7 @@
 
         .entity-card-simple .friendly-name {
             font-weight: 500;
-            color: #374151;
+            color: var(--color-gray-700);
             margin-bottom: 2px;
             overflow: hidden;
             /* Two lines rather than a cut end: the difference is often the last word. */
@@ -879,30 +893,30 @@
 
         /* What both names share steps back; what changes stands out. */
         .diff-same {
-            color: #9ca3af;
+            color: var(--color-gray-400);
         }
         .diff-old {
-            background: #fee2e2;
-            color: #b91c1c;
+            background: var(--color-red-100);
+            color: var(--color-red-700);
             border-radius: 3px;
             padding: 0 2px;
             text-decoration: line-through;
         }
         .diff-new {
-            background: #dcfce7;
-            color: #15803d;
+            background: var(--color-green-100);
+            color: var(--color-green-700);
             border-radius: 3px;
             padding: 0 2px;
         }
 
         .entity-card-simple .new-state .friendly-name {
-            color: #059669;
+            color: var(--color-emerald-600);
         }
 
         .entity-card-simple .entity-id {
             font-size: 0.75rem;
-            color: #6b7280;
-            background: #f3f4f6;
+            color: var(--color-gray-500);
+            background: var(--color-gray-100);
             padding: 2px 6px;
             border-radius: 4px;
             font-family: monospace;
@@ -916,17 +930,17 @@
         }
 
         .entity-card-simple .new-state .entity-id {
-            background: #d1fae5;
-            color: #065f46;
+            background: var(--color-emerald-100);
+            color: var(--color-emerald-800);
         }
 
         .entity-card-simple .arrow-separator {
-            color: #9ca3af;
+            color: var(--color-gray-400);
             font-size: 1.2rem;
         }
 
         .entity-card-simple .no-change-badge {
-            color: #10b981;
+            color: var(--color-emerald-500);
             font-size: 0.85rem;
             font-weight: 500;
         }
@@ -962,51 +976,51 @@
         }
 
         .entity-card-simple .btn-filled-green {
-            background: #10b981;
-            color: white;
-            border: 1px solid #10b981;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
+            border: 1px solid var(--color-emerald-500);
         }
         .entity-card-simple .btn-filled-green:hover {
-            background: #059669;
-            border-color: #059669;
+            background: var(--color-emerald-600);
+            border-color: var(--color-emerald-600);
         }
 
         .entity-card-simple .btn-filled-red {
-            background: #ef4444;
-            color: white;
-            border: 1px solid #ef4444;
+            background: var(--fill-red);
+            color: var(--ink-on-colour);
+            border: 1px solid var(--color-red-500);
         }
         .entity-card-simple .btn-filled-red:hover {
-            background: #dc2626;
-            border-color: #dc2626;
+            background: var(--color-red-600);
+            border-color: var(--color-red-600);
         }
 
         .entity-card-simple .btn-outline-gray {
             background: transparent;
-            color: #9ca3af;
-            border: 1px solid #d1d5db;
+            color: var(--color-gray-400);
+            border: 1px solid var(--color-gray-300);
         }
         .entity-card-simple .btn-outline-gray:hover {
-            color: #374151;
-            border-color: #9ca3af;
+            color: var(--color-gray-700);
+            border-color: var(--color-gray-400);
         }
 
         /* Hover transitions for outline → filled */
         .entity-card-simple .btn-outline-gray.hover\:btn-filled-green:hover {
-            background: #10b981;
-            color: white;
-            border-color: #10b981;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
+            border-color: var(--color-emerald-500);
         }
         .entity-card-simple .btn-outline-gray.hover\:btn-filled-red:hover {
-            background: #ef4444;
-            color: white;
-            border-color: #ef4444;
+            background: var(--fill-red);
+            color: var(--ink-on-colour);
+            border-color: var(--color-red-500);
         }
 
         .entity-card-simple .edit-panel {
             padding: 12px 16px;
-            background: #f9fafb;
-            border-top: 1px solid #e5e7eb;
+            background: var(--color-gray-50);
+            border-top: 1px solid var(--color-gray-200);
         }
 
         .entity-card-simple .edit-row {
@@ -1017,7 +1031,7 @@
 
         .entity-card-simple .edit-row label {
             font-size: 0.85rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
             white-space: nowrap;
         }
 
@@ -1030,21 +1044,21 @@
         .entity-card-simple .suffix-input {
             flex: 1;
             padding: 8px 12px;
-            border: 1px solid #d1d5db;
+            border: 1px solid var(--color-gray-300);
             border-radius: 6px;
             font-size: 0.9rem;
         }
 
         .entity-card-simple .suffix-input:focus {
             outline: none;
-            border-color: #3b82f6;
+            border-color: var(--color-blue-500);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .entity-card-simple .save-btn {
             padding: 8px 16px;
-            background: #3b82f6;
-            color: white;
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
             border: none;
             border-radius: 6px;
             cursor: pointer;
@@ -1052,13 +1066,13 @@
         }
 
         .entity-card-simple .save-btn:hover {
-            background: #2563eb;
+            background: var(--color-blue-600);
         }
 
         .entity-card-simple .preview-row {
             margin-top: 10px;
             padding: 8px 12px;
-            background: #ecfdf5;
+            background: var(--color-emerald-50);
             border-radius: 6px;
             display: flex;
             align-items: center;
@@ -1068,18 +1082,18 @@
 
         .entity-card-simple .preview-label {
             font-size: 0.8rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
 
         .entity-card-simple .preview-name {
             font-weight: 600;
-            color: #059669;
+            color: var(--color-emerald-600);
         }
 
         .entity-card-simple .preview-id {
             font-size: 0.75rem;
-            color: #065f46;
-            background: #d1fae5;
+            color: var(--color-emerald-800);
+            background: var(--color-emerald-100);
             padding: 2px 6px;
             border-radius: 4px;
             font-family: monospace;
@@ -1095,35 +1109,35 @@
             justify-content: space-between;
             align-items: center;
             padding: 8px 12px;
-            background: #f3f4f6;
+            background: var(--color-gray-100);
             border-radius: 6px 6px 0 0;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--color-gray-200);
             border-bottom: none;
         }
 
         .group-header.confidence-high {
-            background: linear-gradient(90deg, #d1fae5 0%, #ecfdf5 100%);
-            border-color: #a7f3d0;
+            background: linear-gradient(90deg, var(--color-emerald-100) 0%, var(--color-emerald-50) 100%);
+            border-color: var(--color-emerald-200);
         }
 
         .group-header.confidence-medium {
-            background: linear-gradient(90deg, #fef3c7 0%, #fefce8 100%);
-            border-color: #fde68a;
+            background: linear-gradient(90deg, var(--color-amber-100) 0%, var(--color-yellow-50) 100%);
+            border-color: var(--color-amber-200);
         }
 
         .group-header.confidence-low {
-            background: linear-gradient(90deg, #fee2e2 0%, #fef2f2 100%);
-            border-color: #fecaca;
+            background: linear-gradient(90deg, var(--color-red-100) 0%, var(--color-red-50) 100%);
+            border-color: var(--color-red-200);
         }
 
         .group-type {
             font-weight: 600;
-            color: #374151;
+            color: var(--color-gray-700);
             font-size: 0.9rem;
         }
 
         .group-count {
-            color: #6b7280;
+            color: var(--color-gray-500);
             font-size: 0.8rem;
         }
 
@@ -1136,18 +1150,18 @@
         }
 
         .confidence-badge.confidence-high {
-            background: #10b981;
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
         }
 
         .confidence-badge.confidence-medium {
-            background: #f59e0b;
-            color: white;
+            background: var(--fill-amber);
+            color: var(--ink-on-colour);
         }
 
         .confidence-badge.confidence-low {
-            background: #ef4444;
-            color: white;
+            background: var(--fill-red);
+            color: var(--ink-on-colour);
         }
 
         .entity-group .entity-card {
@@ -1161,8 +1175,8 @@
         }
 
         .inheritance-bar {
-            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-            color: white;
+            background: linear-gradient(90deg, var(--banner-from), var(--banner-to));
+            color: var(--ink-on-colour);
             padding: 8px 16px;
             font-size: 13px;
             display: flex;
@@ -1177,22 +1191,42 @@
         .badge {
             display: inline-flex;
             align-items: center;
+            border: 1px solid transparent;
             padding: 2px 8px;
             border-radius: 9999px;
             font-size: 11px;
             font-weight: 500;
         }
 
-        .badge-blue { background: #dbeafe; color: #1d4ed8; }
-        .badge-red { background: #fee2e2; color: #dc2626; }
-        .badge-green { background: #d1fae5; color: #059669; }
-        .badge-amber { background: #fef3c7; color: #b45309; }
-        .badge-purple { background: #ede9fe; color: #7c3aed; }
-        .badge-gray { background: #f3f4f6; color: #4b5563; }
+        .badge-blue { background: var(--color-blue-100); color: var(--color-blue-700); border-color: var(--color-blue-200); }
+        .badge-red { background: var(--color-red-100); color: var(--color-red-600); border-color: var(--color-red-200); }
+        .badge-green { background: var(--color-emerald-100); color: var(--color-emerald-600); border-color: var(--color-emerald-200); }
+        .badge-amber { background: var(--color-amber-100); color: var(--color-amber-700); border-color: var(--color-amber-200); }
+        .badge-purple { background: var(--color-violet-100); color: var(--color-violet-600); border-color: var(--color-violet-400); }
+        /* The resting state: a surface of its own, never the bar it sits on. */
+        .badge-gray { background: var(--badge-resting); color: var(--color-gray-600); border-color: var(--color-gray-300); }
+
+        /* A filter that can be switched: off is an outline, on is filled, so
+           the difference survives a glance and does not rest on hue alone. */
+        .filter-toggle {
+            background: var(--badge-resting);
+            color: var(--color-gray-600);
+            border-color: var(--color-gray-300);
+        }
+
+        .filter-toggle:hover { border-color: var(--color-gray-400); }
+
+        .filter-toggle.is-on {
+            color: var(--ink-on-colour);
+            border-color: transparent;
+        }
+
+        .filter-toggle.toggle-amber.is-on { background: var(--fill-amber); }
+        .filter-toggle.toggle-red.is-on { background: var(--fill-red); }
 
         .edit-input {
-            background: white;
-            border: 1px solid #d1d5db;
+            background: var(--color-white);
+            border: 1px solid var(--color-gray-300);
             border-radius: 6px;
             padding: 6px 10px;
             font-size: 14px;
@@ -1201,7 +1235,7 @@
 
         .edit-input:focus {
             outline: none;
-            border-color: #3b82f6;
+            border-color: var(--color-blue-500);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
@@ -1219,31 +1253,31 @@
         }
 
         .btn-primary {
-            background: #3b82f6;
-            color: white;
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
         }
 
         .btn-primary:hover {
-            background: #2563eb;
+            background: var(--color-blue-600);
         }
 
         .btn-success {
-            background: #10b981;
-            color: white;
+            background: var(--fill-green);
+            color: var(--ink-on-colour);
         }
 
         .btn-success:hover {
-            background: #059669;
+            background: var(--color-emerald-600);
         }
 
         .btn-ghost {
             background: transparent;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
 
         .btn-ghost:hover {
-            background: #f3f4f6;
-            color: #374151;
+            background: var(--color-gray-100);
+            color: var(--color-gray-700);
         }
 
         .checkbox-wrapper {
@@ -1256,14 +1290,14 @@
             width: 18px;
             height: 18px;
             border-radius: 4px;
-            border: 2px solid #d1d5db;
+            border: 2px solid var(--color-gray-300);
             cursor: pointer;
             transition: all 0.15s ease;
         }
 
         .checkbox.checked {
-            background: #3b82f6;
-            border-color: #3b82f6;
+            background: var(--color-blue-500);
+            border-color: var(--color-blue-500);
         }
 
         /* ==============================================
@@ -1294,7 +1328,7 @@
 
             .entity-card-simple .new-state::before {
                 content: '→ ';
-                color: #9ca3af;
+                color: var(--color-gray-400);
             }
         }
 
@@ -1318,8 +1352,8 @@
                 display: flex;
                 align-items: center;
                 padding: 12px 16px;
-                background: white;
-                border-bottom: 1px solid #e5e7eb;
+                background: var(--color-white);
+                border-bottom: 1px solid var(--color-gray-200);
                 min-height: 56px;
                 gap: 12px;
             }
@@ -1331,14 +1365,14 @@
                 width: 40px;
                 height: 40px;
                 border-radius: 8px;
-                background: #f3f4f6;
-                color: #374151;
+                background: var(--color-gray-100);
+                color: var(--color-gray-700);
                 border: none;
                 cursor: pointer;
             }
 
             .mobile-nav-header .back-btn:active {
-                background: #e5e7eb;
+                background: var(--color-gray-200);
             }
 
             .mobile-nav-header .nav-title {
@@ -1349,7 +1383,7 @@
             .mobile-nav-header .nav-title h2 {
                 font-size: 1.1rem;
                 font-weight: 600;
-                color: #111827;
+                color: var(--color-gray-900);
                 margin: 0;
                 white-space: nowrap;
                 overflow: hidden;
@@ -1358,7 +1392,7 @@
 
             .mobile-nav-header .nav-title .nav-subtitle {
                 font-size: 0.8rem;
-                color: #6b7280;
+                color: var(--color-gray-500);
                 margin: 0;
                 white-space: nowrap;
                 overflow: hidden;
@@ -1383,7 +1417,7 @@
                 bottom: 0;
                 transform: translateX(100%);
                 transition: transform 0.3s ease;
-                background: white;
+                background: var(--color-white);
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
@@ -1485,7 +1519,7 @@
 
             .entity-card-simple .new-state::before {
                 content: '→ ';
-                color: #9ca3af;
+                color: var(--color-gray-400);
             }
 
             .entity-card-simple .edit-panel {
@@ -1529,9 +1563,9 @@
                 left: 0;
                 right: 0;
                 z-index: 50;
-                background: white;
-                border-top: 1px solid #e5e7eb;
-                box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+                background: var(--color-white);
+                border-top: 1px solid var(--color-gray-200);
+                box-shadow: 0 -4px 6px -1px var(--shadow-colour);
             }
         }
 
@@ -1554,7 +1588,7 @@
         .rule-link {
             margin-left: 4px;
             vertical-align: middle;
-            color: #2563eb;
+            color: var(--color-blue-600);
             text-decoration: none;
             white-space: nowrap;
         }
@@ -1573,16 +1607,67 @@
         }
         .drift-text {
             font-size: 0.75rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
         .drift-bar.is-blocked .drift-text {
-            color: #b91c1c;
+            color: var(--color-red-700);
         }
         .drift-actions {
             display: flex;
             gap: 6px;
             margin-left: auto;
         }
+        /* Ink for anything sitting on a colour that dark does not turn over. */
+        .text-on-colour {
+            color: var(--ink-on-colour);
+        }
+
+        /* A utility fill carrying that ink follows the same rule. */
+        .text-on-colour.bg-blue-500, .text-on-colour.bg-blue-600 { background-color: var(--fill-blue); }
+        .text-on-colour.bg-red-500, .text-on-colour.bg-red-600 { background-color: var(--fill-red); }
+        .text-on-colour.bg-green-500, .text-on-colour.bg-green-600,
+        .text-on-colour.bg-emerald-500, .text-on-colour.bg-emerald-600 { background-color: var(--fill-green); }
+        .text-on-colour.bg-amber-500, .text-on-colour.bg-amber-600 { background-color: var(--fill-amber); }
+        .text-on-colour.hover\:bg-blue-700:hover { background-color: var(--fill-blue); filter: brightness(1.15); }
+        .text-on-colour.hover\:bg-red-700:hover { background-color: var(--fill-red); filter: brightness(1.15); }
+        .text-on-colour.hover\:bg-amber-600:hover { background-color: var(--fill-amber); filter: brightness(1.15); }
+
+        /* Only for a logo that would otherwise be black on a dark card. */
+        .brand-plate {
+            background: var(--color-gray-200);
+            padding: 1px;
+            box-sizing: content-box;
+        }
+
+        .theme-switch {
+            display: inline-flex;
+            border: 1px solid var(--color-gray-300);
+            border-radius: 9999px;
+            overflow: hidden;
+            background: var(--color-gray-100);
+        }
+
+        .theme-option {
+            padding: 6px 10px;
+            font-size: 14px;
+            line-height: 1;
+            color: var(--color-gray-500);
+            background: transparent;
+            border: 0;
+            cursor: pointer;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
+
+        .theme-option:hover {
+            color: var(--color-gray-700);
+        }
+
+        .theme-option.is-active {
+            background: var(--color-white);
+            color: var(--color-blue-600);
+            box-shadow: 0 1px 2px var(--shadow-colour);
+        }
+
         .scope-bar {
             display: flex;
             align-items: center;
@@ -1592,14 +1677,14 @@
         }
         .scope-label {
             font-size: 0.75rem;
-            color: #6b7280;
+            color: var(--color-gray-500);
         }
         .scope-group {
             display: inline-flex;
-            border: 1px solid #d1d5db;
+            border: 1px solid var(--color-gray-300);
             border-radius: 6px;
             overflow: hidden;
-            background: #fff;
+            background: var(--color-white);
             max-width: 100%;
         }
         .scope-option {
@@ -1608,30 +1693,30 @@
             gap: 6px;
             padding: 3px 10px;
             font-size: 0.75rem;
-            color: #374151;
-            background: #fff;
+            color: var(--color-gray-700);
+            background: var(--color-white);
             border: 0;
-            border-left: 1px solid #e5e7eb;
+            border-left: 1px solid var(--color-gray-200);
             cursor: pointer;
             white-space: nowrap;
             min-width: 0;
         }
         .scope-option:first-child { border-left: 0; }
-        .scope-option:hover { background: #f3f4f6; }
+        .scope-option:hover { background: var(--color-gray-100); }
         .scope-option.is-active {
-            background: #2563eb;
-            color: #fff;
+            background: var(--fill-blue);
+            color: var(--ink-on-colour);
         }
         .scope-option.is-active .scope-count {
-            background: rgba(255, 255, 255, 0.25);
-            color: #fff;
+            background: var(--veil);
+            color: var(--ink-on-colour);
         }
         .scope-count {
             font-size: 0.7rem;
             padding: 0 5px;
             border-radius: 8px;
-            background: #f3f4f6;
-            color: #6b7280;
+            background: var(--color-gray-100);
+            color: var(--color-gray-500);
         }
         .scope-model {
             max-width: 150px;
@@ -1661,6 +1746,26 @@
                     <button @click="openSwap()" class="btn btn-ghost" title="Gerät ersetzen">
                         <i class="ri-exchange-line"></i>
                     </button>
+                    <div class="theme-switch" role="group" :aria-label="t('header.theme')">
+                        <button type="button" class="theme-option"
+                                :class="theme === 'light' ? 'is-active' : ''"
+                                @click="chooseTheme('light')"
+                                :title="t('header.theme_light')">
+                            <i class="ri-sun-line"></i>
+                        </button>
+                        <button type="button" class="theme-option"
+                                :class="theme === 'auto' ? 'is-active' : ''"
+                                @click="chooseTheme('auto')"
+                                :title="t('header.theme_auto')">
+                            <i class="ri-contrast-2-line"></i>
+                        </button>
+                        <button type="button" class="theme-option"
+                                :class="theme === 'dark' ? 'is-active' : ''"
+                                @click="chooseTheme('dark')"
+                                :title="t('header.theme_dark')">
+                            <i class="ri-moon-line"></i>
+                        </button>
+                    </div>
                     <a :href="settingsHref()" class="btn btn-ghost" :title="t('header.settings')">
                         <i class="ri-settings-3-line"></i>
                     </a>
@@ -1834,9 +1939,13 @@
                                         <!-- Icon -->
                                         <div class="device-icon">
                                             <template x-if="device.integrations && device.integrations.length > 0">
-                                                <img :src="'https://brands.home-assistant.io/' + device.integrations[0] + '/icon.png'"
+                                                <img :src="brandIconUrl(device.integrations[0])"
+                                                     :data-brand="device.integrations[0]"
                                                      class="w-5 h-5 rounded"
+                                                     :class="brandNeedsPlate[device.integrations[0]] ? 'brand-plate' : ''"
+                                                     crossorigin="anonymous"
                                                      :alt="device.integrations[0]"
+                                                     @load="weighBrandIcon($el, device.integrations[0])"
                                                      @error="$el.style.display='none'; $el.nextElementSibling.style.display='inline'">
                                             </template>
                                             <i class="ri-device-line text-green-500"
@@ -1949,7 +2058,7 @@
                                :disabled="renamingDevice || applyingEntityId || executing">
                         <button @click="renameDeviceInHA($refs.deviceNameInput.value)"
                                 class="btn btn-sm"
-                                style="background: #10b981; color: white;"
+                                style="background: var(--fill-green); color: var(--ink-on-colour);"
                                 :disabled="renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)"
                                 :class="{'opacity-50 cursor-not-allowed': renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)}"
                                 :title="isDeviceNameTaken(selectedDeviceData) ? t('device.id_conflict', {id: deviceNameClashId()}) : ''">
@@ -1973,7 +2082,7 @@
                             </div>
                             <button @click="syncZ2mName(selectedDeviceData)"
                                     :disabled="syncingZ2m"
-                                    class="shrink-0 text-xs px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
+                                    class="shrink-0 text-xs px-2 py-1 rounded bg-amber-500 text-on-colour hover:bg-amber-600"
                                     :class="{'opacity-50 cursor-not-allowed': syncingZ2m}">
                                 <i class="mr-1" :class="syncingZ2m ? 'ri-loader-4-line animate-spin' : 'ri-check-line'"></i><span
                                     x-text="t('entity.apply_rename')">Apply rename</span>
@@ -1984,13 +2093,15 @@
                 <!-- Filters - Separate section for better mobile scroll -->
                 <div class="px-4 py-2 bg-white border-b flex flex-wrap items-center gap-2">
                     <button @click="onlyChanges = !onlyChanges; saveState()"
-                            :class="onlyChanges ? 'badge-amber' : 'badge-gray'"
-                            class="badge cursor-pointer">
+                            :class="onlyChanges ? 'is-on' : ''"
+                            :aria-pressed="onlyChanges ? 'true' : 'false'"
+                            class="badge filter-toggle toggle-amber cursor-pointer">
                         <i class="ri-refresh-line mr-1"></i> <span x-text="t('filters.only_changes')">Only Changes</span>
                     </button>
                     <button @click="showDisabled = !showDisabled; saveState()"
-                            :class="showDisabled ? 'badge-red' : 'badge-gray'"
-                            class="badge cursor-pointer">
+                            :class="showDisabled ? 'is-on' : ''"
+                            :aria-pressed="showDisabled ? 'true' : 'false'"
+                            class="badge filter-toggle toggle-red cursor-pointer">
                         <i class="ri-eye-off-line mr-1"></i> <span x-text="t('filters.show_disabled')">Show Disabled</span>
                     </button>
                 </div>
@@ -2475,7 +2586,7 @@
              x-show="message"
              x-transition
              class="fixed bottom-20 right-4 max-w-md p-4 rounded-lg shadow-lg z-50"
-             :class="messageType === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'">
+             :class="messageType === 'success' ? 'bg-green-600 text-on-colour' : 'bg-red-600 text-on-colour'">
             <div class="flex items-start gap-2">
                 <i :class="messageType === 'success' ? 'ri-check-circle-line' : 'ri-error-warning-line'" class="text-xl shrink-0"></i>
                 <span x-text="message" class="flex-1 min-w-0 break-words"></span>
@@ -2640,7 +2751,7 @@
                         Cancel
                     </button>
                     <button @click="executeDeleteEntity()"
-                            class="btn bg-red-600 text-white hover:bg-red-700">
+                            class="btn bg-red-600 text-on-colour hover:bg-red-700">
                         <i class="ri-delete-bin-line mr-2"></i>
                         <span x-text="t('delete_modal.delete')">Delete</span>
                     </button>
@@ -2690,7 +2801,7 @@
                             <div class="flex items-center" :class="i < swap.steps.length - 1 ? 'flex-1' : ''">
                                 <div class="flex flex-col items-center gap-1.5 shrink-0">
                                     <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-all"
-                                         :class="swap.step > s.n ? 'bg-green-500 text-white' : swap.step === s.n ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-white text-gray-400 border border-gray-300'">
+                                         :class="swap.step > s.n ? 'bg-green-500 text-on-colour' : swap.step === s.n ? 'bg-blue-600 text-on-colour ring-4 ring-blue-100' : 'bg-white text-gray-400 border border-gray-300'">
                                         <i x-show="swap.step > s.n" class="ri-check-line text-lg"></i>
                                         <i x-show="swap.step === s.n" :class="s.icon"></i>
                                         <span x-show="swap.step < s.n" x-text="s.n"></span>
@@ -2943,7 +3054,7 @@
                 </div>
                 <div x-show="swap.step === 3" class="flex justify-between gap-2 px-6 py-4 border-t border-gray-100">
                     <button @click="swap.step=2" class="btn btn-ghost"><i class="ri-arrow-left-line mr-1"></i>Zurück</button>
-                    <button @click="swapExecute()" class="btn" :class="swap.disposition==='delete' ? 'bg-red-600 text-white hover:bg-red-700' : 'btn-primary'" :disabled="swap.busy">
+                    <button @click="swapExecute()" class="btn" :class="swap.disposition==='delete' ? 'bg-red-600 text-on-colour hover:bg-red-700' : 'btn-primary'" :disabled="swap.busy">
                         <i x-show="swap.busy" class="ri-loader-4-line animate-spin mr-1"></i><span x-text="swap.busy ? 'Wird ausgeführt…' : 'Austausch starten'"></span>
                     </button>
                 </div>
@@ -3701,7 +3812,120 @@
                 coreStarting: false,
                 _waitingForCore: null,
 
+                // Light, dark, or what the system says - the three Home
+                // Assistant offers. "auto" is not a stored colour but the
+                // absence of a choice: the stylesheet then reads the system
+                // setting, which is the same one Home Assistant follows.
+                theme: 'auto',
+
+                // Which integrations would disappear, by domain. Measured, not
+                // listed: the answer differs per icon and changes when brands
+                // gains a dark version.
+                brandNeedsPlate: {},
+
+                darkNow() {
+                    if (this.theme === 'dark') return true;
+                    if (this.theme === 'light') return false;
+                    try {
+                        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    } catch (error) {
+                        return false;
+                    }
+                },
+
+                // The dark version where brands holds one; it serves the
+                // ordinary icon under the same path where it does not, so this
+                // never asks for something that is not there.
+                brandIconUrl(domain) {
+                    const file = this.darkNow() ? 'dark_icon.png' : 'icon.png';
+                    return 'https://brands.home-assistant.io/' + domain + '/' + file;
+                },
+
+                // The icons on screen, asked directly. One the browser already
+                // holds is complete before it is bound and never fires load.
+                sweepBrandIcons() {
+                    document.querySelectorAll('.device-icon img[data-brand]').forEach(image => {
+                        const domain = image.dataset.brand;
+                        if (image.complete && image.naturalWidth) {
+                            this.weighBrandIcon(image, domain);
+                        } else {
+                            image.addEventListener('load', () => this.weighBrandIcon(image, domain), {once: true});
+                        }
+                    });
+                },
+
+                // How light the pixels that are actually drawn are. Anything
+                // under a third of full brightness needs something behind it.
+                weighBrandIcon(image, domain) {
+                    if (!this.darkNow()) {
+                        if (this.brandNeedsPlate[domain]) {
+                            this.brandNeedsPlate = {...this.brandNeedsPlate, [domain]: false};
+                        }
+                        return;
+                    }
+                    if (domain in this.brandNeedsPlate) return;
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 32;
+                        canvas.height = 32;
+                        const ctx = canvas.getContext('2d', {willReadFrequently: true});
+                        ctx.drawImage(image, 0, 0, 32, 32);
+                        const pixels = ctx.getImageData(0, 0, 32, 32).data;
+                        let sum = 0, seen = 0;
+                        for (let i = 0; i < pixels.length; i += 4) {
+                            if (pixels[i + 3] < 32) continue;
+                            sum += (0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2]) / 255;
+                            seen++;
+                        }
+                        const light = seen ? sum / seen : 1;
+                        this.brandNeedsPlate = {...this.brandNeedsPlate, [domain]: light < 0.35};
+                    } catch (error) {
+                        // A reading that cannot be taken is not a reason to
+                        // put a plate behind every logo.
+                        this.brandNeedsPlate = {...this.brandNeedsPlate, [domain]: false};
+                    }
+                },
+
+                readTheme() {
+                    try {
+                        const chosen = localStorage.getItem('entityManagerTheme');
+                        this.theme = (chosen === 'light' || chosen === 'dark') ? chosen : 'auto';
+                    } catch (error) {
+                        this.theme = 'auto';
+                    }
+                    this.applyTheme();
+                },
+
+                chooseTheme(which) {
+                    this.theme = which;
+                    try {
+                        if (which === 'auto') {
+                            localStorage.removeItem('entityManagerTheme');
+                        } else {
+                            localStorage.setItem('entityManagerTheme', which);
+                        }
+                    } catch (error) {
+                        // Not remembered, but this session still turns over.
+                    }
+                    this.applyTheme();
+                },
+
+                applyTheme() {
+                    // Different icons, so the verdicts are taken again.
+                    this.brandNeedsPlate = {};
+                    setTimeout(() => this.sweepBrandIcons(), 60);
+                    if (this.theme === 'auto') {
+                        document.documentElement.removeAttribute('data-theme');
+                    } else {
+                        document.documentElement.setAttribute('data-theme', this.theme);
+                    }
+                },
+
                 async init() {
+                    this.readTheme();
+                    // Icons drawn from cache on the first paint report nothing
+                    // either, so they are asked once the list stands.
+                    setTimeout(() => this.sweepBrandIcons(), 1200);
                     // Home Assistant always opens this app at its root, so a reload
                     // from the settings would drop the user here. Go back.
                     if (this.resumeSettings()) return;
