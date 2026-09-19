@@ -5130,10 +5130,20 @@
                             // A type that several integrations supply means different things
                             // per integration ("Tür" is a contact sensor here, a fridge there),
                             // so that is the safer default.
+                            //
+                            // A word only one entity carries today is still the
+                            // integration's word, not that entity's: dyson_local
+                            // says "Next Deep Clean" for every fan it knows, and
+                            // the next one will arrive called that. An exception
+                            // here would name this one entity and leave the next
+                            // to be corrected again, so the integration is where
+                            // the answer belongs. Only a name with no integration
+                            // behind it is this entity's own business.
                             const perIntegration = entity.type_integration_count || 0;
+                            const fromAnIntegration = !!entity.platform;
                             entity._ruleScope = (entity.type_count || 0) > 1
                                 ? (perIntegration && perIntegration < entity.type_count ? 'integration' : 'all')
-                                : 'here';
+                                : (fromAnIntegration ? 'integration' : 'here');
                         }
                     }
                     if (entity._expanded && entity._currentSuffix === undefined) {
