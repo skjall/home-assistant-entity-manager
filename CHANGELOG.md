@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.4.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.3.0...v1.4.0) (2026-09-19)
+
+
+### Features
+
+* a quiet way to keep the name an entity already has ([#127](https://github.com/skjall/home-assistant-entity-manager/issues/127)) ([0e1b6ca](https://github.com/skjall/home-assistant-entity-manager/commit/0e1b6ca12a9ce12299df94623333578988226ddf))
+* a rule can say which domain it means ([#128](https://github.com/skjall/home-assistant-entity-manager/issues/128)) ([03aa1f3](https://github.com/skjall/home-assistant-entity-manager/commit/03aa1f3430b6e9395fe8e8856886dd23b05aa3bb))
+
+
+### Bug Fixes
+
+* a change writes what moved, instead of building the list again ([#136](https://github.com/skjall/home-assistant-entity-manager/issues/136)) ([d260cc4](https://github.com/skjall/home-assistant-entity-manager/commit/d260cc4cb5d7f4a9b55391ec3c57e0ea383226cc))
+* a name a template finishes is not an entity id ([#119](https://github.com/skjall/home-assistant-entity-manager/issues/119)) ([2575c04](https://github.com/skjall/home-assistant-entity-manager/commit/2575c04a55ddb9bdea435347b1fa481167ab15d6))
+* a reload on a phone stays where the reader was ([#122](https://github.com/skjall/home-assistant-entity-manager/issues/122)) ([bf604a9](https://github.com/skjall/home-assistant-entity-manager/commit/bf604a940c97fe24a9c8182129a53cbc75f58920))
+* a switched-off device has nothing to change ([#139](https://github.com/skjall/home-assistant-entity-manager/issues/139)) ([2675aff](https://github.com/skjall/home-assistant-entity-manager/commit/2675affa64f44d57623893d5b62a598cf691db75))
+* a switched-off device offers the one thing that works on it ([#131](https://github.com/skjall/home-assistant-entity-manager/issues/131)) ([33f563f](https://github.com/skjall/home-assistant-entity-manager/commit/33f563fa49d722202678d809a8172e0374a48cd0))
+* a word an integration supplies belongs to the integration ([#137](https://github.com/skjall/home-assistant-entity-manager/issues/137)) ([0031c23](https://github.com/skjall/home-assistant-entity-manager/commit/0031c233fa0c36cba9280240221611c075f38040))
+* an unsaved edit keeps its card under "only changes" ([#126](https://github.com/skjall/home-assistant-entity-manager/issues/126)) ([b31ba65](https://github.com/skjall/home-assistant-entity-manager/commit/b31ba652a5f22db55814607ca272970b03ffbd58))
+* applying everything keeps the rules that were typed ([#130](https://github.com/skjall/home-assistant-entity-manager/issues/130)) ([3844190](https://github.com/skjall/home-assistant-entity-manager/commit/38441903bab24ab2e02fef988850141935280840))
+* let a rule be reworded where it already speaks ([#134](https://github.com/skjall/home-assistant-entity-manager/issues/134)) ([0d63d6b](https://github.com/skjall/home-assistant-entity-manager/commit/0d63d6b903426f7fe473e0ff0a3db1e2a2f55fb2))
+* let the type field fill the card on a phone ([#120](https://github.com/skjall/home-assistant-entity-manager/issues/120)) ([df19df3](https://github.com/skjall/home-assistant-entity-manager/commit/df19df334cc3b6b2c079a3420a09f267311e9f96))
+* link to Home Assistant by path, not by a port we picked ([#124](https://github.com/skjall/home-assistant-entity-manager/issues/124)) ([bedb3f0](https://github.com/skjall/home-assistant-entity-manager/commit/bedb3f04ec33a6d016590809fca76f8eaa7291cc))
+* one button, and it keeps what was typed ([#125](https://github.com/skjall/home-assistant-entity-manager/issues/125)) ([4fccd84](https://github.com/skjall/home-assistant-entity-manager/commit/4fccd8450b8e6bf5b0a4240165682c86713ea466))
+* one change does not reload the list in front of the reader ([#129](https://github.com/skjall/home-assistant-entity-manager/issues/129)) ([10445af](https://github.com/skjall/home-assistant-entity-manager/commit/10445af8123fcd207bd76721680323098e148a55))
+* one tick anywhere means the button for all of them is there too ([#138](https://github.com/skjall/home-assistant-entity-manager/issues/138)) ([8ea4db6](https://github.com/skjall/home-assistant-entity-manager/commit/8ea4db62d1bde89aac4211a3030e3e72891bc38d))
+* open Home Assistant's own pages in the app, not a browser ([#123](https://github.com/skjall/home-assistant-entity-manager/issues/123)) ([c23b607](https://github.com/skjall/home-assistant-entity-manager/commit/c23b60701eb22fb4c0fe8c70a3e02742dfaa09c0))
+* say where a helper's name comes from once ([#121](https://github.com/skjall/home-assistant-entity-manager/issues/121)) ([34427eb](https://github.com/skjall/home-assistant-entity-manager/commit/34427eba68853b7a41364b0d93a4dc6cec80b107))
+* take a name apart the way it was put together ([#133](https://github.com/skjall/home-assistant-entity-manager/issues/133)) ([b58c95e](https://github.com/skjall/home-assistant-entity-manager/commit/b58c95e2406f40e78f4a89043709be2e05b06e48))
+* wait out a Home Assistant restart instead of reporting it ([#135](https://github.com/skjall/home-assistant-entity-manager/issues/135)) ([9aa5af6](https://github.com/skjall/home-assistant-entity-manager/commit/9aa5af60e4db2fc3b1a39543425860c73435d55c))
+
 ## [1.3.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.2.0...v1.3.0) (2026-09-17)
 
 
