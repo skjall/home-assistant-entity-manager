@@ -10,6 +10,6 @@ isort==9.0.1
 flake8==7.3.0
 
 # Runs the hooks themselves; install with
-#   python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt -r requirements-test.txt
 #   .venv/bin/pre-commit install --hook-type pre-commit --hook-type commit-msg
 pre-commit==4.6.2

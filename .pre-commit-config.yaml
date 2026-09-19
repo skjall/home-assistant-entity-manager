@@ -1,7 +1,7 @@
 # Local checks mirroring the CI (lint + tests), plus the two things CI can only
 # complain about after the fact: what a branch is called and what a commit says
 # it is. Install once with:
-#   python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt -r requirements-test.txt
 #   .venv/bin/pre-commit install --hook-type pre-commit --hook-type commit-msg
 #
 # The three revisions below are the versions in requirements-dev.txt, which is
@@ -61,7 +61,7 @@ repos:
 
       - id: pytest
         name: pytest
-        entry: pytest
+        entry: python3 scripts/run_tests.py
         language: system
         types: [python]
         pass_filenames: false
