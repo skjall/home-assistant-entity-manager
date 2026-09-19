@@ -1,11 +1,7 @@
 {
   "header": {
     "title": "Gestionnaire d'entités",
-    "settings": "Paramètres",
-    "theme": "Apparence",
-    "theme_light": "Clair",
-    "theme_dark": "Sombre",
-    "theme_auto": "Automatique"
+    "settings": "Paramètres"
   },
   "panels": {
     "areas": "Zones",

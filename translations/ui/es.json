@@ -1,11 +1,7 @@
 {
   "header": {
     "title": "Gestor de Entidades",
-    "settings": "Configuración",
-    "theme": "Apariencia",
-    "theme_light": "Claro",
-    "theme_dark": "Oscuro",
-    "theme_auto": "Automático"
+    "settings": "Configuración"
   },
   "panels": {
     "areas": "Áreas",
