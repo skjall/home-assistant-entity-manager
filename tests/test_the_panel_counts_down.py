@@ -34,7 +34,58 @@ def test_a_flawless_run_starts_the_countdown_instead_of_closing_outright(markup)
 
 
 def test_opening_the_log_keeps_the_panel(markup):
-    assert "jobPanel.showLog = !jobPanel.showLog; stopClosing()" in markup
+    assert "jobPanel.showLog = !jobPanel.showLog; cancelClosing()" in markup
+
+
+def test_a_log_that_is_already_open_never_starts_a_count(markup):
+    """The log was opened while the run was still going: it stays open."""
+    start = markup.index("startClosing(finished) {")
+    body = markup[start : markup.index("tickClosing(finished) {", start)]
+    assert "if (this.jobPanel.showLog) return;" in body
+
+
+def test_a_pointer_already_on_the_panel_holds_the_count(markup):
+    """The panel is on screen before the run ends: no mouseenter ever comes."""
+    start = markup.index("startClosing(finished) {")
+    body = markup[start : markup.index("panelHasPointerOrFocus() {", start)]
+    assert "if (this.panelHasPointerOrFocus()) return;" in body
+    asked = markup[markup.index("panelHasPointerOrFocus() {") : markup.index("tickClosing(finished) {")]
+    assert "card.matches(':hover')" in asked
+    assert "card.contains(document.activeElement)" in asked
+    assert 'x-ref="jobPanelCard"' in markup
+
+
+def test_filtering_the_log_keeps_the_panel(markup):
+    start = markup.index("toggleJobLogFilter(step) {")
+    assert "this.cancelClosing();" in markup[start : start + 300]
+
+
+def test_the_pointer_and_the_focus_hold_the_count(markup):
+    assert '@mouseenter="pauseClosing()"' in markup
+    assert '@mouseleave="resumeClosing()"' in markup
+    assert '@focusin="pauseClosing()"' in markup
+    assert '@focusout="resumeClosing()"' in markup
+
+
+def test_acting_on_the_panel_ends_the_count_for_good(markup):
+    assert '@mousedown="cancelClosing()"' in markup
+    assert '@keydown="cancelClosing()"' in markup
+    start = markup.index("resumeClosing() {")
+    body = markup[start : markup.index("cancelClosing() {", start)]
+    assert "if (this.jobPanel.closingCancelled) return;" in body
+
+
+def test_a_paused_count_keeps_its_seconds(markup):
+    """Pausing clears the interval but leaves the number on the button."""
+    start = markup.index("pauseClosing() {")
+    body = markup[start : markup.index("resumeClosing() {", start)]
+    assert "this.jobPanel.closing = null" not in body
+
+
+def test_a_new_run_is_not_bound_by_the_last_cancellation(markup):
+    start = markup.index("startJob(pollUrl, job,")
+    body = markup[start : markup.index("async pollJob() {", start)]
+    assert "this.jobPanel.closingCancelled = false;" in body
 
 
 def test_closing_the_panel_clears_the_timer(markup):
@@ -55,6 +106,6 @@ def test_the_count_starts_before_the_entities_are_reloaded(markup):
 
 
 def test_the_countdown_is_dropped_when_another_job_takes_the_panel(markup):
-    start = markup.index("startClosing(finished) {")
-    body = markup[start : markup.index("stopClosing() {", start)]
+    start = markup.index("tickClosing(finished) {")
+    body = markup[start : markup.index("pauseClosing() {", start)]
     assert "this.jobPanel.job !== finished" in body
