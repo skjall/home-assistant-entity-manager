@@ -2477,7 +2477,7 @@
              class="fixed bottom-20 right-4 max-w-md p-4 rounded-lg shadow-lg z-50"
              :class="messageType === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'">
             <div class="flex items-start gap-2">
-                <i :class="messageType === 'success' ? 'ri-check-circle-line' : 'ri-error-warning-line'" class="text-xl shrink-0"></i>
+                <i :class="messageType === 'success' ? 'ri-checkbox-circle-line' : 'ri-error-warning-line'" class="text-xl shrink-0"></i>
                 <span x-text="message" class="flex-1 min-w-0 break-words"></span>
                 <button @click="message = ''" class="shrink-0 opacity-70 hover:opacity-100" :title="t('buttons.close')">
                     <i class="ri-close-line"></i>
