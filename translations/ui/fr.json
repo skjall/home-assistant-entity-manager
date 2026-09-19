@@ -109,7 +109,7 @@
     "drift_overwrite": "Remplacer",
     "drift_overwrite_hint": "Écrire la proposition des règles par-dessus le nom modifié.",
     "drift_adopted": "« {value} » conservé comme exception",
-    "blocked_explain": "{holder} occupe déjà « {wanted} ».",
+    "blocked_explain": "L’adresse {wanted} appartient déjà à {holder}.",
     "ignore": "Laisser tranquille",
     "ignore_hint": "Plus aucune proposition pour cette entité ; le nom fourni reste.",
     "ignored": "Cette entité est laissée telle quelle",

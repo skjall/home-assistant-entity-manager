@@ -109,7 +109,7 @@
     "drift_overwrite": "Sobrescribir",
     "drift_overwrite_hint": "Escribir la propuesta de las reglas sobre el nombre cambiado.",
     "drift_adopted": "“{value}” conservado como excepción",
-    "blocked_explain": "{holder} ya ocupa «{wanted}».",
+    "blocked_explain": "La dirección {wanted} ya pertenece a {holder}.",
     "ignore": "Dejar en paz",
     "ignore_hint": "Sin más propuestas para esta entidad; se mantiene el nombre suministrado.",
     "ignored": "Esta entidad se deja como está",

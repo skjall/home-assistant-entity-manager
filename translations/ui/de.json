@@ -109,7 +109,7 @@
     "drift_overwrite": "Überschreiben",
     "drift_overwrite_hint": "Den Vorschlag aus den Regeln über den geänderten Namen schreiben.",
     "drift_adopted": "„{value}“ als Ausnahme übernommen",
-    "blocked_explain": "„{wanted}“ hält schon {holder}.",
+    "blocked_explain": "Die Adresse {wanted} gehört schon {holder}.",
     "ignore": "In Ruhe lassen",
     "ignore_hint": "Kein Vorschlag mehr für diese Entität; der gelieferte Name bleibt.",
     "ignored": "Diese Entität wird in Ruhe gelassen",
