@@ -53,9 +53,7 @@ async def test_a_removal_that_worked_does_not_claim_it_was_already_gone():
 
 @pytest.mark.asyncio
 async def test_any_other_refusal_is_still_a_failure():
-    socket = Socket(
-        {"type": "result", "success": False, "error": {"code": "unauthorized", "message": "not allowed"}}
-    )
+    socket = Socket({"type": "result", "success": False, "error": {"code": "unauthorized", "message": "not allowed"}})
     registry = EntityRegistry(socket)
 
     with pytest.raises(Exception) as refused:
