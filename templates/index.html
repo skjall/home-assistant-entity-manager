@@ -3349,23 +3349,8 @@
                                 areaDevices = areaDevices.filter(d => !d.disabled_by);
                             }
 
-                            // Use same logic as filteredDevices: device needs rename OR has entities that need rename
-                            return areaDevices.some(device => {
-                                // Check if device name itself needs renaming
-                                if (this.deviceNameNeedsRename(device)) {
-                                    return true;
-                                }
-                                // Z2M-Namens-Drift zählt als Änderung
-                                if (device.z2m_drift) {
-                                    return true;
-                                }
-                                // Check if any entities need renaming
-                                let deviceEntities = this.hierarchy.entities.filter(e => e.device_id === device.id);
-                                if (!this.showDisabled) {
-                                    deviceEntities = deviceEntities.filter(e => !e.disabled_by);
-                                }
-                                return deviceEntities.some(e => this.staysInChangesFilter(e));
-                            });
+                            // The same question the device list asks.
+                            return areaDevices.some(device => this.deviceStaysInChangesFilter(device));
                         });
                     }
 
@@ -3426,23 +3411,7 @@
 
                     // Only show devices that need renaming (device name or entities)
                     if (this.onlyChanges) {
-                        devices = devices.filter(d => {
-                            // Check if device name itself needs renaming
-                            if (this.deviceNameNeedsRename(d)) {
-                                return true;
-                            }
-                            // Z2M-Namens-Drift zählt als Änderung
-                            if (d.z2m_drift) {
-                                return true;
-                            }
-                            // Check if any entities need renaming
-                            let deviceEntities = this.hierarchy.entities.filter(e => e.device_id === d.id);
-                            // Apply same filters as entity list
-                            if (!this.showDisabled) {
-                                deviceEntities = deviceEntities.filter(e => !e.disabled_by);
-                            }
-                            return deviceEntities.some(e => this.staysInChangesFilter(e));
-                        });
+                        devices = devices.filter(d => this.deviceStaysInChangesFilter(d));
                     }
 
                     return devices.sort((a, b) => {
@@ -4561,6 +4530,26 @@
                 // every other entity of that type and leaves this one alone.
                 //
                 // An unsaved edit therefore holds the card, however it renders.
+                // Whether "only changes" keeps this device on screen.
+                //
+                // A device somebody switched off has nothing to change: its
+                // entities cannot be renamed before it is back on, and the list
+                // does not show them (onADisabledDevice). Counting them here
+                // left the device standing under "only changes" above an empty
+                // list - "0 entities", nothing to do, no way to tell why.
+                deviceStaysInChangesFilter(device) {
+                    if (!device) return false;
+                    if (device.disabled_by) return false;
+                    if (this.deviceNameNeedsRename(device)) return true;
+                    // Z2M-Namens-Drift zählt als Änderung
+                    if (device.z2m_drift) return true;
+                    let mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
+                    if (!this.showDisabled) {
+                        mine = mine.filter(e => !e.disabled_by);
+                    }
+                    return mine.some(e => this.staysInChangesFilter(e));
+                },
+
                 staysInChangesFilter(entity) {
                     return this.entityNeedsRename(entity) || this.typeEdited(entity);
                 },
