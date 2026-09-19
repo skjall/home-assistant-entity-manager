@@ -5432,6 +5432,9 @@
                 async executeDeleteEntity() {
                     const entity = this.deleteModal.entity;
                     this.deleteModal.show = false;
+                    // The target is dealt with; keeping it would let a later
+                    // press delete something the user is no longer looking at.
+                    this.deleteModal.entity = null;
                     await this.executeDeleteEntityDirect(entity);
                 },
 
@@ -5450,9 +5453,22 @@
 
                         const data = await response.json();
                         if (data.success) {
-                            // Remove from local list (use filter for Alpine.js reactivity)
-                            this.hierarchy.entities = this.hierarchy.entities.filter(e => e.id !== entity.id);
-                            this.showMessage(`Entity ${entity.id} deleted`, 'success');
+                            // By registry entry as well as by id: a row whose id
+                            // has moved on is still the row that was deleted.
+                            this.hierarchy.entities = this.hierarchy.entities.filter(
+                                e => e.id !== entity.id
+                                     && (!entity.registry_id || e.registry_id !== entity.registry_id)
+                            );
+                            // A plain deletion needs no applause and stays
+                            // quiet; one that found nothing left has to say so,
+                            // or the row vanishing looks like a second delete.
+                            this.showMessage(
+                                data.already_gone
+                                    ? this.t('entity.was_already_gone')
+                                    : `Entity ${entity.id} deleted`,
+                                'success',
+                                Boolean(data.already_gone)
+                            );
                         } else {
                             throw new Error(data.error || 'Failed to delete entity');
                         }

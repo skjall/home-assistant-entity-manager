@@ -121,7 +121,8 @@
     "explain_builtin_class": "Home Assistant calls the device class {device_class} “{value}”",
     "supplied_stale": "The name is the helper’s entry title: “{supplied}” — applying rewrites the title too.",
     "scope_domain_hint": "Only the {count} {domain} entities on devices of type {model}.",
-    "keep_current_hint": "Put “{name}” in the field – what it is called today"
+    "keep_current_hint": "Put “{name}” in the field – what it is called today",
+    "was_already_gone": "The entity was already deleted — the list has caught up."
   },
   "virtual_devices": {
     "automations": "Automations",
