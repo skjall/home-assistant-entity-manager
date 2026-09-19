@@ -109,7 +109,7 @@
     "drift_overwrite": "Overwrite",
     "drift_overwrite_hint": "Write the proposal from the rules over the changed name.",
     "drift_adopted": "Kept “{value}” as an exception",
-    "blocked_explain": "The address {wanted} already belongs to {holder}.",
+    "blocked_explain": "Several entities here would get the same name — the number tells them apart.",
     "ignore": "Leave alone",
     "ignore_hint": "No more proposals for this entity; the supplied name stays.",
     "ignored": "This entity is left alone",
