@@ -1,20 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <script>
-        // The choice made on the list page holds here too, and is read before
-        // the first paint so leaving the list does not flash white.
-        (function () {
-            try {
-                var chosen = localStorage.getItem('entityManagerTheme');
-                if (chosen === 'light' || chosen === 'dark') {
-                    document.documentElement.setAttribute('data-theme', chosen);
-                }
-            } catch (e) {
-                // A browser that refuses storage still gets the system setting.
-            }
-        })();
-    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <base href="{{ base_href }}">
@@ -38,30 +24,30 @@
             align-items: center;
             margin-bottom: 24px;
             padding-bottom: 16px;
-            border-bottom: 1px solid var(--color-gray-200);
+            border-bottom: 1px solid #e5e7eb;
         }
 
         .settings-header h1 {
             margin: 0;
             font-size: 1.5rem;
-            color: var(--color-gray-900);
+            color: #111827;
         }
 
         .back-link {
             display: flex;
             align-items: center;
             gap: 6px;
-            color: var(--color-gray-500);
+            color: #6b7280;
             text-decoration: none;
             font-size: 0.9rem;
             transition: color 0.15s ease;
         }
 
         .back-link:hover {
-            color: var(--color-blue-500);
+            color: #3b82f6;
         }
 
-        .section-hint { color: var(--color-gray-500); font-size: 0.85rem; padding: 14px 20px 12px; }
+        .section-hint { color: #6b7280; font-size: 0.85rem; padding: 14px 20px 12px; }
 
         /* A setting that is on or off reads as a switch, not as a form field.
            The input stays where it is - it carries the state, the keyboard and
@@ -73,20 +59,20 @@
         }
         .switch .track {
             position: absolute; inset: 0; border-radius: 9999px;
-            background: var(--color-gray-300); transition: background 0.18s ease;
+            background: #d1d5db; transition: background 0.18s ease;
         }
         .switch .track::after {
             content: ''; position: absolute; top: 3px; left: 3px;
-            width: 18px; height: 18px; border-radius: 50%; background: var(--color-white);
-            box-shadow: 0 1px 3px var(--shadow-colour);
+            width: 18px; height: 18px; border-radius: 50%; background: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
             transition: transform 0.18s ease;
         }
-        .switch input:checked + .track { background: var(--color-indigo-600); }
+        .switch input:checked + .track { background: #4f46e5; }
         .switch input:checked + .track::after { transform: translateX(18px); }
         .switch input:focus-visible + .track { box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.35); }
         .switch input:disabled { cursor: default; }
-        .row-muted td { color: var(--color-gray-400); }
-        .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9999px; background: var(--color-indigo-50); color: var(--color-indigo-600); font-size: 0.7rem; }
+        .row-muted td { color: #9ca3af; }
+        .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9999px; background: #eef2ff; color: #4f46e5; font-size: 0.7rem; }
 
         /* One rule per row, read as a sentence rather than as five columns:
            entity ids and long names have nowhere to be cut off here. */
@@ -95,8 +81,8 @@
             flex-direction: column;
             gap: 8px;
             padding: 4px 16px 20px;
-            background: var(--color-gray-50);
-            border-top: 1px solid var(--color-gray-200);
+            background: #f8fafc;
+            border-top: 1px solid #e5e7eb;
         }
 
         /* A card per rule, with a coloured edge saying what kind of rule it is:
@@ -107,23 +93,23 @@
             gap: 12px;
             padding: 14px 16px;
             background: white;
-            border: 1px solid var(--color-gray-200);
-            border-left: 3px solid var(--color-blue-500);
+            border: 1px solid #e5e7eb;
+            border-left: 3px solid #3b82f6;
             border-radius: 10px;
             box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
             transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
         }
 
         .rule-row:hover {
-            border-color: var(--color-blue-200);
+            border-color: #bfdbfe;
             box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
             transform: translateY(-1px);
         }
 
         /* A rule that reaches nothing is quieter, but still legible: it is the
            one the user most likely came to look at. */
-        .rule-row-muted { border-left-color: var(--color-gray-300); background: var(--color-white); }
-        .rule-row-builtin { border-left-color: var(--color-violet-400); }
+        .rule-row-muted { border-left-color: #d1d5db; background: #fcfcfd; }
+        .rule-row-builtin { border-left-color: #a78bfa; }
         .rule-body { flex: 1 1 auto; min-width: 0; }
         .rule-actions { flex: none; }
 
@@ -137,15 +123,15 @@
         .rule-from {
             padding: 2px 8px;
             border-radius: 6px;
-            background: var(--color-gray-100);
+            background: #f3f4f6;
             font-family: monospace;
             font-size: 0.85rem;
-            color: var(--color-gray-600);
+            color: #4b5563;
             overflow-wrap: anywhere;
         }
 
-        .rule-arrow { color: var(--color-gray-400); flex: none; }
-        .rule-to { color: var(--color-gray-900); font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+        .rule-arrow { color: #9ca3af; flex: none; }
+        .rule-to { color: #111827; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
 
         /* How far a rule actually reaches, as the one number worth seeing first. */
         .reach-badge {
@@ -154,26 +140,26 @@
             gap: 4px;
             padding: 2px 8px;
             border-radius: 9999px;
-            background: var(--color-emerald-50);
-            color: var(--color-emerald-700);
+            background: #ecfdf5;
+            color: #047857;
             font-size: 0.75rem;
             font-weight: 600;
         }
 
-        .reach-badge.empty { background: var(--color-gray-100); color: var(--color-gray-500); }
+        .reach-badge.empty { background: #f3f4f6; color: #6b7280; }
         .reach-badge { border: none; font: inherit; font-size: 0.8rem; font-weight: 600; }
         .reach-badge-open { cursor: pointer; }
-        .reach-badge-open:hover { background: var(--color-emerald-100); }
+        .reach-badge-open:hover { background: #d1fae5; }
 
         .reach-list {
             margin-top: 10px;
-            border-top: 1px solid var(--color-gray-200);
+            border-top: 1px solid #e5e7eb;
             padding-top: 10px;
             display: flex;
             flex-direction: column;
             gap: 8px;
         }
-        .reach-note { margin: 0; color: var(--color-gray-500); font-size: 0.8rem; }
+        .reach-note { margin: 0; color: #6b7280; font-size: 0.8rem; }
 
         /* Wider than a phone at four columns, and scrolled rather than wrapped:
            a name broken over three lines is what made this unreadable. */
@@ -186,14 +172,14 @@
         .reach-table th {
             text-align: left;
             font-weight: 600;
-            color: var(--color-gray-500);
+            color: #6b7280;
             padding: 0 12px 6px 0;
             white-space: nowrap;
         }
         .reach-table td {
             padding: 6px 12px 6px 0;
-            border-top: 1px solid var(--color-gray-100);
-            color: var(--color-gray-700);
+            border-top: 1px solid #f3f4f6;
+            color: #374151;
             vertical-align: top;
         }
         .reach-domain {
@@ -201,21 +187,21 @@
             padding: 1px 6px;
             margin-right: 6px;
             border-radius: 4px;
-            background: var(--color-indigo-50);
-            color: var(--color-indigo-700);
+            background: #eef2ff;
+            color: #4338ca;
             font-size: 0.7rem;
             font-weight: 600;
         }
-        .reach-id { font-family: monospace; color: var(--color-indigo-600); word-break: break-all; text-decoration: none; }
+        .reach-id { font-family: monospace; color: #4f46e5; word-break: break-all; text-decoration: none; }
         a.reach-id:hover { text-decoration: underline; }
-        .reach-key { font-family: monospace; color: var(--color-gray-700); word-break: break-all; }
-        .reach-kind { display: block; color: var(--color-gray-400); font-size: 0.7rem; }
-        .reach-changes { color: var(--color-emerald-700); font-weight: 600; }
-        .rule-entity { font-family: monospace; font-size: 0.85rem; color: var(--color-gray-700); word-break: break-all; }
+        .reach-key { font-family: monospace; color: #374151; word-break: break-all; }
+        .reach-kind { display: block; color: #9ca3af; font-size: 0.7rem; }
+        .reach-changes { color: #047857; font-weight: 600; }
+        .rule-entity { font-family: monospace; font-size: 0.85rem; color: #374151; word-break: break-all; }
 
         .rule-reach {
             margin-top: 8px;
-            color: var(--color-gray-500);
+            color: #6b7280;
             font-size: 0.8rem;
             display: flex;
             align-items: center;
@@ -228,7 +214,7 @@
             align-items: center;
             gap: 8px;
             margin: 14px 2px 2px;
-            color: var(--color-gray-700);
+            color: #374151;
             font-size: 0.78rem;
             font-weight: 700;
             letter-spacing: 0.06em;
@@ -239,21 +225,21 @@
             content: "";
             flex: 1;
             height: 1px;
-            background: var(--color-gray-200);
+            background: #e5e7eb;
         }
 
         .rule-group .tally {
             padding: 1px 8px;
             border-radius: 9999px;
-            background: var(--color-gray-200);
-            color: var(--color-gray-600);
+            background: #e5e7eb;
+            color: #4b5563;
             font-size: 0.7rem;
             font-weight: 600;
             letter-spacing: 0;
         }
 
-        .rule-builtin { color: var(--color-gray-400); }
-        .rule-warning { color: var(--color-amber-600); }
+        .rule-builtin { color: #9ca3af; }
+        .rule-warning { color: #d97706; }
 
         /* One line above the list saying what could go, instead of a badge on
            every row that could. */
@@ -265,13 +251,13 @@
             gap: 12px;
             margin: 0 20px 12px;
             padding: 10px 14px;
-            background: var(--color-amber-50);
-            border: 1px solid var(--color-amber-200);
+            background: #fffbeb;
+            border: 1px solid #fde68a;
             border-radius: 8px;
-            color: var(--color-amber-800);
+            color: #92400e;
             font-size: 0.85rem;
         }
-        .kind-badge.muted { background: var(--color-gray-100); color: var(--color-gray-500); }
+        .kind-badge.muted { background: #f3f4f6; color: #6b7280; }
 
         /* The default reach, worn a shade quieter than a filter someone chose. */
         .filter-chip {
@@ -280,8 +266,8 @@
             gap: 4px;
             padding: 4px 4px 4px 12px;
             border-radius: 9999px;
-            background: var(--color-indigo-50);
-            color: var(--color-indigo-600);
+            background: #eef2ff;
+            color: #4f46e5;
             font-size: 0.8rem;
             font-weight: 500;
             line-height: 1.35;
@@ -292,8 +278,8 @@
         /* No remove button on this one, so it keeps the same room on both sides. */
         .filter-chip-default {
             padding: 4px 12px;
-            background: var(--color-gray-100);
-            color: var(--color-gray-500);
+            background: #f3f4f6;
+            color: #6b7280;
         }
 
         .filter-chip-remove {
@@ -313,9 +299,9 @@
         .filter-chip-remove:hover { opacity: 1; background: rgba(79, 70, 229, 0.15); }
 
         .filter-add {
-            border: 1px dashed var(--color-indigo-200);
+            border: 1px dashed #c7d2fe;
             background: none;
-            color: var(--color-indigo-600);
+            color: #4f46e5;
             border-radius: 9999px;
             padding: 4px 12px;
             font-size: 0.8rem;
@@ -324,18 +310,18 @@
             cursor: pointer;
         }
 
-        .filter-add:hover { background: var(--color-indigo-50); }
-        .conflict-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--color-gray-100); }
-        .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid var(--color-gray-300); background: white; cursor: pointer; font-size: 0.85rem; }
-        .chip-active { background: var(--color-blue-600); color: white; border-color: var(--color-blue-600); }
-        .originals-list { margin-top: 6px; border: 1px solid var(--color-gray-200); border-radius: 6px; max-height: 220px; overflow-y: auto; }
-        .originals-item { display: flex; justify-content: space-between; width: 100%; text-align: left; padding: 8px 10px; background: white; border: 0; border-bottom: 1px solid var(--color-gray-100); cursor: pointer; font-size: 0.9rem; }
-        .originals-item:hover { background: var(--color-blue-50); }
-        .originals-meta { color: var(--color-gray-400); font-size: 0.75rem; margin-left: 12px; white-space: nowrap; }
+        .filter-add:hover { background: #eef2ff; }
+        .conflict-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+        .chip-btn { padding: 4px 10px; border-radius: 9999px; border: 1px solid #d1d5db; background: white; cursor: pointer; font-size: 0.85rem; }
+        .chip-active { background: #2563eb; color: white; border-color: #2563eb; }
+        .originals-list { margin-top: 6px; border: 1px solid #e5e7eb; border-radius: 6px; max-height: 220px; overflow-y: auto; }
+        .originals-item { display: flex; justify-content: space-between; width: 100%; text-align: left; padding: 8px 10px; background: white; border: 0; border-bottom: 1px solid #f3f4f6; cursor: pointer; font-size: 0.9rem; }
+        .originals-item:hover { background: #eff6ff; }
+        .originals-meta { color: #9ca3af; font-size: 0.75rem; margin-left: 12px; white-space: nowrap; }
         .mapping-section {
             background: white;
             border-radius: 12px;
-            box-shadow: 0 1px 3px var(--shadow-colour);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             overflow: hidden;
         }
 
@@ -344,14 +330,14 @@
             justify-content: space-between;
             align-items: center;
             padding: 16px 20px;
-            background: var(--color-gray-50);
-            border-bottom: 1px solid var(--color-gray-200);
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
         }
 
         .section-header h2 {
             margin: 0;
             font-size: 1.1rem;
-            color: var(--color-gray-700);
+            color: #374151;
         }
 
         .add-btn {
@@ -359,7 +345,7 @@
             align-items: center;
             gap: 6px;
             padding: 8px 16px;
-            background: var(--color-blue-500);
+            background: #3b82f6;
             color: white;
             border: none;
             border-radius: 6px;
@@ -369,7 +355,7 @@
         }
 
         .add-btn:hover {
-            background: var(--color-blue-600);
+            background: #2563eb;
         }
 
         .mappings-table {
@@ -380,45 +366,45 @@
         .mappings-table th {
             text-align: left;
             padding: 12px 20px;
-            background: var(--color-gray-50);
+            background: #f9fafb;
             font-weight: 500;
-            color: var(--color-gray-500);
+            color: #6b7280;
             font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            border-bottom: 1px solid var(--color-gray-200);
+            border-bottom: 1px solid #e5e7eb;
         }
 
         .mappings-table td {
             padding: 12px 20px;
-            border-bottom: 1px solid var(--color-gray-100);
+            border-bottom: 1px solid #f3f4f6;
             vertical-align: middle;
         }
 
         .mappings-table tr:hover {
-            background: var(--color-gray-50);
+            background: #f9fafb;
         }
 
         .type-key {
             font-family: monospace;
             font-size: 0.9rem;
-            color: var(--color-gray-700);
-            background: var(--color-gray-100);
+            color: #374151;
+            background: #f3f4f6;
             padding: 4px 8px;
             border-radius: 4px;
         }
 
         .translation-value {
-            color: var(--color-gray-900);
+            color: #111827;
         }
 
         .system-default {
-            color: var(--color-gray-500);
+            color: #6b7280;
             font-style: italic;
         }
 
         .user-override {
-            color: var(--color-emerald-600);
+            color: #059669;
             font-weight: 500;
         }
 
@@ -427,8 +413,8 @@
             align-items: center;
             gap: 4px;
             padding: 2px 8px;
-            background: var(--color-gray-200);
-            color: var(--color-gray-500);
+            background: #e5e7eb;
+            color: #6b7280;
             border-radius: 12px;
             font-size: 0.75rem;
         }
@@ -441,28 +427,28 @@
         .action-btn {
             padding: 6px 10px;
             background: transparent;
-            border: 1px solid var(--color-gray-200);
+            border: 1px solid #e5e7eb;
             border-radius: 4px;
             cursor: pointer;
-            color: var(--color-gray-500);
+            color: #6b7280;
             transition: all 0.15s ease;
         }
 
         .action-btn:hover {
-            background: var(--color-gray-100);
-            color: var(--color-gray-700);
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.delete:hover {
-            background: var(--color-red-100);
-            color: var(--color-red-600);
-            border-color: var(--color-red-200);
+            background: #fee2e2;
+            color: #dc2626;
+            border-color: #fecaca;
         }
 
         .edit-input {
             width: 100%;
             padding: 8px 12px;
-            border: 1px solid var(--color-blue-500);
+            border: 1px solid #3b82f6;
             border-radius: 4px;
             font-size: 0.9rem;
             outline: none;
@@ -479,7 +465,7 @@
 
         .save-btn {
             padding: 6px 12px;
-            background: var(--color-emerald-500);
+            background: #10b981;
             color: white;
             border: none;
             border-radius: 4px;
@@ -488,13 +474,13 @@
         }
 
         .save-btn:hover {
-            background: var(--color-emerald-600);
+            background: #059669;
         }
 
         .cancel-btn {
             padding: 6px 12px;
-            background: var(--color-gray-100);
-            color: var(--color-gray-700);
+            background: #f3f4f6;
+            color: #374151;
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -502,7 +488,7 @@
         }
 
         .cancel-btn:hover {
-            background: var(--color-gray-200);
+            background: #e5e7eb;
         }
 
         /* Modal Styles */
@@ -510,7 +496,7 @@
             position: fixed;
             inset: 0;
             padding: 24px 16px;
-            background: var(--shadow-colour);
+            background: rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -527,7 +513,7 @@
             padding: 24px;
             width: 460px;
             max-width: 92vw;
-            box-shadow: 0 20px 40px var(--shadow-colour);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
             /* A suggestion list reaches past the dialog's own edge; clipping it
                here is what swallowed it. */
             overflow: visible;
@@ -535,7 +521,7 @@
 
         .modal h3 {
             margin: 0 0 20px 0;
-            color: var(--color-gray-900);
+            color: #111827;
         }
 
         .form-group {
@@ -546,21 +532,21 @@
             display: block;
             margin-bottom: 6px;
             font-weight: 500;
-            color: var(--color-gray-700);
+            color: #374151;
             font-size: 0.9rem;
         }
 
         .form-group input {
             width: 100%;
             padding: 10px 12px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 6px;
             font-size: 0.95rem;
         }
 
         .form-group input:focus {
             outline: none;
-            border-color: var(--color-blue-500);
+            border-color: #3b82f6;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
         }
 
@@ -573,7 +559,7 @@
 
         .btn-primary {
             padding: 10px 20px;
-            background: var(--color-blue-500);
+            background: #3b82f6;
             color: white;
             border: none;
             border-radius: 6px;
@@ -582,20 +568,20 @@
         }
 
         .btn-primary:hover {
-            background: var(--color-blue-600);
+            background: #2563eb;
         }
 
         .btn-secondary {
             padding: 10px 20px;
-            background: var(--color-gray-100);
-            color: var(--color-gray-700);
+            background: #f3f4f6;
+            color: #374151;
             border: none;
             border-radius: 6px;
             cursor: pointer;
         }
 
         .btn-secondary:hover {
-            background: var(--color-gray-200);
+            background: #e5e7eb;
         }
 
         /* Filter/Search */
@@ -613,21 +599,21 @@
             left: 12px;
             top: 50%;
             transform: translateY(-50%);
-            color: var(--color-gray-400);
+            color: #9ca3af;
             pointer-events: none;
         }
 
         .search-input {
             width: 100%;
             padding: 10px 14px 10px 34px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 8px;
             font-size: 0.9rem;
         }
 
         .search-input:focus {
             outline: none;
-            border-color: var(--color-blue-500);
+            border-color: #3b82f6;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
         }
 
@@ -638,23 +624,23 @@
             align-items: center;
             gap: 8px;
             padding: 10px 14px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 8px;
             background: white;
-            color: var(--color-gray-700);
+            color: #374151;
             font-size: 0.9rem;
             cursor: pointer;
             transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
         }
 
-        .filter-btn:hover { border-color: var(--color-blue-300); color: var(--color-blue-700); }
-        .filter-btn.on { border-color: var(--color-blue-500); background: var(--color-blue-50); color: var(--color-blue-700); }
+        .filter-btn:hover { border-color: #93c5fd; color: #1d4ed8; }
+        .filter-btn.on { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
 
         .filter-count {
             min-width: 20px;
             padding: 0 6px;
             border-radius: 9999px;
-            background: var(--color-blue-500);
+            background: #3b82f6;
             color: white;
             font-size: 0.75rem;
             font-weight: 600;
@@ -678,9 +664,9 @@
             gap: 4px;
             padding: 5px 6px 5px 12px;
             border-radius: 9999px;
-            background: var(--color-blue-50);
-            border: 1px solid var(--color-blue-200);
-            color: var(--color-blue-700);
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
             font-size: 0.8rem;
             font-weight: 500;
         }
@@ -694,23 +680,23 @@
             border: none;
             border-radius: 9999px;
             background: transparent;
-            color: var(--color-blue-700);
+            color: #1d4ed8;
             cursor: pointer;
             font-size: 0.85rem;
         }
 
-        .active-chip button:hover { background: var(--color-blue-100); }
+        .active-chip button:hover { background: #dbeafe; }
 
         .clear-filters {
             border: none;
             background: none;
-            color: var(--color-gray-500);
+            color: #6b7280;
             font-size: 0.8rem;
             cursor: pointer;
             text-decoration: underline;
         }
 
-        .clear-filters:hover { color: var(--color-gray-700); }
+        .clear-filters:hover { color: #374151; }
 
         .log-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
 
@@ -724,22 +710,22 @@
             text-transform: uppercase;
         }
 
-        .log-message { color: var(--color-gray-900); font-size: 0.92rem; overflow-wrap: anywhere; }
+        .log-message { color: #111827; font-size: 0.92rem; overflow-wrap: anywhere; }
 
-        .step-renamed { background: var(--color-indigo-100); color: var(--color-indigo-700); }
-        .step-carried { background: var(--color-emerald-100); color: var(--color-emerald-700); }
-        .step-not-carried { background: var(--color-red-100); color: var(--color-red-700); }
-        .step-unreachable { background: var(--color-amber-100); color: var(--color-amber-700); }
-        .step-enabled { background: var(--color-blue-100); color: var(--color-blue-700); }
-        .step-error { background: var(--color-red-100); color: var(--color-red-700); }
-        .step-other { background: var(--color-gray-100); color: var(--color-gray-500); }
+        .step-renamed { background: #e0e7ff; color: #4338ca; }
+        .step-carried { background: #d1fae5; color: #047857; }
+        .step-not-carried { background: #fee2e2; color: #b91c1c; }
+        .step-unreachable { background: #fef3c7; color: #b45309; }
+        .step-enabled { background: #dbeafe; color: #1d4ed8; }
+        .step-error { background: #fee2e2; color: #b91c1c; }
+        .step-other { background: #f3f4f6; color: #6b7280; }
 
-        .row-renamed { border-left-color: var(--color-indigo-500); }
-        .row-carried { border-left-color: var(--color-emerald-500); }
-        .row-not-carried, .row-error { border-left-color: var(--color-red-500); }
-        .row-enabled { border-left-color: var(--color-blue-500); }
-        .row-unreachable { border-left-color: var(--color-amber-500); }
-        .row-other { border-left-color: var(--color-gray-300); }
+        .row-renamed { border-left-color: #6366f1; }
+        .row-carried { border-left-color: #10b981; }
+        .row-not-carried, .row-error { border-left-color: #ef4444; }
+        .row-enabled { border-left-color: #3b82f6; }
+        .row-unreachable { border-left-color: #f59e0b; }
+        .row-other { border-left-color: #d1d5db; }
 
         .pager {
             display: flex;
@@ -747,7 +733,7 @@
             justify-content: center;
             gap: 16px;
             padding: 16px 20px;
-            border-top: 1px solid var(--color-gray-200);
+            border-top: 1px solid #e5e7eb;
         }
 
         .pager-btn {
@@ -755,17 +741,17 @@
             align-items: center;
             gap: 4px;
             padding: 8px 14px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 8px;
             background: white;
-            color: var(--color-gray-700);
+            color: #374151;
             font-size: 0.9rem;
             cursor: pointer;
         }
 
-        .pager-btn:hover:not(:disabled) { border-color: var(--color-blue-500); color: var(--color-blue-700); }
+        .pager-btn:hover:not(:disabled) { border-color: #3b82f6; color: #1d4ed8; }
         .pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-        .pager-where { color: var(--color-gray-500); font-size: 0.85rem; }
+        .pager-where { color: #6b7280; font-size: 0.85rem; }
 
         /* A list of integrations or models is far too long to scroll through in
            a dropdown, so it is typed into and narrowed as you type, the way
@@ -779,7 +765,7 @@
             left: 12px;
             top: 50%;
             transform: translateY(-50%);
-            color: var(--color-gray-400);
+            color: #9ca3af;
             pointer-events: none;
         }
 
@@ -788,24 +774,24 @@
             right: 12px;
             top: 50%;
             transform: translateY(-50%);
-            color: var(--color-emerald-500);
+            color: #10b981;
         }
 
         .combo-field input.combo-input {
             width: 100%;
             padding: 10px 36px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 8px;
             font-size: 0.95rem;
         }
 
         .combo-input:focus {
             outline: none;
-            border-color: var(--color-blue-500);
+            border-color: #3b82f6;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
         }
 
-        .combo-input.chosen { border-color: var(--color-emerald-300); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12); }
+        .combo-input.chosen { border-color: #6ee7b7; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12); }
 
         .combo-list {
             position: absolute;
@@ -817,7 +803,7 @@
             max-height: 240px;
             overflow-y: auto;
             background: white;
-            border: 1px solid var(--color-gray-200);
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
             box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
         }
@@ -830,37 +816,37 @@
             width: 100%;
             padding: 9px 12px;
             border: none;
-            border-bottom: 1px solid var(--color-gray-100);
+            border-bottom: 1px solid #f3f4f6;
             background: none;
             text-align: left;
             font-size: 0.9rem;
-            color: var(--color-gray-700);
+            color: #374151;
             cursor: pointer;
         }
 
         .combo-item:last-child { border-bottom: none; }
-        .combo-item:hover, .combo-item:focus, .combo-item.at { background: var(--color-blue-50); outline: none; }
-        .combo-item.at { box-shadow: inset 2px 0 0 var(--color-blue-500); }
-        .combo-item.current { background: var(--color-blue-100); font-weight: 600; }
-        .combo-item .tally { color: var(--color-gray-400); font-size: 0.78rem; white-space: nowrap; }
+        .combo-item:hover, .combo-item:focus, .combo-item.at { background: #eff6ff; outline: none; }
+        .combo-item.at { box-shadow: inset 2px 0 0 #3b82f6; }
+        .combo-item.current { background: #dbeafe; font-weight: 600; }
+        .combo-item .tally { color: #9ca3af; font-size: 0.78rem; white-space: nowrap; }
 
         .combo-maker {
             margin-right: 6px;
             padding: 1px 6px;
             border-radius: 4px;
-            background: var(--color-gray-100);
-            color: var(--color-gray-500);
+            background: #f3f4f6;
+            color: #6b7280;
             font-size: 0.75rem;
             font-weight: 600;
         }
 
         .combo-empty, .combo-more {
             padding: 9px 12px;
-            color: var(--color-gray-400);
+            color: #9ca3af;
             font-size: 0.85rem;
         }
 
-        .combo-more { background: var(--color-gray-50); }
+        .combo-more { background: #f9fafb; }
 
         /* Picking filters: groups of chips, several at a time. */
         .modal-wide { width: 580px; }
@@ -873,7 +859,7 @@
             font-weight: 600;
             letter-spacing: 0.06em;
             text-transform: uppercase;
-            color: var(--color-gray-500);
+            color: #6b7280;
         }
 
         .option-grid { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -883,23 +869,23 @@
             align-items: center;
             gap: 6px;
             padding: 7px 12px;
-            border: 1px solid var(--color-gray-200);
+            border: 1px solid #e5e7eb;
             border-radius: 9999px;
             background: white;
-            color: var(--color-gray-700);
+            color: #374151;
             font-size: 0.85rem;
             cursor: pointer;
             transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
         }
 
-        .option-chip:hover { border-color: var(--color-blue-300); background: var(--color-gray-50); }
-        .option-chip.picked { border-color: var(--color-blue-500); background: var(--color-blue-500); color: white; }
+        .option-chip:hover { border-color: #93c5fd; background: #f8fafc; }
+        .option-chip.picked { border-color: #3b82f6; background: #3b82f6; color: white; }
         .option-chip .tally { font-size: 0.75rem; opacity: 0.7; }
         .option-chip.picked .tally { opacity: 0.85; }
 
         .filter-select {
             padding: 10px 14px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 6px;
             font-size: 0.9rem;
             background: white;
@@ -908,7 +894,7 @@
         .empty-state {
             padding: 40px 20px;
             text-align: center;
-            color: var(--color-gray-500);
+            color: #6b7280;
         }
 
         .empty-state i {
@@ -921,9 +907,9 @@
             display: flex;
             gap: 20px;
             padding: 12px 20px;
-            background: var(--color-gray-50);
+            background: #f9fafb;
             font-size: 0.85rem;
-            color: var(--color-gray-500);
+            color: #6b7280;
         }
 
         .stat-item {
@@ -934,7 +920,7 @@
 
         .stat-value {
             font-weight: 600;
-            color: var(--color-gray-700);
+            color: #374151;
         }
 
         .language-selector {
@@ -945,16 +931,16 @@
 
         .language-selector label {
             font-size: 0.9rem;
-            color: var(--color-gray-500);
+            color: #6b7280;
         }
         .row-highlight {
-            background: var(--color-blue-50);
-            box-shadow: inset 3px 0 0 var(--color-blue-600);
+            background: #eff6ff;
+            box-shadow: inset 3px 0 0 #2563eb;
         }
         .settings-tabs {
             display: flex;
             gap: 4px;
-            border-bottom: 1px solid var(--color-gray-200);
+            border-bottom: 1px solid #e5e7eb;
             margin-bottom: 20px;
             overflow-x: auto;
         }
@@ -964,15 +950,15 @@
             gap: 6px;
             padding: 10px 14px;
             font-size: 0.9rem;
-            color: var(--color-gray-500);
+            color: #6b7280;
             text-decoration: none;
             border-bottom: 2px solid transparent;
             white-space: nowrap;
         }
-        .settings-tab:hover { color: var(--color-gray-700); }
+        .settings-tab:hover { color: #374151; }
         .settings-tab.is-active {
-            color: var(--color-blue-600);
-            border-bottom-color: var(--color-blue-600);
+            color: #2563eb;
+            border-bottom-color: #2563eb;
         }
         .cleanup-bar {
             display: flex;
@@ -982,13 +968,13 @@
             flex-wrap: wrap;
             margin: 0 0 12px;
             padding: 10px 12px;
-            background: var(--color-amber-50);
-            border: 1px solid var(--color-amber-200);
+            background: #fffbeb;
+            border: 1px solid #fde68a;
             border-radius: 8px;
         }
         .cleanup-bar p {
             margin: 0;
-            color: var(--color-amber-800);
+            color: #92400e;
             font-size: 0.85rem;
         }
         .sample-picker {
@@ -1007,7 +993,7 @@
             left: 9px;
             top: 50%;
             transform: translateY(-50%);
-            color: var(--color-gray-400);
+            color: #9ca3af;
             font-size: 0.9rem;
         }
         .sample-input {
@@ -1017,14 +1003,14 @@
         .sample-shuffle {
             flex: none;
             padding: 7px 10px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 6px;
-            background: var(--color-white);
-            color: var(--color-gray-600);
+            background: #fff;
+            color: #4b5563;
             cursor: pointer;
         }
         .sample-shuffle:hover {
-            background: var(--color-gray-100);
+            background: #f3f4f6;
         }
         .sample-list {
             position: absolute;
@@ -1035,10 +1021,10 @@
             margin-top: 4px;
             max-height: 260px;
             overflow-y: auto;
-            background: var(--color-white);
-            border: 1px solid var(--color-gray-200);
+            background: #fff;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
-            box-shadow: 0 10px 20px var(--shadow-colour);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
         }
         .sample-option {
             display: flex;
@@ -1047,17 +1033,17 @@
             width: 100%;
             padding: 7px 10px;
             border: none;
-            border-bottom: 1px solid var(--color-gray-100);
+            border-bottom: 1px solid #f3f4f6;
             background: none;
             text-align: left;
             font-size: 0.85rem;
             cursor: pointer;
         }
         .sample-option:hover {
-            background: var(--color-blue-50);
+            background: #eff6ff;
         }
         .sample-option.is-current {
-            background: var(--color-blue-100);
+            background: #dbeafe;
             font-weight: 500;
         }
         .sample-option-name {
@@ -1067,29 +1053,29 @@
             white-space: nowrap;
         }
         .sample-option-area {
-            color: var(--color-gray-400);
+            color: #9ca3af;
         }
         .sample-option-id {
             flex: none;
-            color: var(--color-gray-400);
+            color: #9ca3af;
             font-size: 0.75rem;
         }
         .sample-empty,
         .sample-more {
             padding: 7px 10px;
-            color: var(--color-gray-400);
+            color: #9ca3af;
             font-size: 0.8rem;
         }
         .sample-more {
-            background: var(--color-gray-50);
+            background: #f9fafb;
         }
         .tpl-editor {
             width: 100%;
             min-height: 38px;
             padding: 7px 10px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 6px;
-            background: var(--color-white);
+            background: #fff;
             font-size: 0.9rem;
             line-height: 1.7;
             outline: none;
@@ -1097,22 +1083,22 @@
             word-break: break-word;
         }
         .tpl-editor:focus {
-            border-color: var(--color-blue-600);
+            border-color: #2563eb;
             box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
         }
         .tpl-chip {
             display: inline-block;
             padding: 0 8px;
             border-radius: 10px;
-            background: var(--color-indigo-100);
-            color: var(--color-indigo-800);
+            background: #e0e7ff;
+            color: #3730a3;
             font-size: 0.82rem;
             white-space: nowrap;
             user-select: all;
         }
         .tpl-chip.is-unknown {
-            background: var(--color-red-100);
-            color: var(--color-red-700);
+            background: #fee2e2;
+            color: #b91c1c;
         }
         .field-chips {
             display: flex;
@@ -1125,31 +1111,31 @@
             align-items: flex-start;
             gap: 1px;
             padding: 5px 10px;
-            border: 1px solid var(--color-gray-300);
+            border: 1px solid #d1d5db;
             border-radius: 6px;
-            background: var(--color-white);
+            background: #fff;
             cursor: pointer;
             text-align: left;
             max-width: 200px;
         }
         .field-chip:hover {
-            border-color: var(--color-blue-600);
-            background: var(--color-blue-50);
+            border-color: #2563eb;
+            background: #eff6ff;
         }
         .field-chip-name {
             font-size: 0.8rem;
-            color: var(--color-gray-700);
+            color: #374151;
         }
         .field-chip-value {
             font-size: 0.7rem;
-            color: var(--color-gray-500);
+            color: #6b7280;
             max-width: 100%;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
         .input-invalid {
-            border-color: var(--color-red-600) !important;
+            border-color: #dc2626 !important;
         }
     </style>
 </head>
@@ -1196,7 +1182,7 @@
             <div style="padding: 20px;">
                 <!-- What the setting does, said once and in the open, rather than
                      a label repeating the heading and the reason in a tooltip. -->
-                <p style="color: var(--color-gray-500); font-size: 0.9rem; margin-bottom: 12px;"
+                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 12px;"
                    x-text="t('settings.display_case_hint')"></p>
                 <select class="filter-select" x-model="displayCase" @change="changeDisplayCase()">
                     <option value="first_word" x-text="t('settings.display_case_first_word')">First word capitalised</option>
@@ -1215,7 +1201,7 @@
                 </h2>
             </div>
             <div style="padding: 20px;">
-                <p style="color: var(--color-gray-500); font-size: 0.9rem; margin-bottom: 16px;"
+                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 16px;"
                    x-text="t('settings.naming_templates_hint')"></p>
 
                 <div class="form-group">
@@ -1240,13 +1226,13 @@
                              @keydown.enter.prevent></div>
                     </div>
                 </template>
-                <p style="color: var(--color-gray-500); font-size: 0.8rem; margin: -6px 0 14px;"
+                <p style="color: #6b7280; font-size: 0.8rem; margin: -6px 0 14px;"
                    x-text="t('settings.template_editor_hint')"></p>
 
                 <p x-show="allUnknownFields().length" class="text-amber-600" style="font-size: 0.85rem;"
                    x-text="t('settings.unknown_placeholder', {names: allUnknownFields().join(', ')})"></p>
 
-                <p style="font-size: 0.85rem; color: var(--color-gray-500); margin: 12px 0 6px;"
+                <p style="font-size: 0.85rem; color: #6b7280; margin: 12px 0 6px;"
                    x-text="t('settings.available_placeholders')"></p>
                 <div class="field-chips">
                     <template x-for="field in namingFields" :key="field">
@@ -1258,7 +1244,7 @@
                     </template>
                 </div>
 
-                <div style="margin-top: 16px; padding: 12px; background: var(--color-gray-50); border: 1px solid var(--color-gray-200); border-radius: 6px;">
+                <div style="margin-top: 16px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
                     <strong x-text="t('settings.naming_preview')">Example preview</strong>
                     <div class="sample-picker" @click.away="sampleOpen = false" @keydown.escape.stop="sampleOpen = false">
                         <div class="sample-field">
@@ -1294,7 +1280,7 @@
                         <div><span x-text="t('settings.device_name_template')"></span>: <code x-text="namingPreview.device_name || '—'"></code></div>
                         <div><span x-text="t('settings.entity_name_template')"></span>: <code x-text="namingPreview.entity_name || '—'"></code></div>
                         <div><span x-text="t('settings.entity_id_template')"></span>: <code x-text="namingPreview.entity_id || '—'"></code></div>
-                        <p style="color: var(--color-gray-500); font-size: 0.8rem; margin-top: 6px;" x-text="t('settings.technical_fields_hint')"></p>
+                        <p style="color: #6b7280; font-size: 0.8rem; margin-top: 6px;" x-text="t('settings.technical_fields_hint')"></p>
                     </div>
                 </div>
 
@@ -1303,7 +1289,7 @@
                         <i class="ri-save-line"></i>
                         <span x-text="t('settings.save_templates')">Save templates</span>
                     </button>
-                    <span x-show="namingMessage" :style="namingError ? 'color:var(--color-red-600)' : 'color:var(--color-green-600)'"
+                    <span x-show="namingMessage" :style="namingError ? 'color:#dc2626' : 'color:#16a34a'"
                           x-text="namingMessage"></span>
                 </div>
             </div>
@@ -1642,7 +1628,7 @@
                 </h2>
             </div>
             <div style="padding: 20px;">
-                <p style="color: var(--color-gray-500); font-size: 0.85rem; margin-bottom: 8px;"
+                <p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 8px;"
                    x-text="t('settings.migration_conflicts_hint')"></p>
                 <template x-for="conflict in migration?.conflicts || []" :key="conflict.rule_id">
                     <div class="conflict-row">
@@ -1674,7 +1660,7 @@
                     </span>
                     <span>
                         <span style="font-weight: 600;" x-text="t('settings.auto_close')">Close on success</span>
-                        <span style="display: block; color: var(--color-gray-500); font-size: 0.9rem; margin-top: 2px;"
+                        <span style="display: block; color: #6b7280; font-size: 0.9rem; margin-top: 2px;"
                               x-text="t('settings.auto_close_hint')"></span>
                     </span>
                 </label>
@@ -1689,14 +1675,14 @@
                 </h2>
             </div>
             <div style="padding: 20px;">
-                <p style="color: var(--color-gray-500); font-size: 0.9rem; margin-bottom: 16px;" x-text="t('settings.import_export_hint')">
+                <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 16px;" x-text="t('settings.import_export_hint')">
                     Format: original;name (one per line). Import adds or updates rules without deleting existing ones.
                 </p>
                 <textarea x-model="importExportText"
-                          style="width: 100%; height: 200px; font-family: monospace; font-size: 0.9rem; padding: 12px; border: 1px solid var(--color-gray-300); border-radius: 6px; resize: vertical;"
+                          style="width: 100%; height: 200px; font-family: monospace; font-size: 0.9rem; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; resize: vertical;"
                           :placeholder="t('settings.import_export_placeholder')"></textarea>
                 <div style="display: flex; gap: 12px; margin-top: 12px;">
-                    <button class="add-btn" @click="exportMappings()" style="background: var(--color-gray-500);">
+                    <button class="add-btn" @click="exportMappings()" style="background: #6b7280;">
                         <i class="ri-download-line"></i>
                         <span x-text="t('settings.export')">Export</span>
                     </button>
@@ -1727,37 +1713,37 @@
                     <div>
                         <div style="font-weight: 600;" x-text="t('settings.access_state_' + (network.state || 'off'))"></div>
                         <div x-show="(network.networks || []).length" x-cloak
-                             style="font-size: 0.85rem; color: var(--color-gray-700); margin-top: 2px;">
+                             style="font-size: 0.85rem; color: #374151; margin-top: 2px;">
                             <template x-for="entry in (network.networks || [])" :key="entry">
                                 <code style="margin-right: 6px;" x-text="entry"></code>
                             </template>
                         </div>
-                        <div style="font-size: 0.85rem; color: var(--color-gray-500); margin-top: 2px;" x-text="accessDetail()"></div>
+                        <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;" x-text="accessDetail()"></div>
                     </div>
                 </div>
 
                 <div x-show="networkWarning()" x-cloak
-                     style="margin-bottom: 16px; padding: 10px; border: 1px solid var(--color-amber-500); background: var(--color-amber-50); border-radius: 6px; color: var(--color-amber-800); font-size: 0.85rem;">
+                     style="margin-bottom: 16px; padding: 10px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px; color: #92400e; font-size: 0.85rem;">
                     <i class="ri-alert-line"></i>
                     <span x-text="networkWarning()"></span>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--color-gray-200);">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid #e5e7eb;">
                     <div style="flex: 1; min-width: 220px;">
-                        <div style="font-size: 0.9rem; color: var(--color-gray-700);">
+                        <div style="font-size: 0.9rem; color: #374151;">
                             <span style="font-weight: 600;" x-text="t('settings.access_token')"></span>
                             <span> · </span>
                             <span x-text="apiToken.configured ? t('settings.api_token_status_active') : t('settings.api_token_status_none')"></span>
                             <span> · </span>
                             <span x-text="t('settings.access_mode_' + (network.api || 'read'))"></span>
                         </div>
-                        <div style="font-size: 0.85rem; color: var(--color-gray-500); margin-top: 2px;" x-text="tokenDetail()"></div>
+                        <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;" x-text="tokenDetail()"></div>
                         <div x-show="publishedPort() && (network.api || 'read') !== 'off'" x-cloak style="margin-top: 6px;">
-                            <span style="font-size: 0.85rem; color: var(--color-gray-500);" x-text="t('settings.access_address')"></span>
-                            <span style="font-size: 0.85rem; color: var(--color-gray-500);">: </span>
+                            <span style="font-size: 0.85rem; color: #6b7280;" x-text="t('settings.access_address')"></span>
+                            <span style="font-size: 0.85rem; color: #6b7280;">: </span>
                             <code style="font-size: 0.85rem;" x-text="externalUrl('/api/rename_log')"></code>
                             <button type="button" @click="copyAddress(externalUrl('/api/rename_log'))"
-                                    style="margin-left: 6px; border: none; background: none; cursor: pointer; color: var(--color-gray-500);"
+                                    style="margin-left: 6px; border: none; background: none; cursor: pointer; color: #6b7280;"
                                     :title="t('settings.api_token_copy')">
                                 <i class="ri-file-copy-line"></i>
                             </button>
@@ -1768,7 +1754,7 @@
                             <i class="ri-key-2-line"></i>
                             <span x-text="apiToken.configured ? t('settings.api_token_regenerate') : t('settings.api_token_generate')">Generate token</span>
                         </button>
-                        <button class="add-btn" x-show="apiToken.configured" @click="revokeApiToken()" style="background: var(--color-red-500);">
+                        <button class="add-btn" x-show="apiToken.configured" @click="revokeApiToken()" style="background: #ef4444;">
                             <i class="ri-delete-bin-line"></i>
                             <span x-text="t('settings.api_token_revoke')">Revoke</span>
                         </button>
@@ -1777,30 +1763,30 @@
 
                 <!-- One-time token reveal, right where the button that creates it is. -->
                 <div x-show="newApiToken" x-cloak
-                     style="margin-bottom: 12px; padding: 12px; border: 1px solid var(--color-amber-500); background: var(--color-amber-50); border-radius: 6px;">
-                    <p style="color: var(--color-amber-800); font-size: 0.85rem; margin-bottom: 8px;" x-text="t('settings.api_token_show_once')"></p>
+                     style="margin-bottom: 12px; padding: 12px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px;">
+                    <p style="color: #92400e; font-size: 0.85rem; margin-bottom: 8px;" x-text="t('settings.api_token_show_once')"></p>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" readonly :value="newApiToken" x-ref="tokenField"
-                               style="flex: 1; font-family: monospace; font-size: 0.85rem; padding: 8px; border: 1px solid var(--color-gray-300); border-radius: 6px;">
-                        <button class="add-btn" @click="copyApiToken()" style="background: var(--color-gray-500);">
+                               style="flex: 1; font-family: monospace; font-size: 0.85rem; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        <button class="add-btn" @click="copyApiToken()" style="background: #6b7280;">
                             <i class="ri-file-copy-line"></i>
                             <span x-text="tokenCopied ? t('settings.api_token_copied') : t('settings.api_token_copy')">Copy</span>
                         </button>
                     </div>
                 </div>
 
-                <div style="padding: 12px 0; border-top: 1px solid var(--color-gray-200);">
-                    <div style="font-size: 0.9rem; color: var(--color-gray-700);">
+                <div style="padding: 12px 0; border-top: 1px solid #e5e7eb;">
+                    <div style="font-size: 0.9rem; color: #374151;">
                         <span style="font-weight: 600;" x-text="t('settings.access_mcp')"></span>
                         <span> · </span>
                         <span x-text="t('settings.access_mode_' + (network.mcp || 'off'))"></span>
                     </div>
                     <div x-show="(network.mcp || 'off') !== 'off' && publishedPort()" x-cloak
-                         style="font-size: 0.85rem; color: var(--color-gray-500); margin-top: 2px;">
+                         style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;">
                         <span x-text="t('settings.access_address')"></span><span>: </span>
                         <code x-text="externalUrl('/mcp')"></code>
                         <button type="button" @click="copyAddress(externalUrl('/mcp'))"
-                                style="margin-left: 6px; border: none; background: none; cursor: pointer; color: var(--color-gray-500);"
+                                style="margin-left: 6px; border: none; background: none; cursor: pointer; color: #6b7280;"
                                 :title="t('settings.api_token_copy')">
                             <i class="ri-file-copy-line"></i>
                         </button>
@@ -1809,16 +1795,16 @@
                     <!-- What a client needs, in the shape a client wants it. -->
                     <div x-show="(network.mcp || 'off') !== 'off' && publishedPort()" x-cloak style="margin-top: 10px;">
                         <button type="button" @click="showMcpSetup = !showMcpSetup"
-                                style="border: none; background: none; padding: 0; cursor: pointer; color: var(--color-blue-600); font-size: 0.85rem;">
+                                style="border: none; background: none; padding: 0; cursor: pointer; color: #2563eb; font-size: 0.85rem;">
                             <i :class="showMcpSetup ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
                             <span x-text="t('settings.access_mcp_howto')"></span>
                         </button>
                         <div x-show="showMcpSetup" x-cloak style="margin-top: 8px;">
-                            <p style="font-size: 0.85rem; color: var(--color-gray-500); margin: 0 0 6px;"
+                            <p style="font-size: 0.85rem; color: #6b7280; margin: 0 0 6px;"
                                x-text="t('settings.access_mcp_howto_hint')"></p>
-                            <pre style="margin: 0; padding: 10px; background: var(--color-gray-50); border: 1px solid var(--color-gray-200); border-radius: 6px; overflow-x: auto; font-size: 0.8rem;"><code x-text="mcpSetupSnippet()"></code></pre>
+                            <pre style="margin: 0; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; overflow-x: auto; font-size: 0.8rem;"><code x-text="mcpSetupSnippet()"></code></pre>
                             <button class="add-btn" @click="copyAddress(mcpSetupSnippet())"
-                                    style="margin-top: 8px; background: var(--color-gray-500);">
+                                    style="margin-top: 8px; background: #6b7280;">
                                 <i class="ri-file-copy-line"></i>
                                 <span x-text="t('settings.api_token_copy')"></span>
                             </button>
@@ -1826,17 +1812,17 @@
                     </div>
                 </div>
 
-                <div style="padding: 12px 0; border-top: 1px solid var(--color-gray-200);">
+                <div style="padding: 12px 0; border-top: 1px solid #e5e7eb;">
                     <a :href="docsUrl()" target="_blank" rel="noopener"
-                       style="font-size: 0.9rem; color: var(--color-blue-600); text-decoration: none;">
+                       style="font-size: 0.9rem; color: #2563eb; text-decoration: none;">
                         <i class="ri-book-2-line"></i>
                         <span x-text="t('settings.access_docs')"></span>
                     </a>
-                    <div style="font-size: 0.85rem; color: var(--color-gray-500); margin-top: 2px;"
+                    <div style="font-size: 0.85rem; color: #6b7280; margin-top: 2px;"
                          x-text="t('settings.access_docs_hint')"></div>
                 </div>
 
-                <div style="margin-top: 12px; font-size: 0.85rem; color: var(--color-gray-500);" x-text="t('settings.access_change_note')"></div>
+                <div style="margin-top: 12px; font-size: 0.85rem; color: #6b7280;" x-text="t('settings.access_change_note')"></div>
             </div>
         </div>
 
@@ -2585,8 +2571,8 @@
                 // Grey when nothing gets in, amber when anyone may try, green
                 // for the deliberate middle: the local network only.
                 accessColor() {
-                    if (!this.publishedPort() || (this.network.state || 'off') === 'off') return 'var(--color-gray-400)';
-                    return this.network.state === 'any' ? 'var(--color-amber-500)' : 'var(--color-emerald-500)';
+                    if (!this.publishedPort() || (this.network.state || 'off') === 'off') return '#9ca3af';
+                    return this.network.state === 'any' ? '#f59e0b' : '#10b981';
                 },
 
                 // The line under the headline. A bare port number tells nobody

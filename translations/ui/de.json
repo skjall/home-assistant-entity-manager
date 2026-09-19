@@ -1,11 +1,7 @@
 {
   "header": {
     "title": "Entitäts-Manager",
-    "settings": "Einstellungen",
-    "theme": "Darstellung",
-    "theme_light": "Hell",
-    "theme_dark": "Dunkel",
-    "theme_auto": "Automatisch"
+    "settings": "Einstellungen"
   },
   "panels": {
     "areas": "Bereiche",

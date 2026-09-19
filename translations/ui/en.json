@@ -1,11 +1,7 @@
 {
   "header": {
     "title": "Entity Manager",
-    "settings": "Settings",
-    "theme": "Appearance",
-    "theme_light": "Light",
-    "theme_dark": "Dark",
-    "theme_auto": "Automatic"
+    "settings": "Settings"
   },
   "panels": {
     "areas": "Areas",
