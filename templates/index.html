@@ -5995,9 +5995,16 @@
                         return;
                     }
 
-                    // Prevent renaming to a name that another device already uses
-                    if (this.hierarchy.devices.some(d => d.id !== this.selectedDevice && d.name === newFullName)) {
-                        this.showMessage(this.t('device.name_conflict'), 'error');
+                    // Two devices may share a name; two entities may not share
+                    // an id. Asked here as well as at the button, because this
+                    // is the door the rename actually goes through.
+                    const wasPreviewed = this.devicePreviewBaseName;
+                    this.devicePreviewBaseName = newBaseName;
+                    await this.checkDeviceNameClash();
+                    if (this.deviceNameClash.length) {
+                        const taken = this.deviceNameClashId();
+                        this.devicePreviewBaseName = wasPreviewed;
+                        this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
                         return;
                     }
 
