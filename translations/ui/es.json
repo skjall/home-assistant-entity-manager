@@ -125,7 +125,8 @@
     "explain_builtin_class": "Home Assistant llama «{value}» a la clase de dispositivo {device_class}",
     "supplied_stale": "El nombre es el título de la entrada del auxiliar: «{supplied}»: al aplicar también se reescribe el título.",
     "scope_domain_hint": "Solo las {count} entidades {domain} en dispositivos del tipo {model}.",
-    "keep_current_hint": "Poner «{name}» en el campo: así se llama hoy"
+    "keep_current_hint": "Poner «{name}» en el campo: así se llama hoy",
+    "was_already_gone": "La entidad ya estaba eliminada: la lista se ha puesto al día."
   },
   "virtual_devices": {
     "automations": "Automatizaciones",
@@ -235,7 +236,8 @@
     "enable": "Activar dispositivo",
     "enabling": "Activando…",
     "enabled": "Dispositivo activado",
-    "enable_it_first": "El dispositivo está desactivado: actívalo primero."
+    "enable_it_first": "El dispositivo está desactivado: actívalo primero.",
+    "id_conflict": "Este nombre tomaría un id de entidad que ya está en uso: {id}"
   },
   "units": {
     "entities": "Entidades",

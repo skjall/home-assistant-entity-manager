@@ -125,7 +125,8 @@
     "explain_builtin_class": "Home Assistant nomme la classe d'appareil {device_class} « {value} »",
     "supplied_stale": "Le nom est le titre de l’entrée de l’auxiliaire : « {supplied} » — appliquer réécrit aussi le titre.",
     "scope_domain_hint": "Seulement les {count} entités {domain} sur les appareils de type {model}.",
-    "keep_current_hint": "Mettre « {name} » dans le champ : son nom actuel"
+    "keep_current_hint": "Mettre « {name} » dans le champ : son nom actuel",
+    "was_already_gone": "L'entité était déjà supprimée — la liste s'est mise à jour."
   },
   "virtual_devices": {
     "automations": "Automatisations",
@@ -235,7 +236,8 @@
     "enable": "Activer l’appareil",
     "enabling": "Activation…",
     "enabled": "Appareil activé",
-    "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil."
+    "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil.",
+    "id_conflict": "Ce nom prendrait un identifiant d'entité déjà attribué : {id}"
   },
   "units": {
     "entities": "Entités",

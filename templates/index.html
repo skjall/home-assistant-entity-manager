@@ -2050,7 +2050,9 @@
                                class="edit-input flex-1"
                                x-ref="deviceNameInput"
                                :value="devicePreviewBaseName !== null ? devicePreviewBaseName : selectedDeviceData?.base_name"
-                               @input="devicePreviewBaseName = $event.target.value"
+                               @input="devicePreviewBaseName = $event.target.value;
+                                        clearTimeout(_deviceNameTimer);
+                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(), 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
                                :placeholder="selectedDeviceData?.base_name"
                                :disabled="renamingDevice || applyingEntityId || executing">
@@ -2059,12 +2061,13 @@
                                 style="background: var(--fill-green); color: var(--ink-on-colour);"
                                 :disabled="renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)"
                                 :class="{'opacity-50 cursor-not-allowed': renamingDevice || applyingEntityId || executing || isDeviceNameTaken(selectedDeviceData)}"
-                                :title="isDeviceNameTaken(selectedDeviceData) ? t('device.name_conflict') : ''">
+                                :title="isDeviceNameTaken(selectedDeviceData) ? t('device.id_conflict', {id: deviceNameClashId()}) : ''">
                             <i class="ri-check-line"></i>
                         </button>
                     </div>
                     <span x-show="isDeviceNameTaken(selectedDeviceData)" class="text-red-500 text-xs mt-1 block">
-                        <i class="ri-error-warning-line"></i> <span x-text="t('device.name_conflict')">A device with this name already exists</span>
+                        <i class="ri-error-warning-line"></i>
+                        <span x-text="t('device.id_conflict', {id: deviceNameClashId()})">An entity id would be taken twice</span>
                     </span>
                     <!-- Z2M-Namens-Drift: Z2M-friendly_name weicht vom HA-Namen ab -->
                     <div x-show="selectedDeviceData?.z2m_drift" class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
@@ -2584,10 +2587,10 @@
              x-transition
              class="fixed bottom-20 right-4 max-w-md p-4 rounded-lg shadow-lg z-50"
              :class="messageType === 'success' ? 'bg-green-600 text-on-colour' : 'bg-red-600 text-on-colour'">
-            <div class="flex items-center gap-2">
-                <i :class="messageType === 'success' ? 'ri-check-circle-line' : 'ri-error-warning-line'" class="text-xl"></i>
-                <span x-text="message"></span>
-                <button @click="message = ''" class="ml-4 opacity-70 hover:opacity-100">
+            <div class="flex items-start gap-2">
+                <i :class="messageType === 'success' ? 'ri-check-circle-line' : 'ri-error-warning-line'" class="text-xl shrink-0"></i>
+                <span x-text="message" class="flex-1 min-w-0 break-words"></span>
+                <button @click="message = ''" class="shrink-0 opacity-70 hover:opacity-100" :title="t('buttons.close')">
                     <i class="ri-close-line"></i>
                 </button>
             </div>
@@ -2602,6 +2605,13 @@
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div class="bg-white rounded-xl shadow-xl max-w-xl w-full overflow-y-auto"
                  style="max-height: 85vh"
+                 x-ref="jobPanelCard"
+                 @mouseenter="pauseClosing()"
+                 @mouseleave="resumeClosing()"
+                 @focusin="pauseClosing()"
+                 @focusout="resumeClosing()"
+                 @mousedown="cancelClosing()"
+                 @keydown="cancelClosing()"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100">
@@ -2649,7 +2659,7 @@
                                         <span class="font-semibold" x-text="group.count"></span>
                                     </button>
                                 </template>
-                                <button @click="jobPanel.showLog = !jobPanel.showLog; stopClosing()"
+                                <button @click="jobPanel.showLog = !jobPanel.showLog; cancelClosing()"
                                         class="ml-auto text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 shrink-0">
                                     <i :class="jobPanel.showLog ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
                                     <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
@@ -3077,6 +3087,8 @@
                     timer: null,
                     closing: null,    // seconds left before it closes itself
                     closingTimer: null,
+                    closingJob: null,      // the job the count belongs to
+                    closingCancelled: false,  // the user kept the panel; no count comes back
                     onDone: null,
                 },
 
@@ -3097,6 +3109,8 @@
                 selectedDeviceData: null,
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
+                deviceNameClash: [],  // Ids the name in the field would take from someone else
+                _deviceNameTimer: null,
                 renamingDevice: false,  // Loading state for device rename
                 syncingZ2m: false,  // Loading state for Z2M name sync
                 applyingEntityId: null,  // ID of entity currently being renamed
@@ -4593,6 +4607,7 @@
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
+                    this.deviceNameClash = [];
                     this.saveState();
 
                     // Mobile: Navigate to entities
@@ -4606,6 +4621,7 @@
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
+                    this.deviceNameClash = [];
                     this.saveState();
 
                     // Mobile: Navigate to entities
@@ -5120,12 +5136,55 @@
                     return device.name !== expectedName;
                 },
 
-                // Check if the target device name is already taken by another device
+                // Whether the name in the field would take an id that is held.
+                //
+                // Not whether another device is called this - two devices may
+                // share a name, and since Home Assistant started splitting one
+                // device into several, two of them legitimately do. What may
+                // not be shared is an entity id, and that is what this asks:
+                // would any entity of this device end up on an id that an
+                // entity of another device already has?
                 isDeviceNameTaken(device) {
                     if (!device) return false;
-                    const newName = this.getExpectedDeviceName(device);
-                    if (!newName || newName === device.name) return false; // No change, no conflict
-                    return this.hierarchy.devices.some(d => d.id !== device.id && d.name === newName);
+                    return this.deviceNameClash.length > 0
+                        && this.deviceNameClash[0].device_id === device.id;
+                },
+
+                // The first id that would collide, for the warning to name.
+                deviceNameClashId() {
+                    return this.deviceNameClash.length ? this.deviceNameClash[0].id : '';
+                },
+
+                // Asked while typing, so the answer has to come from the name
+                // in the field rather than from the previews, which are built
+                // from the name that is stored.
+                async checkDeviceNameClash() {
+                    const device = this.selectedDeviceData;
+                    this.deviceNameClash = [];
+                    if (!device || this.isVirtualDevice(this.selectedDevice)) return;
+                    const wanted = this.getExpectedDeviceName(device);
+                    if (!wanted || wanted === device.name) return;
+
+                    const mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
+                    if (!mine.length) return;
+
+                    // The slug rules live in the backend; see fetchNormalized.
+                    const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e)));
+                    const taken = new Map();
+                    for (const other of this.hierarchy.entities) {
+                        if (other.device_id === device.id) continue;
+                        taken.set(other.id, other);
+                    }
+
+                    const clashes = [];
+                    mine.forEach((entity, index) => {
+                        const wantedId = this.composeEntityId(entity, slugs[index]);
+                        const holder = taken.get(wantedId);
+                        if (holder) {
+                            clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
+                        }
+                    });
+                    this.deviceNameClash = clashes;
                 },
 
                 deviceNeedsRename(device) {
@@ -5606,6 +5665,9 @@
                 async executeDeleteEntity() {
                     const entity = this.deleteModal.entity;
                     this.deleteModal.show = false;
+                    // The target is dealt with; keeping it would let a later
+                    // press delete something the user is no longer looking at.
+                    this.deleteModal.entity = null;
                     await this.executeDeleteEntityDirect(entity);
                 },
 
@@ -5624,9 +5686,22 @@
 
                         const data = await response.json();
                         if (data.success) {
-                            // Remove from local list (use filter for Alpine.js reactivity)
-                            this.hierarchy.entities = this.hierarchy.entities.filter(e => e.id !== entity.id);
-                            this.showMessage(`Entity ${entity.id} deleted`, 'success');
+                            // By registry entry as well as by id: a row whose id
+                            // has moved on is still the row that was deleted.
+                            this.hierarchy.entities = this.hierarchy.entities.filter(
+                                e => e.id !== entity.id
+                                     && (!entity.registry_id || e.registry_id !== entity.registry_id)
+                            );
+                            // A plain deletion needs no applause and stays
+                            // quiet; one that found nothing left has to say so,
+                            // or the row vanishing looks like a second delete.
+                            this.showMessage(
+                                data.already_gone
+                                    ? this.t('entity.was_already_gone')
+                                    : `Entity ${entity.id} deleted`,
+                                'success',
+                                Boolean(data.already_gone)
+                            );
                         } else {
                             throw new Error(data.error || 'Failed to delete entity');
                         }
@@ -5851,6 +5926,7 @@
                     this.jobPanel.showLog = false;
                     this.jobPanel.filter = '';
                     this.jobPanel.search = '';
+                    this.jobPanel.closingCancelled = false;
                     this.jobPanel.show = true;
                     if (this.isJobTerminal(job)) {
                         this.finishJob();
@@ -5925,7 +6001,33 @@
                 // the panel says how long is left and can be kept open.
                 startClosing(finished) {
                     this.stopClosing();
+                    if (this.jobPanel.showLog) return;
+                    this.jobPanel.closingCancelled = false;
+                    this.jobPanel.closingJob = finished;
                     this.jobPanel.closing = 3;
+                    // The panel is already on screen when the run ends, so a hand
+                    // resting on it sends no mouseenter and a field inside it no
+                    // focusin. Asked here instead of waited for: the count starts
+                    // held, and the first move away sets it going.
+                    if (this.panelHasPointerOrFocus()) return;
+                    this.tickClosing(finished);
+                },
+
+                // Where the pointer and the keyboard are right now, rather than
+                // where an event said they went.
+                panelHasPointerOrFocus() {
+                    const card = this.$refs.jobPanelCard;
+                    if (!card) return false;
+                    if (document.activeElement && card.contains(document.activeElement)) return true;
+                    try {
+                        return card.matches(':hover');
+                    } catch (error) {
+                        return false;
+                    }
+                },
+
+                tickClosing(finished) {
+                    if (this.jobPanel.closingTimer) return;
                     this.jobPanel.closingTimer = setInterval(() => {
                         if (this.jobPanel.job !== finished) {
                             this.stopClosing();
@@ -5939,12 +6041,35 @@
                     }, 1000);
                 },
 
+                // Pointer or keyboard focus inside the panel: hold the count
+                // where it is, so nothing disappears from under a reading eye.
+                pauseClosing() {
+                    if (this.jobPanel.closingTimer) {
+                        clearInterval(this.jobPanel.closingTimer);
+                        this.jobPanel.closingTimer = null;
+                    }
+                },
+
+                resumeClosing() {
+                    if (this.jobPanel.closingCancelled) return;
+                    if (!this.jobPanel.closing || !this.jobPanel.closingJob) return;
+                    this.tickClosing(this.jobPanel.closingJob);
+                },
+
+                // The user acted on the panel - opened the log, filtered it,
+                // typed in it. It is his now; it closes when he says so.
+                cancelClosing() {
+                    this.jobPanel.closingCancelled = true;
+                    this.stopClosing();
+                },
+
                 stopClosing() {
                     if (this.jobPanel.closingTimer) {
                         clearInterval(this.jobPanel.closingTimer);
                         this.jobPanel.closingTimer = null;
                     }
                     this.jobPanel.closing = null;
+                    this.jobPanel.closingJob = null;
                 },
 
                 stopJobPolling() {
@@ -6046,6 +6171,7 @@
                 toggleJobLogFilter(step) {
                     this.jobPanel.filter = this.jobPanel.filter === step ? '' : step;
                     this.jobPanel.showLog = true;
+                    this.cancelClosing();
                 },
 
                 jobLogEntries() {
@@ -6169,9 +6295,16 @@
                         return;
                     }
 
-                    // Prevent renaming to a name that another device already uses
-                    if (this.hierarchy.devices.some(d => d.id !== this.selectedDevice && d.name === newFullName)) {
-                        this.showMessage(this.t('device.name_conflict'), 'error');
+                    // Two devices may share a name; two entities may not share
+                    // an id. Asked here as well as at the button, because this
+                    // is the door the rename actually goes through.
+                    const wasPreviewed = this.devicePreviewBaseName;
+                    this.devicePreviewBaseName = newBaseName;
+                    await this.checkDeviceNameClash();
+                    if (this.deviceNameClash.length) {
+                        const taken = this.deviceNameClashId();
+                        this.devicePreviewBaseName = wasPreviewed;
+                        this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
                         return;
                     }
 

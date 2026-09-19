@@ -317,7 +317,12 @@ class EntityRegistry:
         return await self.update_entity(entity_id=entity_id, enable=True)
 
     async def remove_entity(self, entity_id: str) -> Dict[str, Any]:
-        """Remove an entity from the registry (for orphaned entities)."""
+        """Remove an entity from the registry (for orphaned entities).
+
+        An entity Home Assistant does not have is the state this asks for, so
+        that answer is reported as a removal that found nothing left to do
+        rather than as a failure.
+        """
         message = {"type": "config/entity_registry/remove", "entity_id": entity_id}
         logger.info(f"Removing entity: {entity_id}")
 
@@ -328,6 +333,9 @@ class EntityRegistry:
             response = await self.ws._receive_message()
 
         if not response.get("success"):
+            if response.get("error", {}).get("code") == "not_found":
+                logger.info(f"Entity {entity_id} was already gone")
+                return {"success": True, "entity_id": entity_id, "already_gone": True}
             raise Exception(f"Failed to remove entity {entity_id}: {response}")
 
         return {"success": True, "entity_id": entity_id}
