@@ -1,0 +1,15 @@
+# The tools that judge the code, pinned.
+#
+# Unpinned, the CI installs whatever was released last night, and the hooks
+# pin something else - which is how a file that passes here fails there, or
+# worse, the other way round. One list, read by both: .pre-commit-config.yaml
+# carries the same three versions, and `pre-commit autoupdate` is what moves
+# them, both at once.
+black==26.5.1
+isort==9.0.1
+flake8==7.3.0
+
+# Runs the hooks themselves; install with
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+#   .venv/bin/pre-commit install --hook-type pre-commit --hook-type commit-msg
+pre-commit==4.6.2
