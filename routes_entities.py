@@ -497,9 +497,16 @@ async def _delete_entity_async():
 
         try:
             entity_registry = EntityRegistry(ws)
-            await entity_registry.remove_entity(entity_id)
+            result = await entity_registry.remove_entity(entity_id)
 
-            return jsonify({"success": True, "entity_id": entity_id, "message": f"Entity {entity_id} deleted"})
+            return jsonify(
+                {
+                    "success": True,
+                    "entity_id": entity_id,
+                    "already_gone": bool(result.get("already_gone")),
+                    "message": f"Entity {entity_id} deleted",
+                }
+            )
 
         finally:
             await ws.disconnect()
