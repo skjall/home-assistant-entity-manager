@@ -4137,6 +4137,82 @@
                     }
                 },
 
+
+                // What belongs to the reader, not to the server: which card is
+                // open, what stands unsaved in its field, what was just renamed.
+                // A read must leave these alone.
+                THEIRS_NOT_OURS: [
+                    'selected', '_editing', '_remember', '_applying', '_expanded',
+                    '_currentSuffix', '_ruleScope', '_justRenamed', '_previewName',
+                    '_previewId',
+                ],
+
+                // Write onto `mine` only the fields that actually differ, and say
+                // whether anything did.
+                //
+                // Replacing the object instead - which is what reading the list
+                // again used to do - hands Alpine a new one for every entity, so
+                // every card re-renders and every preview is computed again,
+                // to arrive at what is on screen already.
+                absorb(mine, fresh) {
+                    let changed = false;
+                    for (const [field, value] of Object.entries(fresh)) {
+                        if (this.THEIRS_NOT_OURS.includes(field)) continue;
+                        const here = mine[field];
+                        const same = (here === value)
+                            || (here && value && typeof here === 'object' && typeof value === 'object'
+                                && JSON.stringify(here) === JSON.stringify(value));
+                        if (same) continue;
+                        mine[field] = value;
+                        changed = true;
+                    }
+                    return changed;
+                },
+
+                // Read the list again without rebuilding it: take the entities
+                // that are already here, write what moved, add what is new, drop
+                // what is gone. Only what changed is computed again.
+                absorbEntities(fresh) {
+                    const here = new Map((this.hierarchy.entities || []).map(one => [one.registry_id, one]));
+                    const moved = [];
+                    const list = [];
+
+                    for (const one of fresh) {
+                        const mine = here.get(one.registry_id);
+                        if (!mine) {
+                            list.push({
+                                ...one,
+                                selected: false,
+                                _editing: false,
+                                _remember: false,
+                                _applying: false,
+                            });
+                            moved.push(list[list.length - 1]);
+                            continue;
+                        }
+                        here.delete(one.registry_id);
+                        if (this.absorb(mine, one)) moved.push(mine);
+                        list.push(mine);
+                    }
+
+                    // Order can change too, and entities can disappear; what is
+                    // left in `here` is no longer in the list.
+                    this.hierarchy.entities = list;
+                    return moved;
+                },
+
+                // The same for areas and devices, which the lists on either side
+                // render.
+                absorbAll(mine, fresh, key) {
+                    const here = new Map((mine || []).map(one => [one[key], one]));
+                    return fresh.map(one => {
+                        const seen = here.get(one[key]);
+                        if (!seen) return one;
+                        this.absorb(seen, one);
+                        return seen;
+                    });
+                },
+
                 // Load hierarchy data
                 // `quietly` reads the list again without emptying the screen
                 // first. After one entity was renamed the reader is looking at
@@ -4157,25 +4233,20 @@
                             throw new Error(data.error);
                         }
 
-                        // A quiet read keeps what the reader is in the middle of:
-                        // which card is open, what stands unsaved in its field, and
-                        // which entity was just renamed. Those live on the entity
-                        // object and would otherwise be dropped with it.
-                        const held = new Map();
-                        if (quietly) {
-                            for (const one of this.hierarchy.entities || []) {
-                                held.set(one.id, {
-                                    _expanded: one._expanded,
-                                    _currentSuffix: one._currentSuffix,
-                                    _ruleScope: one._ruleScope,
-                                    _justRenamed: one._justRenamed,
-                                });
-                            }
-                        }
+                        this.namingConfig = namingData;
+                        this.stats = data.stats || {};
 
-                        Object.assign(this, {
-                            namingConfig: namingData,
-                            hierarchy: {
+                        if (quietly && this.hierarchy?.entities?.length) {
+                            // The list is already on screen. Write what moved onto
+                            // the entities that are there, and compute previews for
+                            // those alone.
+                            this.hierarchy.floors = data.floors || [];
+                            this.hierarchy.areas = this.absorbAll(this.hierarchy.areas, data.areas || [], 'id');
+                            this.hierarchy.devices = this.absorbAll(this.hierarchy.devices, data.devices || [], 'id');
+                            const moved = this.absorbEntities(data.entities || []);
+                            this.computePreviewsFor(moved);
+                        } else {
+                            this.hierarchy = {
                                 floors: data.floors || [],
                                 areas: data.areas || [],
                                 devices: data.devices || [],
@@ -4185,14 +4256,10 @@
                                     _editing: false,
                                     _remember: false,
                                     _applying: false,
-                                    ...(held.get(e.id) || {}),
                                 }))
-                            },
-                            stats: data.stats || {}
-                        });
-
-                        // Precompute preview values for all entities (performance optimization)
-                        this.precomputeEntityPreviews();
+                            };
+                            this.precomputeEntityPreviews();
+                        }
 
                         // selectedDeviceData ist eine gespeicherte Referenz -> aus der frisch
                         // geladenen Liste neu auflösen, damit Detail-Ansicht/Drift-Box aktuell sind
@@ -4509,9 +4576,22 @@
                 // Precompute preview values for all entities (called once after loading)
                 precomputeEntityPreviews() {
                     if (!this.hierarchy?.entities) return;
+                    this.computePreviewsFor(this.hierarchy.entities);
+                },
+
+                // What a set of entities would be called. Their own previews are
+                // dropped first: the answer changed, which is why they are here.
+                computePreviewsFor(entities) {
+                    if (!entities?.length) return;
+
+                    for (const entity of entities) {
+                        if (entity._justRenamed || entity._currentSuffix !== undefined) continue;
+                        entity._previewName = null;
+                        entity._previewId = null;
+                    }
 
                     const pending = [];
-                    for (const entity of this.hierarchy.entities) {
+                    for (const entity of entities) {
                         // Skip if already computed (e.g. from user edit) or just renamed
                         if (entity._previewName || entity._justRenamed) continue;
 
@@ -5032,7 +5112,7 @@
                             // still change what its neighbours are called.
                             entity._expanded = false;
                             entity._currentSuffix = undefined;
-                            if (ruleScopeApplied === 'all') await this.loadHierarchy();
+                            if (ruleScopeApplied === 'all') await this.loadHierarchy(true);
                             this.showMessage(this.t('entity.no_change'), 'info');
                             return;
                         }
@@ -5079,7 +5159,7 @@
                             this.invalidateEntityPreviews();
                             if (ruleScopeApplied === 'all') {
                                 // Other entities of this type now render differently.
-                                await this.loadHierarchy();
+                                await this.loadHierarchy(true);
                             } else if (ruleScopeApplied === 'here') {
                                 entity.resolution = {...(entity.resolution || {}), won_by: 'override', value: typed};
                             }
