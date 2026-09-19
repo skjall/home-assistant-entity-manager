@@ -2494,6 +2494,7 @@
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div class="bg-white rounded-xl shadow-xl max-w-xl w-full overflow-y-auto"
                  style="max-height: 85vh"
+                 x-ref="jobPanelCard"
                  @mouseenter="pauseClosing()"
                  @mouseleave="resumeClosing()"
                  @focusin="pauseClosing()"
@@ -5780,7 +5781,25 @@
                     this.jobPanel.closingCancelled = false;
                     this.jobPanel.closingJob = finished;
                     this.jobPanel.closing = 3;
+                    // The panel is already on screen when the run ends, so a hand
+                    // resting on it sends no mouseenter and a field inside it no
+                    // focusin. Asked here instead of waited for: the count starts
+                    // held, and the first move away sets it going.
+                    if (this.panelHasPointerOrFocus()) return;
                     this.tickClosing(finished);
+                },
+
+                // Where the pointer and the keyboard are right now, rather than
+                // where an event said they went.
+                panelHasPointerOrFocus() {
+                    const card = this.$refs.jobPanelCard;
+                    if (!card) return false;
+                    if (document.activeElement && card.contains(document.activeElement)) return true;
+                    try {
+                        return card.matches(':hover');
+                    } catch (error) {
+                        return false;
+                    }
                 },
 
                 tickClosing(finished) {

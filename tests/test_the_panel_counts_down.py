@@ -44,6 +44,17 @@ def test_a_log_that_is_already_open_never_starts_a_count(markup):
     assert "if (this.jobPanel.showLog) return;" in body
 
 
+def test_a_pointer_already_on_the_panel_holds_the_count(markup):
+    """The panel is on screen before the run ends: no mouseenter ever comes."""
+    start = markup.index("startClosing(finished) {")
+    body = markup[start : markup.index("panelHasPointerOrFocus() {", start)]
+    assert "if (this.panelHasPointerOrFocus()) return;" in body
+    asked = markup[markup.index("panelHasPointerOrFocus() {") : markup.index("tickClosing(finished) {")]
+    assert "card.matches(':hover')" in asked
+    assert "card.contains(document.activeElement)" in asked
+    assert 'x-ref="jobPanelCard"' in markup
+
+
 def test_filtering_the_log_keeps_the_panel(markup):
     start = markup.index("toggleJobLogFilter(step) {")
     assert "this.cancelClosing();" in markup[start : start + 300]
