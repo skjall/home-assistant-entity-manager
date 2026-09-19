@@ -2494,6 +2494,12 @@
              class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div class="bg-white rounded-xl shadow-xl max-w-xl w-full overflow-y-auto"
                  style="max-height: 85vh"
+                 @mouseenter="pauseClosing()"
+                 @mouseleave="resumeClosing()"
+                 @focusin="pauseClosing()"
+                 @focusout="resumeClosing()"
+                 @mousedown="cancelClosing()"
+                 @keydown="cancelClosing()"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100">
@@ -2541,7 +2547,7 @@
                                         <span class="font-semibold" x-text="group.count"></span>
                                     </button>
                                 </template>
-                                <button @click="jobPanel.showLog = !jobPanel.showLog; stopClosing()"
+                                <button @click="jobPanel.showLog = !jobPanel.showLog; cancelClosing()"
                                         class="ml-auto text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 shrink-0">
                                     <i :class="jobPanel.showLog ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
                                     <span x-text="jobPanel.showLog ? t('jobs.hide_log') : t('jobs.show_log')"></span>
@@ -2969,6 +2975,8 @@
                     timer: null,
                     closing: null,    // seconds left before it closes itself
                     closingTimer: null,
+                    closingJob: null,      // the job the count belongs to
+                    closingCancelled: false,  // the user kept the panel; no count comes back
                     onDone: null,
                 },
 
@@ -5693,6 +5701,7 @@
                     this.jobPanel.showLog = false;
                     this.jobPanel.filter = '';
                     this.jobPanel.search = '';
+                    this.jobPanel.closingCancelled = false;
                     this.jobPanel.show = true;
                     if (this.isJobTerminal(job)) {
                         this.finishJob();
@@ -5767,7 +5776,15 @@
                 // the panel says how long is left and can be kept open.
                 startClosing(finished) {
                     this.stopClosing();
+                    if (this.jobPanel.showLog) return;
+                    this.jobPanel.closingCancelled = false;
+                    this.jobPanel.closingJob = finished;
                     this.jobPanel.closing = 3;
+                    this.tickClosing(finished);
+                },
+
+                tickClosing(finished) {
+                    if (this.jobPanel.closingTimer) return;
                     this.jobPanel.closingTimer = setInterval(() => {
                         if (this.jobPanel.job !== finished) {
                             this.stopClosing();
@@ -5781,12 +5798,35 @@
                     }, 1000);
                 },
 
+                // Pointer or keyboard focus inside the panel: hold the count
+                // where it is, so nothing disappears from under a reading eye.
+                pauseClosing() {
+                    if (this.jobPanel.closingTimer) {
+                        clearInterval(this.jobPanel.closingTimer);
+                        this.jobPanel.closingTimer = null;
+                    }
+                },
+
+                resumeClosing() {
+                    if (this.jobPanel.closingCancelled) return;
+                    if (!this.jobPanel.closing || !this.jobPanel.closingJob) return;
+                    this.tickClosing(this.jobPanel.closingJob);
+                },
+
+                // The user acted on the panel - opened the log, filtered it,
+                // typed in it. It is his now; it closes when he says so.
+                cancelClosing() {
+                    this.jobPanel.closingCancelled = true;
+                    this.stopClosing();
+                },
+
                 stopClosing() {
                     if (this.jobPanel.closingTimer) {
                         clearInterval(this.jobPanel.closingTimer);
                         this.jobPanel.closingTimer = null;
                     }
                     this.jobPanel.closing = null;
+                    this.jobPanel.closingJob = null;
                 },
 
                 stopJobPolling() {
@@ -5888,6 +5928,7 @@
                 toggleJobLogFilter(step) {
                     this.jobPanel.filter = this.jobPanel.filter === step ? '' : step;
                     this.jobPanel.showLog = true;
+                    this.cancelClosing();
                 },
 
                 jobLogEntries() {
