@@ -1191,18 +1191,38 @@
         .badge {
             display: inline-flex;
             align-items: center;
+            border: 1px solid transparent;
             padding: 2px 8px;
             border-radius: 9999px;
             font-size: 11px;
             font-weight: 500;
         }
 
-        .badge-blue { background: var(--color-blue-100); color: var(--color-blue-700); }
-        .badge-red { background: var(--color-red-100); color: var(--color-red-600); }
-        .badge-green { background: var(--color-emerald-100); color: var(--color-emerald-600); }
-        .badge-amber { background: var(--color-amber-100); color: var(--color-amber-700); }
-        .badge-purple { background: var(--color-violet-100); color: var(--color-violet-600); }
-        .badge-gray { background: var(--color-gray-100); color: var(--color-gray-600); }
+        .badge-blue { background: var(--color-blue-100); color: var(--color-blue-700); border-color: var(--color-blue-200); }
+        .badge-red { background: var(--color-red-100); color: var(--color-red-600); border-color: var(--color-red-200); }
+        .badge-green { background: var(--color-emerald-100); color: var(--color-emerald-600); border-color: var(--color-emerald-200); }
+        .badge-amber { background: var(--color-amber-100); color: var(--color-amber-700); border-color: var(--color-amber-200); }
+        .badge-purple { background: var(--color-violet-100); color: var(--color-violet-600); border-color: var(--color-violet-400); }
+        /* The resting state: a surface of its own, never the bar it sits on. */
+        .badge-gray { background: var(--badge-resting); color: var(--color-gray-600); border-color: var(--color-gray-300); }
+
+        /* A filter that can be switched: off is an outline, on is filled, so
+           the difference survives a glance and does not rest on hue alone. */
+        .filter-toggle {
+            background: var(--badge-resting);
+            color: var(--color-gray-600);
+            border-color: var(--color-gray-300);
+        }
+
+        .filter-toggle:hover { border-color: var(--color-gray-400); }
+
+        .filter-toggle.is-on {
+            color: var(--ink-on-colour);
+            border-color: transparent;
+        }
+
+        .filter-toggle.toggle-amber.is-on { background: var(--fill-amber); }
+        .filter-toggle.toggle-red.is-on { background: var(--fill-red); }
 
         .edit-input {
             background: var(--color-white);
@@ -2059,13 +2079,15 @@
                 <!-- Filters - Separate section for better mobile scroll -->
                 <div class="px-4 py-2 bg-white border-b flex flex-wrap items-center gap-2">
                     <button @click="onlyChanges = !onlyChanges; saveState()"
-                            :class="onlyChanges ? 'badge-amber' : 'badge-gray'"
-                            class="badge cursor-pointer">
+                            :class="onlyChanges ? 'is-on' : ''"
+                            :aria-pressed="onlyChanges ? 'true' : 'false'"
+                            class="badge filter-toggle toggle-amber cursor-pointer">
                         <i class="ri-refresh-line mr-1"></i> <span x-text="t('filters.only_changes')">Only Changes</span>
                     </button>
                     <button @click="showDisabled = !showDisabled; saveState()"
-                            :class="showDisabled ? 'badge-red' : 'badge-gray'"
-                            class="badge cursor-pointer">
+                            :class="showDisabled ? 'is-on' : ''"
+                            :aria-pressed="showDisabled ? 'true' : 'false'"
+                            class="badge filter-toggle toggle-red cursor-pointer">
                         <i class="ri-eye-off-line mr-1"></i> <span x-text="t('filters.show_disabled')">Show Disabled</span>
                     </button>
                 </div>

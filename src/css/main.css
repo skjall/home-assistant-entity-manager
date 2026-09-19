@@ -37,6 +37,7 @@
     --surface-sunken: var(--color-gray-50);
     --shadow-colour: rgb(0 0 0 / 0.1);
     --veil: rgb(255 255 255 / 0.25);
+    --badge-resting: #f3f4f6;
     /* Ink that sits on a colour, and the bar that carries the path. */
     --ink-on-colour: #ffffff;
     --banner-from: #3b82f6;
@@ -120,6 +121,7 @@
         --surface-sunken: #111827;
         --shadow-colour: rgb(0 0 0 / 0.4);
     --veil: rgb(255 255 255 / 0.10);
+    --badge-resting: #374151;
     --ink-on-colour: #f8fafc;
     --banner-from: #1e40af;
     --banner-to: #5b21b6;
@@ -213,6 +215,7 @@
     --surface-sunken: #111827;
     --shadow-colour: rgb(0 0 0 / 0.4);
     --veil: rgb(255 255 255 / 0.10);
+    --badge-resting: #374151;
     --ink-on-colour: #f8fafc;
     --banner-from: #1e40af;
     --banner-to: #5b21b6;
