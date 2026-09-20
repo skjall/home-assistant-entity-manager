@@ -1380,6 +1380,34 @@
                 min-width: 0;
             }
 
+            /* The tools sit in one group at the end of the bar. The title
+               yields space to them rather than pushing them off the screen,
+               so a narrow phone ellipsises the heading and keeps every
+               button reachable. */
+            .mobile-nav-header .nav-tools {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                flex-shrink: 0;
+            }
+
+            /* Same target size as the back button next to them, so every
+               tool in the bar is equally easy to hit with a thumb. */
+            .mobile-nav-header .nav-tools .back-btn {
+                width: 40px;
+                height: 40px;
+            }
+
+            .mobile-nav-header .nav-tools .theme-option {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 32px;
+                height: 34px;
+                padding: 0 8px;
+                font-size: 16px;
+            }
+
             .mobile-nav-header .nav-title h2 {
                 font-size: 1.1rem;
                 font-weight: 600;
@@ -1784,9 +1812,37 @@
                 <h2 x-text="getMobileTitle()">Areas</h2>
                 <p class="nav-subtitle" x-show="getMobileSubtitle()" x-text="getMobileSubtitle()"></p>
             </div>
-            <a :href="settingsHref()" class="back-btn" style="background: transparent;">
-                <i class="ri-settings-3-line text-xl text-gray-500"></i>
-            </a>
+            <div class="nav-tools">
+                <button class="back-btn" @click="loadHierarchy()" :title="t('buttons.reload')">
+                    <i class="ri-refresh-line text-xl"></i>
+                </button>
+                <button class="back-btn" @click="openSwap()" title="Gerät ersetzen">
+                    <i class="ri-exchange-line text-xl"></i>
+                </button>
+                <div class="theme-switch" role="group" :aria-label="t('header.theme')">
+                    <button type="button" class="theme-option"
+                            :class="theme === 'light' ? 'is-active' : ''"
+                            @click="chooseTheme('light')"
+                            :title="t('header.theme_light')">
+                        <i class="ri-sun-line"></i>
+                    </button>
+                    <button type="button" class="theme-option"
+                            :class="theme === 'auto' ? 'is-active' : ''"
+                            @click="chooseTheme('auto')"
+                            :title="t('header.theme_auto')">
+                        <i class="ri-contrast-2-line"></i>
+                    </button>
+                    <button type="button" class="theme-option"
+                            :class="theme === 'dark' ? 'is-active' : ''"
+                            @click="chooseTheme('dark')"
+                            :title="t('header.theme_dark')">
+                        <i class="ri-moon-line"></i>
+                    </button>
+                </div>
+                <a :href="settingsHref()" class="back-btn" style="background: transparent;" :title="t('header.settings')">
+                    <i class="ri-settings-3-line text-xl text-gray-500"></i>
+                </a>
+            </div>
         </div>
 
         <!-- Inheritance Preview Bar (Desktop only) -->
