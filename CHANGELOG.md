@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.5.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.4.0...v1.5.0) (2026-09-20)
+
+
+### Features
+
+* the panel can be light, dark, or whatever the system says ([#145](https://github.com/skjall/home-assistant-entity-manager/issues/145)) ([34097c4](https://github.com/skjall/home-assistant-entity-manager/commit/34097c4dc745538523ce382ce956b3eb645d1e03))
+
+
+### Bug Fixes
+
+* a bracket that names the peer survives a rename of ours ([#144](https://github.com/skjall/home-assistant-entity-manager/issues/144)) ([39534d3](https://github.com/skjall/home-assistant-entity-manager/commit/39534d35cb5f359b33cb3ffe3ec390140d0c4621))
+* a finished job shows its mark, not a gap ([#154](https://github.com/skjall/home-assistant-entity-manager/issues/154)) ([021f37b](https://github.com/skjall/home-assistant-entity-manager/commit/021f37bf324978b4053f11885ccb79940cc633d3))
+* a message long enough to matter can still be closed ([#146](https://github.com/skjall/home-assistant-entity-manager/issues/146)) ([5732b2f](https://github.com/skjall/home-assistant-entity-manager/commit/5732b2ff3d41c555a05271da9fbafdc467a1c0a9))
+* a number starts at one ([#150](https://github.com/skjall/home-assistant-entity-manager/issues/150)) ([8a87ce9](https://github.com/skjall/home-assistant-entity-manager/commit/8a87ce98612420fe8d1e27106b4fad0939e327c5))
+* a panel that never collapses is not asked whether it did ([#155](https://github.com/skjall/home-assistant-entity-manager/issues/155)) ([c182faf](https://github.com/skjall/home-assistant-entity-manager/commit/c182fafa7031330c21c3d154cf69b3714fb32c11))
+* a row whose entity is gone does not argue about it ([#147](https://github.com/skjall/home-assistant-entity-manager/issues/147)) ([ce2bc1d](https://github.com/skjall/home-assistant-entity-manager/commit/ce2bc1d3cf5506606ac9d90d4d6a7b5c9d26dc1c))
+* the job panel does not close under a reading eye ([#152](https://github.com/skjall/home-assistant-entity-manager/issues/152)) ([4426d7b](https://github.com/skjall/home-assistant-entity-manager/commit/4426d7b1b4153f7d2378fe7803e06f341e932427))
+* the numbered row says it once, and says why ([#153](https://github.com/skjall/home-assistant-entity-manager/issues/153)) ([69f5934](https://github.com/skjall/home-assistant-entity-manager/commit/69f5934d5695a1105c415a3091ce4cd67bb83e10))
+* the phone keeps the tools the desk has, behind one button ([#156](https://github.com/skjall/home-assistant-entity-manager/issues/156)) ([3865fa5](https://github.com/skjall/home-assistant-entity-manager/commit/3865fa56d7db93127d2f8074a922e38189b65b96))
+* two devices may share a name, two entities may not share an id ([#148](https://github.com/skjall/home-assistant-entity-manager/issues/148)) ([081347e](https://github.com/skjall/home-assistant-entity-manager/commit/081347ea8a981176172df38eb2130cd610ddcf46))
+
 ## [1.4.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.3.0...v1.4.0) (2026-09-19)
 
 
