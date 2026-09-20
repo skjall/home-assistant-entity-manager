@@ -321,19 +321,28 @@ def assign_device_area():
 async def _assign_device_area_async():
     """Async implementation of assign_device_area"""
     data = request.json
-    is_valid, error = validate_json_input(data, ["device_id"])
+    # area_id is required even though null is a meaningful value for it. A key
+    # that never arrived is a caller who meant something else -- a misspelled
+    # parameter, a field lost on the way -- and clearing the device's area is
+    # far too much to read into silence. Only an area_id spelled out as null
+    # asks for that.
+    is_valid, error = validate_json_input(data, ["device_id", "area_id"])
     if not is_valid:
         return jsonify({"error": error}), 400
 
     device_id = sanitize_registry_id(data.get("device_id"))
-    area_id = data.get("area_id")  # Can be None to remove area assignment
 
     if not device_id:
         return jsonify({"error": "Invalid device ID"}), 400
 
-    # Sanitize area_id if provided
-    if area_id:
-        area_id = sanitize_registry_id(area_id)
+    supplied_area = data["area_id"]
+    area_id = None
+    if supplied_area is not None:
+        area_id = sanitize_registry_id(supplied_area)
+        # An area that cannot be read is not an area of none. Saying so beats
+        # quietly emptying the field the caller was trying to fill.
+        if not area_id:
+            return jsonify({"error": "Invalid area ID"}), 400
 
     try:
         base_url = os.getenv("HA_URL")
