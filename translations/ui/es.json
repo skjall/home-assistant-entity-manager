@@ -1,6 +1,8 @@
 {
   "header": {
     "title": "Gestor de Entidades",
+    "swap": "Sustituir dispositivo",
+    "menu": "Menú",
     "settings": "Configuración",
     "theme": "Apariencia",
     "theme_light": "Claro",

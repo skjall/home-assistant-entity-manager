@@ -1380,29 +1380,76 @@
                 min-width: 0;
             }
 
-            /* The tools sit in one group at the end of the bar. The title
-               yields space to them rather than pushing them off the screen,
-               so a narrow phone ellipsises the heading and keeps every
-               button reachable. */
+            /* A phone bar this narrow cannot spell out four tools and a
+               device name at once, so the tools fold behind one button and
+               the title keeps the room. */
             .mobile-nav-header .nav-tools {
-                display: flex;
-                align-items: center;
-                gap: 4px;
+                position: relative;
                 flex-shrink: 0;
             }
 
-            /* Same target size as the back button next to them, so every
-               tool in the bar is equally easy to hit with a thumb. */
-            .mobile-nav-header .nav-tools .back-btn {
-                width: 40px;
-                height: 40px;
+            .mobile-nav-header .nav-menu {
+                position: absolute;
+                top: calc(100% + 6px);
+                right: 0;
+                min-width: 220px;
+                padding: 6px;
+                border-radius: 12px;
+                background: var(--color-white);
+                border: 1px solid var(--color-gray-200);
+                box-shadow: 0 10px 25px var(--shadow-colour);
+                z-index: 60;
             }
 
-            .mobile-nav-header .nav-tools .theme-option {
+            .mobile-nav-header .nav-menu-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                width: 100%;
+                min-height: 44px;
+                padding: 0 10px;
+                border: 0;
+                border-radius: 8px;
+                background: transparent;
+                color: var(--color-gray-700);
+                font-size: 0.95rem;
+                text-align: left;
+                text-decoration: none;
+                cursor: pointer;
+            }
+
+            .mobile-nav-header .nav-menu-item i {
+                font-size: 1.15rem;
+                color: var(--color-gray-500);
+            }
+
+            .mobile-nav-header .nav-menu-item:active {
+                background: var(--color-gray-100);
+            }
+
+            /* The appearance switch is a choice among three, not a command,
+               so it keeps its segmented shape instead of becoming three rows. */
+            .mobile-nav-header .nav-menu-theme {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                min-height: 44px;
+                padding: 0 10px;
+                margin-top: 4px;
+                border-top: 1px solid var(--color-gray-200);
+            }
+
+            .mobile-nav-header .nav-menu-label {
+                font-size: 0.95rem;
+                color: var(--color-gray-700);
+            }
+
+            .mobile-nav-header .nav-menu-theme .theme-option {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                min-width: 32px;
+                min-width: 36px;
                 height: 34px;
                 padding: 0 8px;
                 font-size: 16px;
@@ -1812,36 +1859,60 @@
                 <h2 x-text="getMobileTitle()">Areas</h2>
                 <p class="nav-subtitle" x-show="getMobileSubtitle()" x-text="getMobileSubtitle()"></p>
             </div>
-            <div class="nav-tools">
-                <button class="back-btn" @click="loadHierarchy()" :title="t('buttons.reload')">
-                    <i class="ri-refresh-line text-xl"></i>
+            <div class="nav-tools" @keydown.escape.window="mobileMenuOpen = false">
+                <button class="back-btn"
+                        @click="mobileMenuOpen = !mobileMenuOpen"
+                        :aria-expanded="mobileMenuOpen ? 'true' : 'false'"
+                        aria-haspopup="menu"
+                        :title="t('header.menu')">
+                    <i class="ri-more-2-fill text-xl"></i>
                 </button>
-                <button class="back-btn" @click="openSwap()" title="Gerät ersetzen">
-                    <i class="ri-exchange-line text-xl"></i>
-                </button>
-                <div class="theme-switch" role="group" :aria-label="t('header.theme')">
-                    <button type="button" class="theme-option"
-                            :class="theme === 'light' ? 'is-active' : ''"
-                            @click="chooseTheme('light')"
-                            :title="t('header.theme_light')">
-                        <i class="ri-sun-line"></i>
+                <div class="nav-menu"
+                     x-cloak
+                     x-show="mobileMenuOpen"
+                     x-transition.opacity.duration.120ms
+                     @click.outside="mobileMenuOpen = false"
+                     role="menu"
+                     :aria-label="t('header.menu')">
+                    <button type="button" class="nav-menu-item" role="menuitem"
+                            @click="mobileMenuOpen = false; loadHierarchy()">
+                        <i class="ri-refresh-line"></i>
+                        <span x-text="t('buttons.reload')">Reload</span>
                     </button>
-                    <button type="button" class="theme-option"
-                            :class="theme === 'auto' ? 'is-active' : ''"
-                            @click="chooseTheme('auto')"
-                            :title="t('header.theme_auto')">
-                        <i class="ri-contrast-2-line"></i>
+                    <button type="button" class="nav-menu-item" role="menuitem"
+                            @click="mobileMenuOpen = false; openSwap()">
+                        <i class="ri-exchange-line"></i>
+                        <span x-text="t('header.swap')">Replace device</span>
                     </button>
-                    <button type="button" class="theme-option"
-                            :class="theme === 'dark' ? 'is-active' : ''"
-                            @click="chooseTheme('dark')"
-                            :title="t('header.theme_dark')">
-                        <i class="ri-moon-line"></i>
-                    </button>
+                    <a :href="settingsHref()" class="nav-menu-item" role="menuitem"
+                       @click="mobileMenuOpen = false">
+                        <i class="ri-settings-3-line"></i>
+                        <span x-text="t('header.settings')">Settings</span>
+                    </a>
+                    <div class="nav-menu-theme">
+                        <span class="nav-menu-label" x-text="t('header.theme')">Appearance</span>
+                        <div class="theme-switch" role="group" :aria-label="t('header.theme')">
+                            <button type="button" class="theme-option"
+                                    :class="theme === 'light' ? 'is-active' : ''"
+                                    @click="chooseTheme('light')"
+                                    :title="t('header.theme_light')">
+                                <i class="ri-sun-line"></i>
+                            </button>
+                            <button type="button" class="theme-option"
+                                    :class="theme === 'auto' ? 'is-active' : ''"
+                                    @click="chooseTheme('auto')"
+                                    :title="t('header.theme_auto')">
+                                <i class="ri-contrast-2-line"></i>
+                            </button>
+                            <button type="button" class="theme-option"
+                                    :class="theme === 'dark' ? 'is-active' : ''"
+                                    @click="chooseTheme('dark')"
+                                    :title="t('header.theme_dark')">
+                                <i class="ri-moon-line"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <a :href="settingsHref()" class="back-btn" style="background: transparent;" :title="t('header.settings')">
-                    <i class="ri-settings-3-line text-xl text-gray-500"></i>
-                </a>
             </div>
         </div>
 
@@ -3869,6 +3940,11 @@
                 // absence of a choice: the stylesheet then reads the system
                 // setting, which is the same one Home Assistant follows.
                 theme: 'auto',
+
+                // The phone bar has room for a title or for tools, not both.
+                // The tools live behind this one flag; the desk shows them all
+                // side by side and never reads it.
+                mobileMenuOpen: false,
 
                 // Which integrations would disappear, by domain. Measured, not
                 // listed: the answer differs per icon and changes when brands
