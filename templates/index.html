@@ -1826,10 +1826,6 @@
                         </h2>
                         <div class="flex items-center gap-2">
                             <span class="badge badge-gray" x-text="hierarchy.areas.length"></span>
-                            <!-- Show selected area name when collapsed -->
-                            <span x-show="isMobile && panelCollapsed.areas && selectedAreaData"
-                                  class="text-sm text-blue-600 font-medium truncate max-w-32"
-                                  x-text="selectedAreaData?.name"></span>
                         </div>
                     </div>
                 </div>
@@ -1892,15 +1888,11 @@
                         </h2>
                         <div class="flex items-center gap-2">
                             <span class="badge badge-gray" x-text="filteredDevices.length"></span>
-                            <!-- Show selected device name when collapsed -->
-                            <span x-show="isMobile && panelCollapsed.devices && selectedDeviceData"
-                                  class="text-sm text-green-600 font-medium truncate max-w-32"
-                                  x-text="selectedDeviceData?.base_name"></span>
                         </div>
                     </div>
                 </div>
                 <!-- Device Filter -->
-                <div x-show="selectedAreaData && !(isMobile && panelCollapsed.devices)" class="px-4 py-2 bg-gray-50 border-b">
+                <div x-show="selectedAreaData" class="px-4 py-2 bg-gray-50 border-b">
                     <div class="relative">
                         <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                         <input type="text"
