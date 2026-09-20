@@ -1,6 +1,8 @@
 {
   "header": {
     "title": "Entitäts-Manager",
+    "swap": "Gerät ersetzen",
+    "menu": "Menü",
     "settings": "Einstellungen",
     "theme": "Darstellung",
     "theme_light": "Hell",

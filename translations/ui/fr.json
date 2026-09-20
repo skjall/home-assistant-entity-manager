@@ -1,6 +1,8 @@
 {
   "header": {
     "title": "Gestionnaire d'entités",
+    "swap": "Remplacer l'appareil",
+    "menu": "Menu",
     "settings": "Paramètres",
     "theme": "Apparence",
     "theme_light": "Clair",

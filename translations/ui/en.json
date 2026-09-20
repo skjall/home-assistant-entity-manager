@@ -1,6 +1,8 @@
 {
   "header": {
     "title": "Entity Manager",
+    "swap": "Replace device",
+    "menu": "Menu",
     "settings": "Settings",
     "theme": "Appearance",
     "theme_light": "Light",
