@@ -1534,7 +1534,7 @@
                     <span x-text="t('settings.log_title')">Log</span>
                 </h2>
                 <button class="add-btn" @click="loadLog()" :disabled="logBusy">
-                    <i class="ri-refresh-line" :class="logBusy ? 'ri-spin' : ''"></i>
+                    <i class="ri-refresh-line" :class="logBusy ? 'spinning' : ''"></i>
                     <span x-text="t('settings.refresh')">Refresh</span>
                 </button>
             </div>
@@ -3561,6 +3561,10 @@
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
+        }
+
+        .spinning {
+            animation: spin 1s linear infinite;
         }
     </style>
 </body>
