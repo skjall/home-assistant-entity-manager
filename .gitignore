@@ -85,3 +85,5 @@ token.txt
 
 # written by the review workflow, read by the step that holds the merge
 review-verdict.txt
+review-findings.json
+review-comment.md
