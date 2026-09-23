@@ -6362,7 +6362,14 @@
                     // outcome, each with its count. Saying "1 enabled" in a
                     // sentence above a chip reading "Enabled 1" is the same
                     // thing twice.
-                    if (this.jobLogGroups().length) return '';
+                    //
+                    // The chips ask the log directly, so this asks the same
+                    // question the same way: a log entry always carries a step,
+                    // so a log with entries always yields groups. Going through
+                    // jobLogGroups() would walk and sort the whole log a second
+                    // time on every render, and leave two guards that could
+                    // drift apart.
+                    if (((job && job.log) || []).length) return '';
                     const result = (job && job.result) || {};
                     const done = (result.success || []).length
                         || (result.enabled || []).length
@@ -6372,14 +6379,15 @@
                     const did = (result.enabled || []).length ? 'jobs.count_enabled' : 'jobs.count_done';
                     if (done) parts.push(this.t(did, {count: done}));
                     if (failed) parts.push(this.t('jobs.count_failed', {count: failed}));
-                    if (this.jobLogCount('UNREACHABLE')) {
-                        parts.push(this.t('jobs.count_unreachable', {count: this.jobLogCount('UNREACHABLE')}));
-                    }
-                    // Nothing countable either: the heading already reads
-                    // "Completed", and the handler's `message` is the English
-                    // sentence meant for the API. Repeating either one under
-                    // the heading tells the user nothing, so the line keeps
-                    // quiet and takes its spacing with it.
+                    // Nothing countable and no log. Nine of the runs on the
+                    // instance end here, all of them swaps, and every one of
+                    // them did something -- their detail lives in a swap job of
+                    // its own. So this cannot claim the run had nothing to do,
+                    // and the old fallbacks were no better: `jobs.completed` is
+                    // word for word the heading above it, and the handler's
+                    // `message` is the English sentence meant for the API. The
+                    // heading already says the run finished; the line says
+                    // nothing and takes its spacing with it.
                     return parts.join(' · ');
                 },
 

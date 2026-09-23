@@ -580,7 +580,6 @@
     "step_enabled": "Activé",
     "count_done": "{count} renommées",
     "count_failed": "{count} en échec",
-    "count_unreachable": "{count} à reprendre",
     "count_enabled": "{count} activées",
     "step_unverified": "Non confirmé"
   }
