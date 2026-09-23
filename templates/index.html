@@ -474,6 +474,14 @@
             color: var(--color-gray-500);
         }
 
+        /* The job panel's summary line falls silent wherever the chips below
+           already say it. A line with nothing to say should take no room
+           either, and :empty settles that without a second call into
+           jobOutcome(). */
+        .job-outcome:empty {
+            display: none;
+        }
+
         .scanning-spinner {
             font-size: 2.5rem;
             color: var(--color-blue-500);
@@ -2755,8 +2763,11 @@
                     </template>
 
                     <!-- Current item / final message. Empty once the chips say
-                         it better, and then it takes its spacing with it. -->
-                    <p class="text-sm text-gray-600 truncate" x-show="jobOutcome()" x-text="jobOutcome()"></p>
+                         it better, and an empty one takes its spacing with it --
+                         see .job-outcome. Binding x-show to jobOutcome() as well
+                         would ask the same question twice on every render, and
+                         that question walks the whole log. -->
+                    <p class="job-outcome text-sm text-gray-600 truncate" x-text="jobOutcome()"></p>
 
                     <!-- What the run did, sorted by outcome. The counts double as
                          the filter, so the one line that needs the user is one
