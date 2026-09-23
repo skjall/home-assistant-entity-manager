@@ -47,28 +47,32 @@ jobs:
             - Security concerns (this add-on talks to Home Assistant via tokens/WebSocket)
             - Adherence to the conventions in CONTRIBUTING.md (type hints, docstrings,
               Black 120-char line length, English log messages, English PR text)
-            Post concise inline comments on the specific lines that need attention.
             Skip nitpicks; only raise findings worth acting on.
             Ignore lock files and generated/built artifacts (package-lock.json,
             anything under static/) — review only hand-written source changes.
 
-            When you are done, write the file review-verdict.txt in the repository
-            root, and write nothing into it but one of these two words:
-              CLEAN   - nothing worth acting on
-              FINDINGS - you raised at least one comment above
-            The merge is held on that word, so write it last, once, and only after
-            the comments are posted.
-          # Without an explicit allow-list the run ends in permission denials:
-          # Claude reviews, reaches for the tools that would post, is refused,
-          # and the action still reports success. The PR then shows nothing.
-          # These are the tools it needs to say what it found -- and no more,
-          # so it can neither approve nor push.
+            Do not post anything to GitHub yourself. Write two files in the
+            repository root and stop:
+
+            review-findings.json — a JSON array, one object per finding, each
+            with "file", "line", "summary" and "failure_scenario". An empty
+            array if there is nothing worth acting on.
+
+            review-verdict.txt — nothing but one of these two words:
+              CLEAN    - the array is empty
+              FINDINGS - the array is not
+
+            The next step reads both, puts the findings on the pull request and
+            holds the merge on the verdict.
+          # Read the diff and the code, write two files. Nothing that reaches
+          # GitHub: the posting is the next step's job, so the review cannot
+          # comment, approve or push even if it decides to try.
           #
           # Swap to claude-opus-4-8 for deeper reviews at higher quota cost.
           claude_args: |
             --model claude-sonnet-4-6
             --max-turns 100
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob,Write"
+            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           # A denied tool call is the one thing this workflow keeps getting
           # wrong, and by default the log does not say which call was denied or
           # what Claude meant to write. The run then looks like a success with
@@ -76,10 +80,19 @@ jobs:
           # so the next denial can be read instead of guessed at.
           show_full_output: true
 
-      # A review nobody has to act on is a review that changes nothing. The
-      # verdict decides the check, so a PR with open findings cannot merge
-      # until they are dealt with and the run repeats.
-      - name: Hold the merge when the review found something
+      # The review used to be asked to post its own findings. It did not:
+      # the action hands the work to the built-in code-review skill, whose
+      # output contract is a JSON block, and the posting instruction at the
+      # end of that skill got dropped -- the run reported "five findings were
+      # posted as inline comments" while the pull request stayed empty.
+      #
+      # Writing a file is the one thing it did reliably, so that is what it is
+      # asked for now, and the posting happens here where it either works or
+      # fails the job.
+      - name: Put the findings on the pull request and hold the merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           # No execution file means Claude never started: the step was skipped
           # by its own condition (a bot or a fork), or the action refused to run
@@ -95,21 +108,44 @@ jobs:
             echo "refused a PR that edits its own workflow. Nothing to gate."
             exit 0
           fi
+
           if [ ! -f review-verdict.txt ]; then
             echo "The review left no verdict. Treating that as unreviewed."
             exit 1
           fi
           verdict=$(tr -d '[:space:]' < review-verdict.txt)
-          case "$verdict" in
-            CLEAN)
-              echo "Review found nothing worth acting on."
-              ;;
-            FINDINGS)
-              echo "The review raised findings. They are on the PR as comments."
-              exit 1
-              ;;
-            *)
-              echo "Unexpected verdict: '$verdict'"
-              exit 1
-              ;;
-          esac
+
+          if [ "$verdict" = "CLEAN" ]; then
+            echo "Review found nothing worth acting on."
+            exit 0
+          fi
+
+          if [ "$verdict" != "FINDINGS" ]; then
+            echo "Unexpected verdict: '$verdict'"
+            exit 1
+          fi
+
+          if [ ! -f review-findings.json ]; then
+            echo "The verdict says FINDINGS but no findings file was written."
+            exit 1
+          fi
+          if ! jq -e 'type == "array" and length > 0' review-findings.json > /dev/null; then
+            echo "review-findings.json is not a non-empty array:"
+            cat review-findings.json
+            exit 1
+          fi
+
+          # One comment carrying every finding, so the thread stays readable and
+          # a repeat run does not scatter half-answered remarks across the diff.
+          {
+            echo "## Review findings"
+            echo
+            jq -r '.[] | "**\(.file):\(.line)** — \(.summary)\n\n\(.failure_scenario)\n"' review-findings.json
+            echo "---"
+            echo
+            echo "The \`review\` check stays red until these are dealt with and the run repeats."
+          } > review-comment.md
+
+          gh pr comment "$PR" --body-file review-comment.md
+          echo "Posted $(jq 'length' review-findings.json) findings to PR #$PR."
+          exit 1
