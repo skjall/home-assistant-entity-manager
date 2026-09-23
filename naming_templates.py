@@ -83,6 +83,15 @@ def _field_names(template: str) -> Tuple[str, ...]:
 _MARKER = "\x00field\x00"
 
 
+_SEPARATORS = " \t\r\n_-\u2013\u2014|/\u00b7.,"
+
+
+def _split_trailing_separator(value: str) -> tuple:
+    """Split off the separator a template leaves in front of its last field."""
+    head = value.rstrip(_SEPARATORS)
+    return head, value[len(head) :]
+
+
 def _clean_rendered_name(value: str) -> str:
     """Clean whitespace and separators left behind by empty placeholders."""
     value = re.sub(r"\s+", " ", value).strip()
@@ -318,8 +327,21 @@ class NamingTemplates:
             if rendered.count(_MARKER) != 1:
                 continue
             before, after = rendered.split(_MARKER)
-            pattern = re.escape(before) + r"(?P<target>.+?)" + re.escape(after)
+            if after:
+                pattern = re.escape(before) + r"(?P<target>.+?)" + re.escape(after)
+            else:
+                # A trailing field may be empty, and then the rendered name
+                # ends before the separator in front of it. Separator and field
+                # are therefore one optional unit: both present or both absent.
+                # Requiring a character here makes the template miss such a
+                # name, which then falls through to a barer template that
+                # matches anything and returns the name whole.
+                head, separator = _split_trailing_separator(before)
+                pattern = re.escape(head) + "(?:" + re.escape(separator) + r"(?P<target>.+))?"
             match = re.fullmatch(pattern, rendered_name.strip(), flags=re.IGNORECASE)
             if match:
-                return _clean_rendered_name(match.group("target"))
+                # An absent group means the field was empty, which is an
+                # answer, not a failure to match. Callers distinguish it from
+                # None.
+                return _clean_rendered_name(match.group("target") or "")
         return None

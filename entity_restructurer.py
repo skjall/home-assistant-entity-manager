@@ -500,7 +500,9 @@ class EntityRestructurer:
         """Remove hierarchy previously added by a known entity-name template."""
         if context is not None:
             extracted = self.naming_templates.extract_field("entity_name", name, "entity", context)
-            if extracted:
+            # "" means the template matched and the type part was empty;
+            # None means no template matched. Only the latter falls through.
+            if extracted is not None:
                 return extracted
         for prefix in filter(None, prefixes):
             if name.lower() == prefix.lower():
