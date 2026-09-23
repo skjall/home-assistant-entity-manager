@@ -2754,8 +2754,9 @@
                         </div>
                     </template>
 
-                    <!-- Current item / final message -->
-                    <p class="text-sm text-gray-600 truncate" x-text="jobOutcome()"></p>
+                    <!-- Current item / final message. Empty once the chips say
+                         it better, and then it takes its spacing with it. -->
+                    <p class="text-sm text-gray-600 truncate" x-show="jobOutcome()" x-text="jobOutcome()"></p>
 
                     <!-- What the run did, sorted by outcome. The counts double as
                          the filter, so the one line that needs the user is one
@@ -6346,6 +6347,11 @@
                         return (job && job.progress && job.progress.current) || this.t('jobs.working');
                     }
                     if (this.jobFailed(job)) return (job && job.error) || this.t('jobs.failed');
+                    // The chips below already name what the run did, one per
+                    // outcome, each with its count. Saying "1 enabled" in a
+                    // sentence above a chip reading "Enabled 1" is the same
+                    // thing twice.
+                    if (this.jobLogGroups().length) return '';
                     const result = (job && job.result) || {};
                     const done = (result.success || []).length
                         || (result.enabled || []).length
@@ -6358,7 +6364,12 @@
                     if (this.jobLogCount('UNREACHABLE')) {
                         parts.push(this.t('jobs.count_unreachable', {count: this.jobLogCount('UNREACHABLE')}));
                     }
-                    return parts.length ? parts.join(' · ') : (result.message || this.t('jobs.completed'));
+                    // Nothing countable either: the heading already reads
+                    // "Completed", and the handler's `message` is the English
+                    // sentence meant for the API. Repeating either one under
+                    // the heading tells the user nothing, so the line keeps
+                    // quiet and takes its spacing with it.
+                    return parts.join(' · ');
                 },
 
                 jobProgressPercent() {
