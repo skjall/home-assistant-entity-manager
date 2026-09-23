@@ -15,18 +15,6 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
-    # Run on every human PR, or when a human writes "@claude" in a comment.
-    # Skip bot-initiated events (e.g. Renovate): the action refuses bot actors,
-    # and dependency bumps don't need an AI review.
-    #
-    # Skip PRs from forks: GitHub withholds repository secrets and refuses
-    # `id-token: write` for `pull_request` events raised from a fork, so
-    # CLAUDE_CODE_OAUTH_TOKEN is empty and the job can only fail. Review those
-    # by commenting "@claude" on the PR instead — `issue_comment` runs in this
-    # repository's context and does receive the secret.
-    if: |
-      (github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot' && github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' && contains(github.event.comment.body, '@claude'))
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,6 +22,22 @@ jobs:
 
       - name: Claude Code Review
         id: claude
+        # Run on every human PR, or when a human writes "@claude" in a comment.
+        # Skip bot-initiated events (e.g. Renovate): the action refuses bot actors,
+        # and dependency bumps don't need an AI review.
+        #
+        # Skip PRs from forks: GitHub withholds repository secrets and refuses
+        # `id-token: write` for `pull_request` events raised from a fork, so
+        # CLAUDE_CODE_OAUTH_TOKEN is empty and the step can only fail. Review those
+        # by commenting "@claude" on the PR instead -- `issue_comment` runs in this
+        # repository's context and does receive the secret.
+        #
+        # The condition sits on this step and not on the job: the job is a required
+        # status check, and a skipped job never reports one, which would block every
+        # bot and fork PR from merging for good.
+        if: |
+          (github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot' && github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' && contains(github.event.comment.body, '@claude'))
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -71,15 +75,18 @@ jobs:
       # until they are dealt with and the run repeats.
       - name: Hold the merge when the review found something
         run: |
-          # The action refuses to run when the workflow file in the PR differs
-          # from the one on the default branch, so that a PR cannot rewrite the
-          # reviewer that judges it. It logs a warning, sets no outputs and
-          # reports success. Claude never started, so there is nothing to gate:
-          # without this branch every PR that touches this file would be held
-          # for a review that was never allowed to happen.
+          # No execution file means Claude never started: the step was skipped
+          # by its own condition (a bot or a fork), or the action refused to run
+          # because the workflow file in this PR differs from the one on the
+          # default branch -- it will not let a PR rewrite the reviewer that
+          # judges it, and it reports success after doing nothing.
+          #
+          # There is no review to gate in either case, and this job is a required
+          # check: failing here would hold those PRs for a review that was never
+          # allowed to happen.
           if [ -z "${{ steps.claude.outputs.execution_file }}" ]; then
-            echo "Claude did not run -- the action skipped itself, most likely"
-            echo "because this PR changes the workflow file. Nothing to gate."
+            echo "Claude did not run -- skipped by condition, or the action"
+            echo "refused a PR that edits its own workflow. Nothing to gate."
             exit 0
           fi
           if [ ! -f review-verdict.txt ]; then
