@@ -33,6 +33,7 @@ jobs:
           fetch-depth: 0
 
       - name: Claude Code Review
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -70,6 +71,17 @@ jobs:
       # until they are dealt with and the run repeats.
       - name: Hold the merge when the review found something
         run: |
+          # The action refuses to run when the workflow file in the PR differs
+          # from the one on the default branch, so that a PR cannot rewrite the
+          # reviewer that judges it. It logs a warning, sets no outputs and
+          # reports success. Claude never started, so there is nothing to gate:
+          # without this branch every PR that touches this file would be held
+          # for a review that was never allowed to happen.
+          if [ -z "${{ steps.claude.outputs.execution_file }}" ]; then
+            echo "Claude did not run -- the action skipped itself, most likely"
+            echo "because this PR changes the workflow file. Nothing to gate."
+            exit 0
+          fi
           if [ ! -f review-verdict.txt ]; then
             echo "The review left no verdict. Treating that as unreviewed."
             exit 1
