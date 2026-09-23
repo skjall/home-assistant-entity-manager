@@ -33,6 +33,7 @@ jobs:
           fetch-depth: 0
 
       - name: Claude Code Review
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -40,13 +41,62 @@ jobs:
             Review the changes in this pull request. Focus on:
             - Correctness bugs and regressions
             - Security concerns (this add-on talks to Home Assistant via tokens/WebSocket)
-            - Adherence to the repo conventions in CLAUDE.md (type hints, docstrings,
-              Black 120-char line length, English log messages)
+            - Adherence to the conventions in CONTRIBUTING.md (type hints, docstrings,
+              Black 120-char line length, English log messages, English PR text)
             Post concise inline comments on the specific lines that need attention.
             Skip nitpicks; only raise findings worth acting on.
             Ignore lock files and generated/built artifacts (package-lock.json,
             anything under static/) — review only hand-written source changes.
+
+            When you are done, write the file review-verdict.txt in the repository
+            root, and write nothing into it but one of these two words:
+              CLEAN   - nothing worth acting on
+              FINDINGS - you raised at least one comment above
+            The merge is held on that word, so write it last, once, and only after
+            the comments are posted.
+          # Without an explicit allow-list the run ends in permission denials:
+          # Claude reviews, reaches for the tools that would post, is refused,
+          # and the action still reports success. The PR then shows nothing.
+          # These are the tools it needs to say what it found -- and no more,
+          # so it can neither approve nor push.
+          #
           # Swap to claude-opus-4-8 for deeper reviews at higher quota cost.
           claude_args: |
             --model claude-sonnet-4-6
             --max-turns 100
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob,Write"
+
+      # A review nobody has to act on is a review that changes nothing. The
+      # verdict decides the check, so a PR with open findings cannot merge
+      # until they are dealt with and the run repeats.
+      - name: Hold the merge when the review found something
+        run: |
+          # The action refuses to run when the workflow file in the PR differs
+          # from the one on the default branch, so that a PR cannot rewrite the
+          # reviewer that judges it. It logs a warning, sets no outputs and
+          # reports success. Claude never started, so there is nothing to gate:
+          # without this branch every PR that touches this file would be held
+          # for a review that was never allowed to happen.
+          if [ -z "${{ steps.claude.outputs.execution_file }}" ]; then
+            echo "Claude did not run -- the action skipped itself, most likely"
+            echo "because this PR changes the workflow file. Nothing to gate."
+            exit 0
+          fi
+          if [ ! -f review-verdict.txt ]; then
+            echo "The review left no verdict. Treating that as unreviewed."
+            exit 1
+          fi
+          verdict=$(tr -d '[:space:]' < review-verdict.txt)
+          case "$verdict" in
+            CLEAN)
+              echo "Review found nothing worth acting on."
+              ;;
+            FINDINGS)
+              echo "The review raised findings. They are on the PR as comments."
+              exit 1
+              ;;
+            *)
+              echo "Unexpected verdict: '$verdict'"
+              exit 1
+              ;;
+          esac
