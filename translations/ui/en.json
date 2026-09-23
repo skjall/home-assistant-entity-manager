@@ -580,7 +580,6 @@
     "step_enabled": "Enabled",
     "count_done": "{count} renamed",
     "count_failed": "{count} failed",
-    "count_unreachable": "{count} left to you",
     "count_enabled": "{count} enabled",
     "step_unverified": "Unconfirmed"
   }

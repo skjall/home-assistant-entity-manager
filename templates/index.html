@@ -474,6 +474,14 @@
             color: var(--color-gray-500);
         }
 
+        /* The job panel's summary line falls silent wherever the chips below
+           already say it. A line with nothing to say should take no room
+           either, and :empty settles that without a second call into
+           jobOutcome(). */
+        .job-outcome:empty {
+            display: none;
+        }
+
         .scanning-spinner {
             font-size: 2.5rem;
             color: var(--color-blue-500);
@@ -2754,8 +2762,12 @@
                         </div>
                     </template>
 
-                    <!-- Current item / final message -->
-                    <p class="text-sm text-gray-600 truncate" x-text="jobOutcome()"></p>
+                    <!-- Current item / final message. Empty once the chips say
+                         it better, and an empty one takes its spacing with it --
+                         see .job-outcome. Binding x-show to jobOutcome() as well
+                         would ask the same question twice on every render, and
+                         that question walks the whole log. -->
+                    <p class="job-outcome text-sm text-gray-600 truncate" x-text="jobOutcome()"></p>
 
                     <!-- What the run did, sorted by outcome. The counts double as
                          the filter, so the one line that needs the user is one
@@ -6346,6 +6358,18 @@
                         return (job && job.progress && job.progress.current) || this.t('jobs.working');
                     }
                     if (this.jobFailed(job)) return (job && job.error) || this.t('jobs.failed');
+                    // The chips below already name what the run did, one per
+                    // outcome, each with its count. Saying "1 enabled" in a
+                    // sentence above a chip reading "Enabled 1" is the same
+                    // thing twice.
+                    //
+                    // The chips ask the log directly, so this asks the same
+                    // question the same way: a log entry always carries a step,
+                    // so a log with entries always yields groups. Going through
+                    // jobLogGroups() would walk and sort the whole log a second
+                    // time on every render, and leave two guards that could
+                    // drift apart.
+                    if (((job && job.log) || []).length) return '';
                     const result = (job && job.result) || {};
                     const done = (result.success || []).length
                         || (result.enabled || []).length
@@ -6355,10 +6379,16 @@
                     const did = (result.enabled || []).length ? 'jobs.count_enabled' : 'jobs.count_done';
                     if (done) parts.push(this.t(did, {count: done}));
                     if (failed) parts.push(this.t('jobs.count_failed', {count: failed}));
-                    if (this.jobLogCount('UNREACHABLE')) {
-                        parts.push(this.t('jobs.count_unreachable', {count: this.jobLogCount('UNREACHABLE')}));
-                    }
-                    return parts.length ? parts.join(' · ') : (result.message || this.t('jobs.completed'));
+                    // Nothing countable and no log. Nine of the runs on the
+                    // instance end here, all of them swaps, and every one of
+                    // them did something -- their detail lives in a swap job of
+                    // its own. So this cannot claim the run had nothing to do,
+                    // and the old fallbacks were no better: `jobs.completed` is
+                    // word for word the heading above it, and the handler's
+                    // `message` is the English sentence meant for the API. The
+                    // heading already says the run finished; the line says
+                    // nothing and takes its spacing with it.
+                    return parts.join(' · ');
                 },
 
                 jobProgressPercent() {
