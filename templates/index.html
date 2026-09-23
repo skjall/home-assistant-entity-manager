@@ -3780,7 +3780,7 @@
 
                         // For onlyChanges, check if any entities need rename
                         if (this.onlyChanges) {
-                            entities = entities.filter(e => this.staysInChangesFilter(e));
+                            entities = entities.filter(e => this.showsUnderChangesFilter(e));
                         }
 
                         if (entities.length > 0) {
@@ -3831,7 +3831,7 @@
                         entities = entities.filter(e => !e.disabled_by);
                     }
                     if (this.onlyChanges) {
-                        entities = entities.filter(e => this.staysInChangesFilter(e));
+                        entities = entities.filter(e => this.showsUnderChangesFilter(e));
                     }
 
                     // Sort alphabetically by base_name or original_name (using browser locale)
@@ -4910,11 +4910,33 @@
                     if (!this.showDisabled) {
                         mine = mine.filter(e => !e.disabled_by);
                     }
-                    return mine.some(e => this.staysInChangesFilter(e));
+                    // The same question the entity list asks, so a device whose
+                    // only outstanding work is a switched-off entity stays
+                    // reachable instead of hiding the row behind it.
+                    return mine.some(e => this.showsUnderChangesFilter(e));
                 },
 
                 staysInChangesFilter(entity) {
                     return this.entityNeedsRename(entity) || this.typeEdited(entity);
+                },
+
+                // What "only changes" leaves on screen.
+                //
+                // Wider than staysInChangesFilter on purpose, because the two
+                // answer different questions. That one says whether there is a
+                // name to write, and the tick on the row asks it. This one says
+                // whether the row is still work, and with disabled entities on
+                // show a switched-off one is: the job it offers is to switch it
+                // back on. Hiding it meant the two filters together emptied the
+                // list of the very rows the second one had just been turned on
+                // to reveal.
+                //
+                // An entity on a disabled device never reaches here: the lists
+                // drop those first, and rightly, because Home Assistant refuses
+                // to enable one while its device is off.
+                showsUnderChangesFilter(entity) {
+                    if (this.showDisabled && entity.disabled_by) return true;
+                    return this.staysInChangesFilter(entity);
                 },
 
                 // Whether this entity sits on a device somebody switched off.
