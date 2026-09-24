@@ -240,7 +240,8 @@
     "enabling": "Enabling…",
     "enabled": "Device enabled",
     "enable_it_first": "The device is disabled – enable the device first.",
-    "id_conflict": "This name would take an entity id that is already held: {id}"
+    "id_conflict": "This name would take an entity id that is already held: {id}",
+    "check_unfinished": "The registry kept moving; nothing was written. Please try again."
   },
   "units": {
     "entities": "Entities",

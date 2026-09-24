@@ -4927,7 +4927,7 @@
                     // The entity's own device, so a name computed while the
                     // panel turns to another one is still about this entity.
                     const device = entity.device_id
-                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        ? indexed(this).devicesById.get(entity.device_id)
                         : null;
 
                     // Area
@@ -5248,6 +5248,10 @@
                     // Back to what it was: the ordinary previews answer again.
                     if (!this.deviceChangeStaged) {
                         for (const entity of entities) {
+                            // Not the row being typed in: emptying it had the
+                            // next computation put the stored name back over
+                            // what the user was writing.
+                            if (entity._currentSuffix !== undefined) continue;
                             entity._previewName = null;
                             entity._previewId = null;
                         }
@@ -5548,9 +5552,15 @@
                     // Assigning an empty list where one was empty already is a
                     // repaint of everything for nothing, and this runs after
                     // every keystroke in the name field.
-                    const settle = (clashes) => {
-                        if (!clashes.length && !this.deviceNameClash.length) return;
-                        this.deviceNameClash = clashes;
+                    // Gives back whether the question was answered. An
+                    // answer of "no clash" and a check that never got to look
+                    // are both an empty list, and a run reading the list alone
+                    // took the second for the first and wrote the rename.
+                    const settle = (clashes, answered = true) => {
+                        if (clashes.length || this.deviceNameClash.length) {
+                            this.deviceNameClash = clashes;
+                        }
+                        return answered;
                     };
                     if (!device || this.isVirtualDevice(device.id)) return settle([]);
                     const wanted = this.getExpectedDeviceName(device);
@@ -5567,11 +5577,11 @@
                     // index holds now; the next keystroke asks again. What was
                     // written down before is cleared with it: left standing, it
                     // refused a rename over a clash nobody could still see.
-                    if (asked !== this.hierarchyVersion) return settle([]);
+                    if (asked !== this.hierarchyVersion) return settle([], false);
                     // Nor is an answer about a device the panel has left one
                     // that may be written down: it would sit there unread and
                     // unrefreshed until some other device happened to clash.
-                    if (device.id !== this.selectedDevice) return settle([]);
+                    if (device.id !== this.selectedDevice) return settle([], false);
                     const taken = indexed(this).entitiesById;
 
                     const clashes = [];
@@ -5582,7 +5592,7 @@
                             clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
                         }
                     });
-                    settle(clashes);
+                    return settle(clashes);
                 },
 
                 deviceNeedsRename(device) {
@@ -6188,7 +6198,7 @@
                         const data = await response.json();
                         if (data.success) {
                             // Update device in hierarchy
-                            const device = this.hierarchy.devices.find(d => d.id === deviceId);
+                            const device = indexed(this).devicesById.get(deviceId);
                             if (device) {
                                 device.area_id = areaId || null;
                             }
@@ -6783,7 +6793,16 @@
 
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = base;
-                    await this.checkDeviceNameClash(device);
+                    // Asked again where the registry moved under the first
+                    // one: an unanswered check leaves the same empty list as a
+                    // clean one.
+                    let answered = await this.checkDeviceNameClash(device);
+                    if (!answered) answered = await this.checkDeviceNameClash(device);
+                    if (!answered) {
+                        this.devicePreviewBaseName = wasPreviewed;
+                        this.showMessage(this.t('device.check_unfinished'), 'error');
+                        return;
+                    }
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();
                         this.devicePreviewBaseName = wasPreviewed;

@@ -240,7 +240,8 @@
     "enabling": "Activando…",
     "enabled": "Dispositivo activado",
     "enable_it_first": "El dispositivo está desactivado: actívalo primero.",
-    "id_conflict": "Este nombre tomaría un id de entidad que ya está en uso: {id}"
+    "id_conflict": "Este nombre tomaría un id de entidad que ya está en uso: {id}",
+    "check_unfinished": "El registro siguió cambiando; no se escribió nada. Inténtalo de nuevo."
   },
   "units": {
     "entities": "Entidades",
