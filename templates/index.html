@@ -2057,8 +2057,7 @@
                                      :class="{
                                          'selected': selectedDevice === device.id,
                                          'has-changes': deviceNeedsRename(device),
-                                         'is-disabled': device.disabled_by,
-                                         'no-area-mode': selectedArea === '__no_area__'
+                                         'is-disabled': device.disabled_by
                                      }"
                                      @click="selectDevice(device)">
                                     <!-- Main row -->
@@ -5546,19 +5545,17 @@
                         // With a rule just saved the name has to come from the
                         // server, which knows it and the collision numbering.
                         // Without one the preview already holds it.
+                        // The preview answers only where it holds both the
+                        // name and the id: the id is the server's answer and
+                        // may not have arrived yet, and standing in with the
+                        // one the entity has wrote the name and left the id as
+                        // it was, without saying so.
                         let newId, newName;
-                        if (ruleScopeApplied) {
-                            const rendered = await this.previewEntityNaming(entity, null);
-                            newId = rendered.entity_id;
-                            newName = rendered.entity_name;
-                        } else if (entity._previewId) {
+                        const previewed = !ruleScopeApplied && entity._previewId && entity._previewName;
+                        if (previewed) {
                             newId = entity._previewId;
                             newName = entity._previewName;
                         } else {
-                            // The slug is the server's answer and may not have
-                            // arrived yet. Standing in with the current id here
-                            // wrote the name and left the id as it was, without
-                            // saying so.
                             const rendered = await this.previewEntityNaming(entity, null);
                             newId = rendered.entity_id;
                             newName = rendered.entity_name;
