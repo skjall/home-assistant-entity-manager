@@ -260,7 +260,10 @@ def test_a_bracket_that_tells_two_entities_apart_reaches_the_new_id() -> None:
         ) -> list[tuple[str, str, str]]:
             return list(proposals)
 
-    states = [{"entity_id": "sensor.uplink_up", "attributes": {}}, {"entity_id": "sensor.uplink_down", "attributes": {}}]
+    states = [
+        {"entity_id": "sensor.uplink_up", "attributes": {}},
+        {"entity_id": "sensor.uplink_down", "attributes": {}},
+    ]
     restructurer = FakeRestructurer()
 
     captured = routes_entities._capture_device_entity_naming(restructurer, "device-1", states)
