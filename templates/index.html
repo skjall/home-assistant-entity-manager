@@ -3241,6 +3241,10 @@
                 selectedDeviceData: null,
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
+                // The area picked in the panel, before it is written. null is
+                // nothing picked, "" is picked away, which are not the same
+                // answer; the control that sets it comes with the area field.
+                devicePreviewAreaId: null,
                 deviceNameClash: [],  // Ids the name in the field would take from someone else
                 _deviceNameTimer: null,
                 renamingDevice: false,  // Loading state for device rename
@@ -4983,8 +4987,12 @@
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
 
-                    // Find area (from device or entity)
-                    const areaId = device?.area_id || entity.area_id;
+                    // The area the panel holds where it holds one: the
+                    // name the server computed is about the area the registry
+                    // has, and the row would have read the old one while the
+                    // form said otherwise. "" is an area picked away.
+                    const staged = this.pendingDeviceContext(entity).area_id;
+                    const areaId = staged !== undefined ? staged : (device?.area_id || entity.area_id);
                     const area = areaId
                         ? this.hierarchy.areas.find(a => a.id === areaId)
                         : null;
@@ -5092,6 +5100,7 @@
                 devicePreviewsFollowTheDeviceName() {
                     const device = this.selectedDevice;
                     if (!device || !this.hierarchy?.entities) return;
+                    const mine = [];
                     for (const entity of this.hierarchy.entities) {
                         if (entity.device_id !== device || entity._justRenamed) continue;
                         if (entity._currentSuffix !== undefined) {
@@ -5100,8 +5109,12 @@
                         }
                         entity._previewName = null;
                         entity._previewId = null;
+                        mine.push(entity);
                     }
-                    this.precomputeEntityPreviews();
+                    // These rows, not every row: computing the whole list on
+                    // every keystroke cleared and re-read the previews of every
+                    // other device for nothing.
+                    this.computePreviewsFor(mine);
                 },
 
                 // Invalidate cached previews (call after rename to refresh conflict detection)
@@ -5200,21 +5213,25 @@
                 },
 
                 pendingDeviceContext(entity) {
-                    const device = entity?.device_id
-                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
-                        : null;
-                    if (!device || device.id !== this.selectedDevice || this.isVirtualDevice(this.selectedDevice)) {
+                    // Asked for every row of the list on every keystroke, so
+                    // what can be answered without looking anything up is
+                    // answered first: nothing staged means nothing pending, and
+                    // an entity of another device is not this panel's business.
+                    if (this.devicePreviewBaseName === null && (this.devicePreviewAreaId ?? null) === null) {
                         return {};
                     }
+                    if (!entity?.device_id || entity.device_id !== this.selectedDevice) return {};
+                    if (this.isVirtualDevice(this.selectedDevice)) return {};
+                    const device = this.hierarchy.devices.find(d => d.id === entity.device_id);
+                    if (!device) return {};
                     const pending = {};
                     if (this.devicePreviewBaseName !== null && this.devicePreviewBaseName !== device.base_name) {
                         pending.device_name = this.devicePreviewBaseName;
                     }
-                    // An area picked in the panel is written when the change is
-                    // applied, not when it is picked. Empty means picked away,
-                    // which is not the same as nothing picked. A build without
-                    // the picker holds nothing here and sends nothing.
-                    if (this.devicePreviewAreaId !== null && this.devicePreviewAreaId !== undefined
+                    // An area picked in the panel is written when the change
+                    // is applied, not when it is picked. Empty means picked
+                    // away, which is not the same as nothing picked.
+                    if (this.devicePreviewAreaId !== null
                             && (this.devicePreviewAreaId || null) !== (device.area_id || null)) {
                         pending.area_id = this.devicePreviewAreaId || '';
                     }

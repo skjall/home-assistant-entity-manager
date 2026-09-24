@@ -382,12 +382,12 @@ class EntityRestructurer:
         changes something from one a rule has meanwhile caught up with.
 
         ``pending_device_name`` and ``pending_area_id`` answer the same question
-        for a device that is in the middle of being edited. Both the area and
-        the base name are picked in the panel and written only when the change
-        is applied, and until then the registry holds what the integration
-        supplied - for a UniFi access point its MAC address, and no area at all.
-        A preview built from the registry answers with those, and the preview is
-        what a confirmed rename writes.
+        for a device that is in the middle of being edited: they are what the
+        panel holds and the registry does not yet, whether because the write is
+        still to come or because it has not been read back. Until then the
+        registry answers with what the integration supplied - for a UniFi access
+        point its MAC address, and whatever area the device was in - and that
+        answer is what a confirmed rename would write.
 
         ``pending_area_id`` distinguishes "nothing picked" from "picked, no
         area": ``None`` leaves the stored area alone, ``""`` takes it away.
@@ -457,14 +457,13 @@ class EntityRestructurer:
             (
                 raw_device_name,
                 partial_context["area"],
+                # Which is the name the device is about to be given where
+                # one was typed, so it is in here once, not twice.
                 device_name,
                 # An integration may still write the name the device had when it
                 # was added, or its model, into every entity name.
                 device.get("name", ""),
                 device.get("model", ""),
-                # And the name the device is about to be given, which is not in
-                # the registry yet but is what the entity will sit under.
-                *((pending_device_name,) if pending_device_name else ()),
             ),
             partial_context,
         )
