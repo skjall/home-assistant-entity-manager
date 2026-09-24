@@ -2164,7 +2164,7 @@
                                     ? devicePreviewAreaId
                                     : (selectedDeviceData?.area_id || '');
                                 $nextTick(() => $el.value = picked)"
-                            @change="devicePreviewAreaId = $event.target.value">
+                            @change="pickPreviewArea($event.target.value)">
                         <option value="" x-text="t('area.select_area')">Select area...</option>
                         <template x-for="area in hierarchy.areas" :key="area.id">
                             <option :value="area.id" x-text="area.name"></option>
@@ -4798,17 +4798,43 @@
                 // are built out of the navigation's area, which is the device's
                 // own until it is about to leave it.
                 previewAreaData() {
-                    if (this.devicePreviewAreaId === null || !this.devicePreviewAreaId) return null;
-                    if (this.isVirtualDevice(this.selectedDevice)) return null;
-                    return this.hierarchy.areas.find(a => a.id === this.devicePreviewAreaId) || null;
+                    return this.areaForDevice(this.selectedDeviceData);
+                },
+
+                // A move is being shown for this device: an area was picked in
+                // the panel and not yet written. Untouched is null; an empty
+                // pick is a move to no area at all, which is a move like any
+                // other and not the absence of one.
+                deviceIsMoving(device) {
+                    return !!device
+                        && device.id === this.selectedDevice
+                        && !this.isVirtualDevice(this.selectedDevice)
+                        && this.devicePreviewAreaId !== null;
+                },
+
+                // The area every name below is built out of: the picked one
+                // while a move is being shown, the device's own otherwise -
+                // never the area the sidebar happens to stand in.
+                areaForDevice(device) {
+                    const areaId = this.previewAreaFor(device);
+                    if (!areaId) return null;
+                    return this.hierarchy.areas.find(a => a.id === areaId) || null;
+                },
+
+                // What the entities of the device being moved would be called.
+                // Their names are cached, and a move changes all of them.
+                pickPreviewArea(areaId) {
+                    this.devicePreviewAreaId = areaId;
+                    const moved = (this.hierarchy.entities || [])
+                        .filter(e => e.device_id === this.selectedDevice);
+                    this.computePreviewsFor(moved);
                 },
 
                 // Get device display name (full name with area prefix)
                 getDeviceDisplayName(device) {
                     if (!device) return '';
-                    const moving = device.id === this.selectedDevice ? this.previewAreaData() : null;
-                    if (device.suggested_name && !moving) return device.suggested_name;
-                    const area = moving || this.selectedAreaData;
+                    if (device.suggested_name && !this.deviceIsMoving(device)) return device.suggested_name;
+                    const area = this.areaForDevice(device);
                     const areaName = area?.name || '';
                     const deviceBaseName = device.base_name;
 
@@ -4827,7 +4853,9 @@
                     const domain = entity.id.split('.')[0];
 
                     // Area
-                    const area = this.previewAreaData() || this.selectedAreaData;
+                    const area = this.selectedDeviceData
+                        ? this.areaForDevice(this.selectedDeviceData)
+                        : this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
@@ -4863,7 +4891,9 @@
                     const parts = [];
 
                     // Area
-                    const area = this.previewAreaData() || this.selectedAreaData;
+                    const area = this.selectedDeviceData
+                        ? this.areaForDevice(this.selectedDeviceData)
+                        : this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
@@ -5142,9 +5172,7 @@
                 // name below is built from it, so a move shows its full effect
                 // before it is written.
                 previewAreaFor(device) {
-                    if (device && device.id === this.selectedDevice && this.devicePreviewAreaId !== null) {
-                        return this.devicePreviewAreaId || null;
-                    }
+                    if (this.deviceIsMoving(device)) return this.devicePreviewAreaId || null;
                     return device?.area_id || null;
                 },
 
@@ -5165,8 +5193,9 @@
                     const device = entity?.device_id
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
-                    const moving = device && device.id === this.selectedDevice && this.devicePreviewAreaId !== null;
-                    const areaId = moving ? this.previewAreaFor(device) : (entity?.area_id || device?.area_id);
+                    const areaId = this.deviceIsMoving(device)
+                        ? this.previewAreaFor(device)
+                        : (entity?.area_id || device?.area_id);
                     const area = this.hierarchy.areas.find(a => a.id === areaId);
                     const domain = entity?.id?.split('.')[0] || '';
                     return {
@@ -6493,20 +6522,39 @@
                 async renameDeviceInHA(newBaseName) {
                     if (!this.selectedDevice || this.isVirtualDevice(this.selectedDevice) || !newBaseName || this.renamingDevice) return;
 
+                    // The device this run is about, and the button shut from
+                    // here on: the area is written before the name, and a
+                    // second click during that write would move and rename the
+                    // device twice - or, if the selection moved meanwhile,
+                    // rename whichever device the panel had turned to.
+                    const deviceId = this.selectedDevice;
+                    this.renamingDevice = true;
+                    try {
+                        await this.renameDeviceRun(deviceId, newBaseName);
+                    } finally {
+                        this.renamingDevice = false;
+                    }
+                },
+
+                async renameDeviceRun(deviceId, newBaseName) {
+                    let device = this.hierarchy.devices.find(d => d.id === deviceId) || this.selectedDeviceData;
+                    let moved = false;
+
                     // The area goes first: the name is built out of it, so a
                     // device that moves is renamed to where it moved to rather
                     // than to where it was.
                     const picked = this.devicePreviewAreaId;
-                    if (picked && picked !== (this.selectedDeviceData?.area_id || null)) {
-                        if (!await this.assignDeviceArea(this.selectedDevice, picked)) return;
-                        this.devicePreviewAreaId = null;
-                        this.selectedDeviceData = this.hierarchy.devices.find(d => d.id === this.selectedDevice)
-                            || this.selectedDeviceData;
+                    if (picked && picked !== (device?.area_id || null)) {
+                        if (!await this.assignDeviceArea(deviceId, picked)) return;
+                        moved = true;
+                        if (this.selectedDevice === deviceId) this.devicePreviewAreaId = null;
+                        device = this.hierarchy.devices.find(d => d.id === deviceId) || device;
+                        if (this.selectedDevice === deviceId) this.selectedDeviceData = device;
                     }
 
-                    const newFullName = this.renderDeviceName(this.selectedDeviceData, newBaseName);
+                    const newFullName = this.renderDeviceName(device, newBaseName);
 
-                    if (this.selectedDeviceData.name === newFullName) {
+                    if (device.name === newFullName) {
                         this.showMessage('Device name already correct', 'info');
                         return;
                     }
@@ -6524,14 +6572,13 @@
                         return;
                     }
 
-                    this.renamingDevice = true;
                     try {
                         // Enqueue the rename as a background job (returns 202 + job).
                         const response = await fetch('api/rename_device', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({
-                                device_id: this.selectedDevice,
+                                device_id: deviceId,
                                 new_name: newFullName
                             })
                         });
@@ -6543,16 +6590,15 @@
                         if (!response.ok || !job.job_id) {
                             throw new Error(job.error || 'Failed to start device rename');
                         }
-                        const deviceId = this.selectedDevice;  // keep before any reload
                         this.startJob('api/jobs/' + job.job_id, job, {
                             kind: 'rename_device',
                             titleKey: 'jobs.rename_device',
                             onDone: (finished) => this.onRenameDeviceDone(finished, deviceId)
                         });
                     } catch (error) {
-                        this.showMessage('Error: ' + error.message, 'error');
-                    } finally {
-                        this.renamingDevice = false;
+                        this.showMessage(moved
+                            ? this.t('device.moved_not_renamed', {error: error.message})
+                            : 'Error: ' + error.message, 'error');
                     }
                 },
 
