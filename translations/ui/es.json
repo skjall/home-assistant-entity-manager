@@ -224,6 +224,7 @@
     "new_name": "Nuevo nombre",
     "open_details": "Abrir detalles del dispositivo",
     "base_name_label": "Nombre base del dispositivo (sin prefijo de área)",
+    "area_label": "Área",
     "name_conflict": "Ya existe un dispositivo con este nombre",
     "z2m_drift_label": "El nombre Z2M difiere",
     "open_in_ha": "Abrir dispositivo en Home Assistant",

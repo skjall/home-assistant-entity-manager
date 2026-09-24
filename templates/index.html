@@ -2171,6 +2171,17 @@
                         <i class="ri-arrow-right-s-line text-gray-400 mx-1"></i>
                         <span class="text-amber-600" x-text="getExpectedDeviceName(selectedDeviceData)"></span>
                     </div>
+                    <label class="text-xs text-gray-500 block mb-1" x-text="t('device.area_label')">Area</label>
+                    <select class="edit-input w-full mb-2"
+                            x-effect="$el.value = devicePreviewAreaId !== null
+                                ? devicePreviewAreaId
+                                : (selectedDeviceData?.area_id || '')"
+                            @change="devicePreviewAreaId = $event.target.value">
+                        <option value="" x-text="t('area.select_area')">Select area...</option>
+                        <template x-for="area in hierarchy.areas" :key="area.id">
+                            <option :value="area.id" x-text="area.name"></option>
+                        </template>
+                    </select>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.base_name_label')">Device Base Name (without Area prefix)</label>
                     <div class="flex gap-2">
                         <input type="text"
@@ -3236,6 +3247,9 @@
                 selectedDeviceData: null,
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
+                // The area picked in the panel, before anything is written.
+                // null means nothing picked; a string is an area id.
+                devicePreviewAreaId: null,
                 deviceNameClash: [],  // Ids the name in the field would take from someone else
                 _deviceNameTimer: null,
                 renamingDevice: false,  // Loading state for device rename
@@ -5118,8 +5132,19 @@
                     };
                 },
 
+                // The area a device would be in: the one picked in the panel
+                // while it is still only picked, the one it has otherwise. Every
+                // name below is built from it, so a move shows its full effect
+                // before it is written.
+                previewAreaFor(device) {
+                    if (device && device.id === this.selectedDevice && this.devicePreviewAreaId !== null) {
+                        return this.devicePreviewAreaId || null;
+                    }
+                    return device?.area_id || null;
+                },
+
                 deviceNamingContext(device, baseName = null) {
-                    const area = this.hierarchy.areas.find(a => a.id === device?.area_id);
+                    const area = this.hierarchy.areas.find(a => a.id === this.previewAreaFor(device));
                     return {
                         ...this.baseNamingContext(area, device),
                         device: baseName !== null ? baseName : (device?.base_name || '')
@@ -5135,7 +5160,8 @@
                     const device = entity?.device_id
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
-                    const areaId = entity?.area_id || device?.area_id;
+                    const moving = device && device.id === this.selectedDevice && this.devicePreviewAreaId !== null;
+                    const areaId = moving ? this.previewAreaFor(device) : (entity?.area_id || device?.area_id);
                     const area = this.hierarchy.areas.find(a => a.id === areaId);
                     const domain = entity?.id?.split('.')[0] || '';
                     return {
@@ -5926,7 +5952,7 @@
                 },
 
                 async assignDeviceArea(deviceId, areaId) {
-                    if (!deviceId || !areaId) return;
+                    if (!deviceId || !areaId) return false;
 
                     try {
                         const response = await fetch('api/assign_device_area', {
@@ -5953,11 +5979,12 @@
 
                             const area = this.hierarchy.areas.find(a => a.id === areaId);
                             this.showMessage(this.t('area.area_assigned') + ': ' + (area?.name || areaId), 'success');
-                        } else {
-                            throw new Error(data.error || 'Failed to assign area');
+                            return true;
                         }
+                        throw new Error(data.error || 'Failed to assign area');
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
+                        return false;
                     }
                 },
 
@@ -6449,6 +6476,7 @@
 
                 async onRenameDeviceDone(job, deviceId = null) {
                     this.devicePreviewBaseName = null;
+                    this.devicePreviewAreaId = null;
                     await this.loadHierarchy();
                     const id = deviceId || this.selectedDevice;
                     if (id) {
@@ -6459,6 +6487,17 @@
 
                 async renameDeviceInHA(newBaseName) {
                     if (!this.selectedDevice || this.isVirtualDevice(this.selectedDevice) || !newBaseName || this.renamingDevice) return;
+
+                    // The area goes first: the name is built out of it, so a
+                    // device that moves is renamed to where it moved to rather
+                    // than to where it was.
+                    const picked = this.devicePreviewAreaId;
+                    if (picked && picked !== (this.selectedDeviceData?.area_id || null)) {
+                        if (!await this.assignDeviceArea(this.selectedDevice, picked)) return;
+                        this.devicePreviewAreaId = null;
+                        this.selectedDeviceData = this.hierarchy.devices.find(d => d.id === this.selectedDevice)
+                            || this.selectedDeviceData;
+                    }
 
                     const newFullName = this.renderDeviceName(this.selectedDeviceData, newBaseName);
 
