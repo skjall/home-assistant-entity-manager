@@ -297,6 +297,73 @@
             transform: rotate(180deg);
         }
 
+        /* Typing into a list to pick from it, the same shape the settings
+           page uses for integrations and models. */
+        .combo { position: relative; }
+
+        .combo-field { position: relative; }
+
+        .combo-field > i.ri-search-line {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--color-gray-400);
+            pointer-events: none;
+        }
+
+        .combo-field input.combo-input {
+            width: 100%;
+            padding: 8px 12px 8px 32px;
+        }
+
+        .combo-input.chosen {
+            border-color: var(--color-emerald-300);
+        }
+
+        .combo-list {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            z-index: 20;
+            margin-top: 4px;
+            max-height: 240px;
+            overflow-y: auto;
+            background: var(--color-white);
+            border: 1px solid var(--color-gray-200);
+            border-radius: 8px;
+            box-shadow: 0 10px 24px var(--shadow-colour);
+        }
+
+        .combo-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+            padding: 9px 12px;
+            border: none;
+            border-bottom: 1px solid var(--color-gray-100);
+            background: none;
+            text-align: left;
+            font-size: 0.9rem;
+            color: var(--color-gray-700);
+            cursor: pointer;
+        }
+
+        .combo-item:last-child { border-bottom: none; }
+        .combo-item:hover, .combo-item:focus, .combo-item.at { background: var(--color-blue-50); outline: none; }
+        .combo-item.at { box-shadow: inset 2px 0 0 var(--color-blue-500); }
+        .combo-item.current { background: var(--color-blue-100); font-weight: 600; }
+        .combo-item .tally { color: var(--color-gray-400); font-size: 0.78rem; white-space: nowrap; }
+
+        .combo-empty {
+            padding: 9px 12px;
+            color: var(--color-gray-400);
+            font-size: 0.85rem;
+        }
+
         /* NEW: Simple Entity Cards */
         .entity-card-simple {
             margin: 8px 0;
@@ -2158,18 +2225,37 @@
                         <span class="text-amber-600" x-text="getExpectedDeviceName(selectedDeviceData)"></span>
                     </div>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.area_label')">Area</label>
-                    <select class="edit-input w-full mb-2"
-                            x-effect="hierarchy.areas.length;
-                                const picked = devicePreviewAreaId !== null
-                                    ? devicePreviewAreaId
-                                    : (selectedDeviceData?.area_id || '');
-                                $nextTick(() => $el.value = picked)"
-                            @change="devicePreviewAreaId = $event.target.value; stageDeviceWideChange()">
-                        <option value="" x-text="t('area.select_area')">Select area...</option>
-                        <template x-for="area in hierarchy.areas" :key="area.id">
-                            <option :value="area.id" x-text="area.name"></option>
-                        </template>
-                    </select>
+                    <div class="combo mb-2" @click.away="closeAreaCombo()" @keydown.escape.stop="closeAreaCombo()">
+                        <div class="combo-field">
+                            <i class="ri-search-line"></i>
+                            <input type="text" class="edit-input combo-input" autocomplete="off"
+                                   x-effect="hierarchy.areas.length; devicePreviewAreaId; selectedDeviceData;
+                                             if (!areaComboOpen) areaSearch = panelAreaName()"
+                                   :class="devicePreviewAreaId ? 'chosen' : ''"
+                                   :placeholder="t('area.select_area')"
+                                   x-model="areaSearch"
+                                   @focus="areaComboOpen = true; areaComboAt = 0; areaSearch = ''"
+                                   @input="areaComboOpen = true; areaComboAt = 0"
+                                   @keydown.arrow-down.prevent="areaComboOpen = true; comboStep(1, matchingAreas().length)"
+                                   @keydown.arrow-up.prevent="comboStep(-1, matchingAreas().length)"
+                                   @keydown.enter.prevent="takeArea()">
+                        </div>
+                        <div class="combo-list" x-show="areaComboOpen" x-cloak>
+                            <template x-for="(area, at) in matchingAreas()" :key="area.id || '__none__'">
+                                <button type="button" class="combo-item"
+                                        :class="(area.id === panelAreaId() ? 'current ' : '')
+                                                + (at === areaComboAt ? 'at' : '')"
+                                        @mousemove="areaComboAt = at"
+                                        @click="pickArea(area)">
+                                    <span x-text="area.name"></span>
+                                    <span class="tally" x-show="area.id"
+                                          x-text="getAreaEntityCount(area.id)"></span>
+                                </button>
+                            </template>
+                            <div class="combo-empty" x-show="!matchingAreas().length"
+                                 x-text="t('area.no_match')">No area of that name</div>
+                        </div>
+                    </div>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.base_name_label')">Device Base Name (without Area prefix)</label>
                     <div class="flex gap-2">
                         <input type="text"
@@ -3237,6 +3323,9 @@
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
                 _deviceWideTimer: null,  // Debounce for the device-wide entity preview
+                areaSearch: '',  // What is typed into the area field of the panel
+                areaComboOpen: false,
+                areaComboAt: 0,
                 // The area picked in the panel, before anything is written.
                 // null means nothing picked; a string is an area id.
                 devicePreviewAreaId: null,
@@ -5106,6 +5195,63 @@
                     const typed = this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim();
                     const nameStaged = !!typed && typed !== (device.base_name || '').trim();
                     return areaStaged || nameStaged;
+                },
+
+                // The area the panel stands on: the one picked while it is only
+                // picked, the device's own otherwise.
+                panelAreaId() {
+                    if (this.devicePreviewAreaId !== null) return this.devicePreviewAreaId || '';
+                    return this.selectedDeviceData?.area_id || '';
+                },
+
+                panelAreaName() {
+                    const id = this.panelAreaId();
+                    if (!id) return '';
+                    return this.hierarchy.areas.find(a => a.id === id)?.name || '';
+                },
+
+                // The areas the typed text still matches, with taking the device
+                // out of its area offered as one of them - it is a move like any
+                // other, and the field is the only place that can ask for it.
+                matchingAreas() {
+                    const typed = (this.areaSearch || '').trim().toLowerCase();
+                    const areas = this.hierarchy.areas.filter(a => !typed || a.name.toLowerCase().includes(typed));
+                    const none = { id: '', name: this.t('area.no_area') };
+                    if (this.panelAreaId() && (!typed || none.name.toLowerCase().includes(typed))) {
+                        return [...areas, none];
+                    }
+                    return areas;
+                },
+
+                pickArea(area) {
+                    this.devicePreviewAreaId = area.id;
+                    this.areaSearch = area.name;
+                    this.areaComboOpen = false;
+                    this.stageDeviceWideChange();
+                },
+
+                takeArea() {
+                    const area = this.matchingAreas()[this.areaComboAt];
+                    if (area) this.pickArea(area);
+                },
+
+                closeAreaCombo() {
+                    if (!this.areaComboOpen) return;
+                    this.areaComboOpen = false;
+                    // Typing and then looking elsewhere picks nothing: the field
+                    // goes back to the area the panel stands on.
+                    this.areaSearch = this.panelAreaName();
+                },
+
+                // Walk the open list with the arrow keys, keeping the one that
+                // Enter would take in view.
+                comboStep(by, total) {
+                    if (!total) return;
+                    this.areaComboAt = (this.areaComboAt + by + total) % total;
+                    this.$nextTick(() => {
+                        const at = document.querySelector('.combo-list .combo-item.at');
+                        if (at) at.scrollIntoView({block: 'nearest'});
+                    });
                 },
 
                 // The entity rows follow the panel while it is still only typed

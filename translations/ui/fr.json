@@ -31,7 +31,8 @@
     "assign_area": "Assigner une Zone",
     "select_area": "Sélectionner une zone...",
     "area_assigned": "Appareil assigné à la zone",
-    "open_in_ha": "Ouvrir la zone dans Home Assistant"
+    "open_in_ha": "Ouvrir la zone dans Home Assistant",
+    "no_match": "Aucune zone de ce nom"
   },
   "summary": {
     "entities": "Entités",

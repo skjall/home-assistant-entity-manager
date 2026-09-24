@@ -31,7 +31,8 @@
     "assign_area": "Assign Area",
     "select_area": "Select area...",
     "area_assigned": "Device assigned to area",
-    "open_in_ha": "Open area in Home Assistant"
+    "open_in_ha": "Open area in Home Assistant",
+    "no_match": "No area of that name"
   },
   "summary": {
     "entities": "Entities",
