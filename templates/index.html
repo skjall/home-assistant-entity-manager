@@ -3592,18 +3592,13 @@
                     if (!this.hierarchy.areas) return [];
                     let areas = [...this.hierarchy.areas];
 
-                    // Only show areas that have at least one device that would appear in filteredDevices
+                    // Only show areas that hold a device with something to
+                    // apply. The search box is left out of this: it says which
+                    // devices to look at, not which headings exist, and an area
+                    // whose devices simply do not match the words typed would
+                    // otherwise disappear with its pending work.
                     if (this.onlyChanges) {
-                        areas = areas.filter(area => {
-                            // Get all devices for this area (respecting showDisabled filter)
-                            let areaDevices = this.hierarchy.devices.filter(d => d.area_id === area.id);
-                            if (!this.showDisabled) {
-                                areaDevices = areaDevices.filter(d => !d.disabled_by);
-                            }
-
-                            // The same question the device list asks.
-                            return areaDevices.some(device => this.deviceStaysInChangesFilter(device));
-                        });
+                        areas = areas.filter(area => this.devicesShownIn(area.id, false).length > 0);
                     }
 
                     const sortedAreas = areas.sort((a, b) => {
@@ -3612,31 +3607,33 @@
                         return nameA.localeCompare(nameB);
                     });
 
-                    // Add "No Area" entry if there are devices without area
-                    const devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
-                    if (devicesWithoutArea.length > 0 && !this.onlyChanges) {
+                    // "No area" is where a device lands that has none, and it
+                    // answers the same question as every area above: hiding it
+                    // outright under "only changes" put a sixth of the devices
+                    // out of reach of the one view that lists them. It is
+                    // listed on the same terms, and counts the same devices.
+                    const withoutArea = this.devicesShownIn('__no_area__', false);
+                    if (withoutArea.length > 0) {
                         sortedAreas.push({
                             id: '__no_area__',
                             name: this.t('area.no_area'),
                             isSpecial: true,
-                            deviceCount: devicesWithoutArea.length
+                            deviceCount: withoutArea.length
                         });
                     }
 
                     return sortedAreas;
                 },
 
-                // Computed: Filtered devices for selected area (sorted alphabetically)
-                get filteredDevices() {
-                    if (!this.selectedArea) return [];
-
-                    // Special handling for "No Area"
-                    let devices;
-                    if (this.selectedArea === '__no_area__') {
-                        devices = this.hierarchy.devices.filter(d => !d.area_id);
-                    } else {
-                        devices = this.hierarchy.devices.filter(d => d.area_id === this.selectedArea);
-                    }
+                // The one question about which devices a view shows, asked by
+                // the list, by the count beside a heading and by the headings
+                // themselves - three copies of it had already drifted apart.
+                // The sidebar leaves the search box out: it narrows the list,
+                // not the headings above it.
+                devicesShownIn(areaId, searched = true) {
+                    let devices = areaId === '__no_area__'
+                        ? this.hierarchy.devices.filter(d => !d.area_id)
+                        : this.hierarchy.devices.filter(d => d.area_id === areaId);
 
                     // A disabled device is shown only under "show disabled", and
                     // then it offers the one thing that works on it: switching it
@@ -3647,7 +3644,7 @@
                     }
 
                     // Apply text filter (search in name, base_name, manufacturer, model, integrations)
-                    if (this.deviceFilter) {
+                    if (searched && this.deviceFilter) {
                         const filter = this.deviceFilter.toLowerCase();
                         devices = devices.filter(d => {
                             const searchFields = [
@@ -3666,7 +3663,14 @@
                         devices = devices.filter(d => this.deviceStaysInChangesFilter(d));
                     }
 
-                    return devices.sort((a, b) => {
+                    return devices;
+                },
+
+                // Computed: Filtered devices for selected area (sorted alphabetically)
+                get filteredDevices() {
+                    if (!this.selectedArea) return [];
+
+                    return this.devicesShownIn(this.selectedArea).sort((a, b) => {
                         const nameA = (a.base_name || a.name || '').toLowerCase();
                         const nameB = (b.base_name || b.name || '').toLowerCase();
                         return nameA.localeCompare(nameB);
@@ -4162,7 +4166,10 @@
                     if (areaId) {
                         // Special handling for "__no_area__"
                         if (areaId === '__no_area__') {
-                            const devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
+                            // What the sidebar would list: restoring a heading
+                            // the filters have taken away left nothing selected
+                            // and an empty panel with no reason given.
+                            const devicesWithoutArea = this.devicesShownIn('__no_area__', false);
                             if (devicesWithoutArea.length > 0) {
                                 this.selectedArea = '__no_area__';
                                 this.selectedAreaData = {
