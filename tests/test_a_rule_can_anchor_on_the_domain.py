@@ -169,7 +169,7 @@ def test_the_rule_stops_at_its_domain(home):
 
 @pytest.mark.parametrize("scope", ["all", "global"])
 def test_everywhere_takes_no_filter_at_all(home, scope):
-    """"all" is the word the button sends; "global" is the one the API document
+    """ "all" is the word the button sends; "global" is the one the API document
     uses for the same thing, and both have to reach every device tracker.
 
     One installation per word, or the second would find the rule the first
