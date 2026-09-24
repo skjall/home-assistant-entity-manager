@@ -71,7 +71,9 @@ def test_the_device_name_is_not_rendered_into_the_name_twice(restructurer):
     context = restructurer.build_naming_context("switch.a", restructurer.entities["switch.a"])
 
     assert context["device"] == "Pump"
-    assert restructurer.naming_templates.render("entity_name", context) != "Basement Pump Basement Pump"
+    # The whole name, not just "not the doubled one": anything else that came
+    # out - the area dropped, the device twice over - would pass a negative.
+    assert restructurer.naming_templates.render("entity_name", context) == "Basement Pump Switch"
 
 
 def test_unwinding_an_applied_name_gives_the_empty_type_back(restructurer):
