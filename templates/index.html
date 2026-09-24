@@ -5206,10 +5206,19 @@
                     if (!device || device.id !== this.selectedDevice || this.isVirtualDevice(this.selectedDevice)) {
                         return {};
                     }
-                    if (this.devicePreviewBaseName === null || this.devicePreviewBaseName === device.base_name) {
-                        return {};
+                    const pending = {};
+                    if (this.devicePreviewBaseName !== null && this.devicePreviewBaseName !== device.base_name) {
+                        pending.device_name = this.devicePreviewBaseName;
                     }
-                    return { device_name: this.devicePreviewBaseName };
+                    // An area picked in the panel is written when the change is
+                    // applied, not when it is picked. Empty means picked away,
+                    // which is not the same as nothing picked. A build without
+                    // the picker holds nothing here and sends nothing.
+                    if (this.devicePreviewAreaId !== null && this.devicePreviewAreaId !== undefined
+                            && (this.devicePreviewAreaId || null) !== (device.area_id || null)) {
+                        pending.area_id = this.devicePreviewAreaId || '';
+                    }
+                    return pending;
                 },
 
                 async previewEntityNaming(entity, suffix = null) {

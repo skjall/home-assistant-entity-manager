@@ -373,6 +373,7 @@ class EntityRestructurer:
         state_info: Dict[str, Any],
         ignore_exception: bool = False,
         pending_device_name: Optional[str] = None,
+        pending_area_id: Optional[str] = None,
     ) -> Dict[str, str]:
         """Build the complete template context for an entity.
 
@@ -380,19 +381,26 @@ class EntityRestructurer:
         no exception - the one question needed to tell an exception that still
         changes something from one a rule has meanwhile caught up with.
 
-        ``pending_device_name`` answers the same question for a device whose
-        name is typed but not applied. An area is written through the moment it
-        is chosen, but a base name waits for its button, and until then the
-        registry still holds what the integration supplied - for a UniFi access
-        point that is its MAC address. A preview built from the registry answers
-        with that MAC, and the preview is what a confirmed rename writes.
+        ``pending_device_name`` and ``pending_area_id`` answer the same question
+        for a device that is in the middle of being edited. Both the area and
+        the base name are picked in the panel and written only when the change
+        is applied, and until then the registry holds what the integration
+        supplied - for a UniFi access point its MAC address, and no area at all.
+        A preview built from the registry answers with those, and the preview is
+        what a confirmed rename writes.
+
+        ``pending_area_id`` distinguishes "nothing picked" from "picked, no
+        area": ``None`` leaves the stored area alone, ``""`` takes it away.
         """
         domain, _, object_id = entity_id.partition(".")
         entity_reg = self.entities.get(entity_id, {})
         device_id = entity_reg.get("device_id") or ""
         device = self.devices.get(device_id, {}) if device_id else {}
 
-        area_id = entity_reg.get("area_id") or device.get("area_id") or ""
+        if pending_area_id is not None:
+            area_id = pending_area_id
+        else:
+            area_id = entity_reg.get("area_id") or device.get("area_id") or ""
         area = self.areas.get(area_id, {}) if area_id else {}
         floor_id = area.get("floor_id") or ""
         floor = self.floors.get(floor_id, {}) if floor_id else {}
@@ -1223,14 +1231,20 @@ class EntityRestructurer:
         state_info: Dict[str, Any],
         entity_name: Optional[str] = None,
         pending_device_name: Optional[str] = None,
+        pending_area_id: Optional[str] = None,
     ) -> Tuple[str, str]:
         """Generate an entity ID and entity-registry name from active templates.
 
-        ``pending_device_name`` is a device base name typed but not applied; see
-        ``build_naming_context``.
+        ``pending_device_name`` and ``pending_area_id`` are what the panel holds
+        but has not applied; see ``build_naming_context``.
         """
         domain = entity_id.split(".", 1)[0]
-        context = self.build_naming_context(entity_id, state_info, pending_device_name=pending_device_name)
+        context = self.build_naming_context(
+            entity_id,
+            state_info,
+            pending_device_name=pending_device_name,
+            pending_area_id=pending_area_id,
+        )
         if entity_name is not None:
             context["entity"] = entity_name
         object_id = self.naming_templates.render("entity_id", context, normalize=True)

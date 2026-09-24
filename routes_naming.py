@@ -917,12 +917,18 @@ def naming_preview():
     if not entity:
         return jsonify({"error": "unknown entity"}), 404
     entity_name = sanitize_string(type_value) if isinstance(type_value, str) else None
-    # What the form holds but the registry does not yet. A device base name
-    # waits for its button, and a preview built without it answers from the name
-    # the integration gave the device - for a UniFi access point its MAC address.
+    # What the form holds but the registry does not yet. Both the area and the
+    # base name are picked in the panel and written only when the change is
+    # applied; a preview built without them answers from what the integration
+    # supplied - for a UniFi access point its MAC address, and no area at all.
+    # An area sent as "" is one picked away, which is not the same as none sent.
     device_name = data.get("device_name")
     pending_device_name = sanitize_string(device_name) if isinstance(device_name, str) else None
-    new_entity_id, new_name = restructurer.generate_new_entity_id(entity_id, entity, entity_name, pending_device_name)
+    area_id = data.get("area_id")
+    pending_area_id = sanitize_string(area_id, max_length=255) if isinstance(area_id, str) else None
+    new_entity_id, new_name = restructurer.generate_new_entity_id(
+        entity_id, entity, entity_name, pending_device_name, pending_area_id
+    )
     resolution = restructurer.last_resolutions.get(entity_id)
     # Number away from IDs other entities hold, as a batched rename would.
     domain, _, object_id = new_entity_id.partition(".")
