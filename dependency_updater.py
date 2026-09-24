@@ -163,8 +163,11 @@ class DependencyUpdater:
     ) -> Optional[Dict]:
         """Read one automation's configuration from Home Assistant.
 
-        The only place that asks for it over HTTP; everything else goes
-        through ``get_automation_config``, which answers out of what was read.
+        The only place that asks for it over HTTP. A caller that wants what was
+        already read asks ``read_automation_config``, or ``get_automation_config``
+        for a copy to change; the two calls here are the ones that have to reach
+        Home Assistant - filling the store, and reading a write back to see that
+        it took.
         """
         url = f"{self.base_url}/api/config/automation/config/{automation_numeric_id}"
 
@@ -314,12 +317,19 @@ class DependencyUpdater:
         reading and the write built on another, so an automation changed in
         Home Assistant between the two was reported as a failure.
         """
+        supplied = config is not None
         if config is None:
             config = await self.get_automation_config(automation_numeric_id)
         else:
             config = copy.deepcopy(config)
         if not config:
-            logger.error(f"Could not fetch config for automation {automation_id}")
+            # Said apart: a configuration that could not be read at all, and one
+            # that was handed over empty. The second looked like a failed read
+            # and had the reader looking for a connection that was working.
+            if supplied:
+                logger.error(f"Automation {automation_id} was handed over with an empty configuration")
+            else:
+                logger.error(f"Could not fetch config for automation {automation_id}")
             return False
 
         logger.debug(f"Got config, checking for entity {old_entity_id}")

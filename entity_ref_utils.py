@@ -86,11 +86,11 @@ def replace_entity_ref_in_string(value: str, old_entity_id: str, new_entity_id: 
     if value == old_entity_id:
         return new_entity_id, True
 
+    # A template, since the value itself was not the id: the pattern that found
+    # it above is the one that replaces it, so it is there to be replaced. The
+    # one way back is a new id equal to the old one, which is no change to make.
     new_value = re.sub(_word_bounded(old_entity_id), new_entity_id, value)
-    if new_value != value:
-        return new_value, True
-
-    return value, False
+    return new_value, new_value != value
 
 
 def replace_entity_in_obj(data: Any, old_entity_id: str, new_entity_id: str) -> bool:
@@ -142,6 +142,9 @@ def refers_to_entity(data: Any, entity_id: str) -> bool:
     contain the id - an automation described as "watches sensor.old" - is not a
     reference, and a rename that correctly leaves it alone must not be reported
     as one that failed.
+
+    Values, not keys: a key is not rewritten either, so reporting one would be
+    reporting a reference nothing here can carry over.
     """
     if isinstance(data, str):
         return refers_to_entity_in_string(data, entity_id)

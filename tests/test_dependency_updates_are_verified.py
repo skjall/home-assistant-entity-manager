@@ -79,8 +79,9 @@ def test_an_automation_outside_automations_yaml_is_reported_to_the_user():
     ]
 
     async def run():
-        # The state itself names the entity, which is what the walk reads;
-        # the configuration behind it cannot be fetched.
+        # The state names nothing, and the configuration behind it cannot be
+        # fetched: an automation this add-on cannot read and cannot show to
+        # name the entity either, which is the third answer of the three.
         return await updater.update_all_dependencies("sensor.old", "sensor.new", states)
 
     results = asyncio.run(run())

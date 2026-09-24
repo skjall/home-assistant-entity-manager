@@ -349,7 +349,7 @@ def test_nothing_read_at_all_is_asked_for_again() -> None:
     assert sorted(reads) == ["0", "0", "1", "1"]
 
 
-def test_an_automation_nobody_can_read_is_only_unreachable_where_it_refers(monkeypatch) -> None:
+def test_an_automation_nobody_can_read_is_only_unreachable_where_it_refers() -> None:
     """Its friendly name may say the id without the automation using it.
 
     The configuration cannot be read, so the state is all there is; read as
