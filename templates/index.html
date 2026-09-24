@@ -961,22 +961,24 @@
             border-radius: 0;
         }
 
-        /* Counted among the buttons, not among the children: a button a
-           template of Alpine's sits beside is not :first-child, and one left
-           on its own is not :only-child, which left the group square.
-           Each rule excludes the lone button rather than relying on a later
-           rule of equal weight to undo it, so reordering them changes
+        /* Counted among the action buttons, not among the children and not
+           among the buttons: a button a template of Alpine's sits beside is
+           not :first-child, one left on its own is not :only-child - which
+           left the group square - and a button of any other kind put into the
+           group would take the first slot from the one that is drawn first.
+           Each rule excludes the lone button itself rather than relying on a
+           later rule of equal weight to undo it, so reordering them changes
            nothing. */
-        .entity-card-simple .btn-group .action-btn:first-of-type:not(:only-of-type) {
+        .entity-card-simple .btn-group .action-btn:nth-child(1 of .action-btn):not(:nth-last-child(1 of .action-btn)) {
             border-radius: 4px 0 0 4px;
         }
 
-        .entity-card-simple .btn-group .action-btn:last-of-type:not(:only-of-type) {
+        .entity-card-simple .btn-group .action-btn:nth-last-child(1 of .action-btn):not(:nth-child(1 of .action-btn)) {
             border-radius: 0 4px 4px 0;
             margin-left: -1px;
         }
 
-        .entity-card-simple .btn-group .action-btn:only-of-type {
+        .entity-card-simple .btn-group .action-btn:nth-child(1 of .action-btn):nth-last-child(1 of .action-btn) {
             border-radius: 4px;
             margin-left: 0;
         }
