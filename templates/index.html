@@ -2164,6 +2164,7 @@
                                     ? devicePreviewAreaId
                                     : (selectedDeviceData?.area_id || '');
                                 $nextTick(() => $el.value = picked)"
+                            :disabled="renamingDevice || applyingEntityId || executing"
                             @change="pickPreviewArea($event.target.value)">
                         <option value="" x-text="t('area.select_area')">Select area...</option>
                         <template x-for="area in hierarchy.areas" :key="area.id">
@@ -4803,14 +4804,6 @@
                     return this.hierarchy.entities.filter(e => e.device_id === deviceId).length;
                 },
 
-                // The area a move in the panel would put the selected device in,
-                // or null where no move is being shown. The three names below
-                // are built out of the navigation's area, which is the device's
-                // own until it is about to leave it.
-                previewAreaData() {
-                    return this.areaForDevice(this.selectedDeviceData);
-                },
-
                 // A move is being shown for this device: an area was picked in
                 // the panel and not yet written. Untouched is null; an empty
                 // pick is a move to no area at all, which is a move like any
@@ -4900,19 +4893,22 @@
                 getEntityFriendlyNameLive(entity) {
                     const parts = [];
 
+                    // The entity's own device, so a name computed while the
+                    // panel turns to another one is still about this entity.
+                    const device = entity.device_id
+                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        : null;
+
                     // Area
-                    const area = this.selectedDeviceData
-                        ? this.areaForDevice(this.selectedDeviceData)
-                        : this.selectedAreaData;
+                    const area = device ? this.areaForDevice(device) : this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
 
                     // Device base name (use preview if editing)
-                    const device = this.selectedDeviceData;
-                    if (device && !this.isVirtualDevice(this.selectedDevice)) {
-                        const deviceBase = this.devicePreviewBaseName !== null ? this.devicePreviewBaseName : device.base_name;
-                        parts.push(deviceBase);
+                    if (device && !this.isVirtualDevice(device.id)) {
+                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
+                        parts.push(typed !== null ? typed : device.base_name);
                     }
 
                     // Entity: use _editValue for live preview (override_name intentionally ignored)
@@ -5057,8 +5053,13 @@
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
 
-                    // Find area (from device or entity)
-                    const areaId = device?.area_id || entity.area_id;
+                    // Find area (from device or entity), following a move the
+                    // panel is showing: this is what the cached preview holds,
+                    // and a name computed from the old area would sit there
+                    // unchanged while the panel says otherwise.
+                    const areaId = this.deviceIsMoving(device)
+                        ? this.previewAreaFor(device)
+                        : (device?.area_id || entity.area_id);
                     const area = areaId
                         ? this.hierarchy.areas.find(a => a.id === areaId)
                         : null;
@@ -5119,9 +5120,16 @@
                         if (staged && entity.device_id === staged) continue;
 
                         // Friendly-name composition stays client-side; only the slug comes
-                        // from the backend (source of truth).
-                        entity._previewName = entity.suggested_name || this.getEntityFriendlyNameForEntity(entity);
-                        if (entity.suggested_entity_id) {
+                        // from the backend (source of truth). What the server
+                        // precomputed is about the area the device is in, so a
+                        // device on its way to another one is left to the
+                        // client, which knows where it is going.
+                        const moving = this.deviceIsMoving(
+                            entity.device_id ? this.hierarchy.devices.find(d => d.id === entity.device_id) : null
+                        );
+                        entity._previewName = (!moving && entity.suggested_name)
+                            || this.getEntityFriendlyNameForEntity(entity);
+                        if (!moving && entity.suggested_entity_id) {
                             entity._previewId = entity.suggested_entity_id;
                             continue;
                         }
@@ -5476,10 +5484,13 @@
                 // Asked while typing, so the answer has to come from the name
                 // in the field rather than from the previews, which are built
                 // from the name that is stored.
-                async checkDeviceNameClash() {
-                    const device = this.selectedDeviceData;
+                // About the device it is given - the panel may have turned to
+                // another one while the slugs were on their way, and the answer
+                // would then be about whichever device it had turned to.
+                async checkDeviceNameClash(about = null) {
+                    const device = about || this.selectedDeviceData;
                     this.deviceNameClash = [];
-                    if (!device || this.isVirtualDevice(this.selectedDevice)) return;
+                    if (!device || this.isVirtualDevice(device.id)) return;
                     const wanted = this.getExpectedDeviceName(device);
                     if (!wanted || wanted === device.name) return;
 
@@ -6090,7 +6101,10 @@
                 },
 
                 async assignDeviceArea(deviceId, areaId) {
-                    if (!deviceId || !areaId) return false;
+                    // An area of null is the device taken out of every area,
+                    // which the endpoint spells out and accepts. Refusing it
+                    // here left the move and the rename both undone, silently.
+                    if (!deviceId || areaId === undefined) return false;
 
                     try {
                         const response = await fetch('api/assign_device_area', {
@@ -6098,7 +6112,7 @@
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({
                                 device_id: deviceId,
-                                area_id: areaId
+                                area_id: areaId || null
                             })
                         });
 
@@ -6107,7 +6121,7 @@
                             // Update device in hierarchy
                             const device = this.hierarchy.devices.find(d => d.id === deviceId);
                             if (device) {
-                                device.area_id = areaId;
+                                device.area_id = areaId || null;
                             }
 
                             // Also update entities of this device
@@ -6618,8 +6632,13 @@
                 },
 
                 async onRenameDeviceDone(job, deviceId = null, driftDevices = []) {
-                    this.devicePreviewBaseName = null;
-                    this.devicePreviewAreaId = null;
+                    // What the panel holds now may have been typed for another
+                    // device while this job ran, and that is not this job's to
+                    // throw away.
+                    if (!deviceId || deviceId === this.selectedDevice) {
+                        this.devicePreviewBaseName = null;
+                        this.devicePreviewAreaId = null;
+                    }
                     // The job aligns the Z2M name of the device it renamed; any
                     // other device the view showed as drifted is left to here.
                     if (!this.jobFailed(job) && driftDevices.length) {
@@ -6674,7 +6693,7 @@
 
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = base;
-                    await this.checkDeviceNameClash();
+                    await this.checkDeviceNameClash(device);
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();
                         this.devicePreviewBaseName = wasPreviewed;
