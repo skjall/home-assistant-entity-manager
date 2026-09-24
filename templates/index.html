@@ -3195,6 +3195,59 @@
 
     <script>
         function entityManager() {
+            // Every binding of every card reads these lists, so one repaint
+            // reads them dozens of times, and each reading used to walk all
+            // entities of the installation - a few thousand of them, behind
+            // Alpine's proxies. One pass builds what the readings look up.
+            //
+            // It lives outside the reactive data on purpose: writing to it
+            // must not set another repaint off. `hierarchyVersion` says when
+            // the registry moved on and the pass has to run again.
+            const index = {
+                version: -1,
+                devicesById: new Map(),
+                entitiesById: new Map(),
+                byDevice: new Map(),
+                withoutDeviceInArea: new Map(),
+                countInArea: new Map(),
+            };
+            const none = [];
+
+            function indexed(state) {
+                if (index.version === state.hierarchyVersion) return index;
+                index.devicesById = new Map();
+                index.entitiesById = new Map();
+                index.byDevice = new Map();
+                index.withoutDeviceInArea = new Map();
+                index.countInArea = new Map();
+
+                for (const device of state.hierarchy.devices || []) {
+                    index.devicesById.set(device.id, device);
+                }
+                for (const entity of state.hierarchy.entities || []) {
+                    index.entitiesById.set(entity.id, entity);
+                    const device = entity.device_id ? index.devicesById.get(entity.device_id) : null;
+                    if (entity.device_id) {
+                        const mine = index.byDevice.get(entity.device_id);
+                        if (mine) mine.push(entity); else index.byDevice.set(entity.device_id, [entity]);
+                    } else if (entity.area_id) {
+                        const here = index.withoutDeviceInArea.get(entity.area_id);
+                        if (here) here.push(entity); else index.withoutDeviceInArea.set(entity.area_id, [entity]);
+                    }
+                    // An entity counts in the area of its device and in its own,
+                    // and once where those are the same - the count beside an
+                    // area asked exactly that, one entity at a time.
+                    const areas = new Set();
+                    if (device?.area_id) areas.add(device.area_id);
+                    if (entity.area_id) areas.add(entity.area_id);
+                    for (const areaId of areas) {
+                        index.countInArea.set(areaId, (index.countInArea.get(areaId) || 0) + 1);
+                    }
+                }
+                index.version = state.hierarchyVersion;
+                return index;
+            }
+
             return {
                 // State
                 loading: false,
@@ -3246,6 +3299,7 @@
                 syncingZ2m: false,  // Loading state for Z2M name sync
                 applyingEntityId: null,  // ID of entity currently being renamed
                 previewVersion: 0,  // Incremented to force Alpine reactivity on preview changes
+                hierarchyVersion: 0,  // Incremented whenever the registry lists change; the index follows it
 
                 // Filters
                 onlyChanges: false,
@@ -3742,9 +3796,7 @@
                 // Computed: Entities without device in selected area
                 get entitiesWithoutDevice() {
                     if (!this.selectedArea) return [];
-                    return this.hierarchy.entities.filter(e =>
-                        !e.device_id && e.area_id === this.selectedArea
-                    );
+                    return indexed(this).withoutDeviceInArea.get(this.selectedArea) || none;
                 },
 
                 // Computed: Virtual device groups with entity counts
@@ -3838,7 +3890,7 @@
                         }
                     } else {
                         // Physical device
-                        entities = this.hierarchy.entities.filter(e => e.device_id === this.selectedDevice);
+                        entities = indexed(this).byDevice.get(this.selectedDevice) || none;
                     }
 
                     // Apply filters
@@ -4635,6 +4687,7 @@
                             this.hierarchy.areas = this.absorbAll(this.hierarchy.areas, data.areas || [], 'id');
                             this.hierarchy.devices = this.absorbAll(this.hierarchy.devices, data.devices || [], 'id');
                             const moved = this.absorbEntities(data.entities || []);
+                            this.hierarchyVersion++;
                             this.computePreviewsFor(moved);
                         } else {
                             this.hierarchy = {
@@ -4649,6 +4702,7 @@
                                     _applying: false,
                                 }))
                             };
+                            this.hierarchyVersion++;
                             this.precomputeEntityPreviews();
                         }
 
@@ -4776,20 +4830,12 @@
 
                 // Get area entity count
                 getAreaEntityCount(areaId) {
-                    const deviceIds = this.hierarchy.devices
-                        .filter(d => d.area_id === areaId)
-                        .map(d => d.id);
-
-                    const count = this.hierarchy.entities.filter(e =>
-                        deviceIds.includes(e.device_id) || e.area_id === areaId
-                    ).length;
-
-                    return count;
+                    return indexed(this).countInArea.get(areaId) || 0;
                 },
 
                 // Get device entity count
                 getDeviceEntityCount(deviceId) {
-                    return this.hierarchy.entities.filter(e => e.device_id === deviceId).length;
+                    return (indexed(this).byDevice.get(deviceId) || none).length;
                 },
 
                 // The area a move in the panel would put the selected device in,
@@ -4936,7 +4982,7 @@
                     if (this.deviceNameNeedsRename(device)) return true;
                     // Z2M-Namens-Drift zählt als Änderung
                     if (device.z2m_drift) return true;
-                    let mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
+                    let mine = indexed(this).byDevice.get(device.id) || none;
                     if (!this.showDisabled) {
                         mine = mine.filter(e => !e.disabled_by);
                     }
@@ -4978,8 +5024,7 @@
                 // six failures.
                 onADisabledDevice(entity) {
                     if (!entity?.device_id) return false;
-                    const device = (this.hierarchy.devices || []).find(one => one.id === entity.device_id);
-                    return !!device?.disabled_by;
+                    return !!indexed(this).devicesById.get(entity.device_id)?.disabled_by;
                 },
 
                 // Check if entity needs rename (uses entity's own device/area context)
@@ -5013,7 +5058,7 @@
 
                     // Find entity's device
                     const device = entity.device_id
-                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        ? indexed(this).devicesById.get(entity.device_id)
                         : null;
 
                     // Find area (from device or entity)
@@ -5117,8 +5162,8 @@
                 },
 
                 previewDeviceWide() {
-                    const entities = (this.hierarchy.entities || [])
-                        .filter(e => e.device_id === this.selectedDevice && !e._justRenamed);
+                    const entities = (indexed(this).byDevice.get(this.selectedDevice) || none)
+                        .filter(e => !e._justRenamed);
                     if (!entities.length) return;
 
                     // Back to what it was: the ordinary previews answer again.
@@ -5165,7 +5210,8 @@
                 isEntityIdTaken(entity) {
                     const newId = entity._previewId || this.getNewEntityIdForEntity(entity);
                     if (newId === entity.id) return false; // Same ID, no conflict
-                    return this.hierarchy.entities.some(e => e.id === newId && e.registry_id !== entity.registry_id);
+                    const holder = indexed(this).entitiesById.get(newId);
+                    return !!holder && holder.registry_id !== entity.registry_id;
                 },
 
                 renderNamingTemplate(template, context) {
@@ -5222,7 +5268,7 @@
 
                 entityNamingContext(entity, suffix = null) {
                     const device = entity?.device_id
-                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        ? indexed(this).devicesById.get(entity.device_id)
                         : null;
                     const staged = !!device && device.id === this.selectedDevice;
                     const moving = staged && this.devicePreviewAreaId !== null;
@@ -5412,31 +5458,33 @@
                 // from the name that is stored.
                 async checkDeviceNameClash() {
                     const device = this.selectedDeviceData;
-                    this.deviceNameClash = [];
-                    if (!device || this.isVirtualDevice(this.selectedDevice)) return;
+                    // Assigning an empty list where one was empty already is a
+                    // repaint of everything for nothing, and this runs after
+                    // every keystroke in the name field.
+                    const settle = (clashes) => {
+                        if (!clashes.length && !this.deviceNameClash.length) return;
+                        this.deviceNameClash = clashes;
+                    };
+                    if (!device || this.isVirtualDevice(this.selectedDevice)) return settle([]);
                     const wanted = this.getExpectedDeviceName(device);
-                    if (!wanted || wanted === device.name) return;
+                    if (!wanted || wanted === device.name) return settle([]);
 
-                    const mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
-                    if (!mine.length) return;
+                    const mine = indexed(this).byDevice.get(device.id) || none;
+                    if (!mine.length) return settle([]);
 
                     // The slug rules live in the backend; see fetchNormalized.
                     const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e)));
-                    const taken = new Map();
-                    for (const other of this.hierarchy.entities) {
-                        if (other.device_id === device.id) continue;
-                        taken.set(other.id, other);
-                    }
+                    const taken = indexed(this).entitiesById;
 
                     const clashes = [];
-                    mine.forEach((entity, index) => {
-                        const wantedId = this.composeEntityId(entity, slugs[index]);
+                    mine.forEach((entity, position) => {
+                        const wantedId = this.composeEntityId(entity, slugs[position]);
                         const holder = taken.get(wantedId);
-                        if (holder) {
+                        if (holder && holder.device_id !== device.id) {
                             clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
                         }
                     });
-                    this.deviceNameClash = clashes;
+                    settle(clashes);
                 },
 
                 deviceNeedsRename(device) {
@@ -5451,8 +5499,7 @@
                     }
 
                     // Check entities (respecting showDisabled filter)
-                    const visibleEntities = this.hierarchy.entities
-                        .filter(e => e.device_id === device.id)
+                    const visibleEntities = (indexed(this).byDevice.get(device.id) || none)
                         .filter(e => this.showDisabled || !e.disabled_by);
 
                     const needsRename = visibleEntities.filter(e => this.entityNeedsRename(e));
@@ -5479,8 +5526,7 @@
                     }
 
                     // Also check entities without devices that belong to this area
-                    const entitiesInArea = this.hierarchy.entities
-                        .filter(e => !e.device_id && e.area_id === area.id)
+                    const entitiesInArea = (indexed(this).withoutDeviceInArea.get(area.id) || none)
                         .filter(e => this.showDisabled || !e.disabled_by);
 
                     for (const entity of entitiesInArea) {
@@ -5687,8 +5733,8 @@
                             return;
                         }
 
-                        if (newId !== entity.id &&
-                            this.hierarchy.entities.some(e => e.id === newId && e.registry_id !== entity.registry_id)) {
+                        const holder = indexed(this).entitiesById.get(newId);
+                        if (newId !== entity.id && holder && holder.registry_id !== entity.registry_id) {
                             this.showMessage(this.t('entity.id_conflict'), 'error');
                             return;
                         }
@@ -5713,6 +5759,7 @@
                             const storedId = data.new_entity_id || newId;
                             const storedName = data.new_friendly_name ?? newName;
                             entity.id = storedId;
+                            this.hierarchyVersion++;  // the id it is indexed under has moved
                             entity.original_name = storedName;
                             // Update base_name to the new suffix so input field shows correct value
                             if (entity._currentSuffix !== undefined) {
@@ -5944,6 +5991,7 @@
                                 e => e.id !== entity.id
                                      && (!entity.registry_id || e.registry_id !== entity.registry_id)
                             );
+                            this.hierarchyVersion++;
                             // A plain deletion needs no applause and stays
                             // quiet; one that found nothing left has to say so,
                             // or the row vanishing looks like a second delete.
@@ -6045,8 +6093,7 @@
                             }
 
                             // Also update entities of this device
-                            this.hierarchy.entities
-                                .filter(e => e.device_id === deviceId)
+                            (indexed(this).byDevice.get(deviceId) || none)
                                 .forEach(e => e.area_id = areaId);
 
                             const area = this.hierarchy.areas.find(a => a.id === areaId);
