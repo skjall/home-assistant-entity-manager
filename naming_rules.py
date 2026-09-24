@@ -982,7 +982,9 @@ class NamingRules:
 
         Patterns cannot be looked up, only tried. The narrowest filter decides
         as it does for every rule; two patterns that match one name at the same
-        reach are a contradiction the user has to settle, so neither applies.
+        reach are a contradiction the user has to settle, so neither of those
+        applies - and the decision falls to the next rule that reaches less
+        far, which says something the user wrote and nothing contradicts.
         """
         found: List[Tuple[int, Dict[str, Any]]] = []
         for rule, pattern in self._pattern_rules():
@@ -1001,17 +1003,21 @@ class NamingRules:
         if not found:
             return None
         found.sort(key=lambda pair: pair[0])
-        if len(found) > 1 and found[0][0] == found[1][0]:
+        at = 0
+        while at < len(found):
+            reach = found[at][0]
             # All of them, not the first two: a third rule written to settle
             # the tie between the other two joined it without a word.
-            tied = [rule["id"] for rank, rule in found if rank == found[0][0]]
+            tied = [rule for rank, rule in found if rank == reach]
+            if len(tied) == 1:
+                return tied[0]
             logger.warning(
-                "Pattern rules %s all match %r; none applies",
-                ", ".join(tied),
+                "Pattern rules %s all match %r at the same reach; none of those applies",
+                ", ".join(rule["id"] for rule in tied),
                 name,
             )
-            return None
-        return found[0][1]
+            at += len(tied)
+        return None
 
     def render(self, rule: Mapping[str, Any], name: str, language: str) -> str:
         """What a rule makes of a supplied name: its target, placeholders filled."""
@@ -1197,6 +1203,10 @@ class NamingRules:
         held = self.claimed_by(wanting)
         if held is None or held["match"] != wanting["match"]:
             return None
+        # A pattern's new word is judged before it is written, as everywhere
+        # else: a target the expression captures nothing for would otherwise
+        # stand in the rule and be saved with the next change to any rule.
+        self.check_pattern({**held, "targets": {**held["targets"], language: target}})
         others = [each for each in (held.get("filters") or []) if each != one]
         if not others:
             held["targets"][language] = target
@@ -1206,7 +1216,9 @@ class NamingRules:
         # one leaves and takes the new word with it.
         held["filters"] = others
         held["updated_at"] = _now()
-        self.rules.append(dict(wanting))
+        leaving = dict(wanting)
+        self.check_pattern(leaving)
+        self.rules.append(leaving)
         return self.rules[-1]
 
     @guarded
@@ -1292,8 +1304,11 @@ class NamingRules:
             clean = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
             if not clean:
                 raise NamingRuleError("A rule needs at least one target")
+            # Judged as what it would become, and written only if it passes: a
+            # refused target that was written first stood in the rule, and the
+            # next save of anything else put it on disk.
+            self.check_pattern({**rule, "targets": clean})
             rule["targets"] = clean
-            self.check_pattern(rule)
 
         if filters is not ...:
             wanted = clean_filters(filters)

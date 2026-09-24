@@ -330,3 +330,52 @@ def test_an_optional_group_inside_a_repeated_one_is_refused():
     """ "((ab)?)+" repeats a group that can match nothing, and that is the runaway shape."""
     with pytest.raises(NamingRuleError):
         compile_pattern(r"((ab)?)+X")
+
+
+def test_a_refused_target_is_not_left_standing_when_the_rule_is_edited(rules):
+    """update() wrote the targets and judged them afterwards."""
+    rule = _pattern_rule(rules)
+    before = dict(rule["targets"])
+
+    with pytest.raises(NamingRuleError):
+        rules.update(rule["id"], targets={"de": "Heizkosten {2}"})
+
+    assert rules.get(rule["id"])["targets"] == before
+
+
+def test_a_refused_target_is_not_left_standing_when_the_rule_is_reworded(rules):
+    """Rewording the rule that holds the place skipped the judgement entirely."""
+    rule = _pattern_rule(rules)
+    before = dict(rule["targets"])
+
+    with pytest.raises(NamingRuleError):
+        rules.add_filter("pattern", rule["match"]["value"], "de", "Heizkosten {2}", {"integration": INTEGRATION})
+
+    assert rules.get(rule["id"])["targets"] == before
+
+
+def test_a_tie_is_settled_by_the_rule_that_reaches_less_far(rules):
+    """Two patterns contradicting each other said nothing about the wider rule.
+
+    The user wrote that wider rule too, and nothing contradicts it, so it is
+    what the entity is called - it used to come out with no name at all.
+    """
+    wide = _pattern_rule(rules, target="Weit {1}")
+    for target in ("Eng {1}", "Auch eng {1}"):
+        regex, _ = pattern_of("Heizung 12345678")
+        rules.add_filter(
+            "pattern", regex + f"(?#{target})", "de", target, {"integration": INTEGRATION, "model": "Meter"}
+        )
+
+    found = rules.find("pattern", "Heizung 12345678", INTEGRATION, "de", "Meter")
+
+    assert found["id"] == wide["id"]
+
+
+def test_a_backreference_is_not_read_as_a_quantifier():
+    """ "(?P=n1)" repeats nothing by itself; the pattern around it decides."""
+    assert compile_pattern(r"(?P<n1>\d)-(?P=n1)") is not None
+    # The digits inside the repeated group are the runaway shape, backreference
+    # or not.
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"((?P<n1>\d+)-(?P=n1))+")
