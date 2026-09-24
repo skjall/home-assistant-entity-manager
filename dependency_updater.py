@@ -173,9 +173,7 @@ class DependencyUpdater:
                 if response.status == 200:
                     return await response.json()
                 text = await response.text()
-                logger.error(
-                    f"Could not read automation {automation_numeric_id}: {response.status}, response: {text}"
-                )
+                logger.error(f"Could not read automation {automation_numeric_id}: {response.status}, response: {text}")
                 return None
 
         if session is not None:
@@ -269,9 +267,7 @@ class DependencyUpdater:
                     return False
                 else:
                     text = await response.text()
-                    logger.error(
-                        f"Could not write automation {automation_numeric_id}: {response.status}, {text}"
-                    )
+                    logger.error(f"Could not write automation {automation_numeric_id}: {response.status}, {text}")
                     return False
 
         if session is not None:
