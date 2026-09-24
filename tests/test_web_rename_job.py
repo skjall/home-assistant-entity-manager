@@ -150,17 +150,25 @@ def test_a_device_rename_renders_what_the_rules_answered() -> None:
 
     class FakeRestructurer:
         entities = {"binary_sensor.contact": {"device_id": "device-1"}}
-        last_resolutions = {
-            "binary_sensor.contact": {
+
+        def __init__(self) -> None:
+            # Its own, not the class's: a reading left on the class outlives
+            # the test that wrote it.
+            self.last_resolutions: dict[str, dict] = {}
+
+        def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
+            """What the rules answered, which is what a name is built from.
+
+            The real one writes the reading down as it answers, and the capture
+            reads it from there; a fake holding a reading it did not write
+            would let the capture read a stale one and pass.
+            """
+            self.last_resolutions[entity_id] = {
                 "input": "Tuer",
                 "value": "Zustand",
                 "won_by": "rule:user",
                 "rule_id": "rule-9",
             }
-        }
-
-        def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
-            """What the rules answered, which is what a name is built from."""
             return {"entity": "Zustand"}
 
         def generate_new_entity_id(

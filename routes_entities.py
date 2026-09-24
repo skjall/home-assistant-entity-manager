@@ -611,9 +611,12 @@ def _provenance_note(reading: dict[str, Any], template_hash: str) -> dict[str, A
     name; the note keeps the word that went in, so a rule the user edits
     afterwards still finds the entity by what it matches on.
     """
+    # Always the same keys: an entity that turned up only after the capture
+    # left a note of nothing but the fingerprint, and a reader asking it what
+    # went into the name found no key at all rather than an empty answer.
     kept = ("base_entity", "won_by", "rule_id")
     return {
-        **{key: reading[key] for key in kept if key in reading},
+        **{key: reading.get(key) or "" for key in kept},
         "template_hash": template_hash,
     }
 

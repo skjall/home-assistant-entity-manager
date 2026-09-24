@@ -23,7 +23,7 @@ class Restructurer:
         self.supplied = supplied
         self.last_resolutions = {}
 
-    def generate_new_entity_id(self, entity_id, state):
+    def generate_new_entity_id(self, entity_id, state, entity_name=None):
         self.last_resolutions[entity_id] = {
             "input": self.supplied,
             "value": self.supplied,
@@ -103,8 +103,10 @@ def test_every_path_that_writes_a_name_passes_the_note():
 def test_the_note_keeps_what_went_in_where_a_rule_changed_it(monkeypatch):
     """Every test had the two words alike, so swapping them would have gone unseen."""
     restructurer = Restructurer()
-    restructurer.last_resolutions = {}
     monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    # Like every other test here: the fingerprint comes from a stand-in, not
+    # from whatever the installation happens to hold.
+    monkeypatch.setitem(web_ui.renamer_state, "naming_templates", Templates())
     restructurer.last_resolutions["switch.old"] = {
         # The word the rule matches on, and the word it renders to.
         "input": "Tuer",
