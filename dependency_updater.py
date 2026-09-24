@@ -41,6 +41,7 @@ class DependencyUpdater:
         # installation with a hundred automations spent three seconds per
         # entity on nothing but these reads.
         self._automation_configs: Optional[Dict[str, Optional[Dict]]] = None
+        self._configs_lock = asyncio.Lock()
 
     async def get_states(self) -> List[Dict]:
         """Hole alle States"""
@@ -188,6 +189,14 @@ class DependencyUpdater:
         at once buys little and asks a lot of a Home Assistant that is also
         answering the interface.
         """
+        # Under the lock: two jobs starting together both found nothing
+        # here, both read every automation, and the one that finished second
+        # put its own reading in place of the first - along with everything
+        # the first had written back into it in the meantime.
+        async with self._configs_lock:
+            return await self._load_automation_configs(automation_states)
+
+    async def _load_automation_configs(self, automation_states: List[Dict]) -> Dict[str, Optional[Dict]]:
         if self._automation_configs is not None:
             return dict(self._automation_configs)
 
@@ -240,10 +249,8 @@ class DependencyUpdater:
         written, and a write that then fails would leave the next entity of the
         same job working from a configuration Home Assistant does not have.
         """
-        if self._automation_configs is not None and automation_numeric_id in self._automation_configs:
-            config = self._automation_configs[automation_numeric_id]
-            return copy.deepcopy(config) if config is not None else None
-        return await self.fetch_automation_config(automation_numeric_id)
+        config = await self.read_automation_config(automation_numeric_id)
+        return copy.deepcopy(config) if config is not None else None
 
     async def update_automation_config(
         self,
@@ -281,10 +288,19 @@ class DependencyUpdater:
         automation_numeric_id: str,
         old_entity_id: str,
         new_entity_id: str,
+        config: Optional[Dict] = None,
     ) -> bool:
-        """Aktualisiere Entity in einer Automation"""
-        logger.debug(f"Fetching config for automation {automation_id} (numeric: {automation_numeric_id})")
-        config = await self.get_automation_config(automation_numeric_id)
+        """Aktualisiere Entity in einer Automation
+
+        ``config`` is the configuration the caller has already read. Reading it
+        a second time here meant the decision to write was taken on one
+        reading and the write built on another, so an automation changed in
+        Home Assistant between the two was reported as a failure.
+        """
+        if config is None:
+            config = await self.get_automation_config(automation_numeric_id)
+        else:
+            config = copy.deepcopy(config)
         if not config:
             logger.error(f"Could not fetch config for automation {automation_id}")
             return False
@@ -310,17 +326,22 @@ class DependencyUpdater:
             # before it named the new id. A read-back that failed says nothing
             # about what Home Assistant holds, so the entry is dropped rather
             # than answered with nothing for the rest of the job.
-            if self._automation_configs is not None:
-                if written is None:
-                    self._automation_configs.pop(automation_numeric_id, None)
-                else:
-                    self._automation_configs[automation_numeric_id] = written
             if written is None:
+                if self._automation_configs is not None:
+                    self._automation_configs.pop(automation_numeric_id, None)
                 logger.error(f"Could not read automation {automation_id} back after writing it")
                 return False
             if old_entity_id in json.dumps(written):
+                # Kept only where it proved out. A reading that still names the
+                # old id says the write did not take, and storing it would have
+                # the rest of the job build on a version Home Assistant may
+                # never have held.
+                if self._automation_configs is not None:
+                    self._automation_configs.pop(automation_numeric_id, None)
                 logger.error(f"Automation {automation_id} still names {old_entity_id} after the write")
                 return False
+            if self._automation_configs is not None:
+                self._automation_configs[automation_numeric_id] = written
             logger.info(f"Automation {automation_id} now names {new_entity_id}")
             return True
         else:
@@ -425,6 +446,7 @@ class DependencyUpdater:
                             automation_numeric_id,
                             old_entity_id,
                             new_entity_id,
+                            config,
                         )
                         if success:
                             results["automations"]["success"].append(automation_entity_id)

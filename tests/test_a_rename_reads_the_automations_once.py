@@ -206,3 +206,74 @@ def test_a_read_back_that_fails_is_not_kept_as_an_answer() -> None:
     # out to Home Assistant again rather than being answered with nothing.
     assert asyncio.run(run()) == {"id": "0", "action": [{"entity_id": "sensor.old"}]}
     assert len(reads) == 3
+
+
+def test_a_read_back_that_still_names_the_old_id_is_not_kept() -> None:
+    """The write did not take, so what came back says nothing about what was asked for.
+
+    Keeping it had the rest of the job build on a version Home Assistant may
+    never have held.
+    """
+    reads: List[str] = []
+    updater = _updater(reads)
+
+    async def fetch(numeric_id: str, session: Optional[Any] = None) -> Dict[str, Any]:
+        reads.append(numeric_id)
+        return {"id": numeric_id, "action": [{"entity_id": "sensor.old"}], "alias": "read " + str(len(reads))}
+
+    async def write(numeric_id: str, config: Dict[str, Any], session: Optional[Any] = None) -> bool:
+        return True
+
+    updater.fetch_automation_config = fetch  # type: ignore[assignment]
+    updater.update_automation_config = write  # type: ignore[assignment]
+
+    async def run() -> Optional[Dict[str, Any]]:
+        await updater.load_automation_configs(_states(1))
+        assert not await updater.update_automation_entities("automation.number_0", "0", "sensor.old", "sensor.new")
+        return await updater.get_automation_config("0")
+
+    # Asked for again rather than answered out of a reading that proved nothing.
+    assert asyncio.run(run())["alias"] == "read 3"
+
+
+def test_the_write_builds_on_the_reading_the_decision_was_taken_on() -> None:
+    """It used to read the automation again, and write what the second reading held."""
+    reads: List[str] = []
+    updater = _updater(reads)
+    written: List[Dict[str, Any]] = []
+
+    async def write(numeric_id: str, config: Dict[str, Any], session: Optional[Any] = None) -> bool:
+        written.append(config)
+        return True
+
+    updater.update_automation_config = write  # type: ignore[assignment]
+
+    supplied = {"id": "0", "action": [{"entity_id": "sensor.old"}]}
+
+    async def run() -> None:
+        await updater.update_automation_entities("automation.number_0", "0", "sensor.old", "sensor.new", supplied)
+
+    asyncio.run(run())
+
+    assert written == [{"id": "0", "action": [{"entity_id": "sensor.new"}]}]
+    # The supplied reading is left as the caller holds it.
+    assert supplied == {"id": "0", "action": [{"entity_id": "sensor.old"}]}
+    # Only the read-back; nothing was asked for to decide with.
+    assert reads == ["0"]
+
+
+def test_two_jobs_starting_together_read_the_automations_once() -> None:
+    """Both found nothing kept, both read everything, and the second overwrote the first."""
+    reads: List[str] = []
+    updater = _updater(reads)
+    states = _states(4)
+
+    async def run() -> None:
+        await asyncio.gather(
+            updater.load_automation_configs(states),
+            updater.load_automation_configs(states),
+        )
+
+    asyncio.run(run())
+
+    assert sorted(reads) == ["0", "1", "2", "3"]
