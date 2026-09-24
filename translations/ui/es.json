@@ -239,7 +239,8 @@
     "enabling": "Activando…",
     "enabled": "Dispositivo activado",
     "enable_it_first": "El dispositivo está desactivado: actívalo primero.",
-    "id_conflict": "Este nombre tomaría un id de entidad que ya está en uso: {id}"
+    "id_conflict": "Este nombre tomaría un id de entidad que ya está en uso: {id}",
+    "moved_not_renamed": "El dispositivo se movió, pero no se renombró: {error}"
   },
   "units": {
     "entities": "Entidades",
