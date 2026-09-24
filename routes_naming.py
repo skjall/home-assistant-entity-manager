@@ -864,6 +864,11 @@ def naming_rule_item(rule_id):
     targets = data.get("targets")
     if targets is not None and not isinstance(targets, dict):
         return jsonify({"error": "targets has to be a mapping of language to text"}), 400
+    if targets is not None and not any(isinstance(text, str) and text.strip() for text in targets.values()):
+        # A mapping with nothing usable in it is not a target. Passed on it
+        # reached the rules and came back as "a rule needs at least one
+        # target", which reads as though the rule had lost the ones it has.
+        return jsonify({"error": "targets needs at least one language with text"}), 400
     if targets is None and expression is None:
         return jsonify({"error": "Nothing to change: neither targets nor an expression"}), 400
     try:

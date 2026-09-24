@@ -475,3 +475,32 @@ def test_an_optional_group_inside_a_repeated_one_is_refused():
     """ "((ab)?)+" repeats a group that can match nothing, and that is the runaway shape."""
     with pytest.raises(NamingRuleError):
         compile_pattern(r"((ab)?)+X")
+
+
+def test_the_endpoint_says_a_mapping_of_nothing_is_not_a_target(client):
+    """Passed on it came back as "a rule needs at least one target".
+
+    Which reads as though the rule had lost the targets it has, where what
+    happened is that the mapping sent held no language with text in it.
+    """
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = _pattern_rule(rules)
+
+    for targets in ({}, {"de": "   "}, {"de": None}):
+        response = client.put(f"/api/naming/rules/{rule['id']}", json={"targets": targets})
+
+        assert response.status_code == 400
+        assert "language" in response.get_json()["error"]
+
+
+def test_an_expression_of_nothing_is_refused_for_being_nothing():
+    """The length limit is a different mistake and used to be named for both."""
+    with pytest.raises(NamingRuleError) as refused:
+        compile_pattern("")
+
+    assert "at most" not in str(refused.value)
+
+    with pytest.raises(NamingRuleError) as too_long:
+        compile_pattern("a" * 501)
+
+    assert "at most" in str(too_long.value)

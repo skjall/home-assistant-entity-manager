@@ -238,8 +238,12 @@ def _refuse_runaway(regex: str) -> None:
 
 def compile_pattern(regex: str) -> "re.Pattern[str]":
     """A pattern's expression, compiled, or a NamingRuleError saying why not."""
-    if not regex or len(regex) > MAX_PATTERN_LENGTH:
-        raise NamingRuleError("A pattern needs an expression of at most 500 characters")
+    # Said apart, because the two are different mistakes: a writer who sent
+    # nothing was told about a length limit it had not come near.
+    if not regex:
+        raise NamingRuleError("A pattern needs an expression")
+    if len(regex) > MAX_PATTERN_LENGTH:
+        raise NamingRuleError(f"A pattern's expression is at most {MAX_PATTERN_LENGTH} characters")
     _refuse_runaway(regex)
     try:
         return re.compile(regex)

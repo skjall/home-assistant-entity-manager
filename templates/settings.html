@@ -3528,8 +3528,12 @@
                     // into this one without anybody having typed them.
                     this.editValue = row.isRule ? (row.rule?.targets?.[this.language] || '') : '';
                     // The expression as it is, not as it reads: what goes back
-                    // has to be the thing the rule matches on.
-                    this.editPattern = row.isRule && row.kind === 'pattern' ? row.key : '';
+                    // has to be the thing the rule matches on. Every pattern
+                    // row is a rule - a built-in default is a word the
+                    // integration supplies, and ruleRows() gives those rows
+                    // the kind "name" - so the field is filled whenever the
+                    // row has an expression to fill it with.
+                    this.editPattern = row.kind === 'pattern' ? row.key : '';
                 },
 
                 cancelEdit() {
@@ -3546,6 +3550,9 @@
                     // being corrected. Dropping the whole save on the empty
                     // field threw that correction away without a word.
                     const patternChanged = row.kind === 'pattern' && !!expression && expression !== row.key;
+                    // An expression emptied out is not an edit: the rule would
+                    // match nothing at all. There is nothing to save either way,
+                    // since the field was filled from the rule when it opened.
                     if (row.kind === 'pattern' && !expression) {
                         this.cancelEdit();
                         return;
@@ -3583,7 +3590,11 @@
                                 headers: { 'Content-Type': 'application/json' },
                                 // The kind the row is, not "name" for everything:
                                 // a pattern row made a name rule, which matches
-                                // the expression as a word and never fires.
+                                // the expression as a word and never fires. A
+                                // row without a rule is a word the integration
+                                // supplies, so today that kind is "name" and
+                                // the key is the whole of what is matched on -
+                                // there is no expression here to send instead.
                                 body: JSON.stringify({ match: { kind: row.kind || 'name', value: row.key }, value })
                               });
 
