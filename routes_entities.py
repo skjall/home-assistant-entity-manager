@@ -599,6 +599,19 @@ def _capture_device_entity_naming(
     return captured
 
 
+def _provenance_note(reading: dict[str, Any], template_hash: str) -> dict[str, Any]:
+    """The note kept with a written name.
+
+    The type part is for the name, not for the note: the note keeps the word
+    that went in, so a rule the user edits afterwards still finds the entity by
+    what it matches on.
+    """
+    return {
+        **{key: value for key, value in reading.items() if key != "type_part"},
+        "template_hash": template_hash,
+    }
+
+
 def _plan_device_entity_changes(
     restructurer: EntityRestructurer,
     device_id: str,
@@ -607,6 +620,12 @@ def _plan_device_entity_changes(
 ) -> list[tuple[str, str, str]]:
     """Generate entity changes for a renamed device with the active templates."""
     states_by_id = {state["entity_id"]: state for state in states}
+    # The context is built once more here, against the renamed device, because
+    # the area and the device part of the name come from it. Only the type part
+    # is taken from the reading before the rename, where the device name could
+    # still be told from it. An entity with no reading - one the registry
+    # reports only after the rename - has nothing to hand over and is named
+    # from the fresh context alone.
     changes = [
         (
             entity_id,
@@ -712,16 +731,7 @@ async def rename_device_handler(job, ctx):
                     old_entity_id,
                     new_entity_id if id_changed else None,
                     new_friendly_name,
-                    # type_part is for the name, not for the note: the note
-                    # keeps the word that went in, so a rule still finds it.
-                    provenance={
-                        **{
-                            key: value
-                            for key, value in (captured.get(old_entity_id) or {}).items()
-                            if key != "type_part"
-                        },
-                        "template_hash": template_hash,
-                    },
+                    provenance=_provenance_note(captured.get(old_entity_id) or {}, template_hash),
                 )
                 if not (written or {}).get("verified"):
                     ctx.log("UNVERIFIED", f"{old_entity_id} -> {new_entity_id}: written, not read back")

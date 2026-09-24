@@ -112,10 +112,20 @@ def test_a_device_rename_notes_the_type_part_it_used() -> None:
 
     class FakeRestructurer:
         entities = {"sensor.kitchen_sofa_energy": {"device_id": "device-1"}}
-        last_resolutions = {"sensor.kitchen_sofa_energy": {"won_by": "original", "rule_id": "rule-7"}}
+        last_resolutions: dict[str, dict] = {}
 
         def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
-            return {"entity": state["attributes"]["native_name"]}
+            # The real resolver writes the reading down as it answers, and the
+            # capture reads it from there; a fake that skips this would let a
+            # missing "input" pass unnoticed.
+            name = state["attributes"]["native_name"]
+            self.last_resolutions[entity_id] = {
+                "input": name,
+                "value": name,
+                "won_by": "original",
+                "rule_id": "rule-7",
+            }
+            return {"entity": name}
 
     states = [{"entity_id": "sensor.kitchen_sofa_energy", "attributes": {"native_name": "Energy"}}]
 
@@ -189,3 +199,109 @@ def test_init_client_recreates_missing_restructurer(monkeypatch) -> None:
 
     assert asyncio.run(web_ui.init_client()) is client
     assert web_ui.renamer_state["restructurer"].client is client
+
+
+def test_the_note_does_not_carry_the_type_part() -> None:
+    """The type part is what the name is built from, not what a rule matches on.
+
+    It is captured alongside the note and would be written with it if the
+    filter were dropped, leaving a field in the registry that nothing reads.
+    """
+    reading = {
+        "base_entity": "Tuer",
+        "type_part": "Zustand",
+        "won_by": "rule:user",
+        "rule_id": "rule-9",
+    }
+
+    note = routes_entities._provenance_note(reading, "hash-1")
+
+    assert note == {
+        "base_entity": "Tuer",
+        "won_by": "rule:user",
+        "rule_id": "rule-9",
+        "template_hash": "hash-1",
+    }
+
+
+def test_a_bracket_that_tells_two_entities_apart_reaches_the_new_id() -> None:
+    """Three uplink sensors resolve to one name; the bracket says which peer.
+
+    The type part carries it, so the id says "(UP)" rather than being numbered
+    away into _1 and _2 - which is what a name without the bracket would get.
+    """
+
+    class FakeRestructurer:
+        entities = {
+            "sensor.uplink_up": {"device_id": "device-1"},
+            "sensor.uplink_down": {"device_id": "device-1"},
+        }
+        last_resolutions = {
+            "sensor.uplink_up": {"input": "PLC-Uplink PHY-Rate", "value": "PLC-Uplink PHY-Rate (UP)"},
+            "sensor.uplink_down": {"input": "PLC-Uplink PHY-Rate", "value": "PLC-Uplink PHY-Rate (DOWN)"},
+        }
+
+        def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
+            return {"entity": self.last_resolutions[entity_id]["value"]}
+
+        def generate_new_entity_id(
+            self,
+            entity_id: str,
+            state: dict,
+            entity_name: str | None = None,
+        ) -> tuple[str, str]:
+            slug = (entity_name or "").lower().replace("-", "_").replace(" ", "_")
+            slug = slug.replace("(", "").replace(")", "")
+            return f"sensor.hall_plc_{slug}", f"Hall PLC {entity_name or ''}".strip()
+
+        def deduplicate_entity_ids(
+            self,
+            proposals: list[tuple[str, str, str]],
+        ) -> list[tuple[str, str, str]]:
+            return list(proposals)
+
+    states = [{"entity_id": "sensor.uplink_up", "attributes": {}}, {"entity_id": "sensor.uplink_down", "attributes": {}}]
+    restructurer = FakeRestructurer()
+
+    captured = routes_entities._capture_device_entity_naming(restructurer, "device-1", states)
+    planned = routes_entities._plan_device_entity_changes(restructurer, "device-1", states, captured)
+
+    assert [new_id for _, new_id, _ in planned] == [
+        "sensor.hall_plc_plc_uplink_phy_rate_up",
+        "sensor.hall_plc_plc_uplink_phy_rate_down",
+    ]
+
+
+def test_an_entity_with_no_reading_is_named_from_the_fresh_context() -> None:
+    """One the registry reports only after the rename has nothing to hand over.
+
+    It is planned like any other entity of the device; the type part is simply
+    absent, and the name comes from the context built against the renamed
+    device.
+    """
+
+    class FakeRestructurer:
+        entities = {"sensor.late": {"device_id": "device-1"}}
+        last_resolutions: dict[str, dict] = {}
+
+        def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
+            return {"entity": "Power"}
+
+        def generate_new_entity_id(
+            self,
+            entity_id: str,
+            state: dict,
+            entity_name: str | None = None,
+        ) -> tuple[str, str]:
+            assert entity_name is None
+            return "sensor.hall_meter_power", "Hall Meter Power"
+
+        def deduplicate_entity_ids(
+            self,
+            proposals: list[tuple[str, str, str]],
+        ) -> list[tuple[str, str, str]]:
+            return list(proposals)
+
+    planned = routes_entities._plan_device_entity_changes(FakeRestructurer(), "device-1", [], {})
+
+    assert planned == [("sensor.late", "sensor.hall_meter_power", "Hall Meter Power")]
