@@ -2226,13 +2226,14 @@
                     </div>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.area_label')">Area</label>
                     <div class="combo mb-2" @click.away="closeAreaCombo()"
+                         @focusout="if (!$el.contains($event.relatedTarget)) closeAreaCombo()"
                          @keydown.escape="if (areaComboOpen) { $event.stopPropagation(); closeAreaCombo(); }">
                         <div class="combo-field">
                             <i class="ri-search-line"></i>
                             <input type="text" class="edit-input combo-input" autocomplete="off"
                                    x-effect="hierarchy.areas.length; devicePreviewAreaId; selectedDeviceData;
                                              if (!areaComboOpen) areaSearch = panelAreaName()"
-                                   :class="devicePreviewAreaId !== null ? 'chosen' : ''"
+                                   :class="deviceChangeStagedArea() ? 'chosen' : ''"
                                    :placeholder="t('area.select_area')"
                                    x-model="areaSearch"
                                    :disabled="renamingDevice || applyingEntityId || executing"
@@ -4830,6 +4831,7 @@
                     // on. Walking away from it left the next panel shut until
                     // that other device's job reported back.
                     if (this.renamingDevice) return;
+                    this.closeAreaCombo();
                     this.selectedArea = area.id;
                     this.selectedAreaData = area;
                     this.selectedDevice = null;
@@ -4852,6 +4854,7 @@
                 // Select device
                 selectDevice(device) {
                     if (this.renamingDevice) return;
+                    this.closeAreaCombo();
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
@@ -4869,6 +4872,7 @@
                 // Select a virtual device group (automations, scenes, helpers, etc.)
                 selectVirtualDevice(virtualDeviceId) {
                     if (this.renamingDevice) return;
+                    this.closeAreaCombo();
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
@@ -5294,6 +5298,14 @@
 
                 // The area the panel stands on: the one picked while it is only
                 // picked, the device's own otherwise.
+                // Whether the pick in the field is a move, rather than the
+                // area the device is in picked again: the field was marked as
+                // holding a change while the apply button stayed shut.
+                deviceChangeStagedArea() {
+                    if (this.devicePreviewAreaId === null) return false;
+                    return (this.devicePreviewAreaId || null) !== (this.selectedDeviceData?.area_id || null);
+                },
+
                 panelAreaId() {
                     if (this.devicePreviewAreaId !== null) return this.devicePreviewAreaId || '';
                     return this.selectedDeviceData?.area_id || '';
@@ -5305,7 +5317,14 @@
                     // said nothing at all for it, which reads like a field
                     // nobody has touched.
                     if (!id) return this.devicePreviewAreaId === '' ? this.t('area.no_area') : '';
-                    return this.hierarchy.areas.find(a => a.id === id)?.name || '';
+                    const area = this.hierarchy.areas.find(a => a.id === id);
+                    if (area) return area.name;
+                    // The area was deleted in Home Assistant while it stood
+                    // staged here. The field went blank and the button stayed
+                    // open, and applying asked to move the device into an area
+                    // that is no longer there.
+                    if (this.devicePreviewAreaId !== null) this.devicePreviewAreaId = null;
+                    return this.hierarchy.areas.find(a => a.id === this.selectedDeviceData?.area_id)?.name || '';
                 },
 
                 // The areas the typed text still matches, with taking the device
@@ -5316,10 +5335,12 @@
                 get areaOptions() {
                     const key = [
                         this.areaSearch || '',
-                        // The hierarchy as a whole: an area renamed in Home
-                        // Assistant leaves the count where it was, and the
-                        // field went on offering the name it used to have.
-                        this.hierarchyVersion,
+                        // The areas themselves, not how many there are: one
+                        // renamed in Home Assistant leaves the count where it
+                        // was, and the field went on offering it under the name
+                        // it used to have - and, once the key had stopped
+                        // moving, stopped following the list at all.
+                        this.hierarchy.areas.map(a => a.id + '\u0001' + a.name).join('\u0002'),
                         this.selectedDeviceData?.area_id || '',
                         this.translationsReady
                     ].join('\u0000');
