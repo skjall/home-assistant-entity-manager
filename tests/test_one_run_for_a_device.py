@@ -55,6 +55,7 @@ def test_a_null_area_clears_the_area(client) -> None:
     """Spelled out as null, and only then, the device is taken out of its area."""
     c, store = client
     resp = c.post("/api/rename_device", json={"device_id": "dev1", "area_id": None})
+    assert resp.status_code == 202, resp.get_json()
     payload = store.load(resp.get_json()["job_id"])["payload"]
     assert payload["set_area"] is True
     assert payload["area_id"] is None
@@ -97,8 +98,12 @@ class _Registry:
         return True
 
 
-def _run_handler(monkeypatch, payload: dict[str, Any]) -> list[str]:
-    """Run the handler against stand-ins for everything outside this module."""
+def _run(monkeypatch, payload: dict[str, Any], ctx: Any = None) -> tuple[list[str], dict[str, Any]]:
+    """Run the handler against stand-ins for everything outside this module.
+
+    Returns what was written to the registry, in order, and what the job
+    reports back - which is what the log shows the user.
+    """
     written: list[str] = []
 
     class Ws:
@@ -146,8 +151,13 @@ def _run_handler(monkeypatch, payload: dict[str, Any]) -> list[str]:
     monkeypatch.setitem(web_ui.renamer_state, "restructurer", Restructurer())
     monkeypatch.setitem(web_ui.renamer_state, "naming_templates", Templates())
 
-    asyncio.run(routes_entities.rename_device_handler({"payload": payload}, _Ctx()))
-    return written
+    result = asyncio.run(routes_entities.rename_device_handler({"payload": payload}, ctx or _Ctx()))
+    return written, result or {}
+
+
+def _run_handler(monkeypatch, payload: dict[str, Any]) -> list[str]:
+    """What the handler wrote to the device registry, in order."""
+    return _run(monkeypatch, payload)[0]
 
 
 def test_the_area_is_written_before_the_name(monkeypatch) -> None:
@@ -167,3 +177,36 @@ def test_a_move_without_a_new_name_renames_nothing(monkeypatch) -> None:
 def test_a_rename_without_an_area_leaves_the_area_alone(monkeypatch) -> None:
     written = _run_handler(monkeypatch, {"device_id": "dev1", "new_name": "Kitchen Plug"})
     assert written == ["name:Kitchen Plug"]
+
+
+def test_a_move_and_a_rename_are_both_reported(monkeypatch) -> None:
+    """The log is where a move is confirmed; naming only the rename hid it."""
+    _, result = _run(
+        monkeypatch,
+        {"device_id": "dev1", "new_name": "Kitchen Plug", "area_id": "kitchen", "set_area": True},
+    )
+    assert result["message"] == "Device moved and renamed to: Kitchen Plug"
+
+
+def test_a_rename_alone_says_so(monkeypatch) -> None:
+    _, result = _run(monkeypatch, {"device_id": "dev1", "new_name": "Kitchen Plug"})
+    assert result["message"] == "Device renamed to: Kitchen Plug"
+
+
+def test_a_move_alone_says_so(monkeypatch) -> None:
+    _, result = _run(
+        monkeypatch,
+        {"device_id": "dev1", "new_name": None, "area_id": "kitchen", "set_area": True},
+    )
+    assert result["message"] == "Device moved"
+
+
+def test_the_area_step_is_logged_before_it_is_written(monkeypatch) -> None:
+    """A write that raises left no step at all, so nothing said what failed."""
+    ctx = _Ctx()
+    _run(
+        monkeypatch,
+        {"device_id": "dev1", "new_name": None, "area_id": "kitchen", "set_area": True},
+        ctx,
+    )
+    assert ("AREA", "dev1 -> kitchen") in ctx.lines

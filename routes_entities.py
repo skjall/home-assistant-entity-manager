@@ -679,8 +679,10 @@ async def rename_device_handler(job, ctx):
         # The area goes first: the device name and every entity name below is
         # built out of it, so a device that moves is named where it moved to.
         if set_area:
-            await device_registry.assign_area(device_id, area_id)
+            # Said before it is done: a write that raises left the log with no
+            # step at all, so nothing said which operation the job failed on.
             ctx.log("AREA", f"{device_id} -> {area_id or 'no area'}")
+            await device_registry.assign_area(device_id, area_id)
 
         z2m_sync: dict[str, Any] = {}
         if new_name:
@@ -787,7 +789,12 @@ async def rename_device_handler(job, ctx):
             f"Skipped: {entities_skipped}, Dependencies: {dependencies_updated}"
         )
 
-        message = f"Device renamed to: {new_name}" if new_name else "Device moved"
+        if new_name and set_area:
+            message = f"Device moved and renamed to: {new_name}"
+        elif new_name:
+            message = f"Device renamed to: {new_name}"
+        else:
+            message = "Device moved"
         if entities_updated > 0:
             message += f" ({entities_updated} entities"
             if dependencies_updated > 0:

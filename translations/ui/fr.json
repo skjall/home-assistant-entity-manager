@@ -196,7 +196,8 @@
     "entity_marked_for_acceptance": "Entité marquée pour acceptation",
     "core_starting": "Home Assistant est en train de démarrer. Cela reprendra dès qu’il répondra.",
     "rules_saved": "Règles enregistrées",
-    "nothing_to_apply": "Rien à appliquer"
+    "nothing_to_apply": "Rien à appliquer",
+    "name_has_no_place": "Le modèle du nom d’appareil n’a pas de place pour un nom propre, le nom saisi ne peut donc pas être écrit"
   },
   "dependencies": {
     "title": "Dépendances pour",
