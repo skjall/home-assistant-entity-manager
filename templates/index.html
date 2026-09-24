@@ -4786,6 +4786,10 @@
                     this.selectedDevice = null;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching areas
+                    // A move is staged for the device it was staged on. Carried
+                    // to the next one, it offered to move that device instead,
+                    // and said so in its name before anybody asked for it.
+                    this.devicePreviewAreaId = null;
                     this.deviceFilter = '';  // Reset device filter
                     this.saveState();
 
@@ -4800,6 +4804,7 @@
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
+                    this.devicePreviewAreaId = null;  // and the area it was about to move to
                     this.deviceNameClash = [];
                     this.saveState();
 
@@ -4814,6 +4819,7 @@
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
+                    this.devicePreviewAreaId = null;  // and the area it was about to move to
                     this.deviceNameClash = [];
                     this.saveState();
 
