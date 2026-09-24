@@ -2459,7 +2459,7 @@
                                             <div class="friendly-name">
                                                 <span :title="entity.original_name || ''"
                                                       x-html="entityNeedsRename(entity)
-                                                              ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'old')
+                                                              ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyNameForEntity(entity), 'old')
                                                               : escapeHtml(entity.original_name || t('entity.no_name'))"></span>
                                                 <span x-show="isOrphanEntity(entity)"
                                                       class="text-xs text-amber-600 ml-2"
@@ -2469,7 +2469,7 @@
                                             </div>
                                             <code class="entity-id" :title="entity.id"
                                                   x-html="entityNeedsRename(entity)
-                                                          ? diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'old')
+                                                          ? diffHtml(entity.id, entity._previewId || getNewEntityIdForEntity(entity), 'old')
                                                           : escapeHtml(entity.id)"></code>
                                         </div>
 
@@ -2482,10 +2482,10 @@
 
                                         <template x-if="entityNeedsRename(entity)">
                                             <div class="new-state">
-                                                <div class="friendly-name" :title="entity._previewName || getEntityFriendlyName(entity)"
-                                                     x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'new')"></div>
-                                                <code class="entity-id" :title="entity._previewId || getNewEntityId(entity)"
-                                                      x-html="diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'new')"></code>
+                                                <div class="friendly-name" :title="entity._previewName || getEntityFriendlyNameForEntity(entity)"
+                                                     x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyNameForEntity(entity), 'new')"></div>
+                                                <code class="entity-id" :title="entity._previewId || getNewEntityIdForEntity(entity)"
+                                                      x-html="diffHtml(entity.id, entity._previewId || getNewEntityIdForEntity(entity), 'new')"></code>
                                             </div>
                                         </template>
 
@@ -2497,10 +2497,10 @@
                                         </template>
 
                                         <div class="flex items-center gap-2 ml-auto">
-                                            <!-- Conflict warning - hide in no-area mode -->
+                                            <!-- Conflict warning - an id may be taken wherever the entity sits -->
                                             <span x-show="entityNeedsRename(entity) && isEntityIdTaken(entity)"
                                                   class="text-xs text-red-500 flex items-center gap-1"
-                                                  :title="'Target ID: ' + getNewEntityId(entity)">
+                                                  :title="'Target ID: ' + getNewEntityIdForEntity(entity)">
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
                                             </span>
                                             <div class="btn-group">
@@ -3615,8 +3615,11 @@
                     });
 
                     // Add "No Area" entry if there are devices without area
+                    // Its entities can be renamed like any other, so the
+                    // changes filter must not be the one thing that puts them
+                    // out of reach.
                     const devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
-                    if (devicesWithoutArea.length > 0 && !this.onlyChanges) {
+                    if (devicesWithoutArea.length > 0) {
                         sortedAreas.push({
                             id: '__no_area__',
                             name: this.t('area.no_area'),
@@ -5574,9 +5577,17 @@
                             const rendered = await this.previewEntityNaming(entity, null);
                             newId = rendered.entity_id;
                             newName = rendered.entity_name;
-                        } else {
-                            newId = entity._previewId || this.getNewEntityIdForEntity(entity);
+                        } else if (entity._previewId) {
+                            newId = entity._previewId;
                             newName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
+                        } else {
+                            // The slug is the server's answer and may not have
+                            // arrived yet. Standing in with the current id here
+                            // wrote the name and left the id as it was, without
+                            // saying so.
+                            const rendered = await this.previewEntityNaming(entity, null);
+                            newId = rendered.entity_id;
+                            newName = rendered.entity_name;
                         }
                         const idChanged = entity.id !== newId;
                         const nameChanged = entity.original_name !== newName;
