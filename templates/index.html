@@ -3243,7 +3243,8 @@
                 syncingZ2m: false,  // Loading state for Z2M name sync
                 applyingEntityId: null,  // ID of entity currently being renamed
                 previewVersion: 0,  // Incremented to force Alpine reactivity on preview changes
-                _previewsInFlight: null,  // The slug computation under way, if any
+                _previewsInFlight: new Set(),  // Every slug computation under way
+                _previewAsk: 0,  // Which computation each row's answer is about
 
                 // Filters
                 onlyChanges: false,
@@ -4893,7 +4894,11 @@
                 // list - "0 entities", nothing to do, no way to tell why.
                 deviceStaysInChangesFilter(device) {
                     if (!device) return false;
-                    if (device.disabled_by) return false;
+                    // A switched-off device is out of the way unless the user
+                    // asked to see those: refusing it regardless took a device
+                    // they had asked for out of the list, and with it the only
+                    // way to reach the work outstanding on it.
+                    if (device.disabled_by && !this.showDisabled) return false;
                     if (this.deviceNameNeedsRename(device)) return true;
                     // Z2M-Namens-Drift zählt als Änderung
                     if (device.z2m_drift) return true;
@@ -5038,29 +5043,40 @@
                     }
                     if (!pending.length) return;
 
-                    // Kept, so a run that needs the ids can wait for the
-                    // computation already under way instead of asking for the
-                    // same slugs a second time.
+                    // Which computation asked about each row. A second one
+                    // started while the first was still out asks about the
+                    // same rows from newer names, and the first one's answer
+                    // arriving afterwards wrote ids worked out from names that
+                    // no longer apply - which is then what a rename would have
+                    // written.
+                    const asked = ++this._previewAsk;
+                    for (const entity of pending) entity._previewAsk = asked;
+
+                    // Every computation under way, so a run that needs the ids
+                    // waits for all of them rather than for whichever one
+                    // started last.
                     const settling = this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
                         pending.forEach((entity, i) => {
+                            // Only where nothing has asked since: this answer
+                            // is about the name the row had when it was asked.
+                            if (entity._previewAsk !== asked) return;
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
                     }).finally(() => {
-                        // Its own, not whatever is there: a second computation
-                        // started while this one was out, and clearing the
-                        // field regardless said that one had finished too.
-                        if (this._previewsInFlight === settling) this._previewsInFlight = null;
+                        this._previewsInFlight.delete(settling);
                     });
-                    this._previewsInFlight = settling;
+                    this._previewsInFlight.add(settling);
                 },
 
                 // What the rows would be called, once the server has answered.
                 // Before that an id reads as unchanged, which would have a run
                 // write the name and leave the id as it was.
                 async previewsSettled() {
-                    while (this._previewsInFlight) await this._previewsInFlight;
+                    while (this._previewsInFlight.size) {
+                        await Promise.all([...this._previewsInFlight]);
+                    }
                 },
 
                 // Invalidate cached previews (call after rename to refresh conflict detection)
