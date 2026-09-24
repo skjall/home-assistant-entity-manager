@@ -587,11 +587,43 @@ def _capture_device_entity_naming(
             # What went into the name, not what came out of it: a rule the user
             # edits afterwards only reaches this entity again if the note hands
             # it back the word the rule matches on.
+            # An entity with no name of its own supplies nothing, and what it
+            # is called is then the bracket that tells it from its siblings.
+            # Storing the empty word there lost that bracket, and with it the
+            # only thing the entity was told apart by.
             "base_entity": resolution.get("input") or name,
+            # And what came out of it, which is what the name is built from.
+            # The two are the same word until a rule or a translation changes
+            # it; rendering the first one wrote the name past the rule that
+            # decided it - "Tür" where the user's rule says "Zustand".
+            "type_part": name,
             "won_by": resolution.get("won_by") or "",
             "rule_id": resolution.get("rule_id"),
         }
     return captured
+
+
+def _provenance_note(reading: dict[str, Any], template_hash: str) -> dict[str, Any]:
+    """The note kept with a written name.
+
+    Named one by one rather than by what is left out: the capture carries what
+    the job needs, which is more than the note is for. The type part is for the
+    name; the note keeps the word that went in, so a rule the user edits
+    afterwards still finds the entity by what it matches on.
+    """
+    # Always the same keys: an entity that turned up only after the capture
+    # left a note of nothing but the fingerprint, and a reader asking it what
+    # went into the name found no key at all rather than an empty answer.
+    #
+    # The rule id is the one that stays None where there is none, as it does
+    # on every other way into the state file (naming_service.provenance_of):
+    # "" would be an id, and a reader telling a name no rule decided from one
+    # decided by a rule since deleted would be told the same thing for both.
+    return {
+        **{key: reading.get(key) or "" for key in ("base_entity", "won_by")},
+        "rule_id": reading.get("rule_id") or None,
+        "template_hash": template_hash,
+    }
 
 
 def _plan_device_entity_changes(
@@ -602,13 +634,19 @@ def _plan_device_entity_changes(
 ) -> list[tuple[str, str, str]]:
     """Generate entity changes for a renamed device with the active templates."""
     states_by_id = {state["entity_id"]: state for state in states}
+    # The context is built once more here, against the renamed device, because
+    # the area and the device part of the name come from it. Only the type part
+    # is taken from the reading before the rename, where the device name could
+    # still be told from it. An entity with no reading - one the registry
+    # reports only after the rename - has nothing to hand over and is named
+    # from the fresh context alone.
     changes = [
         (
             entity_id,
             *restructurer.generate_new_entity_id(
                 entity_id,
                 states_by_id.get(entity_id, {}),
-                (captured.get(entity_id) or {}).get("base_entity"),
+                (captured.get(entity_id) or {}).get("type_part"),
             ),
         )
         for entity_id, entity_info in restructurer.entities.items()
@@ -707,7 +745,7 @@ async def rename_device_handler(job, ctx):
                     old_entity_id,
                     new_entity_id if id_changed else None,
                     new_friendly_name,
-                    provenance={**(captured.get(old_entity_id) or {}), "template_hash": template_hash},
+                    provenance=_provenance_note(captured.get(old_entity_id) or {}, template_hash),
                 )
                 if not (written or {}).get("verified"):
                     ctx.log("UNVERIFIED", f"{old_entity_id} -> {new_entity_id}: written, not read back")
