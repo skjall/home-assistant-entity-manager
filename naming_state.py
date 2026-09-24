@@ -74,7 +74,7 @@ class NamingState:
         *,
         applied_name: str,
         applied_entity_id: str,
-        base_entity: str = "",
+        base_entity: Optional[str] = None,
         template_hash: str = "",
         won_by: str = "",
         rule_id: Optional[str] = None,
@@ -87,7 +87,9 @@ class NamingState:
         entry = {
             "applied_name": applied_name or "",
             "applied_entity_id": applied_entity_id or "",
-            "base_entity": base_entity or "",
+            # None where the caller had nothing to say about the type part;
+            # "" is a statement of its own - the name has no type part.
+            "base_entity": base_entity if isinstance(base_entity, str) else None,
             "template_hash": template_hash or "",
             "won_by": won_by or "",
             "rule_id": rule_id,
@@ -159,7 +161,7 @@ class NamingState:
             "name_owner": HA_UI if drifted else ENTITY_MANAGER,
             "drift": drifted,
             "template_changed": stale,
-            "base_entity": stored["base_entity"],
+            "base_entity": stored.get("base_entity") or "",
             "applied_name": stored["applied_name"],
             "won_by": stored["won_by"],
             "rule_id": stored["rule_id"],
