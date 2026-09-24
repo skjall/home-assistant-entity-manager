@@ -3594,16 +3594,7 @@
 
                     // Only show areas that have at least one device that would appear in filteredDevices
                     if (this.onlyChanges) {
-                        areas = areas.filter(area => {
-                            // Get all devices for this area (respecting showDisabled filter)
-                            let areaDevices = this.hierarchy.devices.filter(d => d.area_id === area.id);
-                            if (!this.showDisabled) {
-                                areaDevices = areaDevices.filter(d => !d.disabled_by);
-                            }
-
-                            // The same question the device list asks.
-                            return areaDevices.some(device => this.deviceStaysInChangesFilter(device));
-                        });
+                        areas = areas.filter(area => this.devicesShownIn(area.id).length > 0);
                     }
 
                     const sortedAreas = areas.sort((a, b) => {
@@ -3613,39 +3604,33 @@
                     });
 
                     // "No area" is where a device lands that has none, and it
-                    // answers the same two filters as every area above: hiding
-                    // it outright under "only changes" put a sixth of the
-                    // devices out of reach of the one view that lists them.
-                    let devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
-                    if (!this.showDisabled) {
-                        devicesWithoutArea = devicesWithoutArea.filter(d => !d.disabled_by);
-                    }
-                    if (this.onlyChanges) {
-                        devicesWithoutArea = devicesWithoutArea.filter(d => this.deviceStaysInChangesFilter(d));
-                    }
-                    if (devicesWithoutArea.length > 0) {
+                    // answers the same question as every area above: hiding it
+                    // outright under "only changes" put a sixth of the devices
+                    // out of reach of the one view that lists them. An area is
+                    // listed as long as it exists, so "no area" is listed as
+                    // long as a device has none - only "only changes" takes a
+                    // heading away, and it does so for both alike.
+                    const withoutArea = this.hierarchy.devices.filter(d => !d.area_id);
+                    const shownWithoutArea = this.devicesShownIn('__no_area__');
+                    if (withoutArea.length > 0 && (!this.onlyChanges || shownWithoutArea.length > 0)) {
                         sortedAreas.push({
                             id: '__no_area__',
                             name: this.t('area.no_area'),
                             isSpecial: true,
-                            deviceCount: devicesWithoutArea.length
+                            deviceCount: shownWithoutArea.length
                         });
                     }
 
                     return sortedAreas;
                 },
 
-                // Computed: Filtered devices for selected area (sorted alphabetically)
-                get filteredDevices() {
-                    if (!this.selectedArea) return [];
-
-                    // Special handling for "No Area"
-                    let devices;
-                    if (this.selectedArea === '__no_area__') {
-                        devices = this.hierarchy.devices.filter(d => !d.area_id);
-                    } else {
-                        devices = this.hierarchy.devices.filter(d => d.area_id === this.selectedArea);
-                    }
+                // The one question about which devices a view shows, asked by
+                // the list, by the count beside a heading and by the headings
+                // themselves - three copies of it had already drifted apart.
+                devicesShownIn(areaId) {
+                    let devices = areaId === '__no_area__'
+                        ? this.hierarchy.devices.filter(d => !d.area_id)
+                        : this.hierarchy.devices.filter(d => d.area_id === areaId);
 
                     // A disabled device is shown only under "show disabled", and
                     // then it offers the one thing that works on it: switching it
@@ -3675,7 +3660,14 @@
                         devices = devices.filter(d => this.deviceStaysInChangesFilter(d));
                     }
 
-                    return devices.sort((a, b) => {
+                    return devices;
+                },
+
+                // Computed: Filtered devices for selected area (sorted alphabetically)
+                get filteredDevices() {
+                    if (!this.selectedArea) return [];
+
+                    return this.devicesShownIn(this.selectedArea).sort((a, b) => {
                         const nameA = (a.base_name || a.name || '').toLowerCase();
                         const nameB = (b.base_name || b.name || '').toLowerCase();
                         return nameA.localeCompare(nameB);
@@ -4171,7 +4163,10 @@
                     if (areaId) {
                         // Special handling for "__no_area__"
                         if (areaId === '__no_area__') {
-                            const devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
+                            // What the sidebar would list: restoring a heading
+                            // the filters have taken away left nothing selected
+                            // and an empty panel with no reason given.
+                            const devicesWithoutArea = this.devicesShownIn('__no_area__');
                             if (devicesWithoutArea.length > 0) {
                                 this.selectedArea = '__no_area__';
                                 this.selectedAreaData = {
