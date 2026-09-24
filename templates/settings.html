@@ -3479,7 +3479,11 @@
 
                 startEdit(row) {
                     this.editingKey = row.id;
-                    this.editValue = row.isRule ? row.value : '';
+                    // This language's target, not the one the list shows for it:
+                    // the list falls back to another language where this one has
+                    // nothing, and saving then wrote that other language's words
+                    // into this one without anybody having typed them.
+                    this.editValue = row.isRule ? (row.rule?.targets?.[this.language] || '') : '';
                     // The expression as it is, not as it reads: what goes back
                     // has to be the thing the rule matches on.
                     this.editPattern = row.isRule && row.kind === 'pattern' ? row.key : '';
@@ -3534,7 +3538,10 @@
                             : await fetch('api/naming/rules', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ match: { kind: 'name', value: row.key }, value })
+                                // The kind the row is, not "name" for everything:
+                                // a pattern row made a name rule, which matches
+                                // the expression as a word and never fires.
+                                body: JSON.stringify({ match: { kind: row.kind || 'name', value: row.key }, value })
                               });
 
                         if (response.ok) {

@@ -850,6 +850,8 @@ def naming_rule_item(rule_id):
     # adjusted afterwards: the others are matched on a word the integration
     # supplies, and that word is not the writer's to change.
     expression = data.get("match_value")
+    if expression is not None and not isinstance(expression, str):
+        return jsonify({"error": "match_value has to be text"}), 400
     if expression is not None:
         # Whitespace is not an expression. Sanitising leaves an empty string,
         # which read as "something was supplied" and reached compile_pattern,

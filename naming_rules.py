@@ -1257,6 +1257,16 @@ class NamingRules:
         # it, and the stored rules never collide, so re-asking costs nothing.
         self._refuse_collision(wanted)
 
+        # What was asked for is what the rule already says. Stamping it as
+        # changed and writing the file put an edit in the history where none
+        # had happened.
+        if (
+            wanted["targets"] == rule["targets"]
+            and wanted["match"] == rule["match"]
+            and wanted["filters"] == rule["filters"]
+        ):
+            return rule
+
         rule["targets"] = wanted["targets"]
         rule["match"] = wanted["match"]
         rule["filters"] = wanted["filters"]
