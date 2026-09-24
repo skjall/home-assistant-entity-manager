@@ -3612,9 +3612,18 @@
                         return nameA.localeCompare(nameB);
                     });
 
-                    // Add "No Area" entry if there are devices without area
-                    const devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
-                    if (devicesWithoutArea.length > 0 && !this.onlyChanges) {
+                    // "No area" is where a device lands that has none, and it
+                    // answers the same two filters as every area above: hiding
+                    // it outright under "only changes" put a sixth of the
+                    // devices out of reach of the one view that lists them.
+                    let devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
+                    if (!this.showDisabled) {
+                        devicesWithoutArea = devicesWithoutArea.filter(d => !d.disabled_by);
+                    }
+                    if (this.onlyChanges) {
+                        devicesWithoutArea = devicesWithoutArea.filter(d => this.deviceStaysInChangesFilter(d));
+                    }
+                    if (devicesWithoutArea.length > 0) {
                         sortedAreas.push({
                             id: '__no_area__',
                             name: this.t('area.no_area'),
