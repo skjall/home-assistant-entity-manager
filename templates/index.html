@@ -6631,7 +6631,13 @@
                 // Reconstruct a reconnected job's title + completion handler from its type.
                 jobKindMeta(type) {
                     if (type === 'rename_device') {
-                        return { titleKey: 'jobs.rename_device', onDone: (job) => this.onRenameDeviceDone(job) };
+                        // The device out of the job, not whichever one the panel
+                        // stands on when it reports: a job reconnected after a
+                        // reload cleared the area staged for another device.
+                        return {
+                            titleKey: 'jobs.rename_device',
+                            onDone: (job) => this.onRenameDeviceDone(job, job?.payload?.device_id || null)
+                        };
                     }
                     if (type === 'execute' || type === 'execute_direct') {
                         return { titleKey: 'jobs.applying', onDone: (job) => this.onExecuteDone(job) };
@@ -6717,8 +6723,11 @@
                             return;
                         }
                         moved = true;
-                        // The device object is the one the assignment wrote
-                        // into, so there is nothing to look up again.
+                        // Onto this object as well: the assignment writes into
+                        // the one the list holds, and where the list no longer
+                        // holds this device the name below would have been built
+                        // out of the area it has left.
+                        device.area_id = picked || null;
                         if (this.selectedDevice === deviceId) {
                             this.devicePreviewAreaId = null;
                             this.selectedDeviceData = device;
@@ -6886,7 +6895,33 @@
                 },
 
                 // Execute ALL pending changes with batch processing to avoid timeouts
+                // The area picked in the panel and not written yet, written.
+                // The rows below are named out of it, so a run that skipped this
+                // wrote names saying an area the device is not in - and the next
+                // read proposed the old names straight back.
+                async commitStagedArea() {
+                    const deviceId = this.selectedDevice;
+                    if (!deviceId || this.devicePreviewAreaId === null || this.isVirtualDevice(deviceId)) return true;
+                    const device = this.hierarchy.devices.find(one => one.id === deviceId);
+                    if (!device || (this.devicePreviewAreaId || null) === (device.area_id || null)) return true;
+                    const picked = this.devicePreviewAreaId;
+                    if (!await this.assignDeviceArea(deviceId, picked || null)) {
+                        // Nothing was written, so nothing stays staged, here as
+                        // at the panel's own button.
+                        this.devicePreviewAreaId = null;
+                        this.computePreviewsFor(this.entitiesOfDevice(deviceId));
+                        return false;
+                    }
+                    device.area_id = picked || null;
+                    this.devicePreviewAreaId = null;
+                    return true;
+                },
+
                 async executeAllChanges() {
+                    // A move the panel holds goes in before the names that were
+                    // built out of it.
+                    if (!await this.commitStagedArea()) return;
+
                     // The ids come from the server; before they are in, a row
                     // that only needs a new id reads as needing nothing.
                     await this.previewsSettled();
