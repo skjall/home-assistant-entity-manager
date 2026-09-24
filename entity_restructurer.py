@@ -705,11 +705,25 @@ class EntityRestructurer:
             or not self._counts_rather_than_names(candidate["value"])
             or not self._says_more(name, candidate["value"])
         ]
+        # A rule of the user's that says what the name already says has no
+        # effect on it, so it is not reported as the source - but it does apply,
+        # and the form that corrects the name has to open on it. Sent without it,
+        # a correction made a second rule of another kind beside the one in
+        # force, and both then named the entity.
+        in_force = next(
+            (
+                one
+                for one in candidates
+                if one["value"] == shown and one["won_by"] == "rule:user" and one.get("rule_id")
+            ),
+            None,
+        )
         # A rule or default that only repeats the shown spelling has no effect
         # and is not reported as the source.
         candidates = [candidate for candidate in candidates if candidate["value"] != shown]
         candidates.append({"value": shown, "won_by": won_by, "rule_id": None, "matched_on": None})
         winner = dict(candidates[0])
+        winner["applies"] = {"rule_id": in_force["rule_id"], "matched_on": in_force["matched_on"]} if in_force else None
         winner["input"] = name
         winner["normalized"] = winner["value"] != name and winner["won_by"] == won_by
         winner["platform"] = integration

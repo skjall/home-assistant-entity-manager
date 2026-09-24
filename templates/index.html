@@ -5747,15 +5747,27 @@
                 // for this one entity instead of changing the domain rule that
                 // named it.
                 anchorThatApplied(entity) {
+                    const applies = this.ruleInForce(entity);
+                    return applies && (applies.matched_on || {}).kind === 'domain' ? 'domain' : null;
+                },
+
+                // The rule of the user's that applies to this entity, whether or
+                // not the name came from it: one whose word is already the shown
+                // spelling has no effect on the name and still applies. Read off
+                // the source alone, the form opened as though no rule were in
+                // force and the correction made a second one beside it.
+                ruleInForce(entity) {
                     const resolution = entity?.resolution;
-                    if (!resolution || resolution.won_by !== 'rule:user' || !resolution.rule_id) return null;
-                    return (resolution.matched_on || {}).kind === 'domain' ? 'domain' : null;
+                    if (!resolution) return null;
+                    if (resolution.won_by === 'rule:user' && resolution.rule_id) return resolution;
+                    const applies = resolution.applies;
+                    return applies && applies.rule_id ? applies : null;
                 },
 
                 scopeThatApplied(entity) {
-                    const resolution = entity?.resolution;
-                    if (!resolution || resolution.won_by !== 'rule:user' || !resolution.rule_id) return null;
-                    const match = resolution.matched_on;
+                    const applies = this.ruleInForce(entity);
+                    if (!applies) return null;
+                    const match = applies.matched_on;
                     if (!match) return null;
                     const named = (match.filters || []).some(one => one.registry_id === entity.registry_id);
                     if (named) return 'here';

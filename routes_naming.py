@@ -398,6 +398,12 @@ def domain_counts(restructurer) -> dict:
     have no integration to narrow a rule to, so this count is larger than the
     integration counts below add up to - the difference is what only a rule
     reaching the whole domain can name.
+
+    Entities a narrower rule already names are counted too: the number says how
+    far the domain reaches, which is what makes the offer safe to judge, and not
+    how many names would change. Asking that for every entity of every domain
+    means resolving every name a second time on every load, which is the cost
+    this add-on has spent two releases getting rid of.
     """
     counts: dict = {}
     for entity_id in restructurer.entities:
@@ -872,6 +878,12 @@ def naming_learn():
     anchor = sanitize_string(data.get("anchor") or "")
     if anchor and anchor != "domain":
         return jsonify({"error": "unknown anchor"}), 400
+    # A domain rule is about a kind of entity, not about one model of device, so
+    # the scopes it can be given are everywhere and one integration. Accepted,
+    # the rule came back to a form that could not show it: neither row of
+    # buttons had one to light up, and the next save wrote the same state again.
+    if anchor == "domain" and scope not in ("global", "all", "integration"):
+        return jsonify({"error": "A domain rule applies everywhere or within one integration"}), 400
     kind, key = _rule_key_for(entity, entity_id, anchor)
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400

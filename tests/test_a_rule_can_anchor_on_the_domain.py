@@ -224,6 +224,49 @@ def test_an_anchor_nobody_knows_is_refused(home):
     assert answer.status_code == 400
 
 
+def test_a_domain_rule_cannot_be_put_on_one_model(home):
+    """A domain rule is about a kind of entity, not about one model of device.
+
+    Taken, it came back to a form that could not show it: neither row of buttons
+    had one to light up, and the next save wrote the same state again.
+    """
+    client, _, _ = home
+
+    answer = client.post(
+        "/api/naming/learn",
+        json={
+            "entity_id": "device_tracker.jans_iphone",
+            "value": "Standort",
+            "anchor": "domain",
+            "scope": "model",
+        },
+    )
+
+    assert answer.status_code == 400
+
+
+def test_the_rule_in_force_is_reported_even_where_it_won_nothing(home):
+    """A rule saying what the name already says is still the rule to change.
+
+    Reported by nobody, the form opened as though no rule applied, and the
+    correction made a name rule beside the domain rule that names the entity.
+    """
+    client, restructurer, rules = home
+    entity_id = "device_tracker.jans_iphone"
+    made = client.post(
+        "/api/naming/learn",
+        json={"entity_id": entity_id, "value": "Jans iPhone", "anchor": "domain", "scope": "integration"},
+    ).get_json()["rule"]
+
+    restructurer.build_naming_context(entity_id, restructurer.entities[entity_id])
+    resolution = restructurer.last_resolutions[entity_id]
+
+    # The name is what it always was, so no rule won it - and this one applies.
+    assert resolution["rule_id"] is None
+    assert resolution["applies"]["rule_id"] == made["id"]
+    assert resolution["applies"]["matched_on"]["kind"] == "domain"
+
+
 # --- How far it reaches ---------------------------------------------------
 
 
