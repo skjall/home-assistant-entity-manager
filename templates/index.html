@@ -5557,10 +5557,14 @@
                     // are both an empty list, and a run reading the list alone
                     // took the second for the first and wrote the rename.
                     const settle = (clashes, answered = true) => {
+                        // An unanswered check leaves the warning as it stands:
+                        // clearing it said the conflict had gone when nothing
+                        // had looked at it.
+                        if (!answered) return false;
                         if (clashes.length || this.deviceNameClash.length) {
                             this.deviceNameClash = clashes;
                         }
-                        return answered;
+                        return true;
                     };
                     if (!device || this.isVirtualDevice(device.id)) return settle([]);
                     const wanted = this.getExpectedDeviceName(device);
@@ -6719,6 +6723,11 @@
                 },
 
                 async onRenameDeviceDone(job, deviceId = null, driftDevices = []) {
+                    // What was computed for the staged panel is about the
+                    // device as it was before the job; the list is read back
+                    // below, and an answer still on its way would write those
+                    // ids over the ones the server has just given.
+                    this.dropStagedPreview();
                     // The job is over, so the button opens again.
                     this.renamingDevice = false;
                     // What the panel holds now may have been typed for another
@@ -6793,15 +6802,16 @@
 
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = base;
-                    // Asked again where the registry moved under the first
-                    // one: an unanswered check leaves the same empty list as a
-                    // clean one.
-                    let answered = await this.checkDeviceNameClash(device);
-                    if (!answered) answered = await this.checkDeviceNameClash(device);
-                    if (!answered) {
-                        this.devicePreviewBaseName = wasPreviewed;
-                        this.showMessage(this.t('device.check_unfinished'), 'error');
-                        return;
+                    // Asked again where the registry moved under it: an
+                    // unanswered check is not a clean one. A registry that
+                    // keeps moving - a bulk rename running elsewhere - would
+                    // never settle, and refusing on that alone locked the
+                    // button for as long as it lasted, so after a few tries
+                    // the run goes on and the server decides; it refuses a
+                    // taken id and the panel says so.
+                    let answered = false;
+                    for (let tries = 0; tries < 3 && !answered; tries++) {
+                        answered = await this.checkDeviceNameClash(device);
                     }
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();
