@@ -791,17 +791,14 @@ async def rename_device_handler(job, ctx):
             f"Skipped: {entities_skipped}, Dependencies: {dependencies_updated}"
         )
 
-        # What was asked for, not what is left over: a payload that asks for
-        # neither is refused at the route, and saying "moved" for one would be
-        # a move nobody requested.
+        # One of the two was asked for: the route refuses a payload that asks
+        # for neither.
         if new_name is not None and set_area:
             message = f"Device moved and renamed to: {new_name}"
         elif new_name is not None:
             message = f"Device renamed to: {new_name}"
-        elif set_area:
-            message = "Device moved"
         else:
-            message = "Device entities updated"
+            message = "Device moved"
         if entities_updated > 0:
             message += f" ({entities_updated} entities"
             if dependencies_updated > 0:
