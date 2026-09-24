@@ -209,7 +209,7 @@ class DependencyUpdater:
                     try:
                         configs[numeric_id] = await self.fetch_automation_config(numeric_id, session)
                     except Exception as error:  # noqa: BLE001 - one unreadable automation is not the job
-                        logger.error(f"Automation {numeric_id} konnte nicht gelesen werden: {error}")
+                        logger.error(f"Automation {numeric_id} could not be read: {error}")
                         configs[numeric_id] = None
 
             await asyncio.gather(*(one(numeric_id) for numeric_id in numeric_ids))
