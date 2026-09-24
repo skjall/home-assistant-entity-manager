@@ -552,26 +552,47 @@ def normalize_names():
     for_entities = data.get("for")
     restructurer = renamer_state.get("restructurer")
     if isinstance(for_entities, list) and len(for_entities) == len(names) and restructurer is not None:
-        proposals = [
-            (
-                entity_id,
-                f"{str(entity_id).partition('.')[0]}.{slug}",
-                name if isinstance(name, str) else "",
-            )
-            for entity_id, slug, name in zip(for_entities, normalized, names)
-            if isinstance(entity_id, str) and slug
-        ]
-        if len(proposals) == len(names):
+        known = getattr(restructurer, "entities", None) or {}
+        proposals = []
+        places = []
+        for place, (entity_id, slug, name) in enumerate(zip(for_entities, normalized, names)):
+            # Only what there is something to number: one name in the batch
+            # that came out empty used to leave every other entity in it
+            # without its number, and two of them then showed the same id
+            # while the rename wrote _1 and _2.
+            if not isinstance(entity_id, str) or not slug:
+                continue
+            # The domain out of the registry where the entity is known. Taken
+            # from what the caller sent, an id that is not the entity's had the
+            # answer name a domain the entity is not in.
+            here = known.get(entity_id) or {}
+            domain_of = str(here.get("entity_id") or entity_id).partition(".")[0]
+            proposals.append((entity_id, f"{domain_of}.{slug}", name if isinstance(name, str) else ""))
+            places.append(place)
+        if proposals:
             # What the numbering tells the user about is the rename they asked
             # for, not a preview: left behind here, the list would report a
             # collision nobody had run into.
             held = getattr(restructurer, "last_numbering", {})
             try:
                 resolved = restructurer.deduplicate_entity_ids(proposals)
+            except Exception as error:  # noqa: BLE001 - the slugs are still an answer
+                # The slugs are what was asked for; the numbering is what the
+                # rename would make of them. One entity it cannot work out is
+                # no reason to answer the whole batch with an error, which left
+                # every row showing "sensor." for an id until the next reload.
+                logger.error(f"Could not number the proposed ids: {error}", exc_info=True)
+                resolved = None
             finally:
                 restructurer.last_numbering = held
-            answer["ids"] = [new_id for _, new_id, _ in resolved]
-            answer["names"] = [name for _, _, name in resolved]
+            if resolved is not None and len(resolved) == len(proposals):
+                ids = [None] * len(names)
+                written = [None] * len(names)
+                for place, (_, new_id, name) in zip(places, resolved):
+                    ids[place] = new_id
+                    written[place] = name
+                answer["ids"] = ids
+                answer["names"] = written
     return jsonify(answer)
 
 

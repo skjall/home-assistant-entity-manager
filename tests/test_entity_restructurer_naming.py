@@ -368,3 +368,25 @@ def test_a_name_typed_empty_is_not_the_registry_name(restructurer):
     new_entity_id, _ = restructurer.generate_new_entity_id("sensor.existing_id", {}, None, "")
 
     assert new_entity_id == "sensor.living_room_temperature"
+
+
+def test_the_area_the_panel_holds_moves_the_entities_that_follow_the_device(restructurer):
+    """A device moving takes the entities with no area of their own."""
+    restructurer.areas["bedroom"] = {"area_id": "bedroom", "name": "Bedroom", "floor_id": "ground"}
+
+    context = restructurer.build_naming_context("sensor.existing_id", {}, pending_area_id="bedroom")
+
+    assert context["area"] == "Bedroom"
+
+
+def test_an_entity_with_an_area_of_its_own_stays_where_it_was_put(restructurer):
+    """Home Assistant writes the move onto the device, and that entity keeps its
+    own area - a preview that moved it with the device said a name the rename
+    would not have written."""
+    restructurer.areas["bedroom"] = {"area_id": "bedroom", "name": "Bedroom", "floor_id": "ground"}
+    restructurer.areas["bathroom"] = {"area_id": "bathroom", "name": "Bathroom", "floor_id": "ground"}
+    restructurer.entities["sensor.existing_id"]["area_id"] = "bathroom"
+
+    context = restructurer.build_naming_context("sensor.existing_id", {}, pending_area_id="bedroom")
+
+    assert context["area"] == "Bathroom"

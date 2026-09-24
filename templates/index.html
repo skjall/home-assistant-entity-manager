@@ -5012,11 +5012,18 @@
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
 
-                    // The area the panel holds where it holds one: the
-                    // name the server computed is about the area the registry
-                    // has, and the row would have read the old one while the
-                    // form said otherwise. "" is an area picked away.
-                    const areaId = panel.area_id !== undefined ? panel.area_id : (device?.area_id || entity.area_id);
+                    // The area the panel holds where it holds one and the
+                    // entity follows the device into it: the name the server
+                    // computed is about the area the registry has, and the row
+                    // would have read the old one while the form said otherwise.
+                    // "" is an area picked away. An entity with an area of its
+                    // own keeps it - the move is written onto the device, and
+                    // the rename leaves that entity where it is - and that area
+                    // comes first here as it does at the server.
+                    const follows = !entity.area_id;
+                    const areaId = (panel.area_id !== undefined && follows)
+                        ? panel.area_id
+                        : (entity.area_id || device?.area_id);
                     const area = areaId
                         ? this.hierarchy.areas.find(a => a.id === areaId)
                         : null;
@@ -5044,9 +5051,13 @@
                     // the device is in, and it is being shown under the one the
                     // panel holds.
                     let own = this.withoutLeading(this.getEntitySuffix(entity), panel.device_name);
-                    if (panel.area_id !== undefined) {
-                        const here = device?.area_id
-                            ? this.hierarchy.areas.find(one => one.id === device.area_id)
+                    if (panel.area_id !== undefined && follows) {
+                        // The area the entity's own part was read under, which
+                        // is the entity's own where it has one: taken as the
+                        // device's, the row showed the area twice.
+                        const underId = entity.area_id || device?.area_id;
+                        const here = underId
+                            ? this.hierarchy.areas.find(one => one.id === underId)
                             : null;
                         own = this.withoutLeading(this.withoutLeading(own, area?.name), here?.name);
                     }
@@ -5522,7 +5533,15 @@
                     if (!mine.length) return;
 
                     // The slug rules live in the backend; see fetchNormalized.
-                    const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e)));
+                    // Asked with the entities, so the ids come back as a rename
+                    // would write them. Worked out from the slugs alone, two of
+                    // the device's own entities landing on one slug read as one
+                    // taken id, and the panel refused a rename that nothing was
+                    // in the way of - the rename writes _1 and _2.
+                    const answer = await this.fetchNormalizedFor(
+                        mine.map(e => this.getEntityFriendlyNameLive(e)),
+                        mine.map(e => e.id)
+                    );
                     const taken = new Map();
                     for (const other of this.hierarchy.entities) {
                         if (other.device_id === device.id) continue;
@@ -5531,7 +5550,8 @@
 
                     const clashes = [];
                     mine.forEach((entity, index) => {
-                        const wantedId = this.composeEntityId(entity, slugs[index]);
+                        const wantedId = (answer.ids && answer.ids[index])
+                            || this.composeEntityId(entity, answer.normalized[index]);
                         const holder = taken.get(wantedId);
                         if (holder) {
                             clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
