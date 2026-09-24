@@ -4730,6 +4730,10 @@
 
                 // Select area
                 selectArea(area) {
+                    // A rename under way belongs to the device it was started
+                    // on. Walking away from it left the next panel shut until
+                    // that other device's job reported back.
+                    if (this.renamingDevice) return;
                     this.selectedArea = area.id;
                     this.selectedAreaData = area;
                     this.selectedDevice = null;
@@ -4751,6 +4755,7 @@
 
                 // Select device
                 selectDevice(device) {
+                    if (this.renamingDevice) return;
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
@@ -4767,6 +4772,7 @@
 
                 // Select a virtual device group (automations, scenes, helpers, etc.)
                 selectVirtualDevice(virtualDeviceId) {
+                    if (this.renamingDevice) return;
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
@@ -5097,12 +5103,6 @@
                 computePreviewsFor(entities) {
                     if (!entities?.length) return;
 
-                    for (const entity of entities) {
-                        if (entity._justRenamed || entity._currentSuffix !== undefined) continue;
-                        entity._previewName = null;
-                        entity._previewId = null;
-                    }
-
                     // What the panel holds is not in the registry yet, so a
                     // list read again in the background would quietly drop it
                     // and paint the rows as though nothing were staged. The
@@ -5113,11 +5113,31 @@
                     // beside it would then have written.
                     const staged = this.deviceChangeStaged ? this.selectedDevice : null;
 
+                    for (const entity of entities) {
+                        if (entity._justRenamed || entity._currentSuffix !== undefined) continue;
+                        // Not the staged rows: emptying them here left them
+                        // blank until the staged computation answered, which a
+                        // background refresh did over and over.
+                        if (staged && entity.device_id === staged) continue;
+                        entity._previewName = null;
+                        entity._previewId = null;
+                    }
+
+                    // Asked once, not once per entity: the scan was walking
+                    // the device list again for every row.
+                    const devicesById = new Map(this.hierarchy.devices.map(d => [d.id, d]));
+
                     const pending = [];
+                    let stagedUnanswered = false;
                     for (const entity of entities) {
                         // Skip if already computed (e.g. from user edit) or just renamed
+                        if (staged && entity.device_id === staged) {
+                            // A row the staged computation has not reached -
+                            // an entity that arrived with this refresh.
+                            if (!entity._previewName) stagedUnanswered = true;
+                            continue;
+                        }
                         if (entity._previewName || entity._justRenamed) continue;
-                        if (staged && entity.device_id === staged) continue;
 
                         // Friendly-name composition stays client-side; only the slug comes
                         // from the backend (source of truth). What the server
@@ -5125,7 +5145,7 @@
                         // device on its way to another one is left to the
                         // client, which knows where it is going.
                         const moving = this.deviceIsMoving(
-                            entity.device_id ? this.hierarchy.devices.find(d => d.id === entity.device_id) : null
+                            entity.device_id ? devicesById.get(entity.device_id) || null : null
                         );
                         entity._previewName = (!moving && entity.suggested_name)
                             || this.getEntityFriendlyNameForEntity(entity);
@@ -5136,7 +5156,11 @@
                         pending.push(entity);
                     }
 
-                    if (staged) this.previewDeviceWide();
+                    // Only where a staged row is still without an answer: the
+                    // staging itself asks for them, and asking again on every
+                    // background refresh was one slug request per poll for
+                    // rows that already held their answer.
+                    if (stagedUnanswered) this.previewDeviceWide();
                     if (!pending.length) return;
 
 
@@ -6691,6 +6715,12 @@
                     const nameStaged = !!typed && typed !== (device.base_name || '').trim();
                     const base = typed || device.base_name;
 
+                    // Read before the wait below. The panel is shut while
+                    // the check runs, but the sidebar is not: a click on
+                    // another device clears the staged area, and reading it
+                    // afterwards then wrote a rename with the move dropped.
+                    const picked = this.devicePreviewAreaId;
+
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = base;
                     await this.checkDeviceNameClash(device);
@@ -6700,11 +6730,6 @@
                         this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
                         return;
                     }
-
-                    // Read after the check, not before it: the area picker is
-                    // live while the check runs, and the run writes the area
-                    // the panel holds when it starts, not one picked earlier.
-                    const picked = this.devicePreviewAreaId;
                     const areaStaged = picked !== null && (picked || null) !== (device.area_id || null);
                     // Rendered with the staged area, so a device that moves is
                     // named where it moved to rather than where it was.
@@ -6719,6 +6744,10 @@
                         // it, so there is nowhere for the name to go. Saying
                         // "nothing to apply" left that looking like a lost
                         // click.
+                        // Nothing was written, so the field goes back to what
+                        // it held: left standing, the device's own name read as
+                        // a rename waiting to be applied.
+                        this.devicePreviewBaseName = wasPreviewed;
                         this.showMessage(nameStaged
                             ? this.t('messages.name_has_no_place')
                             : this.t('messages.nothing_to_apply'), 'info', true);
