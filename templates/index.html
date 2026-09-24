@@ -2618,7 +2618,7 @@
                                             <span class="scope-label" x-text="t('entity.scope_label', {name: typeOriginal(entity)})"></span>
                                             <div class="scope-group" role="group">
                                                 <button type="button" class="scope-option"
-                                                        :class="entity._ruleScope === 'all' ? 'is-active' : ''"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'all' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'all'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_all_hint', {count: entity.type_count || 1})">
                                                     <span x-text="t('entity.scope_everywhere')"></span>
@@ -2626,7 +2626,7 @@
                                                 </button>
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.platform && entity.type_integration_count"
-                                                        :class="entity._ruleScope === 'integration' ? 'is-active' : ''"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'integration' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'integration'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_integration_hint', {integration: entity.platform, count: entity.type_integration_count || 0})">
                                                     <span x-text="entity.platform"></span>
@@ -2634,7 +2634,7 @@
                                                 </button>
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.device_model && entity.type_model_count"
-                                                        :class="entity._ruleScope === 'model' ? 'is-active' : ''"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'model' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'model'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_model_hint', {model: entity.device_model, count: entity.type_model_count || 0})">
                                                     <span class="scope-model" x-text="entity.device_model"></span>
@@ -2644,7 +2644,7 @@
                                                      and what it sets; the domain is what tells them apart. -->
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.device_model && entity.type_model_domain_count"
-                                                        :class="entity._ruleScope === 'domain' ? 'is-active' : ''"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'domain' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'domain'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_domain_hint', {domain: entityDomain(entity), model: entity.device_model, integration: entity.platform, count: entity.type_model_domain_count || 0})">
                                                     <span x-text="entityDomain(entity)"></span>
@@ -2652,7 +2652,7 @@
                                                     <span class="scope-count" x-text="entity.type_model_domain_count || 0"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
-                                                        :class="entity._ruleScope === 'here' ? 'is-active' : ''"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'here' ? 'is-active' : ''"
                                                         @click="entity._ruleScope = 'here'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_here_hint')">
                                                     <span x-text="t('entity.scope_here')"></span>
