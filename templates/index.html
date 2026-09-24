@@ -5208,10 +5208,14 @@
                     // where the supplied name is correctable the paragraph
                     // beside this one already says where the name comes from.
                     if (!value) {
-                        if (entity.supplied_correctable) return '';
+                        // The override first: an entity whose supplied name is
+                        // correctable can carry one, and then the line that
+                        // matters is the one saying this entity was decided by
+                        // hand.
                         if (r.won_by === 'override') {
                             return this.t('entity.explain_exception_no_type', {original});
                         }
+                        if (entity.supplied_correctable) return '';
                         return this.t('entity.explain_no_type');
                     }
                     switch (r.won_by) {
