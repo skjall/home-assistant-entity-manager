@@ -3253,6 +3253,12 @@
                         index.countInArea.set(areaId, (index.countInArea.get(areaId) || 0) + 1);
                     }
                 }
+                // Handed out to everyone who asks, so nobody's to change:
+                // a caller pushing into one of these would add to the index
+                // itself, and the next lookup would be given it back without
+                // anything having said the hierarchy had moved.
+                for (const list of index.byDevice.values()) Object.freeze(list);
+                for (const list of index.withoutDeviceInArea.values()) Object.freeze(list);
                 index.version = state.hierarchyVersion;
                 return index;
             }
@@ -3301,6 +3307,7 @@
                 _deviceWideTimer: null,  // Debounce for the device-wide entity preview
                 _previewRun: 0,  // Which computation of the previews is the current one
                 _stagedRun: 0,  // and which computation of the staged device's rows
+                _revertRun: 0,  // and which one puts a device's rows back again
                 // The area picked in the panel, before anything is written.
                 // null means nothing picked; a string is an area id.
                 devicePreviewAreaId: null,
@@ -5117,7 +5124,7 @@
 
                 // What a set of entities would be called. Their own previews are
                 // dropped first: the answer changed, which is why they are here.
-                computePreviewsFor(entities) {
+                computePreviewsFor(entities, counter = '_previewRun') {
                     if (!entities?.length) return;
 
                     // What the panel holds is not in the registry yet, so a
@@ -5142,7 +5149,7 @@
 
                     // Asked once, not once per entity: the scan was walking
                     // the device list again for every row.
-                    const devicesById = new Map(this.hierarchy.devices.map(d => [d.id, d]));
+                    const devicesById = indexed(this).devicesById;
 
                     const pending = [];
                     let stagedUnanswered = false;
@@ -5181,10 +5188,10 @@
                     if (!pending.length) return;
 
 
-                    const run = ++this._previewRun;
+                    const run = ++this[counter];
                     this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
                         // A newer computation has since answered these rows.
-                        if (run !== this._previewRun) return;
+                        if (run !== this[counter]) return;
                         pending.forEach((entity, i) => {
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
@@ -5225,7 +5232,12 @@
                     // which would otherwise write the previous device's ids
                     // when it arrives.
                     this._stagedRun++;
-                    this._previewRun++;
+                    // The one that puts the rows back, not the one computing
+                    // them for the whole list: bumping that one had a device
+                    // clicked during the first load throw away the answer the
+                    // entire installation was waiting for, and the list then
+                    // showed no id change anywhere until the next reload.
+                    this._revertRun++;
                 },
 
                 previewDeviceWide() {
@@ -5239,7 +5251,7 @@
                             entity._previewName = null;
                             entity._previewId = null;
                         }
-                        this.computePreviewsFor(entities);
+                        this.computePreviewsFor(entities, '_revertRun');
                         this.previewVersion++;
                         return;
                     }
