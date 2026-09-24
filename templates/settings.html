@@ -2259,11 +2259,24 @@
                 },
 
                 async changePatternRules() {
-                    await fetch('api/naming/settings', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ pattern_rules: this.patternRules })
-                    });
+                    // The switch shows what the server holds. A write that did
+                    // not arrive left it showing the opposite until the page
+                    // was loaded again, when it silently went back.
+                    const wanted = this.patternRules;
+                    try {
+                        const response = await fetch('api/naming/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ pattern_rules: wanted })
+                        });
+                        if (!response.ok) throw new Error(await response.text());
+                        this.namingError = false;
+                        this.namingMessage = '';
+                    } catch (error) {
+                        this.patternRules = !wanted;
+                        this.namingError = true;
+                        this.namingMessage = error.message;
+                    }
                 },
 
                 // The language comes from Home Assistant; the page only shows it.

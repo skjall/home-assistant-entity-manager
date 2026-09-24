@@ -11,7 +11,7 @@ import pytest
 
 from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
-from naming_rules import NamingRuleError, NamingRules, pattern_of, readable_pattern, target_of
+from naming_rules import NamingRuleError, NamingRules, compile_pattern, pattern_of, readable_pattern, target_of
 from naming_templates import NamingTemplates
 import routes_naming
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
@@ -260,3 +260,20 @@ def test_the_setting_is_read_and_written(client):
     response = client.put("/api/naming/settings", json={"pattern_rules": True})
 
     assert response.get_json()["pattern_rules"] is True
+
+
+def test_an_expression_that_repeats_what_repeats_is_refused():
+    """ "(a+)+" takes exponentially long on a name that nearly matches.
+
+    Every entity of the integration is matched against the pattern on every
+    resolution, so one such expression would stop the add-on answering at all.
+    """
+    for expression in [r"(a+)+b", r"(a*)*", r"(\d+){2,}", r"((a+))+"]:
+        with pytest.raises(NamingRuleError):
+            compile_pattern(expression)
+
+
+def test_the_expressions_this_add_on_writes_are_accepted():
+    """A learned pattern quantifies the digits it left open and nothing else."""
+    for expression in [r"Heizung\ (?P<n1>\d+)", r"(ab)?c", r"a+b+", r"(?P<n1>[0-9]{1,4})"]:
+        assert compile_pattern(expression) is not None
