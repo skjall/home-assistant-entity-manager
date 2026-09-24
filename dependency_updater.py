@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 from dotenv import load_dotenv
 
-from energy_prefs import EnergyPrefs
+from energy_prefs import EnergyPrefs, ws_url_for
 from entity_ref_utils import replace_entity_in_obj
 from helper_options import HelperOptions
 
@@ -20,11 +20,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-
-
-def _ws_url(base_url: str) -> str:
-    """The WebSocket address of Home Assistant, derived from its HTTP one."""
-    return base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
 
 
 class DependencyUpdater:
@@ -43,7 +38,7 @@ class DependencyUpdater:
         # reachable over the WebSocket API alone. Nothing carries a rename into
         # it either, and a dashboard naming an entity that has gone shows
         # nothing and says nothing.
-        self.energy = EnergyPrefs(_ws_url(self.base_url), self.token)
+        self.energy = EnergyPrefs(ws_url_for(self.base_url), self.token)
 
     async def get_states(self) -> List[Dict]:
         """Hole alle States"""

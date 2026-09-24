@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 from config_files import shared as shared_config_files
 from device_swap import INTERIM_SUFFIX
-from energy_prefs import EnergyPrefs
+from energy_prefs import EnergyPrefs, ws_url_for
 from helper_options import HelperOptions
 
 logging.basicConfig(level=logging.INFO)
@@ -183,10 +183,7 @@ class ReferenceChecker:
         # sits there silently.
         self.helpers = HelperOptions(self.base_url, self.token)
         # The energy dashboard's own store, which no file or REST scan reaches.
-        self.energy = EnergyPrefs(
-            self.base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket",
-            self.token,
-        )
+        self.energy = EnergyPrefs(ws_url_for(self.base_url), self.token)
         # The YAML the configuration API does not hand out: packages, includes
         # and YAML-mode dashboards. Present only when the mount is there.
         self.config_files = shared_config_files(self.VALID_DOMAINS)

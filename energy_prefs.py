@@ -26,6 +26,12 @@ from ha_websocket import HomeAssistantWebSocket
 
 logger = logging.getLogger(__name__)
 
+
+def ws_url_for(base_url: str) -> str:
+    """The WebSocket address of Home Assistant, derived from its HTTP one."""
+    return base_url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
+
+
 # The fields that hold a statistic id. A statistic id is an entity id wherever
 # the statistic comes from an entity; the external ones - "shellyplug:total" and
 # its kin - carry a colon and match no entity, so they pass through untouched.
