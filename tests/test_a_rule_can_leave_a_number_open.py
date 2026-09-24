@@ -287,3 +287,19 @@ def test_a_number_that_appears_twice_gets_two_placeholders():
 def test_a_repetition_inside_a_class_is_a_character():
     """ "([a+])+" repeats a class of two characters, which finishes in time."""
     assert compile_pattern(r"([a+])+b") is not None
+
+
+def test_a_group_that_may_match_nothing_may_not_repeat():
+    """ "(Sensor ?)+" backtracks as badly as "(a+)+" and was let through."""
+    for expression in [r"(Sensor ?)+\d+", r"(a?)+b", r"(ab?)*c"]:
+        with pytest.raises(NamingRuleError):
+            compile_pattern(expression)
+
+
+def test_a_placeholder_with_nothing_in_it_leaves_the_name_alone(rules):
+    """The target used to come out as the text around a hole."""
+    rule = rules.add_filter("pattern", r"Zone\ (?P<n1>\d*)", "de", "Zimmer {1}", {"integration": INTEGRATION})
+
+    assert rules.render(rule, "Zone 4", "de") == "Zimmer 4"
+    # No number in the name, so the rule has nothing to put in the target.
+    assert rules.render(rule, "Zone ", "de") == "Zimmer {1}"

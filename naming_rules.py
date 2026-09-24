@@ -158,6 +158,11 @@ def target_of(typed: str, numbers: List[str]) -> str:
     return target
 
 
+# The syntax that opens a group: a plain "(", or one of the extensions whose
+# question mark says what kind of group it is rather than repeating anything.
+_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|P=\w+|<[=!]|[:=!>#])")
+
+
 def _refuse_runaway(regex: str) -> None:
     """Refuse a quantifier that is applied to something that already repeats.
 
@@ -176,6 +181,13 @@ def _refuse_runaway(regex: str) -> None:
         if char == "\\":
             at += 2
             continue
+        opening = _GROUP_OPEN.match(regex, at)
+        if opening and not in_class:
+            # "(?P<n1>" and its kin open a group; the question mark in them is
+            # not a quantifier and must not be read as one.
+            repeats.append(False)
+            at = opening.end()
+            continue
         if in_class:
             # Inside [...] a star is a star: "([a+])+" repeats a class of two
             # characters, which finishes in time like any other.
@@ -193,7 +205,11 @@ def _refuse_runaway(regex: str) -> None:
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
             if inside or after in {"*", "+", "{"}:
                 repeats[-1] = True
-        elif char in {"*", "+", "{"}:
+        elif char in {"*", "+", "{", "?"}:
+            # A question mark counts: "(Sensor ?)+" repeats a group that can
+            # match nothing, which backtracks just as badly as "(a+)+". A
+            # question mark on a group of its own is read at the ")" above and
+            # is fine - "(ab)?c" finishes in time.
             repeats[-1] = True
         at += 1
 
@@ -209,13 +225,26 @@ def compile_pattern(regex: str) -> "re.Pattern[str]":
         raise NamingRuleError(f"Not a valid pattern: {error}") from error
 
 
-def fill_placeholders(target: str, match: "re.Match[str]") -> str:
-    """The target with every placeholder replaced by what the name had there."""
+def fill_placeholders(target: str, match: "re.Match[str]") -> Optional[str]:
+    """The target with every placeholder replaced by what the name had there.
+
+    None where a placeholder has nothing to put there: an expression like
+    "Zone (?P<n1>\\d*)" matches "Zone" with no number at all, and the target
+    then came out as the text around a hole. The rule does not apply to such a
+    name rather than renaming it to half of what it says.
+    """
+    missing = False
 
     def value(found: "re.Match[str]") -> str:
-        return _group(match, found.group(1)) or ""
+        nonlocal missing
+        got = _group(match, found.group(1))
+        if not got:
+            missing = True
+            return ""
+        return got
 
-    return _PLACEHOLDER.sub(value, target)
+    filled = _PLACEHOLDER.sub(value, target)
+    return None if missing else filled
 
 
 def _group(match: "re.Match[str]", key: str) -> Optional[str]:
@@ -945,10 +974,12 @@ class NamingRules:
             return None
         found.sort(key=lambda pair: pair[0])
         if len(found) > 1 and found[0][0] == found[1][0]:
+            # All of them, not the first two: a third rule written to settle
+            # the tie between the other two joined it without a word.
+            tied = [rule["id"] for rank, rule in found if rank == found[0][0]]
             logger.warning(
-                "Pattern rules %s and %s both match %r; neither applies",
-                found[0][1]["id"],
-                found[1][1]["id"],
+                "Pattern rules %s all match %r; none applies",
+                ", ".join(tied),
                 name,
             )
             return None
@@ -965,7 +996,10 @@ class NamingRules:
         if pattern is None:
             return target
         match = pattern.fullmatch(name or "")
-        return fill_placeholders(target, match).strip() if match else target
+        if not match:
+            return target
+        filled = fill_placeholders(target, match)
+        return filled.strip() if filled is not None else target
 
     def _compiled_pattern(self, rule: Mapping[str, Any]) -> Optional["re.Pattern[str]"]:
         """The compiled expression of a stored pattern rule, or of a passing one."""
