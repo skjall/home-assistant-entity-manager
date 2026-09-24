@@ -5160,11 +5160,35 @@
                     };
                 },
 
+                // The device base name as the form holds it, where that is not
+                // what the registry holds. An area is written through the moment
+                // it is chosen, but a base name waits for its button, and until
+                // then the registry still has the name the integration supplied -
+                // for a UniFi access point its MAC address. The server builds its
+                // answer from the registry unless it is told otherwise, and that
+                // answer is what a confirmed rename writes.
+                pendingDeviceContext(entity) {
+                    const device = entity?.device_id
+                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        : null;
+                    if (!device || device.id !== this.selectedDevice || this.isVirtualDevice(this.selectedDevice)) {
+                        return {};
+                    }
+                    if (this.devicePreviewBaseName === null || this.devicePreviewBaseName === device.base_name) {
+                        return {};
+                    }
+                    return { device_name: this.devicePreviewBaseName };
+                },
+
                 async previewEntityNaming(entity, suffix = null) {
                     const response = await fetch('api/naming/preview', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ entity_id: entity.id, type_value: suffix })
+                        body: JSON.stringify({
+                            entity_id: entity.id,
+                            type_value: suffix,
+                            ...this.pendingDeviceContext(entity)
+                        })
                     });
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'Failed to preview naming');

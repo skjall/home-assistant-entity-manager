@@ -130,6 +130,26 @@ def test_preview_with_replacement_type(client):
     assert response.get_json()["rendered"]["entity_id"] == "number.kuche_deckenleuchte_tempo"
 
 
+def test_preview_takes_the_device_name_being_typed(client):
+    """The interface writes an area through at once but holds a device base name
+    until its button. Without it the answer comes from the registry, which for a
+    UniFi access point is its MAC address - and the answer is what a confirmed
+    rename writes."""
+    response = client.post(
+        "/api/naming/preview",
+        json={"entity_id": "number.a_effect_speed", "type_value": "Tempo", "device_name": "Deckenlampe"},
+    )
+
+    assert response.get_json()["rendered"]["entity_id"] == "number.kuche_deckenlampe_tempo"
+
+
+def test_preview_without_a_device_name_still_reads_the_registry(client):
+    """Only a name actually typed steps in front of the stored one."""
+    response = client.post("/api/naming/preview", json={"entity_id": "number.a_effect_speed", "type_value": "Tempo"})
+
+    assert response.get_json()["rendered"]["entity_id"] == "number.kuche_deckenleuchte_tempo"
+
+
 def test_rules_list_delete_and_settings(client):
     client.post("/api/naming/learn", json={"entity_id": "number.a_effect_speed", "value": "Effektgeschwindigkeit"})
     listed = client.get("/api/naming/rules").get_json()

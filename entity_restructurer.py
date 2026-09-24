@@ -368,13 +368,24 @@ class EntityRestructurer:
         return "sensor"  # Default
 
     def build_naming_context(
-        self, entity_id: str, state_info: Dict[str, Any], ignore_exception: bool = False
+        self,
+        entity_id: str,
+        state_info: Dict[str, Any],
+        ignore_exception: bool = False,
+        pending_device_name: Optional[str] = None,
     ) -> Dict[str, str]:
         """Build the complete template context for an entity.
 
         ``ignore_exception`` answers what the entity would be called if it had
         no exception - the one question needed to tell an exception that still
         changes something from one a rule has meanwhile caught up with.
+
+        ``pending_device_name`` answers the same question for a device whose
+        name is typed but not applied. An area is written through the moment it
+        is chosen, but a base name waits for its button, and until then the
+        registry still holds what the integration supplied - for a UniFi access
+        point that is its MAC address. A preview built from the registry answers
+        with that MAC, and the preview is what a confirmed rename writes.
         """
         domain, _, object_id = entity_id.partition(".")
         entity_reg = self.entities.get(entity_id, {})
@@ -419,7 +430,12 @@ class EntityRestructurer:
             "model": device.get("model", ""),
             "integration": integration,
         }
-        device_name = self._base_device_name(raw_device_name, partial_context)
+        if pending_device_name is not None:
+            # What was typed is already a base name - it is the field the
+            # interface strips the area prefix out of - so it goes in as it is.
+            device_name = pending_device_name
+        else:
+            device_name = self._base_device_name(raw_device_name, partial_context)
         partial_context["device"] = device_name
         # A hypothetical answer must not replace the real one that the entity
         # list reads back out of last_resolutions.
@@ -438,6 +454,9 @@ class EntityRestructurer:
                 # was added, or its model, into every entity name.
                 device.get("name", ""),
                 device.get("model", ""),
+                # And the name the device is about to be given, which is not in
+                # the registry yet but is what the entity will sit under.
+                *((pending_device_name,) if pending_device_name else ()),
             ),
             partial_context,
         )
@@ -1203,10 +1222,15 @@ class EntityRestructurer:
         entity_id: str,
         state_info: Dict[str, Any],
         entity_name: Optional[str] = None,
+        pending_device_name: Optional[str] = None,
     ) -> Tuple[str, str]:
-        """Generate an entity ID and entity-registry name from active templates."""
+        """Generate an entity ID and entity-registry name from active templates.
+
+        ``pending_device_name`` is a device base name typed but not applied; see
+        ``build_naming_context``.
+        """
         domain = entity_id.split(".", 1)[0]
-        context = self.build_naming_context(entity_id, state_info)
+        context = self.build_naming_context(entity_id, state_info, pending_device_name=pending_device_name)
         if entity_name is not None:
             context["entity"] = entity_name
         object_id = self.naming_templates.render("entity_id", context, normalize=True)
