@@ -86,7 +86,7 @@ _MARKER = "\x00field\x00"
 _SEPARATORS = " \t\r\n_-\u2013\u2014|/\u00b7.,"
 
 
-def _split_trailing_separator(value: str) -> tuple:
+def _split_trailing_separator(value: str) -> Tuple[str, str]:
     """Split off the separator a template leaves in front of its last field."""
     head = value.rstrip(_SEPARATORS)
     return head, value[len(head) :]
