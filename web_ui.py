@@ -530,6 +530,13 @@ def normalize_names():
     the two drift apart -- e.g. accented characters get stripped client-side).
 
     Body: ``{"names": ["Foo Bar", ...]}`` -> ``{"normalized": ["foo_bar", ...]}``
+
+    With ``"for": [entity_id, ...]`` of the same length, the answer also carries
+    the ids and names these entities would be written under: several of them can
+    come out of one name, and which number each one then carries is the rename's
+    own reckoning (``deduplicate_entity_ids``). Asked for here so that a preview
+    and the write it leads to say the same thing - worked out a second time in
+    the interface, the two disagreed about which entity keeps the plain id.
     """
     data = request.json
     if not isinstance(data, dict) or not isinstance(data.get("names"), list):
@@ -540,7 +547,32 @@ def normalize_names():
         return jsonify({"error": "Too many names"}), 400
 
     normalized = [normalize_name(n) if isinstance(n, str) else "" for n in names]
-    return jsonify({"normalized": normalized})
+    answer = {"normalized": normalized}
+
+    for_entities = data.get("for")
+    restructurer = renamer_state.get("restructurer")
+    if isinstance(for_entities, list) and len(for_entities) == len(names) and restructurer is not None:
+        proposals = [
+            (
+                entity_id,
+                f"{str(entity_id).partition('.')[0]}.{slug}",
+                name if isinstance(name, str) else "",
+            )
+            for entity_id, slug, name in zip(for_entities, normalized, names)
+            if isinstance(entity_id, str) and slug
+        ]
+        if len(proposals) == len(names):
+            # What the numbering tells the user about is the rename they asked
+            # for, not a preview: left behind here, the list would report a
+            # collision nobody had run into.
+            held = getattr(restructurer, "last_numbering", {})
+            try:
+                resolved = restructurer.deduplicate_entity_ids(proposals)
+            finally:
+                restructurer.last_numbering = held
+            answer["ids"] = [new_id for _, new_id, _ in resolved]
+            answer["names"] = [name for _, _, name in resolved]
+    return jsonify(answer)
 
 
 @app.route("/api/preview", methods=["POST"])

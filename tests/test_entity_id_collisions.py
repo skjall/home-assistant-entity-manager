@@ -168,3 +168,45 @@ def test_three_of_a_kind_count_one_two_three(restructurer):
         "event.schlafzimmer_button_taste_3",
     ]
     assert [name for _, _, name in result] == ["Taste 1", "Taste 2", "Taste 3"]
+
+
+def test_the_endpoint_answers_with_the_ids_a_rename_would_write(restructurer, monkeypatch):
+    """The interface used to work the numbering out a second time.
+
+    Two rows out of one name: which of them keeps the plain id, and from which
+    number the others count, is the rename's own reckoning. Asked for here, so a
+    preview and the write it leads to cannot disagree - and what the numbering
+    tells the user about stays the rename they asked for, not this question.
+    """
+    import web_ui
+
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    restructurer.last_numbering = {"sensor.untouched": {"wanted": "x", "holder": "y"}}
+    web_ui.app.config["TESTING"] = True
+    client = web_ui.app.test_client()
+
+    answer = client.post(
+        "/api/normalize",
+        json={
+            "names": ["Wohnzimmer Steckdose Energie", "Wohnzimmer Steckdose Energie"],
+            "for": ["sensor.plug_energy", "sensor.plug_energy_2"],
+        },
+    ).get_json()
+
+    assert answer["normalized"] == ["wohnzimmer_steckdose_energie"] * 2
+    assert answer["ids"] == ["sensor.wohnzimmer_steckdose_energie_1", "sensor.wohnzimmer_steckdose_energie_2"]
+    assert answer["names"] == ["Wohnzimmer Steckdose Energie 1", "Wohnzimmer Steckdose Energie 2"]
+    assert restructurer.last_numbering == {"sensor.untouched": {"wanted": "x", "holder": "y"}}
+
+
+def test_the_endpoint_still_answers_names_alone(restructurer, monkeypatch):
+    """Without "for" it says what it always said."""
+    import web_ui
+
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    web_ui.app.config["TESTING"] = True
+    client = web_ui.app.test_client()
+
+    answer = client.post("/api/normalize", json={"names": ["Küche Lampe"]}).get_json()
+
+    assert answer == {"normalized": ["kuche_lampe"]}

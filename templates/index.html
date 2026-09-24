@@ -4863,21 +4863,36 @@
                 // The backend (normalize_name / slugify) is the single source of truth for
                 // the naming convention -- the frontend must NOT reimplement the slug rules,
                 // otherwise the two drift apart (e.g. accented characters get stripped here).
-                async fetchNormalized(names) {
-                    if (!names.length) return [];
+                // The slugs for these names. With ``forEntities`` the answer
+                // also carries the ids and names a rename of them would write,
+                // numbering and all; ``normalizedFor`` is the older caller that
+                // wants the slugs alone.
+                async fetchNormalizedFor(names, forEntities = null) {
+                    const empty = {normalized: names.map(() => '')};
+                    if (!names.length) return {normalized: []};
                     try {
                         const resp = await fetch('api/normalize', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ names })
+                            body: JSON.stringify(forEntities ? { names, for: forEntities } : { names })
                         });
                         if (!resp.ok) throw new Error('normalize HTTP ' + resp.status);
                         const data = await resp.json();
-                        return Array.isArray(data.normalized) ? data.normalized : names.map(() => '');
+                        if (!Array.isArray(data.normalized)) return empty;
+                        const numbered = Array.isArray(data.ids) && Array.isArray(data.names)
+                            && data.ids.length === names.length && data.names.length === names.length;
+                        return numbered
+                            ? {normalized: data.normalized, ids: data.ids, names: data.names}
+                            : {normalized: data.normalized};
                     } catch (e) {
                         console.error('normalize failed', e);
-                        return names.map(() => '');
+                        return empty;
                     }
+                },
+
+                async fetchNormalized(names, forEntities = null) {
+                    const answer = await this.fetchNormalizedFor(names, forEntities);
+                    return forEntities ? answer : answer.normalized;
                 },
 
                 // Build the entity ID from a domain and a backend-provided slug.
@@ -5023,11 +5038,18 @@
                     // leaves it sitting in front, and the row said it twice.
                     // The server does the same thing with the name it is given.
                     // An integration writes the area into the name just as
-                    // readily as the device - "Bad Temperature" - so the area
-                    // being picked comes out of it too, in the order the server
-                    // takes them out in.
+                    // readily as the device - "Bad Temperature" - so an area
+                    // sitting in front of the entity's own part comes out of it
+                    // too. Both areas: the entity's part was read under the one
+                    // the device is in, and it is being shown under the one the
+                    // panel holds.
                     let own = this.withoutLeading(this.getEntitySuffix(entity), panel.device_name);
-                    if (panel.area_id !== undefined) own = this.withoutLeading(own, area?.name);
+                    if (panel.area_id !== undefined) {
+                        const here = device?.area_id
+                            ? this.hierarchy.areas.find(one => one.id === device.area_id)
+                            : null;
+                        own = this.withoutLeading(this.withoutLeading(own, area?.name), here?.name);
+                    }
                     parts.push(own);
 
                     return parts.filter(p => p).join(' ');
@@ -5100,40 +5122,27 @@
                     // Every computation under way, so a run that needs the ids
                     // waits for all of them rather than for whichever one
                     // started last.
-                    const settling = this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
-                        const answered = [];
+                    // Asked about these entities, so the answer carries the
+                    // ids and names a rename of them would write: two rows can
+                    // come out of one name, and which of them keeps the plain id
+                    // is the rename's own reckoning. Worked out here instead, the
+                    // preview and the write disagreed about it.
+                    const settling = this.fetchNormalized(
+                        pending.map(e => e._previewName),
+                        pending.map(e => e.id)
+                    ).then(answer => {
+                        const slugs = answer.normalized;
                         pending.forEach((entity, i) => {
                             // Only where nothing has asked since: this answer
                             // is about the name the row had when it was asked.
                             if (entity._previewAsk !== asked) return;
-                            answered.push({entity, slug: slugs[i]});
+                            entity._previewId = answer.ids
+                                ? answer.ids[i]
+                                : this.composeEntityId(entity, slugs[i]);
+                            // The name carries the number too, or the row would
+                            // read as one thing and be written as another.
+                            if (answer.names) entity._previewName = answer.names[i];
                         });
-                        // Two entities can come out of one name - "Lampe Ein/Aus"
-                        // twice - and the server numbers them apart against every
-                        // id already taken. Its answer is not used while the panel
-                        // holds a name it has not seen, so the same numbering
-                        // happens here: from the slug up, past every id that is
-                        // taken, which is what a rename would write. Numbering the
-                        // finished id instead gave "..._2_2" where the server
-                        // would say "..._3".
-                        const mine = new Set(answered.map(one => one.entity));
-                        const taken = new Set();
-                        for (const other of (this.hierarchy?.entities || [])) {
-                            if (mine.has(other)) continue;
-                            taken.add(other.id);
-                            if (other._previewId) taken.add(other._previewId);
-                        }
-                        for (const {entity, slug} of answered) {
-                            let candidate = this.composeEntityId(entity, slug);
-                            let number = 1;
-                            // Its own id is not something to number away from.
-                            while (candidate !== entity.id && taken.has(candidate)) {
-                                number += 1;
-                                candidate = this.composeEntityId(entity, `${slug}_${number}`);
-                            }
-                            taken.add(candidate);
-                            entity._previewId = candidate;
-                        }
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
                     }).finally(() => {
@@ -5276,7 +5285,7 @@
                     // what can be answered without looking anything up is
                     // answered first: nothing staged means nothing pending, and
                     // an entity of another device is not this panel's business.
-                    if (this.devicePreviewBaseName === null && (this.devicePreviewAreaId ?? null) === null) {
+                    if (this.devicePreviewBaseName === null && this.devicePreviewAreaId === null) {
                         return {};
                     }
                     if (!entity?.device_id || entity.device_id !== this.selectedDevice) return {};

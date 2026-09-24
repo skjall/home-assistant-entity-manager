@@ -397,10 +397,8 @@ class EntityRestructurer:
         device_id = entity_reg.get("device_id") or ""
         device = self.devices.get(device_id, {}) if device_id else {}
 
-        if pending_area_id is not None:
-            area_id = pending_area_id
-        else:
-            area_id = entity_reg.get("area_id") or device.get("area_id") or ""
+        stored_area = entity_reg.get("area_id") or device.get("area_id") or ""
+        area_id = pending_area_id if pending_area_id is not None else stored_area
         area = self.areas.get(area_id, {}) if area_id else {}
         floor_id = area.get("floor_id") or ""
         floor = self.floors.get(floor_id, {}) if floor_id else {}
@@ -450,7 +448,13 @@ class EntityRestructurer:
         # device name or an area that is not written yet is hypothetical in the
         # same way: left behind, it had the list saying a rule decided a name
         # that only the form has.
-        asking_only = ignore_exception or pending_device_name is not None or pending_area_id is not None
+        # An area asked about that is the one the entity is in makes the answer
+        # the real one, which the list may keep.
+        asking_only = (
+            ignore_exception
+            or pending_device_name is not None
+            or (pending_area_id is not None and pending_area_id != stored_area)
+        )
         previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(
             entity_id,
