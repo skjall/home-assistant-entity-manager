@@ -2439,10 +2439,9 @@
                             <template x-for="entity in filteredEntities" :key="entity.registry_id">
                                 <div class="entity-card-simple"
                                      :class="{
-                                         'has-changes': selectedArea !== '__no_area__' && entityNeedsRename(entity),
-                                         'no-changes': selectedArea === '__no_area__' || !entityNeedsRename(entity),
-                                         'is-disabled': entity.disabled_by,
-                                         'no-area-mode': selectedArea === '__no_area__'
+                                         'has-changes': entityNeedsRename(entity),
+                                         'no-changes': !entityNeedsRename(entity),
+                                         'is-disabled': entity.disabled_by
                                      }">
 
                                     <!-- Disabled indicator -->
@@ -2454,12 +2453,12 @@
                                         </button>
                                     </div>
 
-                                    <!-- Main: Current → New (or just Current in no-area mode) -->
-                                    <div class="entity-names" @click="selectedArea !== '__no_area__' && toggleEntityExpand(entity)">
+                                    <!-- Main: Current → New -->
+                                    <div class="entity-names" @click="toggleEntityExpand(entity)">
                                         <div class="current-state">
                                             <div class="friendly-name">
                                                 <span :title="entity.original_name || ''"
-                                                      x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
+                                                      x-html="entityNeedsRename(entity)
                                                               ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'old')
                                                               : escapeHtml(entity.original_name || t('entity.no_name'))"></span>
                                                 <span x-show="isOrphanEntity(entity)"
@@ -2469,19 +2468,19 @@
                                                 </span>
                                             </div>
                                             <code class="entity-id" :title="entity.id"
-                                                  x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
+                                                  x-html="entityNeedsRename(entity)
                                                           ? diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'old')
                                                           : escapeHtml(entity.id)"></code>
                                         </div>
 
-                                        <!-- Arrow and new state - hide in no-area mode -->
-                                        <template x-if="selectedArea !== '__no_area__' && entityNeedsRename(entity)">
+                                        <!-- Arrow and new state -->
+                                        <template x-if="entityNeedsRename(entity)">
                                             <div class="arrow-separator">
                                                 <i class="ri-arrow-right-line"></i>
                                             </div>
                                         </template>
 
-                                        <template x-if="selectedArea !== '__no_area__' && entityNeedsRename(entity)">
+                                        <template x-if="entityNeedsRename(entity)">
                                             <div class="new-state">
                                                 <div class="friendly-name" :title="entity._previewName || getEntityFriendlyName(entity)"
                                                      x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'new')"></div>
@@ -2490,8 +2489,8 @@
                                             </div>
                                         </template>
 
-                                        <!-- OK badge - hide in no-area mode -->
-                                        <template x-if="selectedArea !== '__no_area__' && !entityNeedsRename(entity)">
+                                        <!-- OK badge -->
+                                        <template x-if="!entityNeedsRename(entity)">
                                             <div class="no-change-badge">
                                                 <i class="ri-check-line"></i> <span x-text="t('entity.no_change')">OK</span>
                                             </div>
@@ -2499,14 +2498,14 @@
 
                                         <div class="flex items-center gap-2 ml-auto">
                                             <!-- Conflict warning - hide in no-area mode -->
-                                            <span x-show="selectedArea !== '__no_area__' && entityNeedsRename(entity) && isEntityIdTaken(entity)"
+                                            <span x-show="entityNeedsRename(entity) && isEntityIdTaken(entity)"
                                                   class="text-xs text-red-500 flex items-center gap-1"
                                                   :title="'Target ID: ' + getNewEntityId(entity)">
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
                                             </span>
                                             <div class="btn-group">
-                                                <!-- Quick apply button - hide in no-area mode -->
-                                                <template x-if="selectedArea !== '__no_area__' && staysInChangesFilter(entity)">
+                                                <!-- Quick apply button -->
+                                                <template x-if="staysInChangesFilter(entity)">
                                                     <button @click.stop="quickApplyEntity(entity)"
                                                             class="action-btn"
                                                             :class="{
@@ -2523,22 +2522,25 @@
                                                                    : 'ri-check-line'"></i>
                                                     </button>
                                                 </template>
-                                                <!-- Delete button - always visible, filled red in no-area mode -->
+                                                <!-- Delete button - always there, filled red for an orphan.
+                                                     Red is what says the entity has nothing left behind
+                                                     it; an entity whose device simply has no area still
+                                                     has everything, and deletes like any other. -->
                                                 <button @click.stop="confirmDeleteEntity(entity)"
                                                         class="action-btn"
                                                         :class="{
-                                                            'btn-filled-red': selectedArea === '__no_area__' || isOrphanEntity(entity),
-                                                            'btn-outline-gray hover:btn-filled-red': selectedArea !== '__no_area__' && !isOrphanEntity(entity)
+                                                            'btn-filled-red': isOrphanEntity(entity),
+                                                            'btn-outline-gray hover:btn-filled-red': !isOrphanEntity(entity)
                                                         }"
-                                                        :title="selectedArea === '__no_area__' ? t('entity.delete_entity') : (isOrphanEntity(entity) ? t('entity.delete_orphan') : t('entity.delete_entity'))">
+                                                        :title="isOrphanEntity(entity) ? t('entity.delete_orphan') : t('entity.delete_entity')">
                                                     <i class="ri-delete-bin-line"></i>
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- Edit Panel - hide in no-area mode -->
-                                    <div class="edit-panel" x-show="selectedArea !== '__no_area__' && entity._expanded" @click.stop>
+                                    <!-- Edit Panel -->
+                                    <div class="edit-panel" x-show="entity._expanded" @click.stop>
                                         <div class="edit-row">
                                             <label x-text="t('entity.type_label')">Type:</label>
                                             <div class="edit-input-group">
