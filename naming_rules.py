@@ -212,7 +212,9 @@ def _refuse_runaway(regex: str) -> None:
                     after = ""
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
-            if inside or after in {"*", "+", "{"}:
+            # "?" and "*" as well: "((ab)?)+" repeats a group that can match
+            # nothing, and the inner group alone said nothing about that.
+            if inside or after in {"*", "+", "{", "?"}:
                 repeats[-1] = True
         elif char == "{":
             counted = _COUNT.match(regex, at)
@@ -1018,12 +1020,16 @@ class NamingRules:
             return target
         # Out of what was compiled for the rules, so a home where every entity
         # matches one pattern does not compile it once per entity.
+        # Nothing rather than the target: a target that still holds "{1}" is
+        # not a name, and it was written to Home Assistant as one wherever the
+        # expression could not be read or did not match.
+        unfilled = "" if _PLACEHOLDER.search(target) else target
         pattern = self._compiled_pattern(rule)
         if pattern is None:
-            return target
+            return unfilled
         match = pattern.fullmatch(name or "")
         if not match:
-            return target
+            return unfilled
         filled = fill_placeholders(target, match)
         # Nothing rather than the template: the target with its placeholders
         # still in it is not a name, and it was written to Home Assistant as
@@ -1065,8 +1071,12 @@ class NamingRules:
         else:
             if not target.strip():
                 raise NamingRuleError("A rule needs a target")
-            rule["targets"][language] = target.strip()
-            self.check_pattern(rule)
+            # Judged as what it would become, and written only if it passes:
+            # writing first left a refused target standing in the rule, and the
+            # next save of anything put it on disk.
+            wanted = {**rule["targets"], language: target.strip()}
+            self.check_pattern({**rule, "targets": wanted})
+            rule["targets"] = wanted
             rule["updated_at"] = _now()
             if learned_from:
                 rule["learned_from"] = learned_from

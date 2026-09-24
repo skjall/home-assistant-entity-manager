@@ -313,3 +313,20 @@ def test_a_placeholder_with_nothing_in_it_leaves_the_name_alone(rules):
     # says nothing rather than its own template.
     assert rules.render(rule, "Zone ", "de") == ""
     assert rules.find("pattern", "Zone ", INTEGRATION, "de") is None
+
+
+def test_a_refused_target_is_not_left_standing_in_the_rule(rules):
+    """It was written first and refused afterwards, and the next save put it on disk."""
+    rule = _pattern_rule(rules)
+    before = dict(rule["targets"])
+
+    with pytest.raises(NamingRuleError):
+        rules.upsert("pattern", rule["match"]["value"], INTEGRATION, "de", "Heizkosten {2}")
+
+    assert rules.get(rule["id"])["targets"] == before
+
+
+def test_an_optional_group_inside_a_repeated_one_is_refused():
+    """ "((ab)?)+" repeats a group that can match nothing, and that is the runaway shape."""
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"((ab)?)+X")
