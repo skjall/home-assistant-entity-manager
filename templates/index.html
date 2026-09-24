@@ -2234,6 +2234,7 @@
                                    :class="devicePreviewAreaId !== null ? 'chosen' : ''"
                                    :placeholder="t('area.select_area')"
                                    x-model="areaSearch"
+                                   :disabled="renamingDevice || applyingEntityId || executing"
                                    @focus="areaComboOpen = true; areaComboAt = 0; areaSearch = ''"
                                    @input="areaComboOpen = true; areaComboAt = 0"
                                    @keydown.arrow-down.prevent="areaComboOpen = true; comboStep(1, matchingAreas().length, $el)"
@@ -4892,14 +4893,6 @@
                     return this.hierarchy.entities.filter(e => e.device_id === deviceId).length;
                 },
 
-                // The area a move in the panel would put the selected device in,
-                // or null where no move is being shown. The three names below
-                // are built out of the navigation's area, which is the device's
-                // own until it is about to leave it.
-                previewAreaData() {
-                    return this.areaForDevice(this.selectedDeviceData);
-                },
-
                 // A move is being shown for this device: an area was picked in
                 // the panel and not yet written. Untouched is null; an empty
                 // pick is a move to no area at all, which is a move like any
@@ -5146,8 +5139,13 @@
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
 
-                    // Find area (from device or entity)
-                    const areaId = device?.area_id || entity.area_id;
+                    // Find area (from device or entity), following a move the
+                    // panel is showing: this is what the cached preview holds,
+                    // and a name computed from the old area would sit there
+                    // unchanged while the panel says otherwise.
+                    const areaId = this.deviceIsMoving(device)
+                        ? this.previewAreaFor(device)
+                        : (device?.area_id || entity.area_id);
                     const area = areaId
                         ? this.hierarchy.areas.find(a => a.id === areaId)
                         : null;
@@ -5268,8 +5266,12 @@
                 matchingAreas() {
                     const typed = (this.areaSearch || '').trim().toLowerCase();
                     const areas = this.hierarchy.areas.filter(a => !typed || a.name.toLowerCase().includes(typed));
+                    // Offered as long as the device is in an area, whether or
+                    // not the panel already holds the pick: asking the panel
+                    // took the entry out of the list the moment it was chosen,
+                    // so it could not be seen as chosen or chosen again.
                     const none = { id: '', name: this.t('area.no_area') };
-                    if (this.panelAreaId() && (!typed || none.name.toLowerCase().includes(typed))) {
+                    if (this.selectedDeviceData?.area_id && (!typed || none.name.toLowerCase().includes(typed))) {
                         return [...areas, none];
                     }
                     return areas;
@@ -5307,8 +5309,8 @@
                     this.$nextTick(() => {
                         // The list belonging to this field, not the first one
                         // on the page: a second combo would scroll instead.
-                        const combo = field?.closest('.combo') || document;
-                        const at = combo.querySelector('.combo-list .combo-item.at');
+                        const combo = field?.closest('.combo');
+                        const at = combo?.querySelector('.combo-list .combo-item.at');
                         if (at) at.scrollIntoView({block: 'nearest'});
                     });
                 },
@@ -5632,10 +5634,13 @@
                 // Asked while typing, so the answer has to come from the name
                 // in the field rather than from the previews, which are built
                 // from the name that is stored.
-                async checkDeviceNameClash() {
-                    const device = this.selectedDeviceData;
+                // About the device it is given - the panel may have turned to
+                // another one while the slugs were on their way, and the answer
+                // would then be about whichever device it had turned to.
+                async checkDeviceNameClash(about = null) {
+                    const device = about || this.selectedDeviceData;
                     this.deviceNameClash = [];
-                    if (!device || this.isVirtualDevice(this.selectedDevice)) return;
+                    if (!device || this.isVirtualDevice(device.id)) return;
                     const wanted = this.getExpectedDeviceName(device);
                     if (!wanted || wanted === device.name) return;
 
@@ -6830,7 +6835,7 @@
 
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = base;
-                    await this.checkDeviceNameClash();
+                    await this.checkDeviceNameClash(device);
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();
                         this.devicePreviewBaseName = wasPreviewed;
@@ -6838,9 +6843,9 @@
                         return;
                     }
 
-                    // Read after the check, not before it: the area picker is
-                    // live while the check runs, and the run writes the area
-                    // the panel holds when it starts, not one picked earlier.
+                    // The picker is shut while this runs, so the area read
+                    // here is the one that was staged when the button was
+                    // pressed, whether it is read before the check or after it.
                     const picked = this.devicePreviewAreaId;
                     const areaStaged = picked !== null && (picked || null) !== (device.area_id || null);
                     // Rendered with the staged area, so a device that moves is
