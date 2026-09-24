@@ -90,6 +90,24 @@ Templates can use the following Home Assistant context:
 The entity-ID template is normalized with the same Home Assistant-compatible slug rules used elsewhere by the add-on;
 the entity domain is added automatically. Open Settings to preview a template with sample data before saving it.
 
+### Pattern rules
+
+Some integrations write a serial number into every entity name: `Heating 12345678`, `Heating 12345679`. Each device
+then supplies a name of its own, and a rule on the exact name reaches only one of them.
+
+Switch on **Pattern rules** in Settings and the rename panel offers one more reach next to the integration and the
+model: the supplied name with its numbers left open, such as `Heating {1}`, with the number of entities it matches.
+Typing `Heat cost allocator 12345678` there writes the rule `Heating {1}` → `Heat cost allocator {1}`, and every
+meter of that integration keeps its own number. `Heating total` is not caught - only the numbers are open.
+
+A pattern rule always applies within one integration. A rule on the exact name still wins over it, and where two
+patterns match one name equally closely, neither applies. Switching the setting off only hides the option; pattern
+rules already stored keep applying.
+
+Through the API or MCP (`create_rule` with `kind: pattern`) a pattern can also be a regular expression of your own.
+It has to match the whole supplied name, and the target can carry what it captures: `{1}` for the first group,
+`{name}` for a named group.
+
 ## Configuration
 
 ### Naming Overrides
