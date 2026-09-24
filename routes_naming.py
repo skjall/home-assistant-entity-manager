@@ -9,7 +9,7 @@ than an HTTP request.
 import asyncio
 import logging
 import random
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from flask import Blueprint, jsonify, request
 
@@ -27,6 +27,9 @@ from naming_rules import (
 from naming_templates import NamingTemplateError
 from registry import ensure_registry_loaded
 from sanitize import sanitize_name, sanitize_registry_id, sanitize_string, validate_json_input
+
+if TYPE_CHECKING:  # the type is only read, so the import stays out of the runtime
+    from entity_restructurer import EntityRestructurer
 
 logger = logging.getLogger(__name__)
 
@@ -362,7 +365,7 @@ def type_key_integration_counts(restructurer) -> dict:
     return counts
 
 
-def type_pattern_counts(restructurer) -> dict:
+def type_pattern_counts(restructurer: "EntityRestructurer") -> dict:
     """Entities per integration and pattern: names that differ only in their numbers.
 
     Keyed by (integration, expression), which is what a pattern rule learned
@@ -849,6 +852,8 @@ def naming_rule_item(rule_id):
     expression = data.get("match_value")
     if expression is not None:
         expression = sanitize_string(expression, max_length=500)
+    if data.get("targets") is None and expression is None:
+        return jsonify({"error": "Nothing to change: neither targets nor an expression"}), 400
     try:
         # Where a rule applies is added and removed one filter at a time; a
         # single scope here would have to throw the rest of the list away.

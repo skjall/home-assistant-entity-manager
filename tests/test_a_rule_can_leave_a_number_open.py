@@ -11,7 +11,7 @@ import pytest
 
 from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
-from naming_rules import NamingRuleError, NamingRules, pattern_of, readable_pattern, target_of
+from naming_rules import NamingRuleError, NamingRules, compile_pattern, pattern_of, readable_pattern, target_of
 from naming_templates import NamingTemplates
 import routes_naming
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
@@ -309,9 +309,7 @@ def test_a_new_expression_and_a_new_target_are_judged_together(rules):
 
 def test_an_expression_another_rule_already_claims_is_refused(rules):
     first = _pattern_rule(rules)
-    second = rules.add_filter(
-        "pattern", r"Wasser\ (?P<n1>\d+)", "de", "Wasserzähler {1}", {"integration": INTEGRATION}
-    )
+    second = rules.add_filter("pattern", r"Wasser\ (?P<n1>\d+)", "de", "Wasserzähler {1}", {"integration": INTEGRATION})
 
     with pytest.raises(NamingRuleError):
         rules.update(second["id"], value=first["match"]["value"])
@@ -349,3 +347,39 @@ def test_the_endpoint_says_why_an_expression_is_refused(client):
 
     assert response.status_code == 400
     assert "pattern" in response.get_json()["error"].lower()
+
+
+def test_an_expression_that_repeats_what_repeats_is_refused():
+    """ "(a+)+" takes exponentially long on a name that nearly matches.
+
+    Every entity of the integration is matched against the pattern on every
+    resolution, so one such expression would stop the add-on answering at all.
+    """
+    for expression in [r"(a+)+b", r"(a*)*", r"(\d+){2,}", r"((a+))+"]:
+        with pytest.raises(NamingRuleError):
+            compile_pattern(expression)
+
+
+def test_the_expressions_this_add_on_writes_are_accepted():
+    """A learned pattern quantifies the digits it left open and nothing else."""
+    for expression in [r"Heizung\ (?P<n1>\d+)", r"(ab)?c", r"a+b+", r"(?P<n1>[0-9]{1,4})"]:
+        assert compile_pattern(expression) is not None
+
+
+def test_an_update_that_asks_for_nothing_changes_nothing(rules):
+    """It used to stamp the rule as changed and write the file for it."""
+    rule = _pattern_rule(rules)
+    before = dict(rule)
+
+    unchanged = rules.update(rule["id"])
+
+    assert unchanged == before
+
+
+def test_the_endpoint_refuses_a_body_that_asks_for_nothing(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = _pattern_rule(rules)
+
+    response = client.put(f"/api/naming/rules/{rule['id']}", json={})
+
+    assert response.status_code == 400

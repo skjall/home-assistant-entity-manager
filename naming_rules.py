@@ -146,10 +146,42 @@ def target_of(typed: str, numbers: List[str]) -> str:
     return target
 
 
+def _refuse_runaway(regex: str) -> None:
+    """Refuse a quantifier that is applied to something that already repeats.
+
+    "(a+)+" and its kin take exponentially long on a name that nearly matches,
+    and every entity of the integration is matched against the pattern on every
+    resolution - one such expression would stop the add-on answering at all.
+    Nothing this add-on writes has that shape: a learned pattern quantifies the
+    digits it left open and nothing else.
+    """
+    quantifiers = {"*", "+", "?", "{"}
+    repeats = [False]  # whether the group at each depth already repeats
+    at = 0
+    while at < len(regex):
+        char = regex[at]
+        if char == "\\":
+            at += 2
+            continue
+        if char == "(":
+            repeats.append(False)
+        elif char == ")":
+            inside = repeats.pop() if len(repeats) > 1 else False
+            after = regex[at + 1 : at + 2]
+            if inside and after in quantifiers and after != "?":
+                raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
+            if inside or after in {"*", "+", "{"}:
+                repeats[-1] = True
+        elif char in {"*", "+", "{"}:
+            repeats[-1] = True
+        at += 1
+
+
 def compile_pattern(regex: str) -> "re.Pattern[str]":
     """A pattern's expression, compiled, or a NamingRuleError saying why not."""
     if not regex or len(regex) > MAX_PATTERN_LENGTH:
         raise NamingRuleError("A pattern needs an expression of at most 500 characters")
+    _refuse_runaway(regex)
     try:
         return re.compile(regex)
     except re.error as error:
@@ -1156,6 +1188,10 @@ class NamingRules:
         rule = self.get(rule_id)
         if rule is None:
             raise NamingRuleError(f"Unknown rule: {rule_id}")
+        if targets is None and value is None and filters is ...:
+            # Nothing was asked for. Stamping the rule as changed and writing
+            # the file said an edit had happened where none had.
+            return rule
 
         wanted = dict(rule)
         if targets is not None:
@@ -1167,10 +1203,10 @@ class NamingRules:
         if value is not None:
             if rule["match"]["kind"] != "pattern":
                 raise NamingRuleError("Only a pattern rule is matched on an expression")
-            expression = value.strip()
-            # Says why it cannot be read, which is what the writer needs back.
-            compile_pattern(expression)
-            wanted["match"] = {**rule["match"], "value": expression}
+            # Read as a pattern below, by the check that also asks whether
+            # the targets still have what they need - one compilation, and it
+            # says why it cannot be read, which is what the writer needs back.
+            wanted["match"] = {**rule["match"], "value": value.strip()}
 
         if filters is not ...:
             wanted["filters"] = clean_filters(filters)
