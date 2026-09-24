@@ -191,10 +191,6 @@
             color: var(--color-blue-500);
         }
 
-        .device-area-row {
-            padding-left: 30px;
-        }
-
         .area-select {
             width: 100%;
             font-size: 0.8rem;
@@ -2108,16 +2104,6 @@
                                            :title="t('device.open_in_ha')">
                                             <i class="ri-external-link-line"></i>
                                         </a>
-                                    </div>
-                                    <!-- Area Assignment row (only for devices without area) -->
-                                    <div x-show="selectedArea === '__no_area__'" class="device-area-row" @click.stop>
-                                        <select @change="assignDeviceArea(device.id, $event.target.value)"
-                                                class="area-select">
-                                            <option value="" x-text="t('area.select_area')">Select area...</option>
-                                            <template x-for="area in hierarchy.areas" :key="area.id">
-                                                <option :value="area.id" x-text="area.name"></option>
-                                            </template>
-                                        </select>
                                     </div>
                                 </div>
                             </template>
