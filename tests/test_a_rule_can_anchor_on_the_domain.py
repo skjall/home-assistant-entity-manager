@@ -168,20 +168,23 @@ def test_the_rule_stops_at_its_domain(home):
 
 
 def test_everywhere_takes_no_filter_at_all(home):
+    """"all" is the word the button sends; "global" is the one the API document
+    uses for the same thing, and both have to reach every device tracker."""
     client, restructurer, _ = home
 
-    answer = client.post(
-        "/api/naming/learn",
-        json={
-            "entity_id": "device_tracker.unifi_default_de_91_e5_f7_12_73",
-            "value": "Standort",
-            "anchor": "domain",
-            "scope": "global",
-        },
-    )
+    for scope in ("all", "global"):
+        answer = client.post(
+            "/api/naming/learn",
+            json={
+                "entity_id": "device_tracker.unifi_default_de_91_e5_f7_12_73",
+                "value": "Standort",
+                "anchor": "domain",
+                "scope": scope,
+            },
+        )
 
-    assert answer.get_json()["rule"]["filters"] == []
-    assert name_of(restructurer, "device_tracker.jans_iphone") == "Dusche Access Point Standort"
+        assert answer.get_json()["rule"]["filters"] == []
+        assert name_of(restructurer, "device_tracker.jans_iphone") == "Dusche Access Point Standort"
 
 
 def test_a_name_rule_still_decides_before_the_domain(home):
@@ -230,3 +233,91 @@ def test_the_counts_say_how_far_it_would_reach(home):
         ("device_tracker", "mobile_app"): 1,
         ("sensor", "unifi"): 1,
     }
+
+
+def test_the_domain_stands_back_where_a_name_rule_says_nothing_new(home):
+    """A rule that only repeats what the name already says still speaks.
+
+    The user looked at this entity and said what it is called; that the word
+    matches what was there anyway does not make the rule absent. Read as
+    absent, the widest anchor of all stepped in and renamed the entity after
+    its domain.
+    """
+    client, restructurer, _ = home
+    client.post(
+        "/api/naming/learn",
+        json={
+            "entity_id": "device_tracker.unifi_default_de_91_e5_f7_12_73",
+            "value": "Standort",
+            "anchor": "domain",
+            "scope": "all",
+        },
+    )
+    # The name rule says what the entity is called anyway.
+    client.post(
+        "/api/naming/learn",
+        json={"entity_id": "device_tracker.jans_iphone", "value": "Jans iPhone"},
+    )
+
+    assert name_of(restructurer, "device_tracker.jans_iphone") == "Dusche Access Point Jans iPhone"
+
+
+def test_a_class_rule_the_naming_holds_back_keeps_the_domain_out(home):
+    """The class rule was refused because the name does not name the class.
+
+    That is the naming saying this entity is not what its class says, not an
+    invitation for the widest anchor to name it after its domain instead.
+    """
+    client, restructurer, rules = home
+    restructurer.entities["button.passwort_neu"] = {
+        "id": "reg-button",
+        "entity_id": "button.passwort_neu",
+        "device_id": "ap",
+        "platform": "unifi",
+        "original_name": "Passwort neu erzeugen",
+        "device_class": "update",
+        "has_entity_name": False,
+    }
+    rules.upsert("device_class", "update", None, "de", "Aktualisierung")
+    client.post(
+        "/api/naming/learn",
+        json={
+            "entity_id": "button.passwort_neu",
+            "value": "Taste",
+            "anchor": "domain",
+            "scope": "integration",
+        },
+    )
+
+    assert name_of(restructurer, "button.passwort_neu") == "Dusche Access Point Passwort neu erzeugen"
+
+
+def test_a_rule_the_naming_holds_back_is_not_counted_as_reached(home):
+    """The count over a rule and the list under it have to say the same."""
+    client, restructurer, _ = home
+    restructurer.entities["button.passwort_neu"] = {
+        "id": "reg-button",
+        "entity_id": "button.passwort_neu",
+        "device_id": "ap",
+        "platform": "unifi",
+        "original_name": "Passwort neu erzeugen",
+        "has_entity_name": False,
+    }
+    client.post(
+        "/api/naming/learn",
+        json={"entity_id": "button.passwort_neu", "value": "Passwort neu erzeugen"},
+    )
+    answer = client.post(
+        "/api/naming/learn",
+        json={
+            "entity_id": "button.passwort_neu",
+            "value": "Taste",
+            "anchor": "domain",
+            "scope": "integration",
+        },
+    )
+    domain_rule = answer.get_json()["rule"]["id"]
+
+    behind = restructurer.rule_behind("button.passwort_neu", restructurer.entities["button.passwort_neu"])
+
+    assert (behind or {}).get("rule_id") != domain_rule

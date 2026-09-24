@@ -23,6 +23,7 @@ from hierarchy_manager import normalize_name
 from naming_canon import canon
 from naming_display import DEFAULT_CASE, normalize_display
 from naming_overrides import NamingOverrides
+from naming_rules import KIND_PRIORITY
 from naming_templates import NamingTemplates
 
 # Import new modules - optional for backward compatibility
@@ -579,8 +580,15 @@ class EntityRestructurer:
             language = self.language
             if rules is not None:
                 translation_key = registry.get("translation_key")
+                # Whether the user wrote a rule about this entity that is
+                # not the domain. The domain anchor is the last resort and
+                # stands back where one of them speaks - including one the
+                # naming holds back, because the user said something narrower
+                # about this entity than "every entity of this kind".
+                narrower = False
                 rule = rules.find("translation_key", translation_key, integration, language, model, domain)
                 if rule:
+                    narrower = True
                     candidates.append(
                         {
                             "value": rule["targets"][language],
@@ -591,6 +599,7 @@ class EntityRestructurer:
                     )
                 rule = rules.find("name", name, integration, language, model, domain)
                 if rule:
+                    narrower = True
                     candidates.append(
                         {
                             "value": rule["targets"][language],
@@ -603,6 +612,8 @@ class EntityRestructurer:
                 # measures where neither a key nor a name matched.
                 device_class = registry.get("device_class") or registry.get("original_device_class")
                 rule = rules.find("device_class", device_class, integration, language, model, domain)
+                if rule:
+                    narrower = True
                 if rule and self._names_the_class(name, entity_id, device_class, rule["targets"].get(language, "")):
                     candidates.append(
                         {
@@ -618,9 +629,13 @@ class EntityRestructurer:
                 # the client it found, so no two of them share anything but
                 # their domain. Unlike a device-class rule this is not held
                 # back where the name says more - a name that is not a type
-                # cannot say more than one.
+                # cannot say more than one. It does stand back where a narrower
+                # rule of the user's speaks about this entity, even where that
+                # rule changes nothing: a name rule that says what the entity
+                # already says is still the user saying which entities this one
+                # is about, and the widest anchor must not overrule it.
                 rule = rules.find("domain", domain, integration, language, model, domain)
-                if rule:
+                if rule and not narrower:
                     candidates.append(
                         {
                             "value": rule["targets"][language],
@@ -739,20 +754,29 @@ class EntityRestructurer:
         model = (self.devices.get(registry.get("device_id") or "", {}) or {}).get("model") or None
         device_class = registry.get("device_class") or registry.get("original_device_class") or ""
         domain = entity_id.partition(".")[0] or None
-        for kind, value in (
-            ("translation_key", registry.get("translation_key") or ""),
-            ("name", name),
-            ("device_class", device_class),
-            ("domain", domain or ""),
-        ):
-            rule = rules.find(kind, value, integration, self.language, model, domain)
+        asked = {
+            "translation_key": registry.get("translation_key") or "",
+            "name": name,
+            "device_class": device_class,
+            "domain": domain or "",
+        }
+        # In the order the naming asks them in, out of the one place that says
+        # what that order is. Written out here a second time, the two drifted.
+        narrower = False
+        for kind in sorted(asked, key=lambda one: KIND_PRIORITY[one]):
+            rule = rules.find(kind, asked[kind], integration, self.language, model, domain)
             if rule is None:
                 continue
+            if kind == "domain" and narrower:
+                # The same stepping back the naming does, or the count over a
+                # domain rule would include entities it never names.
+                return None
+            narrower = narrower or kind != "domain"
             if kind == "device_class" and not self._names_the_class(
                 name, entity_id, device_class, rule["targets"].get(self.language, "")
             ):
                 continue
-            return {"rule_id": rule["id"], "kind": kind, "value": value}
+            return {"rule_id": rule["id"], "kind": kind, "value": asked[kind]}
         return None
 
     @staticmethod

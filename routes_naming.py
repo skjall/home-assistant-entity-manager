@@ -393,6 +393,11 @@ def domain_counts(restructurer) -> dict:
     A rule anchored on the domain says nothing about what an entity measures,
     so its reach is every entity of that kind. The count is what makes that
     visible before it is saved.
+
+    Every entity of the domain, including those no integration declares. Those
+    have no integration to narrow a rule to, so this count is larger than the
+    integration counts below add up to - the difference is what only a rule
+    reaching the whole domain can name.
     """
     counts: dict = {}
     for entity_id in restructurer.entities:
@@ -403,7 +408,12 @@ def domain_counts(restructurer) -> dict:
 
 
 def domain_integration_counts(restructurer) -> dict:
-    """Entities per domain and integration: every device tracker UniFi supplies."""
+    """Entities per domain and integration: every device tracker UniFi supplies.
+
+    An entity whose integration Home Assistant does not report is in none of
+    these counts: there is no integration to narrow a rule to. It is in
+    ``domain_counts``, which is why the two do not add up.
+    """
     counts: dict = {}
     for entity_id, entity_data in restructurer.entities.items():
         domain = entity_id.partition(".")[0]
