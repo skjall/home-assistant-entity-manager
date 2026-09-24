@@ -616,38 +616,44 @@ class EntityRestructurer:
                             "matched_on": rules.why(rule, integration, model, domain),
                         }
                     )
-            # Home Assistant knows its own entities in every language it speaks,
-            # which is far more than this add-on could translate itself.
-            self._last_ha_source = None
-            supplied = self._home_assistant_name(entity_id, registry, language, name)
-            if supplied:
-                # What answered, not the name that was asked about: the lookup
-                # goes by this entity's translation key or its device class,
-                # and saying "every entity called X" would claim something
-                # about names that were never looked at.
-                source = self._last_ha_source or {"kind": "home_assistant", "value": canon(name)}
-                candidates.append(
-                    {
-                        "value": supplied,
-                        "won_by": "rule:system",
-                        "rule_id": None,
-                        "matched_on": {**source, "integration": integration},
-                    }
-                )
-            detected = integration or self.type_mappings.detect_integration(entity_id)
-            # No domain fallback: it would replace a specific name with "Sensor".
-            system = self.type_mappings.find_translation(name, language, detected)
-            if system and not any(
-                candidate["value"] == system and candidate["won_by"] == "rule:user" for candidate in candidates
-            ):
-                candidates.append(
-                    {
-                        "value": system,
-                        "won_by": "rule:system",
-                        "rule_id": None,
-                        "matched_on": {"kind": "name", "value": canon(name), "integration": detected},
-                    }
-                )
+            # Only where there is a name to look up. A name that is empty -
+            # area and device and no type part - has nothing for Home
+            # Assistant to answer, and asking anyway returns the device
+            # class, which puts a word back into a name that has none. A
+            # rule the user wrote has already had its say above.
+            if name:
+                # Home Assistant knows its own entities in every language it speaks,
+                # which is far more than this add-on could translate itself.
+                self._last_ha_source = None
+                supplied = self._home_assistant_name(entity_id, registry, language, name)
+                if supplied:
+                    # What answered, not the name that was asked about: the lookup
+                    # goes by this entity's translation key or its device class,
+                    # and saying "every entity called X" would claim something
+                    # about names that were never looked at.
+                    source = self._last_ha_source or {"kind": "home_assistant", "value": canon(name)}
+                    candidates.append(
+                        {
+                            "value": supplied,
+                            "won_by": "rule:system",
+                            "rule_id": None,
+                            "matched_on": {**source, "integration": integration},
+                        }
+                    )
+                detected = integration or self.type_mappings.detect_integration(entity_id)
+                # No domain fallback: it would replace a specific name with "Sensor".
+                system = self.type_mappings.find_translation(name, language, detected)
+                if system and not any(
+                    candidate["value"] == system and candidate["won_by"] == "rule:user" for candidate in candidates
+                ):
+                    candidates.append(
+                        {
+                            "value": system,
+                            "won_by": "rule:system",
+                            "rule_id": None,
+                            "matched_on": {"kind": "name", "value": canon(name), "integration": detected},
+                        }
+                    )
         # A translation that numbers what it cannot name loses to a name that
         # names it: Miele's "temperature_zone_2" reads "Temperaturzone 2" while
         # the entity says "Temperaturzone Gefrierzone", and only the zone tells
@@ -1059,10 +1065,14 @@ class EntityRestructurer:
             noted = remembered is not None and (bool(remembered) or not unwound)
             written = remembered if noted else unwound
             if not written:
-                # Nothing to look up and nothing to take apart. Asking the rules
-                # what "" is called answers with the device class and puts a
-                # word back into a name the user chose not to have one in.
-                return plain("", "original" if noted else "legacy_parse")
+                # A rule the user wrote still has its say - it can key on the
+                # translation key or the device class, neither of which needs a
+                # word to go by. What must not answer here is Home Assistant's
+                # own lookup: it would name the device class and put a word back
+                # into a name that has none (see _resolve_supplied_name).
+                return self._resolve_supplied_name(
+                    "", entity_id, registry, won_by="original" if noted else "legacy_parse"
+                )
             supplied = self._supplied_type(registry, state, prefixes)
             # Which of the two is the type part and which is already the
             # answer? Put the supplied name through the rules: if that is
