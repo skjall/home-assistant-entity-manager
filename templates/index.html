@@ -957,22 +957,26 @@
             display: inline-flex;
         }
 
+        /* A button of the group is rounded like any other button, and the
+           two rules below take the rounding off the edges that meet. Counted
+           among the action buttons, not among the children and not among the
+           buttons: a button a template of Alpine's sits beside is not
+           :first-child, and a button of another kind put into the group would
+           take the first slot from the one that is drawn first. A browser
+           without :nth-child(of S) - Chrome before 111, Firefox before 113 -
+           drops both rules and draws each button rounded on its own, which is
+           a group with a seam rather than a square button. */
         .entity-card-simple .btn-group .action-btn {
-            border-radius: 0;
+            border-radius: 4px;
         }
 
-        .entity-card-simple .btn-group .action-btn:first-child {
+        .entity-card-simple .btn-group .action-btn:nth-child(1 of .action-btn):not(:nth-last-child(1 of .action-btn)) {
             border-radius: 4px 0 0 4px;
         }
 
-        .entity-card-simple .btn-group .action-btn:last-child {
+        .entity-card-simple .btn-group .action-btn:nth-last-child(1 of .action-btn):not(:nth-child(1 of .action-btn)) {
             border-radius: 0 4px 4px 0;
             margin-left: -1px;
-        }
-
-        .entity-card-simple .btn-group .action-btn:only-child {
-            border-radius: 4px;
-            margin-left: 0;
         }
 
         .entity-card-simple .action-btn {
@@ -3626,18 +3630,13 @@
                     if (!this.hierarchy.areas) return [];
                     let areas = [...this.hierarchy.areas];
 
-                    // Only show areas that have at least one device that would appear in filteredDevices
+                    // Only show areas that hold a device with something to
+                    // apply. The search box is left out of this: it says which
+                    // devices to look at, not which headings exist, and an area
+                    // whose devices simply do not match the words typed would
+                    // otherwise disappear with its pending work.
                     if (this.onlyChanges) {
-                        areas = areas.filter(area => {
-                            // Get all devices for this area (respecting showDisabled filter)
-                            let areaDevices = this.hierarchy.devices.filter(d => d.area_id === area.id);
-                            if (!this.showDisabled) {
-                                areaDevices = areaDevices.filter(d => !d.disabled_by);
-                            }
-
-                            // The same question the device list asks.
-                            return areaDevices.some(device => this.deviceStaysInChangesFilter(device));
-                        });
+                        areas = areas.filter(area => this.devicesShownIn(area.id, false).length > 0);
                     }
 
                     const sortedAreas = areas.sort((a, b) => {
@@ -3646,31 +3645,33 @@
                         return nameA.localeCompare(nameB);
                     });
 
-                    // Add "No Area" entry if there are devices without area
-                    const devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
-                    if (devicesWithoutArea.length > 0 && !this.onlyChanges) {
+                    // "No area" is where a device lands that has none, and it
+                    // answers the same question as every area above: hiding it
+                    // outright under "only changes" put a sixth of the devices
+                    // out of reach of the one view that lists them. It is
+                    // listed on the same terms, and counts the same devices.
+                    const withoutArea = this.devicesShownIn('__no_area__', false);
+                    if (withoutArea.length > 0) {
                         sortedAreas.push({
                             id: '__no_area__',
                             name: this.t('area.no_area'),
                             isSpecial: true,
-                            deviceCount: devicesWithoutArea.length
+                            deviceCount: withoutArea.length
                         });
                     }
 
                     return sortedAreas;
                 },
 
-                // Computed: Filtered devices for selected area (sorted alphabetically)
-                get filteredDevices() {
-                    if (!this.selectedArea) return [];
-
-                    // Special handling for "No Area"
-                    let devices;
-                    if (this.selectedArea === '__no_area__') {
-                        devices = this.hierarchy.devices.filter(d => !d.area_id);
-                    } else {
-                        devices = this.hierarchy.devices.filter(d => d.area_id === this.selectedArea);
-                    }
+                // The one question about which devices a view shows, asked by
+                // the list, by the count beside a heading and by the headings
+                // themselves - three copies of it had already drifted apart.
+                // The sidebar leaves the search box out: it narrows the list,
+                // not the headings above it.
+                devicesShownIn(areaId, searched = true) {
+                    let devices = areaId === '__no_area__'
+                        ? this.hierarchy.devices.filter(d => !d.area_id)
+                        : this.hierarchy.devices.filter(d => d.area_id === areaId);
 
                     // A disabled device is shown only under "show disabled", and
                     // then it offers the one thing that works on it: switching it
@@ -3681,7 +3682,7 @@
                     }
 
                     // Apply text filter (search in name, base_name, manufacturer, model, integrations)
-                    if (this.deviceFilter) {
+                    if (searched && this.deviceFilter) {
                         const filter = this.deviceFilter.toLowerCase();
                         devices = devices.filter(d => {
                             const searchFields = [
@@ -3700,7 +3701,14 @@
                         devices = devices.filter(d => this.deviceStaysInChangesFilter(d));
                     }
 
-                    return devices.sort((a, b) => {
+                    return devices;
+                },
+
+                // Computed: Filtered devices for selected area (sorted alphabetically)
+                get filteredDevices() {
+                    if (!this.selectedArea) return [];
+
+                    return this.devicesShownIn(this.selectedArea).sort((a, b) => {
                         const nameA = (a.base_name || a.name || '').toLowerCase();
                         const nameB = (b.base_name || b.name || '').toLowerCase();
                         return nameA.localeCompare(nameB);
@@ -4196,7 +4204,10 @@
                     if (areaId) {
                         // Special handling for "__no_area__"
                         if (areaId === '__no_area__') {
-                            const devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
+                            // What the sidebar would list: restoring a heading
+                            // the filters have taken away left nothing selected
+                            // and an empty panel with no reason given.
+                            const devicesWithoutArea = this.devicesShownIn('__no_area__', false);
                             if (devicesWithoutArea.length > 0) {
                                 this.selectedArea = '__no_area__';
                                 this.selectedAreaData = {
@@ -5233,22 +5244,59 @@
                     const value = r.value || '';
                     const source = r.platform || entity.platform || '';
                     const match = r.matched_on;
+                    // A name built out of area and device alone has no type
+                    // part. Every line below names a word and where it came
+                    // from; with no word there is none to name, and saying the
+                    // integration supplied one left an empty pair of quotes.
+                    // Two cases keep their own line: an override that empties
+                    // the type part is still this one entity's decision, and
+                    // where the supplied name is correctable the paragraph
+                    // beside this one already says where the name comes from.
+                    if (!value) {
+                        // The override first: an entity whose supplied name is
+                        // correctable can carry one, and then the line that
+                        // matters is the one saying this entity was decided by
+                        // hand.
+                        if (r.won_by === 'override') {
+                            return this.t('entity.explain_exception_no_type', {original});
+                        }
+                        if (entity.supplied_correctable) return '';
+                        return this.t('entity.explain_no_type');
+                    }
                     switch (r.won_by) {
                         case 'override':
                             return this.t('entity.explain_exception', {value, original});
-                        case 'rule:user':
+                        case 'rule:user': {
                             if (match?.kind === 'pattern') {
                                 return this.t('entity.explain_rule_pattern', {
                                     pattern: match.label || match.value, value, integration: match.integration || source
                                 });
                             }
+                            // What the rule keys on, which is not always a
+                            // name: one written on a translation key or a
+                            // device class catches entities whose supplied
+                            // name is something else entirely, or empty.
+                            // A name rule keys on the canonical form of the
+                            // supplied name ("effect_speed"); the line says the
+                            // name as it was supplied. A kind we do not know a
+                            // line for falls back to the name rather than
+                            // printing a translation key that does not exist.
+                            const anchorKeys = {
+                                translation_key: 'entity.anchor_translation_key',
+                                device_class: 'entity.anchor_device_class',
+                            };
+                            const anchorKey = anchorKeys[match?.kind];
+                            const anchor = anchorKey
+                                ? this.t(anchorKey, {value: match.value})
+                                : this.t('entity.anchor_name', {value: original || match?.value || ''});
                             if (match?.model) {
-                                return this.t('entity.explain_rule_model', {original, value, model: match.model});
+                                return this.t('entity.explain_rule_model', {anchor, value, model: match.model});
                             }
                             if (match?.integration) {
-                                return this.t('entity.explain_rule_integration', {original, value, integration: match.integration});
+                                return this.t('entity.explain_rule_integration', {anchor, value, integration: match.integration});
                             }
-                            return this.t('entity.explain_rule_all', {original, value});
+                            return this.t('entity.explain_rule_all', {anchor, value});
+                        }
                         case 'rule:system':
                             // Which lookup answered, so the line does not claim
                             // something about every entity that shares a word.

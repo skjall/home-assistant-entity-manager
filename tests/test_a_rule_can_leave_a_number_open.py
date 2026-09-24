@@ -432,3 +432,46 @@ def test_the_endpoint_refuses_an_expression_of_whitespace(client):
 
     assert response.status_code == 400
     assert "Nothing to change" in response.get_json()["error"]
+
+
+def test_a_group_that_may_match_nothing_may_not_repeat():
+    """ "(Sensor ?)+" backtracks as badly as "(a+)+" and was let through."""
+    for expression in [r"(Sensor ?)+\d+", r"(a?)+b", r"(ab?)*c"]:
+        with pytest.raises(NamingRuleError):
+            compile_pattern(expression)
+
+
+def test_a_counted_repetition_is_not_a_runaway():
+    """ "(\\d{4})+" bounds what it repeats, so it finishes; "(\\d{2,})+" does not."""
+    assert compile_pattern(r"(\d{4})+") is not None
+    assert compile_pattern(r"(?:ab{1,3})+c") is not None
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"(\d{2,})+")
+
+
+def test_a_placeholder_with_nothing_in_it_leaves_the_name_alone(rules):
+    """The target used to come out as the text around a hole."""
+    rule = rules.add_filter("pattern", r"Zone\ (?P<n1>\d*)", "de", "Zimmer {1}", {"integration": INTEGRATION})
+
+    assert rules.render(rule, "Zone 4", "de") == "Zimmer 4"
+    # No number in the name, so the rule has nothing to put in the target and
+    # says nothing rather than its own template.
+    assert rules.render(rule, "Zone ", "de") == ""
+    assert rules.find("pattern", "Zone ", INTEGRATION, "de") is None
+
+
+def test_a_refused_target_is_not_left_standing_in_the_rule(rules):
+    """It was written first and refused afterwards, and the next save put it on disk."""
+    rule = _pattern_rule(rules)
+    before = dict(rule["targets"])
+
+    with pytest.raises(NamingRuleError):
+        rules.upsert("pattern", rule["match"]["value"], INTEGRATION, "de", "Heizkosten {2}")
+
+    assert rules.get(rule["id"])["targets"] == before
+
+
+def test_an_optional_group_inside_a_repeated_one_is_refused():
+    """ "((ab)?)+" repeats a group that can match nothing, and that is the runaway shape."""
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"((ab)?)+X")

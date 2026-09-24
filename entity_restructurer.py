@@ -747,7 +747,11 @@ class EntityRestructurer:
                 name, entity_id, device_class, rule["targets"].get(self.language, "")
             ):
                 continue
-            return {"rule_id": rule["id"], "kind": kind, "value": value}
+            # A pattern rule is matched on its expression; the name is only
+            # what was held against it, and reading it back as the value said
+            # the rule was written for this one entity.
+            matched = rule["match"]["value"] if kind == "pattern" else value
+            return {"rule_id": rule["id"], "kind": kind, "value": matched}
         return None
 
     @staticmethod

@@ -158,6 +158,14 @@ def target_of(typed: str, numbers: List[str]) -> str:
     return target
 
 
+# The syntax that opens a group: a plain "(", or one of the extensions whose
+# question mark says what kind of group it is rather than repeating anything.
+_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|P=\w+|<[=!]|[:=!>#])")
+
+# A counted quantifier: "{4}", "{1,3}", or the open-ended "{2,}".
+_COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
+
+
 def _refuse_runaway(regex: str) -> None:
     """Refuse a quantifier that is applied to something that already repeats.
 
@@ -176,6 +184,13 @@ def _refuse_runaway(regex: str) -> None:
         if char == "\\":
             at += 2
             continue
+        opening = _GROUP_OPEN.match(regex, at)
+        if opening and not in_class:
+            # "(?P<n1>" and its kin open a group; the question mark in them is
+            # not a quantifier and must not be read as one.
+            repeats.append(False)
+            at = opening.end()
+            continue
         if in_class:
             # Inside [...] a star is a star: "([a+])+" repeats a class of two
             # characters, which finishes in time like any other.
@@ -189,11 +204,34 @@ def _refuse_runaway(regex: str) -> None:
         elif char == ")":
             inside = repeats.pop() if len(repeats) > 1 else False
             after = regex[at + 1 : at + 2]
+            # A bounded count after the group is no more a runaway than the
+            # group itself; an open-ended one is.
+            if after == "{":
+                counted = _COUNT.match(regex, at + 1)
+                if counted and not counted.group("open"):
+                    after = ""
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
-            if inside or after in {"*", "+", "{"}:
+            # "?" and "*" as well: "((ab)?)+" repeats a group that can match
+            # nothing, and the inner group alone said nothing about that.
+            if inside or after in {"*", "+", "{", "?"}:
                 repeats[-1] = True
-        elif char in {"*", "+", "{"}:
+        elif char == "{":
+            counted = _COUNT.match(regex, at)
+            if counted:
+                # "{4}" and "{1,3}" bound what they repeat, so what they
+                # repeat finishes: "(\\d{4})+" is not the shape that runs
+                # away. An open end - "{2,}" - is, and reads as one below.
+                if counted.group("open"):
+                    repeats[-1] = True
+                at = counted.end()
+                continue
+            repeats[-1] = True
+        elif char in {"*", "+", "?"}:
+            # A question mark counts: "(Sensor ?)+" repeats a group that can
+            # match nothing, which backtracks just as badly as "(a+)+". A
+            # question mark on a group of its own is read at the ")" above and
+            # is fine - "(ab)?c" finishes in time.
             repeats[-1] = True
         at += 1
 
@@ -209,13 +247,26 @@ def compile_pattern(regex: str) -> "re.Pattern[str]":
         raise NamingRuleError(f"Not a valid pattern: {error}") from error
 
 
-def fill_placeholders(target: str, match: "re.Match[str]") -> str:
-    """The target with every placeholder replaced by what the name had there."""
+def fill_placeholders(target: str, match: "re.Match[str]") -> Optional[str]:
+    """The target with every placeholder replaced by what the name had there.
+
+    None where a placeholder has nothing to put there: an expression like
+    "Zone (?P<n1>\\d*)" matches "Zone" with no number at all, and the target
+    then came out as the text around a hole. The rule does not apply to such a
+    name rather than renaming it to half of what it says.
+    """
+    missing = False
 
     def value(found: "re.Match[str]") -> str:
-        return _group(match, found.group(1)) or ""
+        nonlocal missing
+        got = _group(match, found.group(1))
+        if not got:
+            missing = True
+            return ""
+        return got
 
-    return _PLACEHOLDER.sub(value, target)
+    filled = _PLACEHOLDER.sub(value, target)
+    return None if missing else filled
 
 
 def _group(match: "re.Match[str]", key: str) -> Optional[str]:
@@ -938,17 +989,25 @@ class NamingRules:
             if not rule["targets"].get(language):
                 continue
             one = self.matching_filter(rule, integration, model, domain)
-            if not one or not pattern.fullmatch(name):
+            if not one:
+                continue
+            match = pattern.fullmatch(name)
+            # Matching is not enough: a placeholder the name has nothing for
+            # leaves the target with a hole in it, and the rule then renamed
+            # the entity to its own template, "{1}" and all.
+            if not match or fill_placeholders(rule["targets"][language], match) is None:
                 continue
             found.append((filter_rank(one), rule))
         if not found:
             return None
         found.sort(key=lambda pair: pair[0])
         if len(found) > 1 and found[0][0] == found[1][0]:
+            # All of them, not the first two: a third rule written to settle
+            # the tie between the other two joined it without a word.
+            tied = [rule["id"] for rank, rule in found if rank == found[0][0]]
             logger.warning(
-                "Pattern rules %s and %s both match %r; neither applies",
-                found[0][1]["id"],
-                found[1][1]["id"],
+                "Pattern rules %s all match %r; none applies",
+                ", ".join(tied),
                 name,
             )
             return None
@@ -961,11 +1020,21 @@ class NamingRules:
             return target
         # Out of what was compiled for the rules, so a home where every entity
         # matches one pattern does not compile it once per entity.
+        # Nothing rather than the target: a target that still holds "{1}" is
+        # not a name, and it was written to Home Assistant as one wherever the
+        # expression could not be read or did not match.
+        unfilled = "" if _PLACEHOLDER.search(target) else target
         pattern = self._compiled_pattern(rule)
         if pattern is None:
-            return target
+            return unfilled
         match = pattern.fullmatch(name or "")
-        return fill_placeholders(target, match).strip() if match else target
+        if not match:
+            return unfilled
+        filled = fill_placeholders(target, match)
+        # Nothing rather than the template: the target with its placeholders
+        # still in it is not a name, and it was written to Home Assistant as
+        # one.
+        return filled.strip() if filled is not None else ""
 
     def _compiled_pattern(self, rule: Mapping[str, Any]) -> Optional["re.Pattern[str]"]:
         """The compiled expression of a stored pattern rule, or of a passing one."""
@@ -1002,8 +1071,12 @@ class NamingRules:
         else:
             if not target.strip():
                 raise NamingRuleError("A rule needs a target")
-            rule["targets"][language] = target.strip()
-            self.check_pattern(rule)
+            # Judged as what it would become, and written only if it passes:
+            # writing first left a refused target standing in the rule, and the
+            # next save of anything put it on disk.
+            wanted = {**rule["targets"], language: target.strip()}
+            self.check_pattern({**rule, "targets": wanted})
+            rule["targets"] = wanted
             rule["updated_at"] = _now()
             if learned_from:
                 rule["learned_from"] = learned_from

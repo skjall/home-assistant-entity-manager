@@ -536,7 +536,10 @@ def _rule_builtins(rules) -> dict:
     language = rules.language
     builtins = {}
     for rule in rules.rules:
-        if rule["match"]["kind"] == "translation_key":
+        if rule["match"]["kind"] in VERBATIM_KINDS:
+            # An expression is not a word: held against the system's table it
+            # answers nothing today, and would answer wrongly the moment a key
+            # there happened to read like one.
             continue
         builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
         if builtin is not None:
