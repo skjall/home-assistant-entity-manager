@@ -5050,7 +5050,8 @@
                     // is in. A device the panel is moving is not there any
                     // more, so the rows would have gone on showing the old
                     // area while the panel said otherwise.
-                    if (entity.suggested_name && entity._currentSuffix === undefined && !this.deviceIsMoving(device)) {
+                    const moving = this.deviceIsMoving(device);
+                    if (entity.suggested_name && entity._currentSuffix === undefined && !moving) {
                         return entity.suggested_name;
                     }
                     const parts = [];
@@ -5059,7 +5060,7 @@
                     // panel is showing: this is what the cached preview holds,
                     // and a name computed from the old area would sit there
                     // unchanged while the panel says otherwise.
-                    const areaId = this.deviceIsMoving(device)
+                    const areaId = moving
                         ? this.previewAreaFor(device)
                         : (device?.area_id || entity.area_id);
                     const area = areaId
@@ -5132,8 +5133,15 @@
                     }
                     if (!pending.length) return;
 
-                    this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
+                    // The names as they were asked about: a second pick
+                    // computes other ones while these are on their way back,
+                    // and the slug of a name that no longer stands would have
+                    // sat under it - the row read "Bedroom Light" with the id
+                    // of "Kitchen Light" until the second answer arrived.
+                    const asked = pending.map(e => e._previewName);
+                    this.fetchNormalized(asked).then(slugs => {
                         pending.forEach((entity, i) => {
+                            if (entity._previewName !== asked[i]) return;
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
                         // Force Alpine to re-evaluate dependent expressions
@@ -5399,15 +5407,20 @@
                 // About the device it is given - the panel may have turned to
                 // another one while the slugs were on their way, and the answer
                 // would then be about whichever device it had turned to.
+                // The ids the name would take from somebody else, returned
+                // as well as shown: the selection can move to another device
+                // while the slugs are being fetched, and the answer about the
+                // one that was asked about must not stand against the other's
+                // rename. The caller that is renaming reads what it got back.
                 async checkDeviceNameClash(about = null, baseName = null) {
                     const device = about || this.selectedDeviceData;
                     this.deviceNameClash = [];
-                    if (!device || this.isVirtualDevice(device.id)) return;
+                    if (!device || this.isVirtualDevice(device.id)) return [];
                     const wanted = this.getExpectedDeviceName(device, baseName);
-                    if (!wanted || wanted === device.name) return;
+                    if (!wanted || wanted === device.name) return [];
 
                     const mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
-                    if (!mine.length) return;
+                    if (!mine.length) return [];
 
                     // The slug rules live in the backend; see fetchNormalized.
                     const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e, baseName)));
@@ -5425,7 +5438,10 @@
                             clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
                         }
                     });
-                    this.deviceNameClash = clashes;
+                    // Only where the panel is still on this device; the rows
+                    // read the shown list against the selected device.
+                    if (device.id === this.selectedDevice) this.deviceNameClash = clashes;
+                    return clashes;
                 },
 
                 deviceNeedsRename(device) {
@@ -6034,12 +6050,27 @@
                             const device = this.hierarchy.devices.find(d => d.id === deviceId);
                             if (device) {
                                 device.area_id = areaId || null;
+                                // What the server computed is about the area the
+                                // device was in. Keeping it had the list saying
+                                // "Kitchen Light" while the panel wrote the
+                                // Bedroom name; without it the name is rendered
+                                // here, out of the area the device is in now.
+                                device.suggested_name = null;
                             }
 
-                            // Also update entities of this device
-                            this.hierarchy.entities
-                                .filter(e => e.device_id === deviceId)
-                                .forEach(e => e.area_id = areaId || null);
+                            // Also update entities of this device, and the
+                            // names the server computed for them: those are
+                            // about the area the device has left.
+                            const mine = this.hierarchy.entities.filter(e => e.device_id === deviceId);
+                            mine.forEach(e => {
+                                e.area_id = areaId || null;
+                                e.suggested_name = null;
+                                e.suggested_entity_id = null;
+                            });
+                            // Computed again from where the device is now. The
+                            // rows read the cached names, so dropping them
+                            // without this left the list empty where they were.
+                            this.computePreviewsFor(mine);
 
                             // An area added since this page was loaded is not
                             // in the list yet; it is still the area the device
@@ -6606,7 +6637,13 @@
                             // Nothing was written, so nothing stays staged: the
                             // rows went on showing a move that had failed, with
                             // no way to take it back but to pick the old area.
-                            if (this.selectedDevice === deviceId) this.devicePreviewAreaId = null;
+                            if (this.selectedDevice === deviceId) {
+                                this.devicePreviewAreaId = null;
+                                // And the names computed for the area it did not
+                                // move to. Left standing, a rename run from the
+                                // list would have written every one of them.
+                                this.invalidateEntityPreviews();
+                            }
                             return;
                         }
                         moved = true;
@@ -6622,6 +6659,11 @@
 
                     if (device.name === newFullName) {
                         this.showMessage(this.t('device.name_already_correct'), 'info');
+                        // The move stands even though the name needed nothing.
+                        // What the server computed for the names is about the
+                        // area the device has left, so it is read again rather
+                        // than left saying the old one.
+                        if (moved) await this.loadHierarchy();
                         return;
                     }
 
@@ -6630,8 +6672,9 @@
                     // is the door the rename actually goes through.
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = newBaseName;
+                    let clashes = [];
                     try {
-                        await this.checkDeviceNameClash(device, newBaseName);
+                        clashes = await this.checkDeviceNameClash(device, newBaseName);
                     } catch (error) {
                         // The check never got to look. The field goes back to
                         // what it held, or it sits there showing a rename that
@@ -6639,12 +6682,13 @@
                         this.devicePreviewBaseName = wasPreviewed;
                         throw error;
                     }
-                    if (this.deviceNameClash.length) {
-                        const taken = this.deviceNameClashId();
+                    if (clashes.length) {
+                        const taken = clashes[0].id;
                         this.devicePreviewBaseName = wasPreviewed;
                         this.showMessage(moved
                             ? this.t('device.moved_not_renamed', {error: this.t('device.id_conflict', {id: taken})})
                             : this.t('device.id_conflict', {id: taken}), 'error');
+                        if (moved) await this.loadHierarchy();
                         return;
                     }
 
@@ -6664,6 +6708,7 @@
                             this.showMessage(moved
                                 ? this.t('device.moved_not_renamed', {error: busy})
                                 : busy, 'error');
+                            if (moved) await this.loadHierarchy();
                             return;
                         }
                         if (!response.ok || !job.job_id) {
@@ -6679,6 +6724,7 @@
                         this.showMessage(moved
                             ? this.t('device.moved_not_renamed', {error: error.message})
                             : 'Error: ' + error.message, 'error');
+                        if (moved) await this.loadHierarchy();
                     }
                 },
 
