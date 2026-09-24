@@ -587,7 +587,7 @@ def _capture_device_entity_naming(
             # What went into the name, not what came out of it: a rule the user
             # edits afterwards only reaches this entity again if the note hands
             # it back the word the rule matches on.
-            "base_entity": resolution.get("input") or name,
+            "base_entity": resolution["input"] if "input" in resolution else name,
             # And what came out of it, which is what the name is built from.
             # The two are the same word until a rule or a translation changes
             # it; rendering the first one wrote the name past the rule that

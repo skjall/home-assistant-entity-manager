@@ -236,13 +236,23 @@ def test_a_bracket_that_tells_two_entities_apart_reaches_the_new_id() -> None:
             "sensor.uplink_up": {"device_id": "device-1"},
             "sensor.uplink_down": {"device_id": "device-1"},
         }
-        last_resolutions = {
-            "sensor.uplink_up": {"input": "PLC-Uplink PHY-Rate", "value": "PLC-Uplink PHY-Rate (UP)"},
-            "sensor.uplink_down": {"input": "PLC-Uplink PHY-Rate", "value": "PLC-Uplink PHY-Rate (DOWN)"},
+        supplied = {
+            "sensor.uplink_up": "PLC-Uplink PHY-Rate (UP)",
+            "sensor.uplink_down": "PLC-Uplink PHY-Rate (DOWN)",
         }
+        last_resolutions: dict[str, dict] = {}
 
         def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
-            return {"entity": self.last_resolutions[entity_id]["value"]}
+            # The real resolver writes the reading down as it answers, bracket
+            # and all, and the capture reads it from there.
+            value = self.supplied[entity_id]
+            self.last_resolutions[entity_id] = {
+                "input": "PLC-Uplink PHY-Rate",
+                "value": value,
+                "won_by": "rule:system",
+                "rule_id": None,
+            }
+            return {"entity": value}
 
         def generate_new_entity_id(
             self,
@@ -269,6 +279,9 @@ def test_a_bracket_that_tells_two_entities_apart_reaches_the_new_id() -> None:
     captured = routes_entities._capture_device_entity_naming(restructurer, "device-1", states)
     planned = routes_entities._plan_device_entity_changes(restructurer, "device-1", states, captured)
 
+    # The note keeps the word the rule matches on, which both of them share.
+    assert captured["sensor.uplink_up"]["base_entity"] == "PLC-Uplink PHY-Rate"
+    assert captured["sensor.uplink_up"]["won_by"] == "rule:system"
     assert [new_id for _, new_id, _ in planned] == [
         "sensor.hall_plc_plc_uplink_phy_rate_up",
         "sensor.hall_plc_plc_uplink_phy_rate_down",
