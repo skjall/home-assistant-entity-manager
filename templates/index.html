@@ -4879,7 +4879,11 @@
                     return !!device
                         && device.id === this.selectedDevice
                         && !this.isVirtualDevice(device.id)
-                        && this.devicePreviewAreaId !== null;
+                        && this.devicePreviewAreaId !== null
+                        // The area it is in, picked again, is not a move: every
+                        // row was computed afresh for it and the fast answer
+                        // thrown away for nothing.
+                        && (this.devicePreviewAreaId || null) !== (device.area_id || null);
                 },
 
                 // The area every name below is built out of: the picked one
@@ -4903,14 +4907,10 @@
                 getDeviceDisplayName(device) {
                     if (!device) return '';
                     if (device.suggested_name && !this.deviceIsMoving(device)) return device.suggested_name;
-                    const area = this.areaForDevice(device);
-                    const areaName = area?.name || '';
-                    const deviceBaseName = device.base_name;
-
-                    if (areaName) {
-                        return `${areaName} ${deviceBaseName}`;
-                    }
-                    return deviceBaseName;
+                    // Through the template, not "area then name": a template
+                    // that puts the area elsewhere had the list and the panel
+                    // saying two different things about the same rename.
+                    return this.renderDeviceName(device) || device.base_name;
                 },
 
                 // Get entity display name (short - just the entity suffix)
@@ -4921,7 +4921,7 @@
                 },
 
                 // Live preview versions - use _editValue for real-time updates
-                getEntityFriendlyNameLive(entity) {
+                getEntityFriendlyNameLive(entity, baseName = null) {
                     const parts = [];
 
                     // The entity's own device, so a name computed while the
@@ -4938,7 +4938,12 @@
 
                     // Device base name (use preview if editing)
                     if (device && !this.isVirtualDevice(device.id)) {
-                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
+                        // The name the caller is writing, where it said one:
+                        // reading it off the panel had a click on another
+                        // device leave the check asking about the old name.
+                        const typed = baseName !== null
+                            ? baseName
+                            : (device.id === this.selectedDevice ? this.devicePreviewBaseName : null);
                         parts.push(typed !== null ? typed : device.base_name);
                     }
 
@@ -5073,15 +5078,19 @@
 
                 // Get friendly name using entity's own device/area (not selected)
                 getEntityFriendlyNameForEntity(entity) {
-                    if (entity.suggested_name && entity._currentSuffix === undefined) {
-                        return entity.suggested_name;
-                    }
-                    const parts = [];
-
                     // Find entity's device
                     const device = entity.device_id
                         ? indexed(this).devicesById.get(entity.device_id)
                         : null;
+
+                    // What the server precomputed is about the area the device
+                    // is in. A device the panel is moving is not there any
+                    // more, so the rows would have gone on showing the old
+                    // area while the panel said otherwise.
+                    if (entity.suggested_name && entity._currentSuffix === undefined && !this.deviceIsMoving(device)) {
+                        return entity.suggested_name;
+                    }
+                    const parts = [];
 
                     // Find area (from device or entity), following a move the
                     // panel is showing: this is what the cached preview holds,
@@ -5099,9 +5108,13 @@
                         parts.push(area.name);
                     }
 
-                    // Device base name
+                    // Device base name, as the panel holds it: a name typed
+                    // there and not written yet is what the row would be
+                    // renamed to, and the row showed the stored one instead -
+                    // which is then what a run would have written.
                     if (device) {
-                        parts.push(device.base_name);
+                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
+                        parts.push(typed !== null ? typed : device.base_name);
                     }
 
                     // Entity suffix (uses shared logic)
@@ -5507,12 +5520,12 @@
                 },
 
                 // Check if device needs rename
-                getExpectedDeviceName(device) {
+                getExpectedDeviceName(device, baseName = null) {
                     if (!device) return '';
-                    const deviceBase = (device.id === this.selectedDevice && this.devicePreviewBaseName !== null)
+                    const typed = (device.id === this.selectedDevice && this.devicePreviewBaseName !== null)
                         ? this.devicePreviewBaseName
                         : device.base_name;
-                    return this.renderDeviceName(device, deviceBase) || device.name;
+                    return this.renderDeviceName(device, baseName !== null ? baseName : typed) || device.name;
                 },
 
                 // Check if device name itself needs to change
@@ -5547,7 +5560,7 @@
                 // About the device it is given - the panel may have turned to
                 // another one while the slugs were on their way, and the answer
                 // would then be about whichever device it had turned to.
-                async checkDeviceNameClash(about = null) {
+                async checkDeviceNameClash(about = null, baseName = null) {
                     const device = about || this.selectedDeviceData;
                     // Assigning an empty list where one was empty already is a
                     // repaint of everything for nothing, and this runs after
@@ -5567,7 +5580,7 @@
                         return true;
                     };
                     if (!device || this.isVirtualDevice(device.id)) return settle([]);
-                    const wanted = this.getExpectedDeviceName(device);
+                    const wanted = this.getExpectedDeviceName(device, baseName);
                     if (!wanted || wanted === device.name) return settle([]);
 
                     const mine = indexed(this).byDevice.get(device.id) || none;
@@ -5575,7 +5588,7 @@
 
                     // The slug rules live in the backend; see fetchNormalized.
                     const asked = this.hierarchyVersion;
-                    const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e)));
+                    const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e, baseName)));
                     // The registry moved while the slugs were on their way, so
                     // the entities they were computed for are not the ones the
                     // index holds now; the next keystroke asks again. What was
@@ -6218,9 +6231,13 @@
                             // now, so the counts have to be worked out again.
                             this.hierarchyVersion++;
 
+                            // An area added since this page was loaded is not
+                            // in the list yet; it is still the area the device
+                            // was put in, and saying it was taken out of every
+                            // area would be the opposite of what happened.
                             const area = areaId ? this.hierarchy.areas.find(a => a.id === areaId) : null;
-                            this.showMessage(area
-                                ? this.t('area.area_assigned') + ': ' + area.name
+                            this.showMessage(areaId
+                                ? this.t('area.area_assigned') + ': ' + (area?.name || areaId)
                                 : this.t('area.area_cleared'), 'success');
                             return true;
                         }
@@ -6299,7 +6316,7 @@
 
                     const newName = this.getExpectedDeviceName(device);
                     if (device.name === newName) {
-                        this.showMessage('Device name already correct', 'info');
+                        this.showMessage(this.t('device.name_already_correct'), 'info');
                         return;
                     }
 
@@ -6787,6 +6804,12 @@
                 },
 
                 async applyDeviceWideRun(device, deviceId, driftDevices) {
+                    // The device went while the page was standing on it. Reading
+                    // its name below threw where a message belongs.
+                    if (!indexed(this).devicesById.has(deviceId)) {
+                        this.showMessage(this.t('device.gone'), 'error');
+                        return;
+                    }
 
                     // An empty field is not a name: the device keeps the one
                     // it has, and only the area is then left to write.
@@ -6810,8 +6833,16 @@
                     // the run goes on and the server decides; it refuses a
                     // taken id and the panel says so.
                     let answered = false;
-                    for (let tries = 0; tries < 3 && !answered; tries++) {
-                        answered = await this.checkDeviceNameClash(device);
+                    try {
+                        for (let tries = 0; tries < 3 && !answered; tries++) {
+                            answered = await this.checkDeviceNameClash(device, base);
+                        }
+                    } catch (error) {
+                        // The check never got to look. The field goes back to
+                        // what it held, or it sits there showing a rename that
+                        // was not made.
+                        this.devicePreviewBaseName = wasPreviewed;
+                        throw error;
                     }
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();

@@ -240,7 +240,10 @@
     "enabling": "Wird aktiviert…",
     "enabled": "Gerät aktiviert",
     "enable_it_first": "Das Gerät ist deaktiviert – erst das Gerät aktivieren.",
-    "id_conflict": "Dieser Name nähme eine Entitäts-ID, die schon vergeben ist: {id}"
+    "id_conflict": "Dieser Name nähme eine Entitäts-ID, die schon vergeben ist: {id}",
+    "name_already_correct": "Das Gerät heißt bereits so",
+    "gone": "Dieses Gerät gibt es in Home Assistant nicht mehr",
+    "moved_not_renamed": "Das Gerät wurde verschoben, aber nicht umbenannt: {error}"
   },
   "units": {
     "entities": "Entitäten",
