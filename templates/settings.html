@@ -517,7 +517,10 @@
             padding: 24px 16px;
             background: var(--shadow-colour);
             display: flex;
-            align-items: center;
+            /* Centred by the margin, not by the box: a dialog taller than the
+               screen would otherwise start above the top edge, and its head -
+               title, close button - could not be scrolled to at all. */
+            align-items: flex-start;
             justify-content: center;
             overflow-y: auto;
             overscroll-behavior: contain;
@@ -532,6 +535,7 @@
             padding: 24px;
             width: 460px;
             max-width: 92vw;
+            margin: auto;
             box-shadow: 0 20px 40px var(--shadow-colour);
             /* A suggestion list reaches past the dialog's own edge; clipping it
                here is what swallowed it. */
@@ -1155,6 +1159,45 @@
         }
         .input-invalid {
             border-color: var(--color-red-600) !important;
+        }
+
+        /* A phone. The page is one column there, and a row of controls that
+           shares its width leaves the field in it too narrow to type in. */
+        @media (max-width: 640px) {
+            .filter-bar {
+                flex-wrap: wrap;
+                padding: 16px;
+            }
+
+            /* The search field gets the row to itself; the rest shares the next. */
+            .search-wrap { flex: 1 0 100%; }
+
+            .filter-btn, .filter-select { flex: 1 1 auto; }
+
+            .modal {
+                width: 100%;
+                max-width: 100%;
+                padding: 20px 16px;
+            }
+
+            .modal-overlay { padding: 16px 12px; }
+
+            /* An entity id fills more than one line here, and a pill shape
+               around three lines of text reads as a blot with the remove
+               button floating off it. */
+            .filter-chip {
+                align-items: flex-start;
+                border-radius: 12px;
+            }
+
+            .active-filters, .filter-bar { row-gap: 10px; }
+
+            /* Four columns do not fit, and .reach-scroll is there to be
+               scrolled. Squeezed into the width instead, every id broke
+               character by character down a column two words wide. */
+            .reach-table { width: max-content; min-width: 100%; }
+            .reach-table td { white-space: nowrap; }
+            .reach-id { word-break: normal; }
         }
     </style>
 </head>

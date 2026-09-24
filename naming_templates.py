@@ -83,6 +83,15 @@ def _field_names(template: str) -> Tuple[str, ...]:
 _MARKER = "\x00field\x00"
 
 
+_SEPARATORS = " \t\r\n_-\u2013\u2014|/\u00b7.,"
+
+
+def _split_trailing_separator(value: str) -> Tuple[str, str]:
+    """Split off the separator a template leaves in front of its last field."""
+    head = value.rstrip(_SEPARATORS)
+    return head, value[len(head) :]
+
+
 def _clean_rendered_name(value: str) -> str:
     """Clean whitespace and separators left behind by empty placeholders."""
     value = re.sub(r"\s+", " ", value).strip()
@@ -318,8 +327,44 @@ class NamingTemplates:
             if rendered.count(_MARKER) != 1:
                 continue
             before, after = rendered.split(_MARKER)
-            pattern = re.escape(before) + r"(?P<target>.+?)" + re.escape(after)
+            if after:
+                pattern = re.escape(before) + r"(?P<target>.+?)" + re.escape(after)
+            else:
+                # A trailing field may be empty, and then the rendered name
+                # ends before the separator in front of it. Separator and field
+                # are therefore one optional unit: both present or both absent.
+                #
+                # The head is what this template renders in front of the field
+                # for this context and no other - a field that is empty here
+                # took its own separator with it when the name was rendered, so
+                # the pattern stays as narrow as the name it describes. Two
+                # templates that differ only in such a field then read the same
+                # name the same way, and which of them is asked first does not
+                # change the answer.
+                # Requiring a character here makes the template miss such a
+                # name, which then falls through to a barer template that
+                # matches anything and returns the name whole.
+                head, separator = _split_trailing_separator(before)
+                if not separator and head:
+                    # Nothing stands between the field before and this one, so
+                    # an empty field leaves no trace to read: "{area}{entity}"
+                    # renders "Living" either way, and a name it did not render
+                    # is unreadable here rather than readable as anything that
+                    # begins with the same words. This template is passed
+                    # over - the next one down is still asked, which "return"
+                    # here denied them.
+                    continue
+                if not separator:
+                    # Nothing before it at all - "{entity}" - so the field is
+                    # the whole name.
+                    pattern = r"(?P<target>.+)"
+                else:
+                    pattern = re.escape(head) + "(?:" + re.escape(separator) + r"(?P<target>.+))?"
             match = re.fullmatch(pattern, rendered_name.strip(), flags=re.IGNORECASE)
             if match:
-                return _clean_rendered_name(match.group("target"))
+                # An absent group means the field was empty, which is an
+                # answer, not a failure to match. Callers distinguish it from
+                # None. Only the optional-separator branch above can leave it
+                # absent; the others require something to be there.
+                return _clean_rendered_name(match.group("target") or "")
         return None
