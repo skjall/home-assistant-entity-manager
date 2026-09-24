@@ -114,8 +114,12 @@ def _run(monkeypatch, payload: dict[str, Any], ctx: Any = None) -> tuple[list[st
             pass
 
     class Restructurer:
-        entities: dict[str, dict[str, Any]] = {}
-        last_resolutions: dict[str, dict[str, Any]] = {}
+        # On the instance, not on the class: a class-level dict is one dict for
+        # every test that reaches this class, and what one test wrote into it
+        # would still be there for the next.
+        def __init__(self) -> None:
+            self.entities: dict[str, dict[str, Any]] = {}
+            self.last_resolutions: dict[str, dict[str, Any]] = {}
 
         async def load_structure(self, ws: Any) -> None:
             pass
