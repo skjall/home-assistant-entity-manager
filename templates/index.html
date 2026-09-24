@@ -5075,7 +5075,14 @@
                         }
                         pending.push(entity);
                     }
-                    if (!pending.length) return;
+                    // What the panel holds is not in the registry yet, so a
+                    // list read again in the background would quietly drop it
+                    // and paint the rows as though nothing were staged.
+                    const keepStaged = () => {
+                        if (this.deviceChangeStaged) this.previewDeviceWide();
+                    };
+
+                    if (!pending.length) return keepStaged();
 
                     this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
                         pending.forEach((entity, i) => {
@@ -5083,7 +5090,9 @@
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
+                        keepStaged();
                     });
+                    keepStaged();
                 },
 
                 // Whether the panel holds a device-wide change nobody has written
