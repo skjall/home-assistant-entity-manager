@@ -535,18 +535,38 @@ def rename_device():
     runs in the background worker and the frontend polls the returned job.
     """
     data = request.json
-    is_valid, error = validate_json_input(data, ["device_id", "new_name"])
+    is_valid, error = validate_json_input(data, ["device_id"])
     if not is_valid:
         return jsonify({"error": error}), 400
 
     device_id = sanitize_registry_id(data.get("device_id"))
-    new_name = sanitize_name(data.get("new_name"))
-
     if not device_id:
         return jsonify({"error": "Invalid device ID"}), 400
 
-    if not new_name:
-        return jsonify({"error": "Invalid device name"}), 400
+    payload: dict[str, Any] = {"device_id": device_id, "new_name": None}
+
+    # The name is optional: a device that only moves to another area is renamed
+    # by its template rather than by hand, and may come out called the same.
+    if data.get("new_name") is not None:
+        new_name = sanitize_name(data.get("new_name"))
+        if not new_name:
+            return jsonify({"error": "Invalid device name"}), 400
+        payload["new_name"] = new_name
+
+    # A key that never arrived is a caller who meant something else, so only an
+    # area_id spelled out asks for the area to be written - null to clear it.
+    if "area_id" in data:
+        supplied_area = data["area_id"]
+        area_id = None
+        if supplied_area is not None:
+            area_id = sanitize_registry_id(supplied_area)
+            if not area_id:
+                return jsonify({"error": "Invalid area ID"}), 400
+        payload["area_id"] = area_id
+        payload["set_area"] = True
+
+    if payload["new_name"] is None and not payload.get("set_area"):
+        return jsonify({"error": "Nothing to change: neither a name nor an area"}), 400
 
     # Do not rename the same device twice concurrently.
     for existing in renamer_state["job_store"].list_unfinished():
@@ -556,7 +576,7 @@ def rename_device():
                 409,
             )
 
-    job = new_job("rename_device", {"device_id": device_id, "new_name": new_name}, job_id=uuid.uuid4().hex)
+    job = new_job("rename_device", payload, job_id=uuid.uuid4().hex)
     renamer_state["job_store"].save(job)
     renamer_state["worker"].enqueue(job)
     return jsonify(job), 202
@@ -618,16 +638,21 @@ def _plan_device_entity_changes(
 
 
 async def rename_device_handler(job, ctx):
-    """Rename a device and cascade the rename to all of its entities.
+    """Move a device, rename it, and cascade both to all of its entities.
 
-    Renames the device, aligns the Z2M friendly name, then for every entity of
-    the device rebuilds its friendly name and entity id and rewrites references
-    in automations/scenes/scripts. Progress is reported per entity so the UI can
-    show a live bar. Runs inside the worker (serial, off the request path).
+    Writes the area first, because the device name is built out of it, then the
+    device name, aligns the Z2M friendly name, and for every entity of the
+    device rebuilds its friendly name and entity id and rewrites references in
+    automations/scenes/scripts. Area and name are each optional, so one run
+    applies whichever of them the user staged. Progress is reported per entity
+    so the UI can show a live bar. Runs inside the worker (serial, off the
+    request path).
     """
     payload = job["payload"]
     device_id = payload["device_id"]
-    new_name = payload["new_name"]
+    new_name = payload.get("new_name")
+    set_area = bool(payload.get("set_area"))
+    area_id = payload.get("area_id")
 
     base_url = os.getenv("HA_URL")
     token = os.getenv("HA_TOKEN")
@@ -650,13 +675,22 @@ async def rename_device_handler(job, ctx):
         )
 
         device_registry = DeviceRegistry(ws)
-        success = await device_registry.rename_device(device_id, new_name)
 
-        if not success:
-            raise RuntimeError("Failed to rename device in Home Assistant")
+        # The area goes first: the device name and every entity name below is
+        # built out of it, so a device that moves is named where it moved to.
+        if set_area:
+            await device_registry.assign_area(device_id, area_id)
+            ctx.log("AREA", f"{device_id} -> {area_id or 'no area'}")
 
-        # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
-        z2m_sync = await sync_z2m_name(device_registry, device_id, new_name)
+        z2m_sync: dict[str, Any] = {}
+        if new_name:
+            success = await device_registry.rename_device(device_id, new_name)
+
+            if not success:
+                raise RuntimeError("Failed to rename device in Home Assistant")
+
+            # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
+            z2m_sync = await sync_z2m_name(device_registry, device_id, new_name)
 
         # The shared generator needs the updated device registry entry to render
         # the active entity ID and entity-name templates correctly.
@@ -753,7 +787,7 @@ async def rename_device_handler(job, ctx):
             f"Skipped: {entities_skipped}, Dependencies: {dependencies_updated}"
         )
 
-        message = f"Device renamed to: {new_name}"
+        message = f"Device renamed to: {new_name}" if new_name else "Device moved"
         if entities_updated > 0:
             message += f" ({entities_updated} entities"
             if dependencies_updated > 0:

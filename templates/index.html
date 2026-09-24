@@ -2164,7 +2164,7 @@
                                     ? devicePreviewAreaId
                                     : (selectedDeviceData?.area_id || '');
                                 $nextTick(() => $el.value = picked)"
-                            @change="devicePreviewAreaId = $event.target.value">
+                            @change="devicePreviewAreaId = $event.target.value; stageDeviceWideChange()">
                         <option value="" x-text="t('area.select_area')">Select area...</option>
                         <template x-for="area in hierarchy.areas" :key="area.id">
                             <option :value="area.id" x-text="area.name"></option>
@@ -2177,6 +2177,7 @@
                                x-ref="deviceNameInput"
                                :value="devicePreviewBaseName !== null ? devicePreviewBaseName : selectedDeviceData?.base_name"
                                @input="devicePreviewBaseName = $event.target.value;
+                                        stageDeviceWideChange();
                                         clearTimeout(_deviceNameTimer);
                                         _deviceNameTimer = setTimeout(() => checkDeviceNameClash(), 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
@@ -3235,6 +3236,7 @@
                 selectedDeviceData: null,
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
+                _deviceWideTimer: null,  // Debounce for the device-wide entity preview
                 // The area picked in the panel, before anything is written.
                 // null means nothing picked; a string is an area id.
                 devicePreviewAreaId: null,
@@ -3894,7 +3896,10 @@
                     // to write, or a type typed in and waiting to become a rule.
                     const entityChanges = this.filteredEntities.filter(e => this.staysInChangesFilter(e)).length;
                     const z2mDrift = this.filteredDevices.filter(d => d.z2m_drift).length;
-                    return entityChanges + z2mDrift;
+                    // An area picked or a name typed in the panel is a change of
+                    // its own: it is the one thing "apply all" writes that no
+                    // entity row carries a tick for.
+                    return entityChanges + z2mDrift + (this.deviceChangeStaged ? 1 : 0);
                 },
 
                 // Computed: Count of disabled entities in current selection (only when showDisabled is true)
@@ -5081,6 +5086,57 @@
                     });
                 },
 
+                // Whether the panel holds a device-wide change nobody has written
+                // yet: an area picked that the device is not in, or a name typed
+                // that it does not carry. Both are applied by the one job.
+                get deviceChangeStaged() {
+                    const device = this.selectedDeviceData;
+                    if (!device || this.isVirtualDevice(this.selectedDevice)) return false;
+                    const areaStaged = this.devicePreviewAreaId !== null
+                        && (this.devicePreviewAreaId || null) !== (device.area_id || null);
+                    const typed = this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim();
+                    const nameStaged = !!typed && typed !== (device.base_name || '').trim();
+                    return areaStaged || nameStaged;
+                },
+
+                // The entity rows follow the panel while it is still only typed
+                // in, so the effect of a move or a rename is read off the list
+                // rather than out of the job that would write it.
+                stageDeviceWideChange() {
+                    clearTimeout(this._deviceWideTimer);
+                    this._deviceWideTimer = setTimeout(() => this.previewDeviceWide(), 250);
+                },
+
+                previewDeviceWide() {
+                    const entities = (this.hierarchy.entities || [])
+                        .filter(e => e.device_id === this.selectedDevice && !e._justRenamed);
+                    if (!entities.length) return;
+
+                    // Back to what it was: the ordinary previews answer again.
+                    if (!this.deviceChangeStaged) {
+                        for (const entity of entities) {
+                            entity._previewName = null;
+                            entity._previewId = null;
+                        }
+                        this.computePreviewsFor(entities);
+                        this.previewVersion++;
+                        return;
+                    }
+
+                    const template = this.namingConfig?.templates?.entity_name || '{area} {device} {entity}';
+                    for (const entity of entities) {
+                        const typed = entity._currentSuffix !== undefined ? entity._currentSuffix : null;
+                        entity._previewName = this.renderNamingTemplate(template, this.entityNamingContext(entity, typed));
+                    }
+                    this.previewVersion++;
+                    this.fetchNormalized(entities.map(e => e._previewName)).then(slugs => {
+                        entities.forEach((entity, i) => {
+                            entity._previewId = this.composeEntityId(entity, slugs[i]);
+                        });
+                        this.previewVersion++;
+                    });
+                },
+
                 // Invalidate cached previews (call after rename to refresh conflict detection)
                 invalidateEntityPreviews() {
                     if (!this.hierarchy?.entities) return;
@@ -5159,12 +5215,20 @@
                     const device = entity?.device_id
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
-                    const moving = device && device.id === this.selectedDevice && this.devicePreviewAreaId !== null;
+                    const staged = !!device && device.id === this.selectedDevice;
+                    const moving = staged && this.devicePreviewAreaId !== null;
                     const areaId = moving ? this.previewAreaFor(device) : (entity?.area_id || device?.area_id);
                     const area = this.hierarchy.areas.find(a => a.id === areaId);
                     const domain = entity?.id?.split('.')[0] || '';
                     return {
                         ...this.baseNamingContext(area, device),
+                        // A device name typed into the panel is not written yet,
+                        // so the entity reads it from there rather than from the
+                        // registry -- the rows show the move and the rename the
+                        // same way, before either of them happens.
+                        device: staged && this.devicePreviewBaseName !== null
+                            ? this.devicePreviewBaseName
+                            : (device?.base_name || ''),
                         entity: suffix !== null ? suffix : this.getEntitySuffix(entity),
                         entity_id: entity?.id?.split('.').pop() || '',
                         domain,
@@ -6473,9 +6537,16 @@
                     return { titleKey: 'jobs.working', onDone: null };
                 },
 
-                async onRenameDeviceDone(job, deviceId = null) {
+                async onRenameDeviceDone(job, deviceId = null, driftDevices = []) {
                     this.devicePreviewBaseName = null;
                     this.devicePreviewAreaId = null;
+                    // The job aligns the Z2M name of the device it renamed; any
+                    // other device the view showed as drifted is left to here.
+                    if (!this.jobFailed(job) && driftDevices.length) {
+                        const z = await this.syncZ2mDrift(driftDevices);
+                        if (z.failed > 0) this.showMessage(`${z.failed} Z2M failed`, 'error', true);
+                        else if (z.synced > 0) this.showMessage(`${z.synced} Z2M synced`, 'success', true);
+                    }
                     await this.loadHierarchy();
                     const id = deviceId || this.selectedDevice;
                     if (id) {
@@ -6484,32 +6555,34 @@
                     }
                 },
 
+                // The tick beside the name field asks for the same thing the
+                // apply-all button does, for this one device: whatever the panel
+                // holds, written in one run.
                 async renameDeviceInHA(newBaseName) {
                     if (!this.selectedDevice || this.isVirtualDevice(this.selectedDevice) || !newBaseName || this.renamingDevice) return;
-
-                    // The area goes first: the name is built out of it, so a
-                    // device that moves is renamed to where it moved to rather
-                    // than to where it was.
-                    const picked = this.devicePreviewAreaId;
-                    if (picked && picked !== (this.selectedDeviceData?.area_id || null)) {
-                        if (!await this.assignDeviceArea(this.selectedDevice, picked)) return;
-                        this.devicePreviewAreaId = null;
-                        this.selectedDeviceData = this.hierarchy.devices.find(d => d.id === this.selectedDevice)
-                            || this.selectedDeviceData;
-                    }
-
-                    const newFullName = this.renderDeviceName(this.selectedDeviceData, newBaseName);
-
-                    if (this.selectedDeviceData.name === newFullName) {
-                        this.showMessage('Device name already correct', 'info');
-                        return;
-                    }
-
-                    // Two devices may share a name; two entities may not share
-                    // an id. Asked here as well as at the button, because this
-                    // is the door the rename actually goes through.
-                    const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = newBaseName;
+                    await this.applyDeviceWideChange();
+                },
+
+                // Apply what the panel holds for the device in one run: the area
+                // it was moved to, the name it was given, and the entities that
+                // follow from both. Same job as the rename button starts, asked
+                // for everything at once rather than one step at a time.
+                async applyDeviceWideChange(driftDevices = []) {
+                    const device = this.selectedDeviceData;
+                    const deviceId = this.selectedDevice;
+                    if (!device || this.isVirtualDevice(deviceId)) return;
+
+                    const typed = this.devicePreviewBaseName === null ? '' : this.devicePreviewBaseName.trim();
+                    const base = typed || device.base_name;
+                    const picked = this.devicePreviewAreaId;
+                    const areaStaged = picked !== null && (picked || null) !== (device.area_id || null);
+                    // Rendered with the staged area, so a device that moves is
+                    // named where it moved to rather than where it was.
+                    const newFullName = this.renderDeviceName(device, base);
+
+                    const wasPreviewed = this.devicePreviewBaseName;
+                    this.devicePreviewBaseName = base;
                     await this.checkDeviceNameClash();
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();
@@ -6518,16 +6591,20 @@
                         return;
                     }
 
+                    const payload = { device_id: deviceId };
+                    if (newFullName && newFullName !== device.name) payload.new_name = newFullName;
+                    if (areaStaged) payload.area_id = picked || null;
+                    if (payload.new_name === undefined && !areaStaged) {
+                        this.showMessage(this.t('messages.nothing_to_apply'), 'info', true);
+                        return;
+                    }
+
                     this.renamingDevice = true;
                     try {
-                        // Enqueue the rename as a background job (returns 202 + job).
                         const response = await fetch('api/rename_device', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                device_id: this.selectedDevice,
-                                new_name: newFullName
-                            })
+                            body: JSON.stringify(payload)
                         });
                         const job = await response.json();
                         if (response.status === 409) {
@@ -6535,13 +6612,12 @@
                             return;
                         }
                         if (!response.ok || !job.job_id) {
-                            throw new Error(job.error || 'Failed to start device rename');
+                            throw new Error(job.error || 'Failed to start apply');
                         }
-                        const deviceId = this.selectedDevice;  // keep before any reload
                         this.startJob('api/jobs/' + job.job_id, job, {
                             kind: 'rename_device',
-                            titleKey: 'jobs.rename_device',
-                            onDone: (finished) => this.onRenameDeviceDone(finished, deviceId)
+                            titleKey: 'jobs.applying',
+                            onDone: (finished) => this.onRenameDeviceDone(finished, deviceId, driftDevices)
                         });
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
@@ -6651,6 +6727,18 @@
                         // a rule reaches every entity of its type, and the server
                         // renders them, numbering included.
                         await this.loadHierarchy();
+                    }
+
+                    // A device that moves or is renamed takes its entities with
+                    // it: that job writes the area, the device name and every
+                    // entity name of the device in one run, so the batch below
+                    // would only do the same work a second time.
+                    if (this.deviceChangeStaged) {
+                        const others = this.filteredDevices
+                            .filter(d => d.z2m_drift && d.id !== this.selectedDevice)
+                            .map(d => d.id);
+                        await this.applyDeviceWideChange(others);
+                        return;
                     }
 
                     // Find all entities that need renaming
