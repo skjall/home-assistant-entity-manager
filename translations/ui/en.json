@@ -108,6 +108,7 @@
     "explain_rule_model": "All “{original}” entities from {model} are called “{value}” for you",
     "explain_exception": "This entity alone is called “{value}” instead of “{original}”",
     "explain_supplied": "{source} supplies “{value}”",
+    "explain_no_type": "This name has no type part",
     "open_rule": "View rule",
     "drift_explain": "This name was changed in Home Assistant. “{applied}” came from here.",
     "drift_adopt": "Keep this name",

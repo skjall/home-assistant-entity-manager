@@ -5199,6 +5199,11 @@
                     const value = r.value || '';
                     const source = r.platform || entity.platform || '';
                     const match = r.matched_on;
+                    // A name built out of area and device alone has no type
+                    // part. Every line below names a word and where it came
+                    // from; with no word there is none to name, and saying the
+                    // integration supplied one left an empty pair of quotes.
+                    if (!value) return this.t('entity.explain_no_type');
                     switch (r.won_by) {
                         case 'override':
                             return this.t('entity.explain_exception', {value, original});
