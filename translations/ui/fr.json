@@ -240,6 +240,7 @@
     "enabled": "Appareil activé",
     "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil.",
     "id_conflict": "Ce nom prendrait un identifiant d'entité déjà attribué : {id}",
+    "gone": "Cet appareil n'est plus dans Home Assistant",
     "moved_not_renamed": "L’appareil a été déplacé, mais pas renommé : {error}"
   },
   "units": {

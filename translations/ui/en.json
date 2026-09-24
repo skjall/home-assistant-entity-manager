@@ -240,6 +240,7 @@
     "enabled": "Device enabled",
     "enable_it_first": "The device is disabled – enable the device first.",
     "id_conflict": "This name would take an entity id that is already held: {id}",
+    "gone": "This device is no longer in Home Assistant",
     "moved_not_renamed": "The device was moved, but not renamed: {error}"
   },
   "units": {
