@@ -957,33 +957,17 @@
             display: inline-flex;
         }
 
+        /* A button of the group is rounded like any other button, and the
+           two rules below take the rounding off the edges that meet. Counted
+           among the action buttons, not among the children and not among the
+           buttons: a button a template of Alpine's sits beside is not
+           :first-child, and a button of another kind put into the group would
+           take the first slot from the one that is drawn first. A browser
+           without :nth-child(of S) - Chrome before 111, Firefox before 113 -
+           drops both rules and draws each button rounded on its own, which is
+           a group with a seam rather than a square button. */
         .entity-card-simple .btn-group .action-btn {
-            border-radius: 0;
-        }
-
-        /* Counted among the action buttons, not among the children and not
-           among the buttons: a button a template of Alpine's sits beside is
-           not :first-child, one left on its own is not :only-child - which
-           left the group square - and a button of any other kind put into the
-           group would take the first slot from the one that is drawn first.
-           Each rule excludes the lone button itself rather than relying on a
-           later rule of equal weight to undo it, so reordering them changes
-           nothing. */
-        /* Counted by tag first, so a browser without :nth-child(of S) - Chrome
-           before 111, Firefox before 113 - still rounds the group the way it
-           always did. The rules below then say it exactly. */
-        .entity-card-simple .btn-group .action-btn:first-of-type:not(:only-of-type) {
-            border-radius: 4px 0 0 4px;
-        }
-
-        .entity-card-simple .btn-group .action-btn:last-of-type:not(:only-of-type) {
-            border-radius: 0 4px 4px 0;
-            margin-left: -1px;
-        }
-
-        .entity-card-simple .btn-group .action-btn:only-of-type {
             border-radius: 4px;
-            margin-left: 0;
         }
 
         .entity-card-simple .btn-group .action-btn:nth-child(1 of .action-btn):not(:nth-last-child(1 of .action-btn)) {
@@ -993,11 +977,6 @@
         .entity-card-simple .btn-group .action-btn:nth-last-child(1 of .action-btn):not(:nth-child(1 of .action-btn)) {
             border-radius: 0 4px 4px 0;
             margin-left: -1px;
-        }
-
-        .entity-card-simple .btn-group .action-btn:nth-child(1 of .action-btn):nth-last-child(1 of .action-btn) {
-            border-radius: 4px;
-            margin-left: 0;
         }
 
         .entity-card-simple .action-btn {
