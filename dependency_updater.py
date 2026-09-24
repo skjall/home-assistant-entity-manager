@@ -33,6 +33,13 @@ class DependencyUpdater:
         # which no rename reaches on its own. Shared across one job so the
         # options are read once, not once per entity.
         self.helpers = HelperOptions(self.base_url, self.token)
+        # Every automation has to be read to find out whether it names the
+        # entity being renamed, and the config API only hands them out one at
+        # a time. Read once per updater - which is once per job - and kept
+        # current here, rather than read again for every entity: an
+        # installation with a hundred automations spent three seconds per
+        # entity on nothing but these reads.
+        self._automation_configs: Optional[Dict[str, Optional[Dict]]] = None
 
     async def get_states(self) -> List[Dict]:
         """Hole alle States"""
@@ -150,20 +157,71 @@ class DependencyUpdater:
         return False
 
     # ===== AUTOMATIONS =====
-    async def get_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
-        """Hole Automation Konfiguration"""
+    async def fetch_automation_config(
+        self, automation_numeric_id: str, session: Optional[aiohttp.ClientSession] = None
+    ) -> Optional[Dict]:
+        """Read one automation's configuration from Home Assistant.
+
+        The only place that asks for it over HTTP; everything else goes
+        through ``get_automation_config``, which answers out of what was read.
+        """
         url = f"{self.base_url}/api/config/automation/config/{automation_numeric_id}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=self.headers) as response:
+        async def read(open_session: aiohttp.ClientSession) -> Optional[Dict]:
+            async with open_session.get(url, headers=self.headers) as response:
                 if response.status == 200:
                     return await response.json()
-                else:
-                    text = await response.text()
-                    logger.error(
-                        f"Fehler beim Abrufen der Automation {automation_numeric_id}: {response.status}, Response: {text}"
-                    )
-                    return None
+                text = await response.text()
+                logger.error(
+                    f"Fehler beim Abrufen der Automation {automation_numeric_id}: {response.status}, Response: {text}"
+                )
+                return None
+
+        if session is not None:
+            return await read(session)
+        async with aiohttp.ClientSession() as own:
+            return await read(own)
+
+    async def load_automation_configs(self, automation_states: List[Dict]) -> Dict[str, Optional[Dict]]:
+        """Read every automation's configuration once, over one connection.
+
+        The reads are independent, so a few run at a time; more than a handful
+        at once buys little and asks a lot of a Home Assistant that is also
+        answering the interface.
+        """
+        if self._automation_configs is not None:
+            return self._automation_configs
+
+        numeric_ids = []
+        for state in automation_states:
+            numeric_id = state.get("attributes", {}).get("id")
+            if numeric_id:
+                numeric_ids.append(numeric_id)
+
+        configs: Dict[str, Optional[Dict]] = {}
+        at_a_time = asyncio.Semaphore(8)
+
+        async with aiohttp.ClientSession() as session:
+
+            async def one(numeric_id: str) -> None:
+                async with at_a_time:
+                    try:
+                        configs[numeric_id] = await self.fetch_automation_config(numeric_id, session)
+                    except Exception as error:  # noqa: BLE001 - one unreadable automation is not the job
+                        logger.error(f"Automation {numeric_id} konnte nicht gelesen werden: {error}")
+                        configs[numeric_id] = None
+
+            await asyncio.gather(*(one(numeric_id) for numeric_id in numeric_ids))
+
+        logger.info(f"Read {len(configs)} automation configurations once for this job")
+        self._automation_configs = configs
+        return configs
+
+    async def get_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
+        """Hole Automation Konfiguration (aus dem Vorrat dieses Jobs)"""
+        if self._automation_configs is not None and automation_numeric_id in self._automation_configs:
+            return self._automation_configs[automation_numeric_id]
+        return await self.fetch_automation_config(automation_numeric_id)
 
     async def update_automation_config(self, automation_numeric_id: str, config: Dict) -> bool:
         """Aktualisiere Automation Konfiguration"""
@@ -213,7 +271,12 @@ class DependencyUpdater:
             # gone: a write that reported success and changed nothing looks
             # exactly like one that worked. Reading it back is the only proof,
             # and without it a rename silently leaves an automation broken.
-            written = await self.get_automation_config(automation_numeric_id)
+            written = await self.fetch_automation_config(automation_numeric_id)
+            # The next entity of this rename reads the automation again, and
+            # what it has to see is the version just written, not the one from
+            # before it named the new id.
+            if self._automation_configs is not None:
+                self._automation_configs[automation_numeric_id] = written
             if written is None:
                 logger.error(f"Konnte Automation {automation_id} nach dem Schreiben nicht wieder lesen")
                 return False
@@ -305,6 +368,7 @@ class DependencyUpdater:
         logger.info("Checking automations via REST API...")
         automation_states = [s for s in states if s["entity_id"].startswith("automation.")]
         logger.info(f"Found {len(automation_states)} automations to check")
+        await self.load_automation_configs(automation_states)
 
         for automation_state in automation_states:
             automation_entity_id = automation_state["entity_id"]

@@ -22,7 +22,7 @@ class Recorded(DependencyUpdater):
         self.writes_ok = writes_ok
         self.written = []
 
-    async def get_automation_config(self, automation_numeric_id):
+    async def fetch_automation_config(self, automation_numeric_id, session=None):
         return self.reads.pop(0)
 
     async def update_automation_config(self, automation_numeric_id, config):
@@ -67,7 +67,7 @@ def test_an_automation_outside_automations_yaml_is_reported_to_the_user():
         async def get_states(self):
             return []
 
-        async def get_automation_config(self, automation_numeric_id):
+        async def fetch_automation_config(self, automation_numeric_id, session=None):
             return None
 
     updater = OutOfReach("http://ha.invalid", "token")
@@ -98,7 +98,7 @@ def test_unreachable_is_only_a_warning_when_the_old_id_is_actually_there(names_o
         async def get_states(self):
             return []
 
-        async def get_automation_config(self, automation_numeric_id):
+        async def fetch_automation_config(self, automation_numeric_id, session=None):
             return None
 
     updater = OutOfReach("http://ha.invalid", "token")
