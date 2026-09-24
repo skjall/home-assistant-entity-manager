@@ -99,7 +99,12 @@ def test_adopting_the_empty_type_part_settles_the_entity(restructurer):
 
 
 def test_a_template_without_a_separator_does_not_claim_a_separated_name(templates):
-    """ "{area}{entity}" renders "BasementSwitch"; "Basement Switch" is not its doing."""
+    """ "{area}{entity}" renders "BasementSwitch" and cannot say where the area ends.
+
+    It is passed over rather than answering "Switch" for "Basement Switch",
+    and the name falls through to the bare "{entity}" below it, which reads it
+    as a type whole - the answer any name no template accounts for gets.
+    """
     templates.set_templates({**TEMPLATES, "entity_name": "{area}{entity}"})
 
-    assert templates.extract_field("entity_name", "BasementSwitch", "entity", CONTEXT) is None
+    assert templates.extract_field("entity_name", "Basement Switch", "entity", CONTEXT) == "Basement Switch"

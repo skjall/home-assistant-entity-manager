@@ -342,8 +342,10 @@ class NamingTemplates:
                     # an empty field leaves no trace to read: "{area}{entity}"
                     # renders "Living" either way, and a name it did not render
                     # is unreadable here rather than readable as anything that
-                    # begins with the same words. Such a template is not asked.
-                    return None
+                    # begins with the same words. This template is passed
+                    # over - the next one down is still asked, which "return"
+                    # here denied them.
+                    continue
                 if not separator:
                     # Nothing before it at all - "{entity}" - so the field is
                     # the whole name.
