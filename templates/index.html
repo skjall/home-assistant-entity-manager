@@ -2182,7 +2182,7 @@
                                :value="devicePreviewBaseName !== null ? devicePreviewBaseName : selectedDeviceData?.base_name"
                                @input="devicePreviewBaseName = $event.target.value;
                                         clearTimeout(_deviceNameTimer);
-                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(), 300)"
+                                        _deviceNameTimer = setTimeout(() => { checkDeviceNameClash(); devicePreviewsFollowTheDeviceName(); }, 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
                                :placeholder="selectedDeviceData?.base_name"
                                :disabled="renamingDevice || applyingEntityId || executing">
@@ -4973,7 +4973,7 @@
 
                 // Get friendly name using entity's own device/area (not selected)
                 getEntityFriendlyNameForEntity(entity) {
-                    if (entity.suggested_name && entity._currentSuffix === undefined) {
+                    if (entity.suggested_name && entity._currentSuffix === undefined && !this.snapshotIsStale(entity)) {
                         return entity.suggested_name;
                     }
                     const parts = [];
@@ -4994,9 +4994,10 @@
                         parts.push(area.name);
                     }
 
-                    // Device base name
+                    // Device base name - the one being typed, where there is one.
                     if (device) {
-                        parts.push(device.base_name);
+                        const pending = this.pendingDeviceContext(entity).device_name;
+                        parts.push(pending !== undefined ? pending : device.base_name);
                     }
 
                     // Entity suffix (uses shared logic)
@@ -5035,8 +5036,13 @@
 
                         // Friendly-name composition stays client-side; only the slug comes
                         // from the backend (source of truth).
-                        entity._previewName = entity.suggested_name || this.getEntityFriendlyNameForEntity(entity);
-                        if (entity.suggested_entity_id) {
+                        // The hierarchy's own answer, except where a device base
+                        // name has been typed since: it was worked out from the
+                        // registry and does not know about it.
+                        const stale = this.snapshotIsStale(entity);
+                        entity._previewName = (!stale && entity.suggested_name)
+                            || this.getEntityFriendlyNameForEntity(entity);
+                        if (entity.suggested_entity_id && !stale) {
                             entity._previewId = entity.suggested_entity_id;
                             continue;
                         }
@@ -5078,6 +5084,24 @@
                     while (this._previewsInFlight.size) {
                         await Promise.all([...this._previewsInFlight]);
                     }
+                },
+
+                // The device base name was typed into, so every entity under it
+                // is called something else now. A row being edited is asked
+                // again with the type it holds; the rest are worked out afresh.
+                devicePreviewsFollowTheDeviceName() {
+                    const device = this.selectedDevice;
+                    if (!device || !this.hierarchy?.entities) return;
+                    for (const entity of this.hierarchy.entities) {
+                        if (entity.device_id !== device || entity._justRenamed) continue;
+                        if (entity._currentSuffix !== undefined) {
+                            this.updateEntityPreview(entity, entity._currentSuffix);
+                            continue;
+                        }
+                        entity._previewName = null;
+                        entity._previewId = null;
+                    }
+                    this.precomputeEntityPreviews();
                 },
 
                 // Invalidate cached previews (call after rename to refresh conflict detection)
@@ -5167,6 +5191,14 @@
                 // for a UniFi access point its MAC address. The server builds its
                 // answer from the registry unless it is told otherwise, and that
                 // answer is what a confirmed rename writes.
+                // Whether the hierarchy's own answer for this entity still holds.
+                // It was worked out from the registry, so a device base name
+                // typed since is not in it - and seeding a preview from it puts
+                // the old name back, which is what expanding a row did.
+                snapshotIsStale(entity) {
+                    return Object.keys(this.pendingDeviceContext(entity)).length > 0;
+                },
+
                 pendingDeviceContext(entity) {
                     const device = entity?.device_id
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
@@ -5780,10 +5812,13 @@
                     }
                     if (entity._expanded && entity._currentSuffix === undefined) {
                         const initialSuffix = this.getEntitySuffix(entity);
-                        if (entity.suggested_entity_id) {
+                        if (entity.suggested_entity_id && !this.snapshotIsStale(entity)) {
                             // Seed from what the hierarchy already resolved. Rendering the
                             // template here instead would miss the collision numbering the
-                            // backend applies and flag a rename that is not needed.
+                            // backend applies and flag a rename that is not needed. Only
+                            // where nothing has been typed since: otherwise it seeds the
+                            // name the device no longer has, and expanding a row would
+                            // undo what the field above it says.
                             entity._currentSuffix = initialSuffix;
                             entity._previewName = entity.suggested_name;
                             entity._previewId = entity.suggested_entity_id;
