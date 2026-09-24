@@ -197,7 +197,8 @@
     "entity_marked_for_acceptance": "Entität zum Akzeptieren markiert",
     "core_starting": "Home Assistant startet gerade. Sobald es antwortet, geht es weiter.",
     "rules_saved": "Regeln gespeichert",
-    "nothing_to_apply": "Nichts zu übernehmen"
+    "nothing_to_apply": "Nichts zu übernehmen",
+    "name_has_no_place": "Die Vorlage für den Gerätenamen hat keinen Platz für einen eigenen Namen, der eingegebene Name kann also nicht geschrieben werden"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",

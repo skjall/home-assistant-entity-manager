@@ -3326,6 +3326,7 @@
                 areaSearch: '',  // What is typed into the area field of the panel
                 areaComboOpen: false,
                 areaComboAt: 0,
+                _previewRun: 0,  // Which computation of the previews is the current one
                 // The area picked in the panel, before anything is written.
                 // null means nothing picked; a string is an area id.
                 devicePreviewAreaId: null,
@@ -4825,6 +4826,7 @@
                     // to the next one, it offered to move that device instead,
                     // and said so in its name before anybody asked for it.
                     this.devicePreviewAreaId = null;
+                    this.dropStagedPreview();
                     this.deviceFilter = '';  // Reset device filter
                     this.saveState();
 
@@ -4840,6 +4842,7 @@
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
                     this.devicePreviewAreaId = null;  // and the area it was about to move to
+                    this.dropStagedPreview();
                     this.deviceNameClash = [];
                     this.saveState();
 
@@ -4855,6 +4858,7 @@
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
                     this.devicePreviewAreaId = null;  // and the area it was about to move to
+                    this.dropStagedPreview();
                     this.deviceNameClash = [];
                     this.saveState();
 
@@ -5156,10 +5160,21 @@
                         entity._previewId = null;
                     }
 
+                    // What the panel holds is not in the registry yet, so a
+                    // list read again in the background would quietly drop it
+                    // and paint the rows as though nothing were staged. The
+                    // staged device's rows are left to that one computation:
+                    // computing them here as well had the two answers overwrite
+                    // each other, and a row could be left showing a new name
+                    // beside the id of the old one - which is what the button
+                    // beside it would then have written.
+                    const staged = this.deviceChangeStaged ? this.selectedDevice : null;
+
                     const pending = [];
                     for (const entity of entities) {
                         // Skip if already computed (e.g. from user edit) or just renamed
                         if (entity._previewName || entity._justRenamed) continue;
+                        if (staged && entity.device_id === staged) continue;
 
                         // Friendly-name composition stays client-side; only the slug comes
                         // from the backend (source of truth).
@@ -5170,24 +5185,20 @@
                         }
                         pending.push(entity);
                     }
-                    // What the panel holds is not in the registry yet, so a
-                    // list read again in the background would quietly drop it
-                    // and paint the rows as though nothing were staged.
-                    const keepStaged = () => {
-                        if (this.deviceChangeStaged) this.previewDeviceWide();
-                    };
 
-                    if (!pending.length) return keepStaged();
+                    if (staged) this.previewDeviceWide();
+                    if (!pending.length) return;
 
+                    const run = ++this._previewRun;
                     this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
+                        // A newer computation has since answered these rows.
+                        if (run !== this._previewRun) return;
                         pending.forEach((entity, i) => {
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
-                        keepStaged();
                     });
-                    keepStaged();
                 },
 
                 // Whether the panel holds a device-wide change nobody has written
@@ -5268,6 +5279,15 @@
                     this._deviceWideTimer = setTimeout(() => this.previewDeviceWide(), 250);
                 },
 
+                // What was typed a moment ago is about this device, and nothing
+                // about the next one: left running, the timer answered for
+                // whatever the panel had turned to and threw away the previews
+                // that had just been computed for it.
+                dropStagedPreview() {
+                    clearTimeout(this._deviceWideTimer);
+                    this._deviceWideTimer = null;
+                },
+
                 previewDeviceWide() {
                     const entities = (this.hierarchy.entities || [])
                         .filter(e => e.device_id === this.selectedDevice && !e._justRenamed);
@@ -5288,9 +5308,15 @@
                     for (const entity of entities) {
                         const typed = entity._currentSuffix !== undefined ? entity._currentSuffix : null;
                         entity._previewName = this.renderNamingTemplate(template, this.entityNamingContext(entity, typed));
+                        // The id belongs to the name the server is being asked
+                        // about. Until it answers, the row shows none rather
+                        // than the one that belonged to the name before.
+                        entity._previewId = null;
                     }
                     this.previewVersion++;
+                    const run = ++this._previewRun;
                     this.fetchNormalized(entities.map(e => e._previewName)).then(slugs => {
+                        if (run !== this._previewRun) return;
                         entities.forEach((entity, i) => {
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
@@ -6734,13 +6760,11 @@
                     const deviceId = this.selectedDevice;
                     if (!device || this.isVirtualDevice(deviceId)) return;
 
+                    // An empty field is not a name: the device keeps the one
+                    // it has, and only the area is then left to write.
                     const typed = this.devicePreviewBaseName === null ? '' : this.devicePreviewBaseName.trim();
+                    const nameStaged = !!typed && typed !== (device.base_name || '').trim();
                     const base = typed || device.base_name;
-                    const picked = this.devicePreviewAreaId;
-                    const areaStaged = picked !== null && (picked || null) !== (device.area_id || null);
-                    // Rendered with the staged area, so a device that moves is
-                    // named where it moved to rather than where it was.
-                    const newFullName = this.renderDeviceName(device, base);
 
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = base;
@@ -6752,11 +6776,27 @@
                         return;
                     }
 
+                    // Read after the check, not before it: the area picker is
+                    // live while the check runs, and the run writes the area
+                    // the panel holds when it starts, not one picked earlier.
+                    const picked = this.devicePreviewAreaId;
+                    const areaStaged = picked !== null && (picked || null) !== (device.area_id || null);
+                    // Rendered with the staged area, so a device that moves is
+                    // named where it moved to rather than where it was.
+                    const newFullName = this.renderDeviceName(device, base);
+
                     const payload = { device_id: deviceId };
                     if (newFullName && newFullName !== device.name) payload.new_name = newFullName;
                     if (areaStaged) payload.area_id = picked || null;
                     if (payload.new_name === undefined && !areaStaged) {
-                        this.showMessage(this.t('messages.nothing_to_apply'), 'info', true);
+                        // A name was typed and the device is still called what
+                        // it was: the device-name template has no {device} in
+                        // it, so there is nowhere for the name to go. Saying
+                        // "nothing to apply" left that looking like a lost
+                        // click.
+                        this.showMessage(nameStaged
+                            ? this.t('messages.name_has_no_place')
+                            : this.t('messages.nothing_to_apply'), 'info', true);
                         return;
                     }
 

@@ -197,7 +197,8 @@
     "entity_marked_for_acceptance": "Entity marked for acceptance",
     "core_starting": "Home Assistant is starting up. This continues as soon as it answers.",
     "rules_saved": "Rules saved",
-    "nothing_to_apply": "Nothing to apply"
+    "nothing_to_apply": "Nothing to apply",
+    "name_has_no_place": "The device-name template has no place for a name of its own, so the typed name cannot be written"
   },
   "dependencies": {
     "title": "Dependencies for",
