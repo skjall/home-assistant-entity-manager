@@ -32,7 +32,8 @@
     "select_area": "Sélectionner une zone...",
     "area_assigned": "Appareil assigné à la zone",
     "open_in_ha": "Ouvrir la zone dans Home Assistant",
-    "no_match": "Aucune zone de ce nom"
+    "no_match": "Aucune zone de ce nom",
+    "area_cleared": "Appareil retiré de sa zone"
   },
   "summary": {
     "entities": "Entités",

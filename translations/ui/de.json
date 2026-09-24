@@ -32,7 +32,8 @@
     "select_area": "Bereich wählen...",
     "area_assigned": "Gerät wurde Bereich zugewiesen",
     "open_in_ha": "Bereich in Home Assistant öffnen",
-    "no_match": "Kein Bereich dieses Namens"
+    "no_match": "Kein Bereich dieses Namens",
+    "area_cleared": "Gerät aus seinem Bereich genommen"
   },
   "summary": {
     "entities": "Entitäten",
