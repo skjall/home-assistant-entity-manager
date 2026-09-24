@@ -107,7 +107,10 @@ class EnergyPrefs:
 
     async def save(self, prefs: Dict[str, Any]) -> None:
         """Put the settings back whole; there is no partial save."""
-        await self._command({"type": "energy/save_prefs", **prefs})
+        # The settings are spread into the command, so a field of theirs called
+        # "type" would become the command. Named first and last, it cannot.
+        message = {**prefs, "type": "energy/save_prefs"}
+        await self._command(message)
         self._prefs = prefs
 
     @staticmethod

@@ -824,9 +824,12 @@ def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_result
         + dep_results.get("scripts", {}).get("failed", [])
         + dep_results.get("automations", {}).get("failed", [])
         + dep_results.get("helpers", {}).get("failed", [])
-        + dep_results.get("energy", {}).get("failed", [])
     )
     unreachable = dep_results.get("automations", {}).get("unreachable", [])
+    # Said on its own: the others name a configuration the user can open, while
+    # the dashboard names a place inside one settings page. Run together they
+    # read as a list of ids with something unreadable among them.
+    stayed_in_the_dashboard = dep_results.get("energy", {}).get("failed", [])
     if failed:
         results["dependency_warnings"].append(
             {
@@ -834,6 +837,18 @@ def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_result
                 "old_id": old_id,
                 "failed_updates": failed,
                 "warning": f"Einige Verweise konnten nicht aktualisiert werden: {', '.join(failed)}",
+            }
+        )
+    if stayed_in_the_dashboard:
+        results["dependency_warnings"].append(
+            {
+                "entity_id": new_id,
+                "old_id": old_id,
+                "energy_dashboard": stayed_in_the_dashboard,
+                "warning": (
+                    f"Das Energie-Dashboard nennt weiterhin {old_id}. "
+                    f"Betroffen: {', '.join(stayed_in_the_dashboard)}"
+                ),
             }
         )
     if unreachable:
@@ -1737,7 +1752,12 @@ async def _fix_reference_async():
                 # once, and there is nothing to do per place.
                 try:
                     carried = await updater.energy.rename(old_entity_id, new_entity_id)
-                    success = bool(carried["success"]) and not carried["failed"]
+                    # Nothing left to change is not a failure. One entity can be
+                    # named in several places, and the first repair puts them all
+                    # right at once - the findings behind it then find their work
+                    # already done, and counting that as failed reported "1
+                    # fixed, 2 failed" for a repair that fixed everything.
+                    success = not carried["failed"]
                 except Exception as error:  # noqa: BLE001 - one finding must not stop the rest
                     logger.error(f"Could not repair the energy dashboard: {error}")
                     success = False

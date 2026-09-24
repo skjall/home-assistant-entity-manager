@@ -49,17 +49,27 @@ class HomeAssistantWebSocket:
         message = await self.websocket.recv()
         return json.loads(message)
 
-    async def send_command(self, message: Dict[str, Any]) -> Any:
+    async def send_command(self, message: Dict[str, Any], timeout: float = 30.0) -> Any:
         """Send one command and give back its result.
 
         Home Assistant answers with events and other traffic in between, so the
-        reply is the one carrying this message's id.
+        reply is the one carrying this message's id. Everything else is read
+        past - which is why this waits with a clock: on a socket that also
+        carries a subscription the traffic never stops, and a reply that never
+        comes would otherwise be waited for until the process is killed.
         """
         msg_id = await self._send_message(dict(message))
 
-        response = await self._receive_message()
-        while response.get("id") != msg_id:
+        async def the_answer() -> Dict[str, Any]:
             response = await self._receive_message()
+            while response.get("id") != msg_id:
+                response = await self._receive_message()
+            return response
+
+        try:
+            response = await asyncio.wait_for(the_answer(), timeout)
+        except asyncio.TimeoutError as expired:
+            raise TimeoutError(f"{message['type']} was not answered within {timeout:g}s") from expired
 
         if not response.get("success"):
             raise Exception(f"{message['type']} failed: {response.get('error') or response}")

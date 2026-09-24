@@ -185,3 +185,30 @@ def test_a_statistic_from_outside_the_registry_is_not_missing(energy):
     broken = asyncio.run(energy.broken({"sensor.water_total"}))
 
     assert "shellyplug:total" not in [one["missing_entity_id"] for one in broken]
+
+
+def test_a_second_repair_finds_its_work_already_done(energy, ha):
+    """One entity named in several places is put right once, not once per place.
+
+    The reference check reports every place, and the repair runs per report.
+    Reading "nothing left to change" as a failure told the user "1 fixed,
+    2 failed" for a repair that had fixed everything.
+    """
+    first = asyncio.run(energy.rename("sensor.water_total", "sensor.garden_water_total"))
+    again = asyncio.run(energy.rename("sensor.water_total", "sensor.garden_water_total"))
+
+    assert len(first["success"]) == 3
+    assert again == {"success": [], "failed": []}
+    # Nothing failed either time, which is what the repair goes by.
+    assert not first["failed"] and not again["failed"]
+    assert len(ha.written) == 1
+
+
+def test_a_field_of_the_settings_called_type_does_not_become_the_command(ha):
+    """The settings are spread into the command, so one could have replaced it."""
+    ha.held["type"] = "something_home_assistant_added"
+    energy = EnergyPrefs("ws://home-assistant.invalid/api/websocket", "token", command=ha)
+
+    asyncio.run(energy.rename("sensor.water_total", "sensor.garden_water_total"))
+
+    assert ha.asked[-1] == "energy/save_prefs"

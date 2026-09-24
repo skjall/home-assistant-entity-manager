@@ -11,6 +11,7 @@ import os
 
 from api_token_store import ApiTokenStore
 from device_swap import SwapJobStore
+from energy_prefs import ws_url_for
 from entity_registry import EntityRegistry
 from entity_restructurer import EntityRestructurer
 from ha_client import HomeAssistantClient
@@ -183,5 +184,4 @@ async def _connect_mqtt_bridge():
 
 def ws_url() -> str:
     """The WebSocket address of Home Assistant, derived from its HTTP one."""
-    base_url = os.getenv("HA_URL") or "http://supervisor/core"
-    return base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
+    return ws_url_for(os.getenv("HA_URL") or "http://supervisor/core")
