@@ -4384,6 +4384,7 @@
                         'scene': 'ri-palette-line',
                         'script': 'ri-terminal-box-line',
                         'helper': 'ri-tools-line',
+                        'energy': 'ri-flashlight-line',
                         'yaml': 'ri-file-edit-line'
                     };
                     return icons[configType] || 'ri-question-line';
@@ -4465,6 +4466,10 @@
                         // A helper is a config entry, and Home Assistant opens
                         // those from its helper list rather than by their id.
                         return '/config/helpers';
+                    } else if (ref.config_type === 'energy') {
+                        // The energy dashboard has one settings page; the path
+                        // inside it says which of its fields the reference is.
+                        return '/config/energy';
                     }
                     return '#';
                 },

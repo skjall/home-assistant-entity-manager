@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 from dotenv import load_dotenv
 
+from energy_prefs import EnergyPrefs
 from entity_ref_utils import replace_entity_in_obj
 from helper_options import HelperOptions
 
@@ -19,6 +20,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+
+def _ws_url(base_url: str) -> str:
+    """The WebSocket address of Home Assistant, derived from its HTTP one."""
+    return base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket"
 
 
 class DependencyUpdater:
@@ -33,6 +39,11 @@ class DependencyUpdater:
         # which no rename reaches on its own. Shared across one job so the
         # options are read once, not once per entity.
         self.helpers = HelperOptions(self.base_url, self.token)
+        # The energy dashboard keeps bare entity ids in its own store, which is
+        # reachable over the WebSocket API alone. Nothing carries a rename into
+        # it either, and a dashboard naming an entity that has gone shows
+        # nothing and says nothing.
+        self.energy = EnergyPrefs(_ws_url(self.base_url), self.token)
 
     async def get_states(self) -> List[Dict]:
         """Hole alle States"""
@@ -352,6 +363,17 @@ class DependencyUpdater:
             results["total_failed"] += len(helpers["failed"])
         except Exception as error:  # noqa: BLE001 - a rename must not fail over a helper
             logger.error("Could not carry the rename into the helpers: %s", error)
+
+        # The energy dashboard. Its store holds entity ids as text with nothing
+        # linking them to the registry, so a rename leaves it naming an entity
+        # that is not there and showing nothing for it.
+        try:
+            energy = await self.energy.rename(old_entity_id, new_entity_id)
+            results["energy"] = energy
+            results["total_success"] += len(energy["success"])
+            results["total_failed"] += len(energy["failed"])
+        except Exception as error:  # noqa: BLE001 - a rename must not fail over the dashboard
+            logger.error("Could not carry the rename into the energy dashboard: %s", error)
 
         return results
 

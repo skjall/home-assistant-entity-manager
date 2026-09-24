@@ -49,6 +49,23 @@ class HomeAssistantWebSocket:
         message = await self.websocket.recv()
         return json.loads(message)
 
+    async def send_command(self, message: Dict[str, Any]) -> Any:
+        """Send one command and give back its result.
+
+        Home Assistant answers with events and other traffic in between, so the
+        reply is the one carrying this message's id.
+        """
+        msg_id = await self._send_message(dict(message))
+
+        response = await self._receive_message()
+        while response.get("id") != msg_id:
+            response = await self._receive_message()
+
+        if not response.get("success"):
+            raise Exception(f"{message['type']} failed: {response.get('error') or response}")
+
+        return response.get("result")
+
     async def call_service(self, domain: str, service: str, data: Optional[Dict] = None) -> Dict[str, Any]:
         message = {
             "type": "call_service",

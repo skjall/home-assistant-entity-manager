@@ -23,11 +23,12 @@ from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import access
-from app_state import UNASSIGNED_AREA, ensure_mqtt_bridge, init_client, renamer_state
+from app_state import UNASSIGNED_AREA, ensure_mqtt_bridge, init_client, renamer_state, ws_url
 import asgi
 from config_files import out_of_reach as references_out_of_reach
 import core_readiness
 from dependency_updater import DependencyUpdater
+from energy_prefs import EnergyPrefs
 from device_registry import DeviceRegistry
 from entity_registry import EntityRegistry
 from ha_websocket import HomeAssistantWebSocket
@@ -822,6 +823,8 @@ def _warn_about_dependencies(results: dict, old_id: str, new_id: str, dep_result
         dep_results.get("scenes", {}).get("failed", [])
         + dep_results.get("scripts", {}).get("failed", [])
         + dep_results.get("automations", {}).get("failed", [])
+        + dep_results.get("helpers", {}).get("failed", [])
+        + dep_results.get("energy", {}).get("failed", [])
     )
     unreachable = dep_results.get("automations", {}).get("unreachable", [])
     if failed:
@@ -1545,6 +1548,18 @@ async def _get_dependencies_async(entity_id):
         else:
             logger.info(f"Keine Automations gefunden die {entity_id} verwenden")
 
+        # The energy dashboard keeps its entity ids in a store of its own, which
+        # only the WebSocket API hands out. Left out here, it answered "nothing
+        # refers to this" for an entity the dashboard was built on, and the
+        # rename went ahead and broke it.
+        try:
+            energy = EnergyPrefs(ws_url(), os.getenv("HA_TOKEN"))
+            places = await energy.referring_to(entity_id)
+            if places:
+                dependencies["Energy dashboard"] = places
+        except Exception as error:  # noqa: BLE001 - the other answers still stand
+            logger.error("Could not ask the energy dashboard about %s: %s", entity_id, error)
+
     except Exception as e:
         logger.error(f"Fehler beim Laden der Dependencies: {e}")
         dependencies = {"error": str(e)}
@@ -1714,6 +1729,17 @@ async def _fix_reference_async():
                     success = await updater.helpers.replace_in(config_id, old_entity_id, new_entity_id)
                 except Exception as error:  # noqa: BLE001 - one helper must not stop the rest
                     logger.error(f"Could not repair helper {config_id}: {error}")
+                    success = False
+
+            elif ref.config_type == "energy":
+                # The dashboard is one store with one save, so the repair is
+                # the rename: every place naming the old id is put right at
+                # once, and there is nothing to do per place.
+                try:
+                    carried = await updater.energy.rename(old_entity_id, new_entity_id)
+                    success = bool(carried["success"]) and not carried["failed"]
+                except Exception as error:  # noqa: BLE001 - one finding must not stop the rest
+                    logger.error(f"Could not repair the energy dashboard: {error}")
                     success = False
 
             if success:

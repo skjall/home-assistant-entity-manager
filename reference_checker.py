@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 from config_files import shared as shared_config_files
 from device_swap import INTERIM_SUFFIX
+from energy_prefs import EnergyPrefs
 from helper_options import HelperOptions
 
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +28,7 @@ load_dotenv()
 class BrokenReference:
     """Eine verwaiste Entity-Referenz."""
 
-    config_type: str  # "automation" | "scene" | "script" | "helper"
+    config_type: str  # "automation" | "scene" | "script" | "helper" | "energy"
     config_id: str  # automation.xyz
     config_name: str  # Friendly name
     missing_entity_id: str  # light.schlafzimmer_2
@@ -181,6 +182,11 @@ class ReferenceChecker:
         # prose, so nothing carries a rename into them and a dead reference
         # sits there silently.
         self.helpers = HelperOptions(self.base_url, self.token)
+        # The energy dashboard's own store, which no file or REST scan reaches.
+        self.energy = EnergyPrefs(
+            self.base_url.replace("https://", "wss://").replace("http://", "ws://") + "/api/websocket",
+            self.token,
+        )
         # The YAML the configuration API does not hand out: packages, includes
         # and YAML-mode dashboards. Present only when the mount is there.
         self.config_files = shared_config_files(self.VALID_DOMAINS)
@@ -554,6 +560,23 @@ class ReferenceChecker:
                 )
         except Exception as error:  # noqa: BLE001 - the other findings still stand
             logger.error("Could not scan the helpers: %s", error)
+
+        # Scan the energy dashboard
+        logger.info("Scanning the energy dashboard...")
+        try:
+            for place in await self.energy.broken(existing):
+                broken_refs.append(
+                    BrokenReference(
+                        config_type="energy",
+                        config_id="energy",
+                        config_name="Energy dashboard",
+                        missing_entity_id=place["missing_entity_id"],
+                        context=place["field"],
+                        yaml_path=place["path"],
+                    )
+                )
+        except Exception as error:  # noqa: BLE001 - the other findings still stand
+            logger.error("Could not scan the energy dashboard: %s", error)
 
         broken_refs.extend(self._broken_in_the_yaml(existing))
 

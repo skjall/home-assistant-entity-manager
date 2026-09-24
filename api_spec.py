@@ -634,7 +634,8 @@ OPERATIONS: List[Operation] = [
         "get",
         "broken_references",
         "Every place that names an entity which no longer exists.",
-        "Automations, scripts, scenes and dashboards are searched. The answer is cached; " "refresh=true scans again.",
+        "Automations, scripts, scenes, helpers, dashboards and the energy dashboard are searched. "
+        "The answer is cached; refresh=true scans again.",
         query={"refresh": text("Set to true to scan again instead of using the cache.")},
         tag="References",
     ),
