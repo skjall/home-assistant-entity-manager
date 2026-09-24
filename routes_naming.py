@@ -929,6 +929,9 @@ def naming_preview():
     new_entity_id, new_name = restructurer.generate_new_entity_id(
         entity_id, entity, entity_name, pending_device_name, pending_area_id
     )
+    # What named the entity as it stands. A name asked about for a device name
+    # or an area the panel holds and the registry does not is not a decision
+    # anything made, and build_naming_context leaves no such answer behind.
     resolution = restructurer.last_resolutions.get(entity_id)
     # Number away from IDs other entities hold, as a batched rename would.
     domain, _, object_id = new_entity_id.partition(".")

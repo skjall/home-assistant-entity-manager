@@ -3243,7 +3243,10 @@
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
                 // The area picked in the panel, before it is written. null is
                 // nothing picked, "" is picked away, which are not the same
-                // answer; the control that sets it comes with the area field.
+                // answer. The field that picks it is its own change (the device
+                // panel's area row); until that is in, this holds null, nothing
+                // is staged, and every preview answers from the registry - which
+                // is what it did before any of this.
                 devicePreviewAreaId: null,
                 deviceNameClash: [],  // Ids the name in the field would take from someone else
                 _deviceNameTimer: null,
@@ -5019,7 +5022,13 @@
                     // its MAC, whose entities are "Bluetooth Proxy Location" -
                     // leaves it sitting in front, and the row said it twice.
                     // The server does the same thing with the name it is given.
-                    parts.push(this.withoutLeading(this.getEntitySuffix(entity), panel.device_name));
+                    // An integration writes the area into the name just as
+                    // readily as the device - "Bad Temperature" - so the area
+                    // being picked comes out of it too, in the order the server
+                    // takes them out in.
+                    let own = this.withoutLeading(this.getEntitySuffix(entity), panel.device_name);
+                    if (panel.area_id !== undefined) own = this.withoutLeading(own, area?.name);
+                    parts.push(own);
 
                     return parts.filter(p => p).join(' ');
                 },
@@ -5097,20 +5106,33 @@
                             // Only where nothing has asked since: this answer
                             // is about the name the row had when it was asked.
                             if (entity._previewAsk !== asked) return;
-                            entity._previewId = this.composeEntityId(entity, slugs[i]);
-                            answered.push(entity);
+                            answered.push({entity, slug: slugs[i]});
                         });
-                        // Two entities of one device can come out with the same
-                        // id - "Lampe Ein/Aus" twice - and the server numbers the
-                        // second. Its answer is not used while the panel holds a
-                        // name it has not seen, so the numbering happens here as
-                        // well, or both rows would show one id and the reader
-                        // would be told of a clash that is not there.
-                        const times = new Map();
-                        for (const entity of answered) {
-                            const taken = (times.get(entity._previewId) || 0) + 1;
-                            times.set(entity._previewId, taken);
-                            if (taken > 1) entity._previewId = `${entity._previewId}_${taken}`;
+                        // Two entities can come out of one name - "Lampe Ein/Aus"
+                        // twice - and the server numbers them apart against every
+                        // id already taken. Its answer is not used while the panel
+                        // holds a name it has not seen, so the same numbering
+                        // happens here: from the slug up, past every id that is
+                        // taken, which is what a rename would write. Numbering the
+                        // finished id instead gave "..._2_2" where the server
+                        // would say "..._3".
+                        const mine = new Set(answered.map(one => one.entity));
+                        const taken = new Set();
+                        for (const other of (this.hierarchy?.entities || [])) {
+                            if (mine.has(other)) continue;
+                            taken.add(other.id);
+                            if (other._previewId) taken.add(other._previewId);
+                        }
+                        for (const {entity, slug} of answered) {
+                            let candidate = this.composeEntityId(entity, slug);
+                            let number = 1;
+                            // Its own id is not something to number away from.
+                            while (candidate !== entity.id && taken.has(candidate)) {
+                                number += 1;
+                                candidate = this.composeEntityId(entity, `${slug}_${number}`);
+                            }
+                            taken.add(candidate);
+                            entity._previewId = candidate;
                         }
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;

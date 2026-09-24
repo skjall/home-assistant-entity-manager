@@ -446,8 +446,12 @@ class EntityRestructurer:
             device_name = self._base_device_name(raw_device_name, partial_context)
         partial_context["device"] = device_name
         # A hypothetical answer must not replace the real one that the entity
-        # list reads back out of last_resolutions.
-        previous = self.last_resolutions.get(entity_id) if ignore_exception else None
+        # list reads back out of last_resolutions. A name asked about for a
+        # device name or an area that is not written yet is hypothetical in the
+        # same way: left behind, it had the list saying a rule decided a name
+        # that only the form has.
+        asking_only = ignore_exception or pending_device_name is not None or pending_area_id is not None
+        previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(
             entity_id,
             entity_reg,
@@ -467,7 +471,7 @@ class EntityRestructurer:
             ),
             partial_context,
         )
-        if ignore_exception:
+        if asking_only:
             if previous is None:
                 self.last_resolutions.pop(entity_id, None)
             else:
