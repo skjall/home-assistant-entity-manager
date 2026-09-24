@@ -961,16 +961,19 @@
             border-radius: 0;
         }
 
-        .entity-card-simple .btn-group .action-btn:first-child {
+        /* Counted among the buttons, not among the children: a button a
+           template of Alpine's sits beside is not :first-child, and one left
+           on its own is not :only-child, which left the group square. */
+        .entity-card-simple .btn-group .action-btn:first-of-type {
             border-radius: 4px 0 0 4px;
         }
 
-        .entity-card-simple .btn-group .action-btn:last-child {
+        .entity-card-simple .btn-group .action-btn:last-of-type {
             border-radius: 0 4px 4px 0;
             margin-left: -1px;
         }
 
-        .entity-card-simple .btn-group .action-btn:only-child {
+        .entity-card-simple .btn-group .action-btn:only-of-type {
             border-radius: 4px;
             margin-left: 0;
         }
