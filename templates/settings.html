@@ -775,6 +775,14 @@
         /* A list of integrations or models is far too long to scroll through in
            a dropdown, so it is typed into and narrowed as you type, the way
            devices are picked when one is swapped. */
+        /* An expression is read character by character, so it is set in the
+           face that makes one character look like one character. */
+        .rule-pattern-input {
+            flex: 1 1 200px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85rem;
+        }
+
         .combo { position: relative; }
 
         .combo-field { position: relative; }
@@ -1428,7 +1436,20 @@
                                 <span class="rule-to" x-text="row.isRule ? row.value : row.system_default"></span>
                             </div>
                             <div class="rule-says" x-show="editingKey === row.id">
-                                <span class="rule-from" x-text="row.shown || row.key"></span>
+                                <!-- A pattern is matched on an expression the user
+                                     wrote, so it is edited here like the target. The
+                                     other kinds are matched on the word an integration
+                                     supplies; changing that word would make the rule a
+                                     different rule, so it stays as it reads. -->
+                                <template x-if="row.kind === 'pattern'">
+                                    <input type="text" class="edit-input rule-pattern-input" x-model="editPattern"
+                                           :title="t('settings.pattern_expression')"
+                                           :placeholder="t('settings.pattern_expression')"
+                                           @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
+                                </template>
+                                <template x-if="row.kind !== 'pattern'">
+                                    <span class="rule-from" x-text="row.shown || row.key"></span>
+                                </template>
                                 <i class="ri-arrow-right-line rule-arrow"></i>
                                 <input type="text" class="edit-input" style="flex: 1 1 200px;" x-model="editValue"
                                        @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
@@ -2127,6 +2148,7 @@
                 reachBusy: false,
                 reachError: '',
                 editValue: '',
+                editPattern: '',  // The expression, while a pattern rule is being edited
                 filterFor: null,
                 comboOpen: '',
                 comboAt: 0,
@@ -3445,11 +3467,15 @@
                 startEdit(row) {
                     this.editingKey = row.id;
                     this.editValue = row.isRule ? row.value : '';
+                    // The expression as it is, not as it reads: what goes back
+                    // has to be the thing the rule matches on.
+                    this.editPattern = row.isRule && row.kind === 'pattern' ? row.key : '';
                 },
 
                 cancelEdit() {
                     this.editingKey = null;
                     this.editValue = '';
+                    this.editPattern = '';
                 },
 
                 async saveEdit(row) {
@@ -3457,14 +3483,23 @@
                         this.cancelEdit();
                         return;
                     }
+                    const expression = this.editPattern.trim();
+                    if (row.kind === 'pattern' && !expression) {
+                        this.cancelEdit();
+                        return;
+                    }
 
                     try {
                         const value = this.editValue.trim();
+                        // Only what changed: an expression sent back unchanged
+                        // would be checked against the other rules for nothing.
+                        const changes = { targets: { ...row.rule?.targets, [this.language]: value } };
+                        if (row.kind === 'pattern' && expression !== row.key) changes.match_value = expression;
                         const response = row.isRule
                             ? await fetch(`api/naming/rules/${encodeURIComponent(row.id)}`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ targets: { ...row.rule.targets, [this.language]: value } })
+                                body: JSON.stringify(changes)
                               })
                             : await fetch('api/naming/rules', {
                                 method: 'POST',

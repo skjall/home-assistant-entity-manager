@@ -541,7 +541,8 @@
     "pattern_hint": "Some integrations put a serial number into every name, such as “Heating 12345678”. A pattern rule leaves the number open and so applies to every device of that integration. Existing pattern rules keep applying when this is switched off.",
     "pattern_toggle": "Offer pattern rules when renaming",
     "pick_pattern": "Pattern",
-    "caught_pattern": "pattern"
+    "caught_pattern": "pattern",
+    "pattern_expression": "Expression, e.g. Heating\\ (?P<n1>\\d+)"
   },
   "type_mappings": {
     "light": "Light",

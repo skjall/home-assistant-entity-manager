@@ -843,10 +843,16 @@ def naming_rule_item(rule_id):
         renamer_state["type_mappings"]._refresh_user_view()
         return jsonify({"success": True})
     data = request.json if isinstance(request.json, dict) else {}
+    # The expression of a pattern rule, which is the one kind written to be
+    # adjusted afterwards: the others are matched on a word the integration
+    # supplies, and that word is not the writer's to change.
+    expression = data.get("match_value")
+    if expression is not None:
+        expression = sanitize_string(expression, max_length=500)
     try:
         # Where a rule applies is added and removed one filter at a time; a
         # single scope here would have to throw the rest of the list away.
-        rule = rules.update(rule_id, targets=data.get("targets"))
+        rule = rules.update(rule_id, targets=data.get("targets"), value=expression)
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()

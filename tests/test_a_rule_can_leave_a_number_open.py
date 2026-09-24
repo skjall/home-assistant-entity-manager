@@ -260,3 +260,92 @@ def test_the_setting_is_read_and_written(client):
     response = client.put("/api/naming/settings", json={"pattern_rules": True})
 
     assert response.get_json()["pattern_rules"] is True
+
+
+# ------------------------------------------------------------------- editing
+
+
+def test_the_expression_of_a_pattern_rule_can_be_changed(rules):
+    """A pattern is written to be adjusted: the first one rarely fits exactly."""
+    rule = _pattern_rule(rules)
+
+    changed = rules.update(rule["id"], value=r"Heizkosten\ (?P<n1>\d+)")
+
+    assert changed["match"]["value"] == r"Heizkosten\ (?P<n1>\d+)"
+    assert readable_pattern(changed["match"]["value"]) == "Heizkosten {1}"
+
+
+def test_an_expression_that_cannot_be_read_is_refused(rules):
+    rule = _pattern_rule(rules)
+
+    with pytest.raises(NamingRuleError):
+        rules.update(rule["id"], value="Heizung (?P<n1>")
+
+    assert rules.get(rule["id"])["match"]["value"] == pattern_of("Heizung 12345678")[0]
+
+
+def test_an_expression_losing_a_placeholder_the_target_uses_is_refused(rules):
+    """The name would come out with a hole where the number belongs."""
+    rule = _pattern_rule(rules)
+
+    with pytest.raises(NamingRuleError):
+        rules.update(rule["id"], value=r"Heizung\ \d+")
+
+    assert rules.get(rule["id"])["targets"]["de"] == "Heizkostenverteiler {1}"
+
+
+def test_a_new_expression_and_a_new_target_are_judged_together(rules):
+    """The target that goes with the new expression, not the one before it."""
+    rule = _pattern_rule(rules)
+
+    changed = rules.update(
+        rule["id"],
+        value=r"Heizung\ (?P<meter>\d+)",
+        targets={"de": "Heizkostenverteiler {meter}"},
+    )
+
+    assert changed["targets"]["de"] == "Heizkostenverteiler {meter}"
+
+
+def test_an_expression_another_rule_already_claims_is_refused(rules):
+    first = _pattern_rule(rules)
+    second = rules.add_filter(
+        "pattern", r"Wasser\ (?P<n1>\d+)", "de", "Wasserzähler {1}", {"integration": INTEGRATION}
+    )
+
+    with pytest.raises(NamingRuleError):
+        rules.update(second["id"], value=first["match"]["value"])
+
+
+def test_only_a_pattern_rule_is_matched_on_an_expression(rules):
+    """A name rule is matched on the word an integration supplies, not one the user wrote."""
+    rule = rules.add_filter("name", "Heizung", "de", "Heizkostenverteiler", {"integration": INTEGRATION})
+
+    with pytest.raises(NamingRuleError):
+        rules.update(rule["id"], value=r"Heizung\ (?P<n1>\d+)")
+
+
+def test_the_endpoint_carries_the_new_expression(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = _pattern_rule(rules)
+
+    response = client.put(
+        f"/api/naming/rules/{rule['id']}",
+        json={"targets": {"de": "Heizkostenverteiler {1}"}, "match_value": r"Heizkosten\ (?P<n1>\d+)"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["rule"]["label"] == "Heizkosten {1}"
+
+
+def test_the_endpoint_says_why_an_expression_is_refused(client):
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = _pattern_rule(rules)
+
+    response = client.put(
+        f"/api/naming/rules/{rule['id']}",
+        json={"targets": {"de": "Heizkostenverteiler {1}"}, "match_value": "Heizung (?P<n1>"},
+    )
+
+    assert response.status_code == 400
+    assert "pattern" in response.get_json()["error"].lower()

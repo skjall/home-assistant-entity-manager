@@ -561,7 +561,8 @@
     "pattern_hint": "Algunas integraciones ponen un número de serie en cada nombre, como «Calefacción 12345678». Una regla con patrón deja el número abierto y así se aplica a todos los dispositivos de esa integración. Las reglas con patrón existentes siguen aplicándose aunque esto esté desactivado.",
     "pattern_toggle": "Ofrecer reglas con patrón al renombrar",
     "pick_pattern": "Patrón",
-    "caught_pattern": "patrón"
+    "caught_pattern": "patrón",
+    "pattern_expression": "Expresión, p. ej. Calefacción\\ (?P<n1>\\d+)"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

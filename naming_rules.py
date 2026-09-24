@@ -1136,28 +1136,53 @@ class NamingRules:
         rule_id: str,
         targets: Optional[Mapping[str, str]] = None,
         filters: Any = ...,
+        value: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Change what a rule says, or the whole list of places it applies.
+        """Change what a rule says, what it matches, or where it applies.
 
         One place at a time is add_filter and remove_filter; this is for
         replacing the list wholesale, which is the only other honest way to
         change it. There is deliberately no way to set a single scope: on a
         rule reaching three places that could only mean throwing two away.
+
+        ``value`` is the expression of a pattern rule. The other kinds are
+        matched on a word the integration supplies, and changing that word
+        would make the rule a different rule rather than an edited one; a
+        pattern is the one kind written to be adjusted.
+
+        Everything asked for is worked out first and checked together, so a
+        new expression is judged against the new targets rather than the old.
         """
         rule = self.get(rule_id)
         if rule is None:
             raise NamingRuleError(f"Unknown rule: {rule_id}")
+
+        wanted = dict(rule)
         if targets is not None:
             clean = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
             if not clean:
                 raise NamingRuleError("A rule needs at least one target")
-            rule["targets"] = clean
-            self.check_pattern(rule)
+            wanted["targets"] = clean
+
+        if value is not None:
+            if rule["match"]["kind"] != "pattern":
+                raise NamingRuleError("Only a pattern rule is matched on an expression")
+            expression = value.strip()
+            # Says why it cannot be read, which is what the writer needs back.
+            compile_pattern(expression)
+            wanted["match"] = {**rule["match"], "value": expression}
 
         if filters is not ...:
-            wanted = clean_filters(filters)
-            self._refuse_collision({**rule, "filters": wanted})
-            rule["filters"] = wanted
+            wanted["filters"] = clean_filters(filters)
+
+        if value is not None or filters is not ...:
+            self._refuse_collision(wanted)
+        elif targets is not None:
+            self.check_pattern(wanted)
+
+        rule["targets"] = wanted["targets"]
+        rule["match"] = wanted["match"]
+        rule["filters"] = wanted["filters"]
         rule["updated_at"] = _now()
         self.save()
         return rule
