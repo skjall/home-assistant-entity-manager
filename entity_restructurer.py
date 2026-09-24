@@ -452,6 +452,11 @@ class EntityRestructurer:
         """Remove hierarchy previously added by a known device template."""
         name = name or ""
         extracted = self.naming_templates.extract_field("device_name", name, "device", context)
+        # Deliberately not "is not None": a device with no name of its own is
+        # not a device, and rendering "{area} {device}" with nothing for the
+        # device leaves the area and a gap where the name belongs. The entity
+        # side takes the empty answer, because an entity named after its device
+        # alone is an ordinary thing to find.
         if extracted:
             return extracted
         for prefix in (context["floor"], context["area"]):
@@ -1133,6 +1138,11 @@ class EntityRestructurer:
             # apart is what is left for everything named before the note
             # existed.
             base = self._strip_applied_entity_name(applied, prefixes, context)
+            # Deliberately not "is not None": an empty type part is a name
+            # built out of area and device alone, and there is nothing in it to
+            # resolve. The type then comes from the state below, and from the
+            # domain where the state has nothing either - which is how such an
+            # entity gets called "Switch" rather than nothing at all.
             if base:
                 return self._resolve_supplied_name(base, entity_id, registry, won_by="legacy_parse")
 
