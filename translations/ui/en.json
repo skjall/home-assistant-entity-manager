@@ -509,6 +509,7 @@
     "pick_name": "Supplied name",
     "pick_device_class": "Device class",
     "pick_translation_key": "Translation key",
+    "pick_domain": "Domain",
     "filter_search_integration": "Search integrations …",
     "model_count": "{count} models",
     "more_matches": "… {count} more — narrow the search",
@@ -541,9 +542,9 @@
     "caught_translation_key": "translation key",
     "caught_name": "supplied name",
     "caught_device_class": "device class",
+    "caught_domain": "domain",
     "caught_none": "—",
-    "reach_open_device": "Open “{device}” in Home Assistant",
-    "kind_domain": "Domain"
+    "reach_open_device": "Open “{device}” in Home Assistant"
   },
   "type_mappings": {
     "light": "Light",

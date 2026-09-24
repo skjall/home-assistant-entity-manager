@@ -529,6 +529,7 @@
     "pick_name": "Nom fourni",
     "pick_device_class": "Classe d'appareil",
     "pick_translation_key": "Clé de traduction",
+    "pick_domain": "Domaine",
     "filter_search_integration": "Rechercher une intégration …",
     "model_count": "{count} modèles",
     "more_matches": "… {count} de plus — affinez la recherche",
@@ -561,9 +562,9 @@
     "caught_translation_key": "clé de traduction",
     "caught_name": "nom fourni",
     "caught_device_class": "classe d'appareil",
+    "caught_domain": "domaine",
     "caught_none": "—",
-    "reach_open_device": "Ouvrir « {device} » dans Home Assistant",
-    "kind_domain": "Domaine"
+    "reach_open_device": "Ouvrir « {device} » dans Home Assistant"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

@@ -529,6 +529,7 @@
     "pick_name": "Nombre suministrado",
     "pick_device_class": "Clase de dispositivo",
     "pick_translation_key": "Clave de traducción",
+    "pick_domain": "Dominio",
     "filter_search_integration": "Buscar integración …",
     "model_count": "{count} modelos",
     "more_matches": "… {count} más — acota la búsqueda",
@@ -561,9 +562,9 @@
     "caught_translation_key": "clave de traducción",
     "caught_name": "nombre entregado",
     "caught_device_class": "clase de dispositivo",
+    "caught_domain": "dominio",
     "caught_none": "—",
-    "reach_open_device": "Abrir «{device}» en Home Assistant",
-    "kind_domain": "Dominio"
+    "reach_open_device": "Abrir «{device}» en Home Assistant"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",
