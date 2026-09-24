@@ -1,8 +1,8 @@
 """Tests for the central, word-boundary-safe entity reference replacement."""
 
 from entity_ref_utils import (
-    refers_to_entity,
     extract_entity_ids,
+    refers_to_entity,
     replace_entity_in_obj,
     replace_entity_ref_in_string,
 )
