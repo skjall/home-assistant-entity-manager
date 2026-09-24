@@ -4878,7 +4878,7 @@
                 deviceIsMoving(device) {
                     return !!device
                         && device.id === this.selectedDevice
-                        && !this.isVirtualDevice(this.selectedDevice)
+                        && !this.isVirtualDevice(device.id)
                         && this.devicePreviewAreaId !== null;
                 },
 
@@ -6194,15 +6194,20 @@
                             }
 
                             // Also update entities of this device
+                            // The same value the device holds: an empty pick
+                            // is no area, and "" beside the device's null read
+                            // as two different answers to the same question.
                             (indexed(this).byDevice.get(deviceId) || none)
-                                .forEach(e => e.area_id = areaId);
+                                .forEach(e => e.area_id = areaId || null);
 
                             // Both areas hold a different number of entities
                             // now, so the counts have to be worked out again.
                             this.hierarchyVersion++;
 
-                            const area = this.hierarchy.areas.find(a => a.id === areaId);
-                            this.showMessage(this.t('area.area_assigned') + ': ' + (area?.name || areaId), 'success');
+                            const area = areaId ? this.hierarchy.areas.find(a => a.id === areaId) : null;
+                            this.showMessage(area
+                                ? this.t('area.area_assigned') + ': ' + area.name
+                                : this.t('area.area_cleared'), 'success');
                             return true;
                         }
                         throw new Error(data.error || 'Failed to assign area');
@@ -6704,6 +6709,8 @@
                 },
 
                 async onRenameDeviceDone(job, deviceId = null, driftDevices = []) {
+                    // The job is over, so the button opens again.
+                    this.renamingDevice = false;
                     // What the panel holds now may have been typed for another
                     // device while this job ran, and that is not this job's to
                     // throw away.
@@ -6749,10 +6756,15 @@
                     // it started a second run of the same job.
                     this.renamingDevice = true;
                     try {
-                        await this.applyDeviceWideRun(device, deviceId, driftDevices);
-                    } finally {
-                        this.renamingDevice = false;
+                        // The run gives back whether a job is now under way. If
+                        // one is, the button stays shut until it reports back -
+                        // a second click would enqueue the same rename twice.
+                        const running = await this.applyDeviceWideRun(device, deviceId, driftDevices);
+                        if (running) return;
+                    } catch (error) {
+                        this.showMessage('Error: ' + error.message, 'error');
                     }
+                    this.renamingDevice = false;
                 },
 
                 async applyDeviceWideRun(device, deviceId, driftDevices) {
@@ -6791,10 +6803,9 @@
                         // it was: the device-name template has no {device} in
                         // it, so there is nowhere for the name to go. Saying
                         // "nothing to apply" left that looking like a lost
-                        // click.
-                        // Nothing was written, so the field goes back to what
-                        // it held: left standing, the device's own name read as
-                        // a rename waiting to be applied.
+                        // click. Nothing was written either, so the field goes
+                        // back to what it held - left standing, the device's own
+                        // name read as a rename waiting to be applied.
                         this.devicePreviewBaseName = wasPreviewed;
                         this.showMessage(nameStaged
                             ? this.t('messages.name_has_no_place')
@@ -6821,6 +6832,7 @@
                             titleKey: 'jobs.applying',
                             onDone: (finished) => this.onRenameDeviceDone(finished, deviceId, driftDevices)
                         });
+                        return true;
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     }
