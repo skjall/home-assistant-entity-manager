@@ -3507,12 +3507,23 @@
                         this.cancelEdit();
                         return;
                     }
+                    // Nothing was changed. Sending it anyway stamped the rule
+                    // as edited and wrote the file for no reason.
+                    if (row.isRule && !patternChanged && value === (row.rule?.targets?.[this.language] || '')) {
+                        this.cancelEdit();
+                        return;
+                    }
 
                     try {
                         // Only what changed: an expression sent back unchanged
                         // would be checked against the other rules for nothing.
                         const changes = {};
-                        if (value) changes.targets = { ...row.rule?.targets, [this.language]: value };
+                        // This language alone. Sending the whole set back wrote
+                        // the other languages as they were read, which undid an
+                        // edit made to one of them in the meantime; the server
+                        // merges what it is given into what it holds.
+                        const stored = row.rule?.targets?.[this.language] || '';
+                        if (value && value !== stored) changes.targets = { [this.language]: value };
                         if (patternChanged) changes.match_value = expression;
                         const response = row.isRule
                             ? await fetch(`api/naming/rules/${encodeURIComponent(row.id)}`, {

@@ -1234,7 +1234,11 @@ class NamingRules:
             clean = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
             if not clean:
                 raise NamingRuleError("A rule needs at least one target")
-            wanted["targets"] = clean
+            # Merged, not replaced: the caller edits the language in front of
+            # it and says nothing about the others. Replacing meant every
+            # writer had to send the whole set back, and a set read before
+            # someone else's edit then wrote that edit away again.
+            wanted["targets"] = {**rule["targets"], **clean}
 
         if value is not None:
             if rule["match"]["kind"] != "pattern":
@@ -1247,10 +1251,11 @@ class NamingRules:
         if filters is not ...:
             wanted["filters"] = clean_filters(filters)
 
-        if value is not None or filters is not ...:
-            self._refuse_collision(wanted)
-        elif targets is not None:
-            self.check_pattern(wanted)
+        # Everything the rule would become is judged the same way, whichever
+        # field was supplied: a target carrying a placeholder the expression
+        # does not capture is refused whether or not the expression came with
+        # it, and the stored rules never collide, so re-asking costs nothing.
+        self._refuse_collision(wanted)
 
         rule["targets"] = wanted["targets"]
         rule["match"] = wanted["match"]

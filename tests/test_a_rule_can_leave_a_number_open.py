@@ -384,6 +384,7 @@ def test_the_endpoint_refuses_a_body_that_asks_for_nothing(client):
 
     assert response.status_code == 400
 
+
 def test_a_number_that_appears_twice_gets_two_placeholders():
     """ "Zone 10 Panel 10" holds the same number twice, and they move apart."""
     assert target_of("Zone 10 Panel 10", ["10", "10"]) == "Zone {1} Panel {2}"
@@ -392,3 +393,42 @@ def test_a_number_that_appears_twice_gets_two_placeholders():
 def test_a_repetition_inside_a_class_is_a_character():
     """ "([a+])+" repeats a class of two characters, which finishes in time."""
     assert compile_pattern(r"([a+])+b") is not None
+
+
+def test_a_target_in_another_language_survives_an_edit(rules):
+    """The writer edits the language in front of it and says nothing about the rest."""
+    rule = _pattern_rule(rules)
+    rules.update(rule["id"], targets={"en": "Heat meter {1}"})
+
+    changed = rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+    assert changed["targets"] == {"de": "Heizkosten {1}", "en": "Heat meter {1}"}
+
+
+def test_a_target_is_refused_when_the_expression_captures_nothing_for_it(rules):
+    """The check used to be skipped where only the targets were supplied."""
+    rule = _pattern_rule(rules)
+
+    with pytest.raises(NamingRuleError):
+        rules.update(rule["id"], targets={"de": "Heizkosten {2}"})
+
+
+def test_the_endpoint_refuses_targets_that_are_not_a_mapping(client):
+    """A list where a mapping belongs used to come back as a 500."""
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = _pattern_rule(rules)
+
+    response = client.put(f"/api/naming/rules/{rule['id']}", json={"targets": ["Heizung"]})
+
+    assert response.status_code == 400
+
+
+def test_the_endpoint_refuses_an_expression_of_whitespace(client):
+    """It reached compile_pattern and failed about the pattern, not the field."""
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = _pattern_rule(rules)
+
+    response = client.put(f"/api/naming/rules/{rule['id']}", json={"match_value": "   "})
+
+    assert response.status_code == 400
+    assert "Nothing to change" in response.get_json()["error"]

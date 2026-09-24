@@ -851,13 +851,20 @@ def naming_rule_item(rule_id):
     # supplies, and that word is not the writer's to change.
     expression = data.get("match_value")
     if expression is not None:
-        expression = sanitize_string(expression, max_length=500)
-    if data.get("targets") is None and expression is None:
+        # Whitespace is not an expression. Sanitising leaves an empty string,
+        # which read as "something was supplied" and reached compile_pattern,
+        # where it failed with a message about the pattern rather than about
+        # the empty field.
+        expression = sanitize_string(expression, max_length=500).strip() or None
+    targets = data.get("targets")
+    if targets is not None and not isinstance(targets, dict):
+        return jsonify({"error": "targets has to be a mapping of language to text"}), 400
+    if targets is None and expression is None:
         return jsonify({"error": "Nothing to change: neither targets nor an expression"}), 400
     try:
         # Where a rule applies is added and removed one filter at a time; a
         # single scope here would have to throw the rest of the list away.
-        rule = rules.update(rule_id, targets=data.get("targets"), value=expression)
+        rule = rules.update(rule_id, targets=targets, value=expression)
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()
