@@ -133,7 +133,9 @@ class NamingState:
         entry = self.data.get("entities", {}).get(registry_id or "")
         if not isinstance(entry, dict) or entry.get("base_entity") == base_entity:
             return False
-        entry["base_entity"] = base_entity or ""
+        # As it was given: "" is the statement that the name has no type part,
+        # and record() keeps the same distinction.
+        entry["base_entity"] = base_entity if isinstance(base_entity, str) else None
         self._save()
         return True
 

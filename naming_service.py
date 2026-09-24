@@ -230,9 +230,16 @@ def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
 
 
 def provenance_of(proposed: Dict[str, Any]) -> Dict[str, Any]:
-    """Turn a proposal into the note that is kept with the written name."""
+    """Turn a proposal into the note that is kept with the written name.
+
+    A proposal that says nothing about the type part leaves the note saying
+    nothing about it. "" is a statement - the name is area and device and ends
+    there - and writing it where nothing was worked out had the next run
+    propose stripping the type part off a name that has one.
+    """
+    kept = proposed.get("base_entity")
     return {
-        "base_entity": proposed.get("base_entity") or "",
+        "base_entity": kept if isinstance(kept, str) else None,
         "won_by": proposed.get("name_comes_from") or "",
         "rule_id": proposed.get("rule_id"),
         "template_hash": renamer_state["naming_templates"].fingerprint(),

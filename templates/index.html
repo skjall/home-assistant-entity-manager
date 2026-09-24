@@ -5422,6 +5422,9 @@
                         // moving, stopped following the list at all.
                         this.hierarchy.areas.map(a => a.id + '\u0001' + a.name).join('\u0002'),
                         this.selectedDeviceData?.area_id || '',
+                        // And the area picked and not yet written, which is the
+                        // one the list marks as the current one.
+                        this.devicePreviewAreaId === null ? '\u0003' : this.devicePreviewAreaId,
                         this.translationsReady
                     ].join('\u0000');
                     if (areaList.key !== key) {
@@ -5464,6 +5467,10 @@
                 closeAreaCombo() {
                     if (!this.areaComboOpen) return;
                     this.areaComboOpen = false;
+                    // Where the list stood is forgotten with it: reopened with
+                    // an arrow key it went on from there, so the highlight
+                    // appeared in the middle of the list rather than at its top.
+                    this.areaComboAt = 0;
                     // Typing and then looking elsewhere picks nothing: the field
                     // goes back to the area the panel stands on.
                     this.areaSearch = this.panelAreaName();
