@@ -25,7 +25,7 @@ class Recorded(DependencyUpdater):
     async def fetch_automation_config(self, automation_numeric_id, session=None):
         return self.reads.pop(0)
 
-    async def update_automation_config(self, automation_numeric_id, config):
+    async def update_automation_config(self, automation_numeric_id, config, session=None):
         self.written.append(config)
         return self.writes_ok
 

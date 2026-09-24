@@ -4,6 +4,7 @@ Dependency Updater - Aktualisiert Entity IDs in Scenes, Scripts und Automations
 """
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -218,17 +219,29 @@ class DependencyUpdater:
         return configs
 
     async def get_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
-        """Hole Automation Konfiguration (aus dem Vorrat dieses Jobs)"""
+        """Hole Automation Konfiguration (aus dem Vorrat dieses Jobs)
+
+        A copy, because the caller rewrites the entity ids inside it. Handing
+        out what is kept would put a rename into the store before it is
+        written, and a write that then fails would leave the next entity of the
+        same job working from a configuration Home Assistant does not have.
+        """
         if self._automation_configs is not None and automation_numeric_id in self._automation_configs:
-            return self._automation_configs[automation_numeric_id]
+            config = self._automation_configs[automation_numeric_id]
+            return copy.deepcopy(config) if config is not None else None
         return await self.fetch_automation_config(automation_numeric_id)
 
-    async def update_automation_config(self, automation_numeric_id: str, config: Dict) -> bool:
+    async def update_automation_config(
+        self,
+        automation_numeric_id: str,
+        config: Dict,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> bool:
         """Aktualisiere Automation Konfiguration"""
         url = f"{self.base_url}/api/config/automation/config/{automation_numeric_id}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=config) as response:
+        async def write(open_session: aiohttp.ClientSession) -> bool:
+            async with open_session.post(url, headers=self.headers, json=config) as response:
                 if response.status == 200:
                     result = await response.json()
                     if result.get("result") == "ok":
@@ -244,6 +257,11 @@ class DependencyUpdater:
                         f"Fehler beim Update der Automation {automation_numeric_id}: {response.status}, {text}"
                     )
                     return False
+
+        if session is not None:
+            return await write(session)
+        async with aiohttp.ClientSession() as own:
+            return await write(own)
 
     async def update_automation_entities(
         self,
@@ -265,18 +283,26 @@ class DependencyUpdater:
 
         if changed:
             logger.info(f"Aktualisiere Automation {automation_id}: {old_entity_id} -> {new_entity_id}")
-            if not await self.update_automation_config(automation_numeric_id, config):
-                return False
-            # Home Assistant answering "ok" is not evidence that the old id is
-            # gone: a write that reported success and changed nothing looks
-            # exactly like one that worked. Reading it back is the only proof,
-            # and without it a rename silently leaves an automation broken.
-            written = await self.fetch_automation_config(automation_numeric_id)
+            # The write and the read that proves it share one connection.
+            async with aiohttp.ClientSession() as session:
+                if not await self.update_automation_config(automation_numeric_id, config, session):
+                    return False
+                # Home Assistant answering "ok" is not evidence that the old id
+                # is gone: a write that reported success and changed nothing
+                # looks exactly like one that worked. Reading it back is the
+                # only proof, and without it a rename silently leaves an
+                # automation broken.
+                written = await self.fetch_automation_config(automation_numeric_id, session)
             # The next entity of this rename reads the automation again, and
             # what it has to see is the version just written, not the one from
-            # before it named the new id.
+            # before it named the new id. A read-back that failed says nothing
+            # about what Home Assistant holds, so the entry is dropped rather
+            # than answered with nothing for the rest of the job.
             if self._automation_configs is not None:
-                self._automation_configs[automation_numeric_id] = written
+                if written is None:
+                    self._automation_configs.pop(automation_numeric_id, None)
+                else:
+                    self._automation_configs[automation_numeric_id] = written
             if written is None:
                 logger.error(f"Konnte Automation {automation_id} nach dem Schreiben nicht wieder lesen")
                 return False
