@@ -1043,7 +1043,11 @@ def naming_exception_adopt():
 
     restructurer = renamer_state["restructurer"]
     context = restructurer.build_naming_context(entity_id, entity, ignore_exception=True)
-    adopted = restructurer.naming_templates.extract_field("entity_name", current, "entity", context) or current
+    # An empty answer is an answer: the template matched and the name has no
+    # type part of its own. Falling back to the whole name here stored the
+    # device name as the type and rendered it twice on the next run.
+    extracted = restructurer.naming_templates.extract_field("entity_name", current, "entity", context)
+    adopted = extracted if extracted is not None else current
 
     renamer_state["naming_overrides"].set_entity_override(registry_id, adopted, source=naming_overrides.HA_UI)
     # The name in the registry is now the one the exception describes, so it

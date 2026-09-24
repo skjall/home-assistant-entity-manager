@@ -244,7 +244,7 @@ class EntityRegistry:
                 registry_id,
                 applied_name=name or "",
                 applied_entity_id=new_entity_id or entity_id,
-                base_entity=details.get("base_entity", ""),
+                base_entity=details.get("base_entity"),
                 template_hash=details.get("template_hash", ""),
                 won_by=details.get("won_by", "") or "",
                 rule_id=details.get("rule_id"),
