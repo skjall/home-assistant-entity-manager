@@ -4883,19 +4883,22 @@
                 getEntityFriendlyNameLive(entity) {
                     const parts = [];
 
+                    // The entity's own device, so a name computed while the
+                    // panel turns to another one is still about this entity.
+                    const device = entity.device_id
+                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        : null;
+
                     // Area
-                    const area = this.selectedDeviceData
-                        ? this.areaForDevice(this.selectedDeviceData)
-                        : this.selectedAreaData;
+                    const area = device ? this.areaForDevice(device) : this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
 
                     // Device base name (use preview if editing)
-                    const device = this.selectedDeviceData;
-                    if (device && !this.isVirtualDevice(this.selectedDevice)) {
-                        const deviceBase = this.devicePreviewBaseName !== null ? this.devicePreviewBaseName : device.base_name;
-                        parts.push(deviceBase);
+                    if (device && !this.isVirtualDevice(device.id)) {
+                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
+                        parts.push(typed !== null ? typed : device.base_name);
                     }
 
                     // Entity: use _editValue for live preview (override_name intentionally ignored)
@@ -5096,9 +5099,16 @@
                         if (entity._previewName || entity._justRenamed) continue;
 
                         // Friendly-name composition stays client-side; only the slug comes
-                        // from the backend (source of truth).
-                        entity._previewName = entity.suggested_name || this.getEntityFriendlyNameForEntity(entity);
-                        if (entity.suggested_entity_id) {
+                        // from the backend (source of truth). What the server
+                        // precomputed is about the area the device is in, so a
+                        // device on its way to another one is left to the
+                        // client, which knows where it is going.
+                        const moving = this.deviceIsMoving(
+                            entity.device_id ? this.hierarchy.devices.find(d => d.id === entity.device_id) : null
+                        );
+                        entity._previewName = (!moving && entity.suggested_name)
+                            || this.getEntityFriendlyNameForEntity(entity);
+                        if (!moving && entity.suggested_entity_id) {
                             entity._previewId = entity.suggested_entity_id;
                             continue;
                         }
@@ -5987,7 +5997,10 @@
                 },
 
                 async assignDeviceArea(deviceId, areaId) {
-                    if (!deviceId || !areaId) return false;
+                    // An area of null is the device taken out of every area,
+                    // which the endpoint spells out and accepts. Refusing it
+                    // here left the move and the rename both undone, silently.
+                    if (!deviceId || areaId === undefined) return false;
 
                     try {
                         const response = await fetch('api/assign_device_area', {
@@ -5995,7 +6008,7 @@
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({
                                 device_id: deviceId,
-                                area_id: areaId
+                                area_id: areaId || null
                             })
                         });
 
@@ -6004,7 +6017,7 @@
                             // Update device in hierarchy
                             const device = this.hierarchy.devices.find(d => d.id === deviceId);
                             if (device) {
-                                device.area_id = areaId;
+                                device.area_id = areaId || null;
                             }
 
                             // Also update entities of this device
@@ -6510,8 +6523,13 @@
                 },
 
                 async onRenameDeviceDone(job, deviceId = null) {
-                    this.devicePreviewBaseName = null;
-                    this.devicePreviewAreaId = null;
+                    // What the panel holds now may have been typed for another
+                    // device while this job ran, and that is not this job's to
+                    // throw away.
+                    if (!deviceId || deviceId === this.selectedDevice) {
+                        this.devicePreviewBaseName = null;
+                        this.devicePreviewAreaId = null;
+                    }
                     await this.loadHierarchy();
                     const id = deviceId || this.selectedDevice;
                     if (id) {
