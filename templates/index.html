@@ -2173,9 +2173,11 @@
                     </div>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.area_label')">Area</label>
                     <select class="edit-input w-full mb-2"
-                            x-effect="$el.value = devicePreviewAreaId !== null
-                                ? devicePreviewAreaId
-                                : (selectedDeviceData?.area_id || '')"
+                            x-effect="hierarchy.areas.length;
+                                const picked = devicePreviewAreaId !== null
+                                    ? devicePreviewAreaId
+                                    : (selectedDeviceData?.area_id || '');
+                                $nextTick(() => $el.value = picked)"
                             @change="devicePreviewAreaId = $event.target.value">
                         <option value="" x-text="t('area.select_area')">Select area...</option>
                         <template x-for="area in hierarchy.areas" :key="area.id">
@@ -4799,11 +4801,22 @@
                     return this.hierarchy.entities.filter(e => e.device_id === deviceId).length;
                 },
 
+                // The area a move in the panel would put the selected device in,
+                // or null where no move is being shown. The three names below
+                // are built out of the navigation's area, which is the device's
+                // own until it is about to leave it.
+                previewAreaData() {
+                    if (this.devicePreviewAreaId === null || !this.devicePreviewAreaId) return null;
+                    if (this.isVirtualDevice(this.selectedDevice)) return null;
+                    return this.hierarchy.areas.find(a => a.id === this.devicePreviewAreaId) || null;
+                },
+
                 // Get device display name (full name with area prefix)
                 getDeviceDisplayName(device) {
                     if (!device) return '';
-                    if (device.suggested_name) return device.suggested_name;
-                    const area = this.selectedAreaData;
+                    const moving = device.id === this.selectedDevice ? this.previewAreaData() : null;
+                    if (device.suggested_name && !moving) return device.suggested_name;
+                    const area = moving || this.selectedAreaData;
                     const areaName = area?.name || '';
                     const deviceBaseName = device.base_name;
 
@@ -4822,7 +4835,7 @@
                     const domain = entity.id.split('.')[0];
 
                     // Area
-                    const area = this.selectedAreaData;
+                    const area = this.previewAreaData() || this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
@@ -4858,7 +4871,7 @@
                     const parts = [];
 
                     // Area
-                    const area = this.selectedAreaData;
+                    const area = this.previewAreaData() || this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
