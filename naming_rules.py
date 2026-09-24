@@ -162,6 +162,9 @@ def target_of(typed: str, numbers: List[str]) -> str:
 # question mark says what kind of group it is rather than repeating anything.
 _GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|P=\w+|<[=!]|[:=!>#])")
 
+# A counted quantifier: "{4}", "{1,3}", or the open-ended "{2,}".
+_COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
+
 
 def _refuse_runaway(regex: str) -> None:
     """Refuse a quantifier that is applied to something that already repeats.
@@ -201,11 +204,28 @@ def _refuse_runaway(regex: str) -> None:
         elif char == ")":
             inside = repeats.pop() if len(repeats) > 1 else False
             after = regex[at + 1 : at + 2]
+            # A bounded count after the group is no more a runaway than the
+            # group itself; an open-ended one is.
+            if after == "{":
+                counted = _COUNT.match(regex, at + 1)
+                if counted and not counted.group("open"):
+                    after = ""
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
             if inside or after in {"*", "+", "{"}:
                 repeats[-1] = True
-        elif char in {"*", "+", "{", "?"}:
+        elif char == "{":
+            counted = _COUNT.match(regex, at)
+            if counted:
+                # "{4}" and "{1,3}" bound what they repeat, so what they
+                # repeat finishes: "(\\d{4})+" is not the shape that runs
+                # away. An open end - "{2,}" - is, and reads as one below.
+                if counted.group("open"):
+                    repeats[-1] = True
+                at = counted.end()
+                continue
+            repeats[-1] = True
+        elif char in {"*", "+", "?"}:
             # A question mark counts: "(Sensor ?)+" repeats a group that can
             # match nothing, which backtracks just as badly as "(a+)+". A
             # question mark on a group of its own is read at the ")" above and
@@ -967,7 +987,13 @@ class NamingRules:
             if not rule["targets"].get(language):
                 continue
             one = self.matching_filter(rule, integration, model, domain)
-            if not one or not pattern.fullmatch(name):
+            if not one:
+                continue
+            match = pattern.fullmatch(name)
+            # Matching is not enough: a placeholder the name has nothing for
+            # leaves the target with a hole in it, and the rule then renamed
+            # the entity to its own template, "{1}" and all.
+            if not match or fill_placeholders(rule["targets"][language], match) is None:
                 continue
             found.append((filter_rank(one), rule))
         if not found:
@@ -999,7 +1025,10 @@ class NamingRules:
         if not match:
             return target
         filled = fill_placeholders(target, match)
-        return filled.strip() if filled is not None else target
+        # Nothing rather than the template: the target with its placeholders
+        # still in it is not a name, and it was written to Home Assistant as
+        # one.
+        return filled.strip() if filled is not None else ""
 
     def _compiled_pattern(self, rule: Mapping[str, Any]) -> Optional["re.Pattern[str]"]:
         """The compiled expression of a stored pattern rule, or of a passing one."""

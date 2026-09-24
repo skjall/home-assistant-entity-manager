@@ -296,10 +296,20 @@ def test_a_group_that_may_match_nothing_may_not_repeat():
             compile_pattern(expression)
 
 
+def test_a_counted_repetition_is_not_a_runaway():
+    """ "(\\d{4})+" bounds what it repeats, so it finishes; "(\\d{2,})+" does not."""
+    assert compile_pattern(r"(\d{4})+") is not None
+    assert compile_pattern(r"(?:ab{1,3})+c") is not None
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"(\d{2,})+")
+
+
 def test_a_placeholder_with_nothing_in_it_leaves_the_name_alone(rules):
     """The target used to come out as the text around a hole."""
     rule = rules.add_filter("pattern", r"Zone\ (?P<n1>\d*)", "de", "Zimmer {1}", {"integration": INTEGRATION})
 
     assert rules.render(rule, "Zone 4", "de") == "Zimmer 4"
-    # No number in the name, so the rule has nothing to put in the target.
-    assert rules.render(rule, "Zone ", "de") == "Zimmer {1}"
+    # No number in the name, so the rule has nothing to put in the target and
+    # says nothing rather than its own template.
+    assert rules.render(rule, "Zone ", "de") == ""
+    assert rules.find("pattern", "Zone ", INTEGRATION, "de") is None
