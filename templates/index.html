@@ -3299,6 +3299,7 @@
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
                 _deviceWideTimer: null,  // Debounce for the device-wide entity preview
                 _previewRun: 0,  // Which computation of the previews is the current one
+                _stagedRun: 0,  // and which computation of the staged device's rows
                 // The area picked in the panel, before anything is written.
                 // null means nothing picked; a string is an area id.
                 devicePreviewAreaId: null,
@@ -5183,6 +5184,7 @@
                     if (staged) this.previewDeviceWide();
                     if (!pending.length) return;
 
+
                     const run = ++this._previewRun;
                     this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
                         // A newer computation has since answered these rows.
@@ -5223,6 +5225,9 @@
                 dropStagedPreview() {
                     clearTimeout(this._deviceWideTimer);
                     this._deviceWideTimer = null;
+                    // And an answer already on its way, which would otherwise
+                    // write the previous device's ids when it arrives.
+                    this._stagedRun++;
                 },
 
                 previewDeviceWide() {
@@ -5251,9 +5256,9 @@
                         entity._previewId = null;
                     }
                     this.previewVersion++;
-                    const run = ++this._previewRun;
+                    const run = ++this._stagedRun;
                     this.fetchNormalized(entities.map(e => e._previewName)).then(slugs => {
-                        if (run !== this._previewRun) return;
+                        if (run !== this._stagedRun) return;
                         entities.forEach((entity, i) => {
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
@@ -5338,6 +5343,7 @@
                     const device = entity?.device_id
                         ? indexed(this).devicesById.get(entity.device_id)
                         : null;
+                    const staged = !!device && device.id === this.selectedDevice;
                     const areaId = this.deviceIsMoving(device)
                         ? this.previewAreaFor(device)
                         : (entity?.area_id || device?.area_id);
@@ -6663,6 +6669,11 @@
                 // Reconstruct a reconnected job's title + completion handler from its type.
                 jobKindMeta(type) {
                     if (type === 'rename_device') {
+                        // Without the drift devices: which of them had a Z2M
+                        // name to align was worked out in the page that started
+                        // the job, and a page that only finds the job running
+                        // has never seen that list. The drift shows again on
+                        // the next load and can be aligned from there.
                         return { titleKey: 'jobs.rename_device', onDone: (job) => this.onRenameDeviceDone(job) };
                     }
                     if (type === 'execute' || type === 'execute_direct') {
@@ -6893,7 +6904,10 @@
                     // A device that moves or is renamed takes its entities with
                     // it: that job writes the area, the device name and every
                     // entity name of the device in one run, so the batch below
-                    // would only do the same work a second time.
+                    // would only do the same work a second time. Nothing is
+                    // left behind by returning here: a device is staged only
+                    // while it is the selected one, and the list below is that
+                    // device's own entities.
                     if (this.deviceChangeStaged) {
                         const others = this.filteredDevices
                             .filter(d => d.z2m_drift && d.id !== this.selectedDevice)
