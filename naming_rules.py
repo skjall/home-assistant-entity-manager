@@ -140,9 +140,21 @@ def target_of(typed: str, numbers: List[str]) -> str:
     number stays whatever it is on the next device. A number the typed name
     does not repeat is simply not carried.
     """
+    # One at a time, and each number only where it has not already been
+    # replaced: "Zone 10 Panel 10" holds the same number twice, and replacing
+    # every occurrence at once gave both of them the first placeholder.
     target = typed
+    taken: List[Tuple[int, int]] = []
     for index, number in sorted(enumerate(numbers, 1), key=lambda pair: -len(pair[1])):
-        target = re.sub(rf"(?<![\d{{]){re.escape(number)}(?![\d}}])", "{" + str(index) + "}", target)
+        for found in re.finditer(rf"(?<![\d{{]){re.escape(number)}(?![\d}}])", target):
+            if any(start < found.end() and found.start() < end for start, end in taken):
+                continue
+            placeholder = "{" + str(index) + "}"
+            target = target[: found.start()] + placeholder + target[found.end() :]
+            shift = len(placeholder) - (found.end() - found.start())
+            taken = [(start + shift, end + shift) if start > found.start() else (start, end) for start, end in taken]
+            taken.append((found.start(), found.start() + len(placeholder)))
+            break
     return target
 
 
@@ -158,12 +170,21 @@ def _refuse_runaway(regex: str) -> None:
     quantifiers = {"*", "+", "?", "{"}
     repeats = [False]  # whether the group at each depth already repeats
     at = 0
+    in_class = False
     while at < len(regex):
         char = regex[at]
         if char == "\\":
             at += 2
             continue
-        if char == "(":
+        if in_class:
+            # Inside [...] a star is a star: "([a+])+" repeats a class of two
+            # characters, which finishes in time like any other.
+            in_class = char != "]"
+            at += 1
+            continue
+        if char == "[":
+            in_class = True
+        elif char == "(":
             repeats.append(False)
         elif char == ")":
             inside = repeats.pop() if len(repeats) > 1 else False
@@ -938,8 +959,23 @@ class NamingRules:
         target = rule["targets"].get(language) or ""
         if rule["match"]["kind"] != "pattern":
             return target
-        match = compile_pattern(rule["match"]["value"]).fullmatch(name or "")
+        # Out of what was compiled for the rules, so a home where every entity
+        # matches one pattern does not compile it once per entity.
+        pattern = self._compiled_pattern(rule)
+        if pattern is None:
+            return target
+        match = pattern.fullmatch(name or "")
         return fill_placeholders(target, match).strip() if match else target
+
+    def _compiled_pattern(self, rule: Mapping[str, Any]) -> Optional["re.Pattern[str]"]:
+        """The compiled expression of a stored pattern rule, or of a passing one."""
+        for kept, pattern in self._pattern_rules():
+            if kept["id"] == rule.get("id"):
+                return pattern
+        try:
+            return compile_pattern(rule["match"]["value"])
+        except NamingRuleError:
+            return None
 
     @guarded
     def upsert(

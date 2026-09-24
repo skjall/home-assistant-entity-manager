@@ -277,3 +277,13 @@ def test_the_expressions_this_add_on_writes_are_accepted():
     """A learned pattern quantifies the digits it left open and nothing else."""
     for expression in [r"Heizung\ (?P<n1>\d+)", r"(ab)?c", r"a+b+", r"(?P<n1>[0-9]{1,4})"]:
         assert compile_pattern(expression) is not None
+
+
+def test_a_number_that_appears_twice_gets_two_placeholders():
+    """ "Zone 10 Panel 10" holds the same number twice, and they move apart."""
+    assert target_of("Zone 10 Panel 10", ["10", "10"]) == "Zone {1} Panel {2}"
+
+
+def test_a_repetition_inside_a_class_is_a_character():
+    """ "([a+])+" repeats a class of two characters, which finishes in time."""
+    assert compile_pattern(r"([a+])+b") is not None
