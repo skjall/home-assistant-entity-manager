@@ -86,7 +86,7 @@ def test_what_was_written_survives_a_restart(state, tmp_path):
     again = NamingState(str(tmp_path / "naming_state.json"))
 
     assert again.get("abc")["applied_name"] == "Küche Temperatur"
-    assert json.loads((tmp_path / "naming_state.json").read_text())["version"] == 1
+    assert json.loads((tmp_path / "naming_state.json").read_text())["version"] == 2
 
 
 def test_an_unreadable_file_costs_provenance_but_not_the_add_on(tmp_path):
