@@ -198,7 +198,8 @@
     "core_starting": "Home Assistant se está iniciando. Continuará en cuanto responda.",
     "rules_saved": "Reglas guardadas",
     "nothing_to_apply": "Nada que aplicar",
-    "name_has_no_place": "La plantilla del nombre del dispositivo no tiene lugar para un nombre propio, así que el nombre escrito no se puede guardar"
+    "name_has_no_place": "La plantilla del nombre del dispositivo no tiene lugar para un nombre propio, así que el nombre escrito no se puede guardar",
+    "rename_running": "Hay un renombrado en curso: espera un momento"
   },
   "dependencies": {
     "title": "Dependencias de",

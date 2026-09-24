@@ -4801,8 +4801,10 @@
                 selectArea(area) {
                     // A rename under way belongs to the device it was started
                     // on. Walking away from it left the next panel shut until
-                    // that other device's job reported back.
-                    if (this.renamingDevice) return;
+                    // that other device's job reported back. The click is not
+                    // remembered for afterwards, so it is answered rather than
+                    // dropped without a word.
+                    if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
                     this.selectedArea = area.id;
                     this.selectedAreaData = area;
                     this.selectedDevice = null;
@@ -4824,7 +4826,7 @@
 
                 // Select device
                 selectDevice(device) {
-                    if (this.renamingDevice) return;
+                    if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
@@ -4841,7 +4843,7 @@
 
                 // Select a virtual device group (automations, scenes, helpers, etc.)
                 selectVirtualDevice(virtualDeviceId) {
-                    if (this.renamingDevice) return;
+                    if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
@@ -4921,37 +4923,24 @@
                 },
 
                 // Live preview versions - use _editValue for real-time updates
+                // Out of the same template the preview and the job render.
+                // Joining area, device and type with spaces was that name only
+                // for the default template: with "{entity} ({area})" in
+                // templates.entity_name the clash check asked about ids nothing
+                // was going to take, and the ids the rename would have taken
+                // went unasked.
+                //
+                // _editValue is what is being typed into the type field, and
+                // override_name is deliberately not read: this is the name the
+                // rename would write, not the one the entity carries now. The
+                // baseName the caller passes is the device name it is writing -
+                // reading that off the panel had a click on another device leave
+                // the check asking about the old name.
                 getEntityFriendlyNameLive(entity, baseName = null) {
-                    const parts = [];
-
-                    // The entity's own device, so a name computed while the
-                    // panel turns to another one is still about this entity.
-                    const device = entity.device_id
-                        ? indexed(this).devicesById.get(entity.device_id)
-                        : null;
-
-                    // Area
-                    const area = device ? this.areaForDevice(device) : this.selectedAreaData;
-                    if (area) {
-                        parts.push(area.name);
-                    }
-
-                    // Device base name (use preview if editing)
-                    if (device && !this.isVirtualDevice(device.id)) {
-                        // The name the caller is writing, where it said one:
-                        // reading it off the panel had a click on another
-                        // device leave the check asking about the old name.
-                        const typed = baseName !== null
-                            ? baseName
-                            : (device.id === this.selectedDevice ? this.devicePreviewBaseName : null);
-                        parts.push(typed !== null ? typed : device.base_name);
-                    }
-
-                    // Entity: use _editValue for live preview (override_name intentionally ignored)
-                    const entitySuffix = entity._editValue || entity.base_name || entity.device_class || entity.id.split('.').pop();
-                    parts.push(entitySuffix);
-
-                    return parts.filter(p => p).join(' ');
+                    const template = this.namingConfig?.templates?.entity_name || '{area} {device} {entity}';
+                    const typed = entity._editValue
+                        || (entity._currentSuffix !== undefined ? entity._currentSuffix : null);
+                    return this.renderNamingTemplate(template, this.entityNamingContext(entity, typed, baseName));
                 },
 
                 getNewEntityIdLive(entity) {
@@ -5366,7 +5355,7 @@
                     return this.renderNamingTemplate(template, this.deviceNamingContext(device, baseName));
                 },
 
-                entityNamingContext(entity, suffix = null) {
+                entityNamingContext(entity, suffix = null, baseName = null) {
                     const device = entity?.device_id
                         ? indexed(this).devicesById.get(entity.device_id)
                         : null;
@@ -5376,15 +5365,17 @@
                         : (entity?.area_id || device?.area_id);
                     const area = this.hierarchy.areas.find(a => a.id === areaId);
                     const domain = entity?.id?.split('.')[0] || '';
+                    const wantedDevice = baseName !== null ? baseName : (staged ? this.devicePreviewBaseName : null);
                     return {
                         ...this.baseNamingContext(area, device),
                         // A device name typed into the panel is not written yet,
                         // so the entity reads it from there rather than from the
                         // registry -- the rows show the move and the rename the
-                        // same way, before either of them happens.
-                        device: staged && this.devicePreviewBaseName !== null
-                            ? this.devicePreviewBaseName
-                            : (device?.base_name || ''),
+                        // same way, before either of them happens. An empty
+                        // field is not a name: the run leaves the device called
+                        // what it is called, and the rows said it would be
+                        // called nothing, with the gap to show it.
+                        device: (wantedDevice || '').trim() || (device?.base_name || ''),
                         entity: suffix !== null ? suffix : this.getEntitySuffix(entity),
                         entity_id: entity?.id?.split('.').pop() || '',
                         domain,
@@ -5522,10 +5513,12 @@
                 // Check if device needs rename
                 getExpectedDeviceName(device, baseName = null) {
                     if (!device) return '';
-                    const typed = (device.id === this.selectedDevice && this.devicePreviewBaseName !== null)
-                        ? this.devicePreviewBaseName
-                        : device.base_name;
-                    return this.renderDeviceName(device, baseName !== null ? baseName : typed) || device.name;
+                    // An empty field is not a name: the device keeps the one
+                    // it has. Read as one, it had the panel offer a rename to a
+                    // name with the device left out of it.
+                    const typed = device.id === this.selectedDevice ? (this.devicePreviewBaseName || '').trim() : '';
+                    const wanted = baseName !== null ? baseName : typed || device.base_name;
+                    return this.renderDeviceName(device, wanted) || device.name;
                 },
 
                 // Check if device name itself needs to change
@@ -6806,10 +6799,17 @@
                 async applyDeviceWideRun(device, deviceId, driftDevices) {
                     // The device went while the page was standing on it. Reading
                     // its name below threw where a message belongs.
-                    if (!indexed(this).devicesById.has(deviceId)) {
+                    //
+                    // And the one the hierarchy holds now, not the object the
+                    // panel was handed: a poll that replaced it left the run
+                    // reading an area the device has left, and the name was then
+                    // computed for where it used to be.
+                    const live = indexed(this).devicesById.get(deviceId);
+                    if (!live) {
                         this.showMessage(this.t('device.gone'), 'error');
                         return;
                     }
+                    device = live;
 
                     // An empty field is not a name: the device keeps the one
                     // it has, and only the area is then left to write.
@@ -6843,6 +6843,13 @@
                         // was not made.
                         this.devicePreviewBaseName = wasPreviewed;
                         throw error;
+                    }
+                    if (!answered) {
+                        // Nothing got to look, so what is written down is from
+                        // before the registry moved. It is not a reason to
+                        // refuse and it is not left standing as one: the server
+                        // refuses a taken id, and the panel says so then.
+                        this.deviceNameClash = [];
                     }
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();

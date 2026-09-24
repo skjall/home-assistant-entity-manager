@@ -198,7 +198,8 @@
     "core_starting": "Home Assistant is starting up. This continues as soon as it answers.",
     "rules_saved": "Rules saved",
     "nothing_to_apply": "Nothing to apply",
-    "name_has_no_place": "The device-name template has no place for a name of its own, so the typed name cannot be written"
+    "name_has_no_place": "The device-name template has no place for a name of its own, so the typed name cannot be written",
+    "rename_running": "A rename is running - please wait"
   },
   "dependencies": {
     "title": "Dependencies for",
