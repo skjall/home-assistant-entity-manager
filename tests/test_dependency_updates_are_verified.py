@@ -79,11 +79,8 @@ def test_an_automation_outside_automations_yaml_is_reported_to_the_user():
     ]
 
     async def run():
-        # The scanner asks Home Assistant what names the entity; here the one
-        # automation does, and its config cannot be fetched.
-        updater.find_automations_using_entity = lambda entity_id, all_states: [
-            {"entity_id": "automation.packaged", "numeric_id": "7", "state": states[0]}
-        ]
+        # The state itself names the entity, which is what the walk reads;
+        # the configuration behind it cannot be fetched.
         return await updater.update_all_dependencies("sensor.old", "sensor.new", states)
 
     results = asyncio.run(run())
@@ -110,10 +107,6 @@ def test_unreachable_is_only_a_warning_when_the_old_id_is_actually_there(names_o
             "entity_id": ["sensor.old"] if names_old else ["sensor.other"],
         },
     }
-    updater.find_automations_using_entity = lambda entity_id, all_states: [
-        {"entity_id": "automation.packaged", "numeric_id": "7", "state": state}
-    ]
-
     results = asyncio.run(updater.update_all_dependencies("sensor.old", "sensor.new", [state]))
 
     assert bool(results["automations"]["unreachable"]) is names_old

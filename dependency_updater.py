@@ -191,7 +191,7 @@ class DependencyUpdater:
         answering the interface.
         """
         if self._automation_configs is not None:
-            return self._automation_configs
+            return dict(self._automation_configs)
 
         numeric_ids = []
         for state in automation_states:
@@ -199,6 +199,10 @@ class DependencyUpdater:
             if numeric_id:
                 numeric_ids.append(numeric_id)
 
+        # Only what was read is kept. A read that failed says nothing about
+        # the automation - a timeout and a configuration this API cannot hand
+        # out look the same from here - so it is asked for again rather than
+        # answered with "there is none" for the rest of the job.
         configs: Dict[str, Optional[Dict]] = {}
         at_a_time = asyncio.Semaphore(8)
 
@@ -207,16 +211,28 @@ class DependencyUpdater:
             async def one(numeric_id: str) -> None:
                 async with at_a_time:
                     try:
-                        configs[numeric_id] = await self.fetch_automation_config(numeric_id, session)
+                        config = await self.fetch_automation_config(numeric_id, session)
                     except Exception as error:  # noqa: BLE001 - one unreadable automation is not the job
                         logger.error(f"Automation {numeric_id} could not be read: {error}")
-                        configs[numeric_id] = None
+                        return
+                    if config is not None:
+                        configs[numeric_id] = config
 
             await asyncio.gather(*(one(numeric_id) for numeric_id in numeric_ids))
 
-        logger.info(f"Read {len(configs)} automation configurations once for this job")
+        logger.info(f"Read {len(configs)} of {len(numeric_ids)} automation configurations once for this job")
         self._automation_configs = configs
-        return configs
+        return dict(configs)
+
+    async def read_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
+        """The automation's configuration as it stands, for reading only.
+
+        The caller must not write into what comes back; ``get_automation_config``
+        is the one that hands out a copy to change.
+        """
+        if self._automation_configs is not None and automation_numeric_id in self._automation_configs:
+            return self._automation_configs[automation_numeric_id]
+        return await self.fetch_automation_config(automation_numeric_id)
 
     async def get_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
         """Hole Automation Konfiguration (aus dem Vorrat dieses Jobs)
@@ -401,8 +417,9 @@ class DependencyUpdater:
             automation_numeric_id = automation_state.get("attributes", {}).get("id")
 
             if automation_numeric_id:
-                # Get automation config via REST
-                config = await self.get_automation_config(automation_numeric_id)
+                # Read, not rewritten, so the stored configuration answers as
+                # it stands; update_automation_entities takes its own copy.
+                config = await self.read_automation_config(automation_numeric_id)
                 if config:
                     config_str = json.dumps(config)
                     if old_entity_id in config_str:

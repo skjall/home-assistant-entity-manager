@@ -60,8 +60,12 @@ def test_the_configurations_are_answered_from_what_was_read() -> None:
     assert sorted(reads) == ["0", "1", "2"]
 
 
-def test_an_automation_that_cannot_be_read_is_remembered_as_such() -> None:
-    """One unreadable automation is not the job, and is not read again either."""
+def test_an_automation_that_cannot_be_read_is_asked_for_again() -> None:
+    """A read that failed says nothing: a timeout and a missing configuration look alike.
+
+    Remembering it as "there is none" answered every later entity of the job
+    with nothing, and skipped the automation without saying why.
+    """
     reads: List[str] = []
     updater = _updater(reads)
 
@@ -76,7 +80,8 @@ def test_an_automation_that_cannot_be_read_is_remembered_as_such() -> None:
         return await updater.get_automation_config("0")
 
     assert asyncio.run(run()) is None
-    assert sorted(reads) == ["0", "1"]
+    # Both read for the job, and the one asked about read again.
+    assert sorted(reads) == ["0", "0", "1"]
 
 
 def test_a_written_automation_is_kept_as_it_was_written() -> None:
