@@ -1,0 +1,125 @@
+"""An entity named entirely by its device has no type part of its own.
+
+Home Assistant marks those with ``has_entity_name`` and no ``original_name``.
+Rendered through ``{area} {device} {entity}`` the name ends after the device,
+so taking it apart again has to answer that the type part is empty.
+"""
+
+import pytest
+
+from entity_restructurer import EntityRestructurer
+from naming_overrides import NamingOverrides
+from naming_state import NamingState
+from naming_templates import NamingTemplates
+
+TEMPLATES = {
+    "device_name": "{area} {device}",
+    "entity_id": "{area} {device} {entity}",
+    "entity_name": "{area} {device} {entity}",
+}
+
+CONTEXT = {"area": "Basement", "device": "Pump"}
+
+
+@pytest.fixture
+def templates(tmp_path):
+    built = NamingTemplates(str(tmp_path / "templates.json"))
+    built.set_templates(TEMPLATES)
+    return built
+
+
+@pytest.fixture
+def restructurer(tmp_path, templates):
+    built = EntityRestructurer(
+        client=object(),
+        naming_overrides=NamingOverrides(str(tmp_path / "overrides.json")),
+        type_mappings=None,
+        naming_templates=templates,
+        naming_state=NamingState(str(tmp_path / "naming_state.json")),
+    )
+    built.floors = {}
+    built.areas = {"b": {"area_id": "b", "name": "Basement"}}
+    # Renamed by the user; the integration's own name stays on the device.
+    built.devices = {"d": {"id": "d", "name": "ACME-4200", "name_by_user": "Basement Pump", "area_id": "b"}}
+    built.entities = {
+        "switch.a": {
+            "id": "reg-a",
+            "entity_id": "switch.a",
+            "device_id": "d",
+            "platform": "matter",
+            "name": "Basement Pump",
+            "original_name": None,
+            "has_entity_name": True,
+        }
+    }
+    return built
+
+
+def test_the_template_answers_that_the_type_part_is_empty(templates):
+    assert templates.extract_field("entity_name", "Basement Pump", "entity", CONTEXT) == ""
+
+
+def test_a_type_part_that_is_there_still_comes_back(templates):
+    assert templates.extract_field("entity_name", "Basement Pump Switch", "entity", CONTEXT) == "Switch"
+
+
+def test_a_name_no_template_produced_is_still_no_match(templates):
+    assert templates.extract_field("entity_name", "", "entity", CONTEXT) is None
+
+
+def test_the_device_name_is_not_rendered_into_the_name_twice(restructurer):
+    context = restructurer.build_naming_context("switch.a", restructurer.entities["switch.a"])
+
+    assert context["device"] == "Pump"
+    # The whole name, not just "not the doubled one": anything else that came
+    # out - the area dropped, the device twice over - would pass a negative.
+    assert restructurer.naming_templates.render("entity_name", context) == "Basement Pump Switch"
+
+
+def test_unwinding_an_applied_name_gives_the_empty_type_back(restructurer):
+    entity = restructurer.entities["switch.a"]
+    context = restructurer.build_naming_context("switch.a", entity)
+    prefixes = ("Basement Pump", "Basement", "Pump", "ACME-4200", "")
+
+    assert restructurer._strip_applied_entity_name(entity["name"], prefixes, context) == ""
+
+
+def test_adopting_the_empty_type_part_settles_the_entity(restructurer):
+    """Storing "" read as "no exception", so the same rename was proposed every run."""
+    entity = restructurer.entities["switch.a"]
+    adopted = restructurer.naming_templates.extract_field("entity_name", entity["name"], "entity", CONTEXT)
+
+    assert adopted == ""
+    restructurer.naming_overrides.set_entity_override("reg-a", adopted)
+
+    context = restructurer.build_naming_context("switch.a", entity)
+
+    assert context["entity"] == ""
+    assert restructurer.naming_templates.render("entity_name", context) == "Basement Pump"
+
+
+def test_a_template_without_a_separator_does_not_claim_a_separated_name(templates):
+    """ "{area}{entity}" renders "BasementSwitch" and cannot say where the area ends.
+
+    It is passed over rather than answering "Switch" for "Basement Switch",
+    and the name falls through to the bare "{entity}" below it, which reads it
+    as a type whole - the answer any name no template accounts for gets.
+    """
+    templates.set_templates({**TEMPLATES, "entity_name": "{area}{entity}"})
+
+    assert templates.extract_field("entity_name", "Basement Switch", "entity", CONTEXT) == "Basement Switch"
+
+
+def test_a_device_with_no_name_leaves_the_template_reading_what_it_renders(templates):
+    """An empty field takes its separator with it, on both ways through.
+
+    ``{area} {device} {entity}`` renders "Basement <type>" where the device has
+    no name, so that is what the pattern built from it describes - and reading
+    "Basement Relay" back as "Relay" is what this template rendered it from,
+    not a name it never wrote. The barer "{area} {entity}" says the same thing
+    about such a name, so which of the two is asked first changes nothing.
+    """
+    without_a_device = {"area": "Basement", "device": ""}
+
+    assert templates.extract_field("entity_name", "Basement Relay", "entity", without_a_device) == "Relay"
+    assert templates.extract_field("entity_name", "Basement", "entity", without_a_device) == ""

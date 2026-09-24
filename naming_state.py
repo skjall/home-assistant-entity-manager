@@ -28,7 +28,10 @@ from json_store import atomically, guarded, new_lock
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+# 2 tells an empty type part apart from one that was never recorded. Version 1
+# wrote "" for both, so its entries cannot say which they mean and are migrated
+# to "nothing recorded" on the first read.
+SCHEMA_VERSION = 2
 
 # Who the current registry name belongs to.
 ENTITY_MANAGER = "entity_manager"  # we wrote it and it is unchanged
@@ -55,6 +58,7 @@ class NamingState:
                 data = json.load(file)
             if not isinstance(data, dict) or not isinstance(data.get("entities"), dict):
                 raise ValueError("naming state must be an object with an entities map")
+            self._forget_empty_type_parts_of_version_one(data)
             data["version"] = SCHEMA_VERSION
             return data
         except (OSError, ValueError, json.JSONDecodeError) as error:
@@ -63,6 +67,24 @@ class NamingState:
             # and nothing else, and the next write begins filling it again.
             logger.error("Could not read %s, starting without it: %s", self.storage_path, error)
             return {"version": SCHEMA_VERSION, "entities": {}}
+
+    @staticmethod
+    def _forget_empty_type_parts_of_version_one(data: Dict[str, Any]) -> None:
+        """Turn version 1's empty type parts into "nothing recorded".
+
+        Version 1 stored ``""`` both for a name built out of area and device
+        alone and for a caller that had nothing to say about the type part.
+        Read as an answer, the second kind would strip the type part off every
+        name it covers; read as a blank, the first kind would have it derived
+        again. Neither can be told from the other, so the older entries say
+        nothing and the name is taken apart once more - the type part it holds
+        is then recorded properly, and the question does not come back.
+        """
+        if data.get("version") == SCHEMA_VERSION:
+            return
+        for entry in data.get("entities", {}).values():
+            if isinstance(entry, dict) and entry.get("base_entity") == "":
+                entry["base_entity"] = None
 
     def _save(self) -> None:
         atomically(self.storage_path, self.data)
@@ -74,7 +96,7 @@ class NamingState:
         *,
         applied_name: str,
         applied_entity_id: str,
-        base_entity: str = "",
+        base_entity: Optional[str] = None,
         template_hash: str = "",
         won_by: str = "",
         rule_id: Optional[str] = None,
@@ -87,7 +109,9 @@ class NamingState:
         entry = {
             "applied_name": applied_name or "",
             "applied_entity_id": applied_entity_id or "",
-            "base_entity": base_entity or "",
+            # None where the caller had nothing to say about the type part;
+            # "" is a statement of its own - the name has no type part.
+            "base_entity": base_entity if isinstance(base_entity, str) else None,
             "template_hash": template_hash or "",
             "won_by": won_by or "",
             "rule_id": rule_id,
@@ -159,7 +183,7 @@ class NamingState:
             "name_owner": HA_UI if drifted else ENTITY_MANAGER,
             "drift": drifted,
             "template_changed": stale,
-            "base_entity": stored["base_entity"],
+            "base_entity": stored.get("base_entity") or "",
             "applied_name": stored["applied_name"],
             "won_by": stored["won_by"],
             "rule_id": stored["rule_id"],
