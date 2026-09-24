@@ -245,10 +245,20 @@ class DependencyUpdater:
 
         The caller must not write into what comes back; ``get_automation_config``
         is the one that hands out a copy to change.
+
+        An automation the batch could not read is asked for again here - once.
+        What that reading says is kept, a configuration or none: asked again for
+        every entity of the job, a handful of unreadable automations cost a
+        request per rename each, which is the whole point of reading them once.
         """
         if self._automation_configs is not None and automation_numeric_id in self._automation_configs:
             return self._automation_configs[automation_numeric_id]
-        return await self.fetch_automation_config(automation_numeric_id)
+        config = await self.fetch_automation_config(automation_numeric_id)
+        async with self._configs_lock:
+            if self._automation_configs is None:
+                self._automation_configs = {}
+            self._automation_configs[automation_numeric_id] = config
+        return config
 
     async def get_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
         """The automation's configuration, out of what this job has read.
@@ -377,8 +387,13 @@ class DependencyUpdater:
                 logger.error(f"Automation {automation_id} still names {old_entity_id} after the write")
                 return False
             async with self._configs_lock:
-                if self._automation_configs is not None:
-                    self._automation_configs[automation_numeric_id] = written
+                # Kept even where the batch read nothing at all: this reading was
+                # taken after the write and proved out against it, so it is the
+                # one version Home Assistant is known to hold, and the next
+                # entity of the job read the automation again without it.
+                if self._automation_configs is None:
+                    self._automation_configs = {}
+                self._automation_configs[automation_numeric_id] = written
             logger.info(f"Automation {automation_id} now names {new_entity_id}")
             return True
         else:

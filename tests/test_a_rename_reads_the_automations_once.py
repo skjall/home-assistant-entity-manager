@@ -426,3 +426,62 @@ def test_a_script_that_only_talks_about_the_entity_is_left_alone() -> None:
     assert fetched == [], "neither script names the entity, so neither is read"
     assert results["scripts"]["failed"] == []
     assert results["total_failed"] == 0
+
+
+def test_an_automation_that_cannot_be_read_is_asked_for_once_and_not_again() -> None:
+    """A handful of unreadable automations cost a request per rename each."""
+    reads: List[str] = []
+    updater = _updater(reads)
+
+    async def fetch(numeric_id: str, session: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+        reads.append(numeric_id)
+        return None
+
+    updater.fetch_automation_config = fetch  # type: ignore[assignment]
+
+    async def run() -> None:
+        await updater.load_automation_configs(_states(2))
+        for _ in range(3):
+            assert await updater.get_automation_config("0") is None
+
+    asyncio.run(run())
+
+    # Both read for the job, and the one asked about read one more time - not
+    # once for every entity that asks after that.
+    assert sorted(reads) == ["0", "0", "1"]
+
+
+def test_a_write_is_kept_where_the_job_could_read_nothing() -> None:
+    """The reading taken after the write is the one version HA is known to hold."""
+    reads: List[str] = []
+    updater = _updater(reads)
+    written: List[Dict[str, Any]] = []
+
+    async def fetch(numeric_id: str, session: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+        reads.append(numeric_id)
+        # Nothing to be read for the job; a reading only once it was written.
+        if not written:
+            return None
+        return {"id": numeric_id, "action": [{"entity_id": "sensor.new"}]}
+
+    async def write(numeric_id: str, config: Dict[str, Any], session: Optional[Any] = None) -> bool:
+        written.append(config)
+        return True
+
+    updater.fetch_automation_config = fetch  # type: ignore[assignment]
+    updater.update_automation_config = write  # type: ignore[assignment]
+
+    async def run() -> Optional[Dict[str, Any]]:
+        await updater.load_automation_configs(_states(1))
+        await updater.update_automation_entities(
+            "automation.number_0", "0", "sensor.old", "sensor.new", {"action": [{"entity_id": "sensor.old"}]}
+        )
+        before = len(reads)
+        config = await updater.get_automation_config("0")
+        assert len(reads) == before, "the written version answers without reading again"
+        return config
+
+    config = asyncio.run(run())
+
+    assert written, "the automation naming the old id is written"
+    assert config == {"id": "0", "action": [{"entity_id": "sensor.new"}]}

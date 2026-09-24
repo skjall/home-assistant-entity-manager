@@ -57,11 +57,17 @@ def refers_to_entity_in_string(value: str, entity_id: str) -> bool:
         return True
 
     # A template can name the entity inside an expression. Word boundaries, so
-    # that `sensor.temp` does not match `sensor.temperature`. `{% ... %}` counts
-    # as a template too: helpers built in the interface often take their values
-    # through `{% set %}`.
-    is_template = ("{{" in value and "}}" in value) or ("{%" in value and "%}" in value)
-    return is_template and re.search(_word_bounded(entity_id), value) is not None
+    # that `sensor.temp` does not match `sensor.temperature`.
+    return _is_template(value) and re.search(_word_bounded(entity_id), value) is not None
+
+
+def _is_template(value: str) -> bool:
+    """Whether the string is a template, which may name an entity inside it.
+
+    `{% ... %}` counts too: helpers built in the interface often take their
+    values through `{% set %}`.
+    """
+    return ("{{" in value and "}}" in value) or ("{%" in value and "%}" in value)
 
 
 def _word_bounded(entity_id: str) -> str:
@@ -80,17 +86,20 @@ def replace_entity_ref_in_string(value: str, old_entity_id: str, new_entity_id: 
     Returns:
         Tupel (neuer_string, wurde_geaendert).
     """
-    if not refers_to_entity_in_string(value, old_entity_id):
-        return value, False
-
     if value == old_entity_id:
         return new_entity_id, True
 
-    # A template, since the value itself was not the id: the pattern that found
-    # it above is the one that replaces it, so it is there to be replaced. The
-    # one way back is a new id equal to the old one, which is no change to make.
-    new_value = re.sub(_word_bounded(old_entity_id), new_entity_id, value)
-    return new_value, new_value != value
+    # The same two categories the read-only check knows - the value itself, and
+    # a template naming the entity inside an expression - but asked once: the
+    # pattern that would find the reference is the pattern that replaces it, and
+    # asking first and replacing afterwards ran it twice over every template a
+    # rename touches. A new id equal to the old one is no change to make.
+    if not _is_template(value):
+        return value, False
+    new_value, hits = re.subn(_word_bounded(old_entity_id), new_entity_id, value)
+    if not hits or new_value == value:
+        return value, False
+    return new_value, True
 
 
 def replace_entity_in_obj(data: Any, old_entity_id: str, new_entity_id: str) -> bool:
