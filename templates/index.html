@@ -963,12 +963,15 @@
 
         /* Counted among the buttons, not among the children: a button a
            template of Alpine's sits beside is not :first-child, and one left
-           on its own is not :only-child, which left the group square. */
-        .entity-card-simple .btn-group .action-btn:first-of-type {
+           on its own is not :only-child, which left the group square.
+           Each rule excludes the lone button rather than relying on a later
+           rule of equal weight to undo it, so reordering them changes
+           nothing. */
+        .entity-card-simple .btn-group .action-btn:first-of-type:not(:only-of-type) {
             border-radius: 4px 0 0 4px;
         }
 
-        .entity-card-simple .btn-group .action-btn:last-of-type {
+        .entity-card-simple .btn-group .action-btn:last-of-type:not(:only-of-type) {
             border-radius: 0 4px 4px 0;
             margin-left: -1px;
         }
