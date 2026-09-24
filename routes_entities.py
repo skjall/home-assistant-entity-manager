@@ -614,9 +614,14 @@ def _provenance_note(reading: dict[str, Any], template_hash: str) -> dict[str, A
     # Always the same keys: an entity that turned up only after the capture
     # left a note of nothing but the fingerprint, and a reader asking it what
     # went into the name found no key at all rather than an empty answer.
-    kept = ("base_entity", "won_by", "rule_id")
+    #
+    # The rule id is the one that stays None where there is none, as it does
+    # on every other way into the state file (naming_service.provenance_of):
+    # "" would be an id, and a reader telling a name no rule decided from one
+    # decided by a rule since deleted would be told the same thing for both.
     return {
-        **{key: reading.get(key) or "" for key in kept},
+        **{key: reading.get(key) or "" for key in ("base_entity", "won_by")},
+        "rule_id": reading.get("rule_id") or None,
         "template_hash": template_hash,
     }
 

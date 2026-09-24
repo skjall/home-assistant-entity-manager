@@ -18,15 +18,18 @@ import web_ui
 class Restructurer:
     """Answers a name the way the real one does, and remembers how."""
 
-    def __init__(self, proposed="Küche Thermomix Steckdose", supplied="Steckdose"):
+    def __init__(self, proposed="Küche Thermomix Steckdose", supplied="Steckdose", rendered=None):
         self.proposed = proposed
         self.supplied = supplied
+        # What the rule renders the supplied word to. The same word unless a
+        # rule or a translation changes it, which is the interesting case.
+        self.rendered = supplied if rendered is None else rendered
         self.last_resolutions = {}
 
     def generate_new_entity_id(self, entity_id, state, entity_name=None):
         self.last_resolutions[entity_id] = {
             "input": self.supplied,
-            "value": self.supplied,
+            "value": self.rendered,
             "won_by": "rule:user",
             "rule_id": "r_01",
         }
@@ -101,20 +104,20 @@ def test_every_path_that_writes_a_name_passes_the_note():
 
 
 def test_the_note_keeps_what_went_in_where_a_rule_changed_it(monkeypatch):
-    """Every test had the two words alike, so swapping them would have gone unseen."""
-    restructurer = Restructurer()
+    """Every test had the two words alike, so swapping them would have gone unseen.
+
+    The reading is left behind by the naming itself, as provenance_for requires
+    of its caller, rather than written into the resolver by hand: a note built
+    on a reading nothing produced would say nothing about the real path.
+    """
+    restructurer = Restructurer(proposed="Küche Thermomix Zustand", supplied="Tuer", rendered="Zustand")
     monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
     # Like every other test here: the fingerprint comes from a stand-in, not
     # from whatever the installation happens to hold.
     monkeypatch.setitem(web_ui.renamer_state, "naming_templates", Templates())
-    restructurer.last_resolutions["switch.old"] = {
-        # The word the rule matches on, and the word it renders to.
-        "input": "Tuer",
-        "value": "Zustand",
-        "won_by": "rule:user",
-        "rule_id": "r_01",
-    }
 
-    note = web_ui.naming_service.provenance_for("switch.old")
+    note = web_ui._note_for("switch.old", STATE, "Küche Thermomix Zustand")
 
     assert note["base_entity"] == "Tuer"
+    assert note["won_by"] == "rule:user"
+    assert note["rule_id"] == "r_01"

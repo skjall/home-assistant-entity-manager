@@ -112,7 +112,11 @@ def test_a_device_rename_notes_the_type_part_it_used() -> None:
 
     class FakeRestructurer:
         entities = {"sensor.kitchen_sofa_energy": {"device_id": "device-1"}}
-        last_resolutions: dict[str, dict] = {}
+
+        def __init__(self) -> None:
+            # One reading per instance. On the class they were shared, and a
+            # second fake would have read the first one's answers.
+            self.last_resolutions: dict[str, dict] = {}
 
         def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
             # The real resolver writes the reading down as it answers, and the
@@ -230,6 +234,16 @@ def test_the_note_does_not_carry_the_type_part() -> None:
         "rule_id": "rule-9",
         "template_hash": "hash-1",
     }
+
+
+def test_a_name_no_rule_decided_notes_no_rule() -> None:
+    """None, not "": an empty string is an id, and a reader asking which rule
+    named an entity would be told the same for a name no rule touched and for
+    one whose rule has since been deleted. Every other way into the state file
+    writes None here (naming_service.provenance_of)."""
+    reading = {"base_entity": "Tuer", "type_part": "Tuer", "won_by": "original", "rule_id": None}
+
+    assert routes_entities._provenance_note(reading, "hash-1")["rule_id"] is None
 
 
 def test_a_bracket_that_tells_two_entities_apart_reaches_the_new_id() -> None:
