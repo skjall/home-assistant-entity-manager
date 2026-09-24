@@ -3617,8 +3617,15 @@
                     // Add "No Area" entry if there are devices without area
                     // Its entities can be renamed like any other, so the
                     // changes filter must not be the one thing that puts them
-                    // out of reach.
-                    const devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
+                    // out of reach - and it is asked the same question as every
+                    // area above rather than none at all.
+                    let devicesWithoutArea = this.hierarchy.devices.filter(d => !d.area_id);
+                    if (!this.showDisabled) {
+                        devicesWithoutArea = devicesWithoutArea.filter(d => !d.disabled_by);
+                    }
+                    if (this.onlyChanges) {
+                        devicesWithoutArea = devicesWithoutArea.filter(d => this.deviceStaysInChangesFilter(d));
+                    }
                     if (devicesWithoutArea.length > 0) {
                         sortedAreas.push({
                             id: '__no_area__',
@@ -4804,44 +4811,11 @@
                     return deviceBaseName;
                 },
 
-                // Get entity friendly name (full: Area + Device + Entity base)
-                getEntityFriendlyName(entity) {
-                    // Force Alpine to track translationsReady as dependency
-                    const _ = this.translationsReady;
-
-                    const parts = [];
-                    const domain = entity.id.split('.')[0];
-
-                    // Area
-                    const area = this.selectedAreaData;
-                    if (area) {
-                        parts.push(area.name);
-                    }
-
-                    // Device base name (use preview if editing)
-                    const device = this.selectedDeviceData;
-                    if (device && !this.isVirtualDevice(this.selectedDevice)) {
-                        const deviceBase = this.devicePreviewBaseName !== null ? this.devicePreviewBaseName : device.base_name;
-                        parts.push(deviceBase);
-                    }
-
-                    // Entity suffix (uses shared logic)
-                    parts.push(this.getEntitySuffix(entity));
-
-                    return parts.filter(p => p).join(' ');
-                },
-
                 // Get entity display name (short - just the entity suffix)
                 getEntityDisplayName(entity) {
                     // Force Alpine to track translationsReady as dependency
                     const _ = this.translationsReady;
                     return this.getEntitySuffix(entity);
-                },
-
-                // Get new entity ID
-                getNewEntityId(entity) {
-                    // Backend-computed slug is the single source of truth (see fetchNormalized).
-                    return entity._previewId || entity.id;
                 },
 
                 // Live preview versions - use _editValue for real-time updates
@@ -5579,7 +5553,7 @@
                             newName = rendered.entity_name;
                         } else if (entity._previewId) {
                             newId = entity._previewId;
-                            newName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
+                            newName = entity._previewName;
                         } else {
                             // The slug is the server's answer and may not have
                             // arrived yet. Standing in with the current id here
@@ -6643,10 +6617,23 @@
                         return;
                     }
 
+                    // The slug is the server's answer and may not have
+                    // arrived for every row yet. Standing in with the current
+                    // id wrote the name and left the id as it was, without
+                    // saying so, so the missing ones are asked for first.
+                    const unanswered = entitiesToChange.filter(e => !e._previewId);
+                    if (unanswered.length) {
+                        const wanted = unanswered.map(e => e._previewName || this.getEntityFriendlyNameForEntity(e));
+                        const slugs = await this.fetchNormalized(wanted);
+                        unanswered.forEach((entity, at) => {
+                            entity._previewId = this.composeEntityId(entity, slugs[at]);
+                        });
+                    }
+
                     // Build the payload with entity details
                     const allEntities = entitiesToChange.map(e => ({
                         old_id: e.id,
-                        new_id: e._previewId || this.getNewEntityIdForEntity(e),
+                        new_id: e._previewId,
                         new_name: e._previewName || this.getEntityFriendlyNameForEntity(e),
                         registry_id: e.registry_id
                     }));
