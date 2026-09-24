@@ -337,19 +337,24 @@ class NamingTemplates:
                 # name, which then falls through to a barer template that
                 # matches anything and returns the name whole.
                 head, separator = _split_trailing_separator(before)
-                if not separator:
+                if not separator and head:
                     # Nothing stands between the field before and this one, so
                     # an empty field leaves no trace to read: "{area}{entity}"
-                    # renders "Living" either way. Such a template keeps asking
-                    # for a field, rather than claiming every name that begins
-                    # with what stands before it.
-                    pattern = re.escape(head) + r"(?P<target>.+)"
+                    # renders "Living" either way, and a name it did not render
+                    # is unreadable here rather than readable as anything that
+                    # begins with the same words. Such a template is not asked.
+                    return None
+                if not separator:
+                    # Nothing before it at all - "{entity}" - so the field is
+                    # the whole name.
+                    pattern = r"(?P<target>.+)"
                 else:
                     pattern = re.escape(head) + "(?:" + re.escape(separator) + r"(?P<target>.+))?"
             match = re.fullmatch(pattern, rendered_name.strip(), flags=re.IGNORECASE)
             if match:
                 # An absent group means the field was empty, which is an
                 # answer, not a failure to match. Callers distinguish it from
-                # None.
+                # None. Only the optional-separator branch above can leave it
+                # absent; the others require something to be there.
                 return _clean_rendered_name(match.group("target") or "")
         return None

@@ -82,3 +82,24 @@ def test_unwinding_an_applied_name_gives_the_empty_type_back(restructurer):
     prefixes = ("Basement Pump", "Basement", "Pump", "ACME-4200", "")
 
     assert restructurer._strip_applied_entity_name(entity["name"], prefixes, context) == ""
+
+
+def test_adopting_the_empty_type_part_settles_the_entity(restructurer):
+    """Storing "" read as "no exception", so the same rename was proposed every run."""
+    entity = restructurer.entities["switch.a"]
+    adopted = restructurer.naming_templates.extract_field("entity_name", entity["name"], "entity", CONTEXT)
+
+    assert adopted == ""
+    restructurer.naming_overrides.set_entity_override("reg-a", adopted)
+
+    context = restructurer.build_naming_context("switch.a", entity)
+
+    assert context["entity"] == ""
+    assert restructurer.naming_templates.render("entity_name", context) == "Basement Pump"
+
+
+def test_a_template_without_a_separator_does_not_claim_a_separated_name(templates):
+    """ "{area}{entity}" renders "BasementSwitch"; "Basement Switch" is not its doing."""
+    templates.set_templates({**TEMPLATES, "entity_name": "{area}{entity}"})
+
+    assert templates.extract_field("entity_name", "BasementSwitch", "entity", CONTEXT) is None

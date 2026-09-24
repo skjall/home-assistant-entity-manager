@@ -1028,13 +1028,18 @@ class EntityRestructurer:
             return resolution
 
         override_name = override.get("name") if override else None
-        if override_name:
+        # Not "if override_name": an exception saying the entity has no type
+        # part of its own is an answer, and skipping it had the next run
+        # propose the same rename again, run after run.
+        if override_name is not None:
             # An exception is the user's own wording and stays as typed — unless
             # it is a bare type key such as "cover", which older versions stored
             # and which the built-in defaults know how to say.
             value = override_name
-            if self.type_mappings and canon(override_name) in self.type_mappings.system_mappings.get(
-                "device_class", {}
+            if (
+                override_name
+                and self.type_mappings
+                and canon(override_name) in self.type_mappings.system_mappings.get("device_class", {})
             ):
                 value = self.type_mappings.get_translation(canon(override_name), self.language)
             return plain(value, "override")
