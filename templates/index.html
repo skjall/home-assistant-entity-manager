@@ -4802,7 +4802,11 @@
                     return !!device
                         && device.id === this.selectedDevice
                         && !this.isVirtualDevice(device.id)
-                        && this.devicePreviewAreaId !== null;
+                        && this.devicePreviewAreaId !== null
+                        // The area it is in, picked again, is not a move: every
+                        // row was computed afresh for it and the fast answer
+                        // thrown away for nothing.
+                        && (this.devicePreviewAreaId || null) !== (device.area_id || null);
                 },
 
                 // The area every name below is built out of: the picked one
@@ -4827,14 +4831,10 @@
                 getDeviceDisplayName(device) {
                     if (!device) return '';
                     if (device.suggested_name && !this.deviceIsMoving(device)) return device.suggested_name;
-                    const area = this.areaForDevice(device);
-                    const areaName = area?.name || '';
-                    const deviceBaseName = device.base_name;
-
-                    if (areaName) {
-                        return `${areaName} ${deviceBaseName}`;
-                    }
-                    return deviceBaseName;
+                    // Through the template, not "area then name": a template
+                    // that puts the area elsewhere had the list and the panel
+                    // saying two different things about the same rename.
+                    return this.renderDeviceName(device) || device.base_name;
                 },
 
                 // Get entity friendly name (full: Area + Device + Entity base)
@@ -5071,9 +5071,13 @@
                         parts.push(area.name);
                     }
 
-                    // Device base name
+                    // Device base name, as the panel holds it: a name typed
+                    // there and not written yet is what the row would be
+                    // renamed to, and the row showed the stored one instead -
+                    // which is then what a run would have written.
                     if (device) {
-                        parts.push(device.base_name);
+                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
+                        parts.push(typed !== null ? typed : device.base_name);
                     }
 
                     // Entity suffix (uses shared logic)
@@ -6122,7 +6126,7 @@
 
                     const newName = this.getExpectedDeviceName(device);
                     if (device.name === newName) {
-                        this.showMessage('Device name already correct', 'info');
+                        this.showMessage(this.t('device.name_already_correct'), 'info');
                         return;
                     }
 
@@ -6617,7 +6621,7 @@
                     const newFullName = this.renderDeviceName(device, newBaseName);
 
                     if (device.name === newFullName) {
-                        this.showMessage('Device name already correct', 'info');
+                        this.showMessage(this.t('device.name_already_correct'), 'info');
                         return;
                     }
 
@@ -6626,7 +6630,15 @@
                     // is the door the rename actually goes through.
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = newBaseName;
-                    await this.checkDeviceNameClash(device, newBaseName);
+                    try {
+                        await this.checkDeviceNameClash(device, newBaseName);
+                    } catch (error) {
+                        // The check never got to look. The field goes back to
+                        // what it held, or it sits there showing a rename that
+                        // was not made.
+                        this.devicePreviewBaseName = wasPreviewed;
+                        throw error;
+                    }
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();
                         this.devicePreviewBaseName = wasPreviewed;
