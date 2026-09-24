@@ -383,3 +383,12 @@ def test_the_endpoint_refuses_a_body_that_asks_for_nothing(client):
     response = client.put(f"/api/naming/rules/{rule['id']}", json={})
 
     assert response.status_code == 400
+
+def test_a_number_that_appears_twice_gets_two_placeholders():
+    """ "Zone 10 Panel 10" holds the same number twice, and they move apart."""
+    assert target_of("Zone 10 Panel 10", ["10", "10"]) == "Zone {1} Panel {2}"
+
+
+def test_a_repetition_inside_a_class_is_a_character():
+    """ "([a+])+" repeats a class of two characters, which finishes in time."""
+    assert compile_pattern(r"([a+])+b") is not None
