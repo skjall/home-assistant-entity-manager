@@ -583,6 +583,7 @@
     "count_done": "{count} renommées",
     "count_failed": "{count} en échec",
     "count_enabled": "{count} activées",
-    "step_unverified": "Non confirmé"
+    "step_unverified": "Non confirmé",
+    "step_area": "Déplacé"
   }
 }

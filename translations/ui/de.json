@@ -583,6 +583,7 @@
     "count_done": "{count} umbenannt",
     "count_failed": "{count} fehlgeschlagen",
     "count_enabled": "{count} aktiviert",
-    "step_unverified": "Unbestätigt"
+    "step_unverified": "Unbestätigt",
+    "step_area": "Verschoben"
   }
 }

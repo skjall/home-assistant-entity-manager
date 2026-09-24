@@ -583,6 +583,7 @@
     "count_done": "{count} renombradas",
     "count_failed": "{count} fallidas",
     "count_enabled": "{count} activadas",
-    "step_unverified": "Sin confirmar"
+    "step_unverified": "Sin confirmar",
+    "step_area": "Movido"
   }
 }
