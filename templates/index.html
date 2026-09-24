@@ -4955,7 +4955,7 @@
 
                     // Use cached preview values (computed once in precomputeEntityPreviews)
                     const newName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
-                    const newId = entity._previewId || this.getNewEntityIdForEntity(entity);
+                    const newId = this.getNewEntityIdForEntity(entity);
 
                     // A supplied name that froze an old hierarchy is written
                     // back as part of the rename, so there is something to do
@@ -5041,15 +5041,19 @@
                     // Kept, so a run that needs the ids can wait for the
                     // computation already under way instead of asking for the
                     // same slugs a second time.
-                    this._previewsInFlight = this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
+                    const settling = this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
                         pending.forEach((entity, i) => {
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
                     }).finally(() => {
-                        this._previewsInFlight = null;
+                        // Its own, not whatever is there: a second computation
+                        // started while this one was out, and clearing the
+                        // field regardless said that one had finished too.
+                        if (this._previewsInFlight === settling) this._previewsInFlight = null;
                     });
+                    this._previewsInFlight = settling;
                 },
 
                 // What the rows would be called, once the server has answered.
@@ -5076,7 +5080,7 @@
 
                 // Check if the target entity ID is already taken by another entity
                 isEntityIdTaken(entity) {
-                    const newId = entity._previewId || this.getNewEntityIdForEntity(entity);
+                    const newId = this.getNewEntityIdForEntity(entity);
                     if (newId === entity.id) return false; // Same ID, no conflict
                     return this.hierarchy.entities.some(e => e.id === newId && e.registry_id !== entity.registry_id);
                 },
@@ -6615,6 +6619,11 @@
                         // a rule reaches every entity of its type, and the server
                         // renders them, numbering included.
                         await this.loadHierarchy();
+                        // Reading the list back computes the ids again, and the
+                        // wait above is about the computation before it: without
+                        // this one every row read as needing no new id and the
+                        // rename wrote the names alone.
+                        await this.previewsSettled();
                     }
 
                     // Find all entities that need renaming
@@ -6633,7 +6642,8 @@
                     }
 
                     // Build the payload with entity details. The id is the
-                    // server's answer, which the wait above made sure of; an
+                    // server's answer, which the waits above made sure of -
+                    // both of them, since reading the list back asks again; an
                     // entity still without one keeps the id it has, and only
                     // its name is written.
                     const allEntities = entitiesToChange.map(e => ({
