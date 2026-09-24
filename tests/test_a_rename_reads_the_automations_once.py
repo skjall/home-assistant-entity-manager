@@ -277,3 +277,73 @@ def test_two_jobs_starting_together_read_the_automations_once() -> None:
     asyncio.run(run())
 
     assert sorted(reads) == ["0", "1", "2", "3"]
+
+
+def test_an_automation_that_only_talks_about_the_entity_is_left_alone() -> None:
+    """A description naming the old id had the rename reported as a failure."""
+    reads: List[str] = []
+    updater = _updater(reads)
+    written: List[Dict[str, Any]] = []
+
+    async def fetch(numeric_id: str, session: Optional[Any] = None) -> Dict[str, Any]:
+        reads.append(numeric_id)
+        return {"id": numeric_id, "description": "Watches sensor.old", "action": [{"entity_id": "sensor.other"}]}
+
+    async def write(numeric_id: str, config: Dict[str, Any], session: Optional[Any] = None) -> bool:
+        written.append(config)
+        return True
+
+    updater.fetch_automation_config = fetch  # type: ignore[assignment]
+    updater.update_automation_config = write  # type: ignore[assignment]
+
+    async def run() -> Dict[str, Any]:
+        return await updater.update_all_dependencies("sensor.old", "sensor.new", _states(1))
+
+    results = asyncio.run(run())
+
+    assert not written
+    assert results["automations"]["failed"] == []
+    assert results["total_failed"] == 0
+
+
+def test_a_write_that_failed_is_not_answered_from_before_it() -> None:
+    """Home Assistant may have applied it and reported an error all the same."""
+    reads: List[str] = []
+    updater = _updater(reads)
+
+    async def fetch(numeric_id: str, session: Optional[Any] = None) -> Dict[str, Any]:
+        reads.append(numeric_id)
+        return {"id": numeric_id, "action": [{"entity_id": "sensor.old"}], "alias": "read " + str(len(reads))}
+
+    async def write(numeric_id: str, config: Dict[str, Any], session: Optional[Any] = None) -> bool:
+        return False
+
+    updater.fetch_automation_config = fetch  # type: ignore[assignment]
+    updater.update_automation_config = write  # type: ignore[assignment]
+
+    async def run() -> Optional[Dict[str, Any]]:
+        await updater.load_automation_configs(_states(1))
+        assert not await updater.update_automation_entities("automation.number_0", "0", "sensor.old", "sensor.new")
+        return await updater.get_automation_config("0")
+
+    assert asyncio.run(run())["alias"] == "read 2"
+
+
+def test_nothing_read_at_all_is_asked_for_again() -> None:
+    """Home Assistant not answering is not an installation without automations."""
+    reads: List[str] = []
+    updater = _updater(reads)
+
+    async def fetch(numeric_id: str, session: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+        reads.append(numeric_id)
+        return None
+
+    updater.fetch_automation_config = fetch  # type: ignore[assignment]
+
+    async def run() -> None:
+        await updater.load_automation_configs(_states(2))
+        await updater.load_automation_configs(_states(2))
+
+    asyncio.run(run())
+
+    assert sorted(reads) == ["0", "0", "1", "1"]

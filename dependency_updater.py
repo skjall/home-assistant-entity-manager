@@ -8,6 +8,7 @@ import copy
 import json
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -20,6 +21,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+
+def _refers_to(text: str, entity_id: str) -> bool:
+    """Whether the text names the entity rather than something it begins."""
+    return re.search(r"(?<![\w.])" + re.escape(entity_id) + r"(?![\w.])", text) is not None
 
 
 class DependencyUpdater:
@@ -228,7 +234,11 @@ class DependencyUpdater:
             await asyncio.gather(*(one(numeric_id) for numeric_id in numeric_ids))
 
         logger.info(f"Read {len(configs)} of {len(numeric_ids)} automation configurations once for this job")
-        self._automation_configs = configs
+        # Nothing at all where something was asked for is Home Assistant not
+        # answering, not an installation without automations. Keeping that as
+        # the reading for the job answered every later entity with nothing.
+        if configs or not numeric_ids:
+            self._automation_configs = configs
         return dict(configs)
 
     async def read_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
@@ -282,6 +292,16 @@ class DependencyUpdater:
         async with aiohttp.ClientSession() as own:
             return await write(own)
 
+    def names_entity(self, config: Dict, entity_id: str) -> bool:
+        """Whether the configuration refers to the entity, as a reference.
+
+        Not as text: an automation described as "watches sensor.old" says the
+        name without referring to it, and a rename that correctly left the
+        prose alone was then reported as one that had failed. The same walk
+        that would rewrite the references answers whether there are any.
+        """
+        return self.replace_entity_in_dict(copy.deepcopy(config), entity_id, entity_id + "__probe")
+
     async def update_automation_entities(
         self,
         automation_id: str,
@@ -314,6 +334,13 @@ class DependencyUpdater:
             # The write and the read that proves it share one connection.
             async with aiohttp.ClientSession() as session:
                 if not await self.update_automation_config(automation_numeric_id, config, session):
+                    # It may have been applied and then reported as an error.
+                    # What is kept is only what was read back, so the entry
+                    # goes rather than answering the rest of the job with a
+                    # version from before a write that may have taken.
+                    async with self._configs_lock:
+                        if self._automation_configs is not None:
+                            self._automation_configs.pop(automation_numeric_id, None)
                     return False
                 # Home Assistant answering "ok" is not evidence that the old id
                 # is gone: a write that reported success and changed nothing
@@ -327,21 +354,24 @@ class DependencyUpdater:
             # about what Home Assistant holds, so the entry is dropped rather
             # than answered with nothing for the rest of the job.
             if written is None:
-                if self._automation_configs is not None:
-                    self._automation_configs.pop(automation_numeric_id, None)
+                async with self._configs_lock:
+                    if self._automation_configs is not None:
+                        self._automation_configs.pop(automation_numeric_id, None)
                 logger.error(f"Could not read automation {automation_id} back after writing it")
                 return False
-            if old_entity_id in json.dumps(written):
-                # Kept only where it proved out. A reading that still names the
-                # old id says the write did not take, and storing it would have
-                # the rest of the job build on a version Home Assistant may
-                # never have held.
-                if self._automation_configs is not None:
-                    self._automation_configs.pop(automation_numeric_id, None)
+            if self.names_entity(written, old_entity_id):
+                # Kept only where it proved out. A reading that still refers to
+                # the old id says the write did not take, and storing it would
+                # have the rest of the job build on a version Home Assistant
+                # may never have held.
+                async with self._configs_lock:
+                    if self._automation_configs is not None:
+                        self._automation_configs.pop(automation_numeric_id, None)
                 logger.error(f"Automation {automation_id} still names {old_entity_id} after the write")
                 return False
-            if self._automation_configs is not None:
-                self._automation_configs[automation_numeric_id] = written
+            async with self._configs_lock:
+                if self._automation_configs is not None:
+                    self._automation_configs[automation_numeric_id] = written
             logger.info(f"Automation {automation_id} now names {new_entity_id}")
             return True
         else:
@@ -438,8 +468,7 @@ class DependencyUpdater:
                 # it stands; update_automation_entities takes its own copy.
                 config = await self.read_automation_config(automation_numeric_id)
                 if config:
-                    config_str = json.dumps(config)
-                    if old_entity_id in config_str:
+                    if self.names_entity(config, old_entity_id):
                         logger.info(f"Found automation {automation_entity_id} using {old_entity_id}")
                         success = await self.update_automation_entities(
                             automation_entity_id,
@@ -460,7 +489,11 @@ class DependencyUpdater:
                     # through the config API. If one of them names the old id,
                     # nothing here will ever change it, so say so rather than
                     # leaving a line in the debug log.
-                    if old_entity_id in json.dumps(automation_state):
+                    # A whole reference, not a piece of one: "sensor.power" is
+                    # a part of "automation.sensor.power_monitor", and every
+                    # such automation was reported as one this add-on cannot
+                    # reach.
+                    if _refers_to(json.dumps(automation_state), old_entity_id):
                         results["automations"]["unreachable"].append(automation_entity_id)
                         results["total_unreachable"] += 1
                     else:
