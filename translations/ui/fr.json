@@ -126,7 +126,9 @@
     "supplied_stale": "Le nom est le titre de l’entrée de l’auxiliaire : « {supplied} » — appliquer réécrit aussi le titre.",
     "scope_domain_hint": "Seulement les {count} entités {domain} sur les appareils de type {model}.",
     "keep_current_hint": "Mettre « {name} » dans le champ : son nom actuel",
-    "was_already_gone": "L'entité était déjà supprimée — la liste s'est mise à jour."
+    "was_already_gone": "L'entité était déjà supprimée — la liste s'est mise à jour.",
+    "scope_pattern_hint": "Pour les {count} entités de {integration} nommées « {pattern} », quel que soit le numéro.",
+    "explain_rule_pattern": "Toutes les entités « {pattern} » de {integration} sont nommées ainsi chez vous – ici « {value} »"
   },
   "virtual_devices": {
     "automations": "Automatisations",
@@ -554,7 +556,12 @@
     "caught_name": "nom fourni",
     "caught_device_class": "classe d'appareil",
     "caught_none": "—",
-    "reach_open_device": "Ouvrir « {device} » dans Home Assistant"
+    "reach_open_device": "Ouvrir « {device} » dans Home Assistant",
+    "pattern_section": "Règles à motif",
+    "pattern_hint": "Certaines intégrations mettent un numéro de série dans chaque nom, par exemple « Chauffage 12345678 ». Une règle à motif laisse le numéro ouvert et s’applique ainsi à tous les appareils de cette intégration. Les règles à motif existantes restent actives quand ceci est désactivé.",
+    "pattern_toggle": "Proposer des règles à motif lors du renommage",
+    "pick_pattern": "Motif",
+    "caught_pattern": "motif"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",
