@@ -174,7 +174,7 @@ class DependencyUpdater:
                     return await response.json()
                 text = await response.text()
                 logger.error(
-                    f"Fehler beim Abrufen der Automation {automation_numeric_id}: {response.status}, Response: {text}"
+                    f"Could not read automation {automation_numeric_id}: {response.status}, response: {text}"
                 )
                 return None
 
@@ -249,12 +249,12 @@ class DependencyUpdater:
                     # A 200 that does not say "ok" used to leave no trace at
                     # all, which is the worst of both: the write did not take
                     # and nothing said why.
-                    logger.error(f"Automation {automation_numeric_id} nicht geschrieben: {result}")
+                    logger.error(f"Automation {automation_numeric_id} was not written: {result}")
                     return False
                 else:
                     text = await response.text()
                     logger.error(
-                        f"Fehler beim Update der Automation {automation_numeric_id}: {response.status}, {text}"
+                        f"Could not write automation {automation_numeric_id}: {response.status}, {text}"
                     )
                     return False
 
@@ -282,7 +282,7 @@ class DependencyUpdater:
         changed = self.replace_entity_in_dict(config, old_entity_id, new_entity_id)
 
         if changed:
-            logger.info(f"Aktualisiere Automation {automation_id}: {old_entity_id} -> {new_entity_id}")
+            logger.info(f"Updating automation {automation_id}: {old_entity_id} -> {new_entity_id}")
             # The write and the read that proves it share one connection.
             async with aiohttp.ClientSession() as session:
                 if not await self.update_automation_config(automation_numeric_id, config, session):
@@ -304,12 +304,12 @@ class DependencyUpdater:
                 else:
                     self._automation_configs[automation_numeric_id] = written
             if written is None:
-                logger.error(f"Konnte Automation {automation_id} nach dem Schreiben nicht wieder lesen")
+                logger.error(f"Could not read automation {automation_id} back after writing it")
                 return False
             if old_entity_id in json.dumps(written):
-                logger.error(f"Automation {automation_id} nennt {old_entity_id} nach dem Schreiben weiterhin")
+                logger.error(f"Automation {automation_id} still names {old_entity_id} after the write")
                 return False
-            logger.info(f"Automation {automation_id} nennt jetzt {new_entity_id}")
+            logger.info(f"Automation {automation_id} now names {new_entity_id}")
             return True
         else:
             logger.debug(f"No changes needed for automation {automation_id}")
