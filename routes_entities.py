@@ -587,7 +587,11 @@ def _capture_device_entity_naming(
             # What went into the name, not what came out of it: a rule the user
             # edits afterwards only reaches this entity again if the note hands
             # it back the word the rule matches on.
-            "base_entity": resolution["input"] if "input" in resolution else name,
+            # An entity with no name of its own supplies nothing, and what it
+            # is called is then the bracket that tells it from its siblings.
+            # Storing the empty word there lost that bracket, and with it the
+            # only thing the entity was told apart by.
+            "base_entity": resolution.get("input") or name,
             # And what came out of it, which is what the name is built from.
             # The two are the same word until a rule or a translation changes
             # it; rendering the first one wrote the name past the rule that

@@ -98,3 +98,21 @@ def test_every_path_that_writes_a_name_passes_the_note():
             forgot.append(f"{method} at line {node.lineno}")
 
     assert not forgot, "these write a name without noting what went into it: " + ", ".join(forgot)
+
+
+def test_the_note_keeps_what_went_in_where_a_rule_changed_it(monkeypatch):
+    """Every test had the two words alike, so swapping them would have gone unseen."""
+    restructurer = Restructurer()
+    restructurer.last_resolutions = {}
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    restructurer.last_resolutions["switch.old"] = {
+        # The word the rule matches on, and the word it renders to.
+        "input": "Tuer",
+        "value": "Zustand",
+        "won_by": "rule:user",
+        "rule_id": "r_01",
+    }
+
+    note = web_ui.naming_service.provenance_for("switch.old")
+
+    assert note["base_entity"] == "Tuer"
