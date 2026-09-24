@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "preset": "entity_manager",
+  "templates": {
+    "device_name": "{area} {device}",
+    "entity_id": "{area} {device} {entity}",
+    "entity_name": "{area} {device} {entity}"
+  },
+  "history": []
+}

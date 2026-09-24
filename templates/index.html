@@ -2231,13 +2231,13 @@
                             <input type="text" class="edit-input combo-input" autocomplete="off"
                                    x-effect="hierarchy.areas.length; devicePreviewAreaId; selectedDeviceData;
                                              if (!areaComboOpen) areaSearch = panelAreaName()"
-                                   :class="devicePreviewAreaId ? 'chosen' : ''"
+                                   :class="devicePreviewAreaId !== null ? 'chosen' : ''"
                                    :placeholder="t('area.select_area')"
                                    x-model="areaSearch"
                                    @focus="areaComboOpen = true; areaComboAt = 0; areaSearch = ''"
                                    @input="areaComboOpen = true; areaComboAt = 0"
-                                   @keydown.arrow-down.prevent="areaComboOpen = true; comboStep(1, matchingAreas().length)"
-                                   @keydown.arrow-up.prevent="comboStep(-1, matchingAreas().length)"
+                                   @keydown.arrow-down.prevent="areaComboOpen = true; comboStep(1, matchingAreas().length, $el)"
+                                   @keydown.arrow-up.prevent="comboStep(-1, matchingAreas().length, $el)"
                                    @keydown.enter.prevent="takeArea()">
                         </div>
                         <div class="combo-list" x-show="areaComboOpen" x-cloak>
@@ -4896,17 +4896,43 @@
                 // are built out of the navigation's area, which is the device's
                 // own until it is about to leave it.
                 previewAreaData() {
-                    if (this.devicePreviewAreaId === null || !this.devicePreviewAreaId) return null;
-                    if (this.isVirtualDevice(this.selectedDevice)) return null;
-                    return this.hierarchy.areas.find(a => a.id === this.devicePreviewAreaId) || null;
+                    return this.areaForDevice(this.selectedDeviceData);
+                },
+
+                // A move is being shown for this device: an area was picked in
+                // the panel and not yet written. Untouched is null; an empty
+                // pick is a move to no area at all, which is a move like any
+                // other and not the absence of one.
+                deviceIsMoving(device) {
+                    return !!device
+                        && device.id === this.selectedDevice
+                        && !this.isVirtualDevice(this.selectedDevice)
+                        && this.devicePreviewAreaId !== null;
+                },
+
+                // The area every name below is built out of: the picked one
+                // while a move is being shown, the device's own otherwise -
+                // never the area the sidebar happens to stand in.
+                areaForDevice(device) {
+                    const areaId = this.previewAreaFor(device);
+                    if (!areaId) return null;
+                    return this.hierarchy.areas.find(a => a.id === areaId) || null;
+                },
+
+                // What the entities of the device being moved would be called.
+                // Their names are cached, and a move changes all of them.
+                pickPreviewArea(areaId) {
+                    this.devicePreviewAreaId = areaId;
+                    const moved = (this.hierarchy.entities || [])
+                        .filter(e => e.device_id === this.selectedDevice);
+                    this.computePreviewsFor(moved);
                 },
 
                 // Get device display name (full name with area prefix)
                 getDeviceDisplayName(device) {
                     if (!device) return '';
-                    const moving = device.id === this.selectedDevice ? this.previewAreaData() : null;
-                    if (device.suggested_name && !moving) return device.suggested_name;
-                    const area = moving || this.selectedAreaData;
+                    if (device.suggested_name && !this.deviceIsMoving(device)) return device.suggested_name;
+                    const area = this.areaForDevice(device);
                     const areaName = area?.name || '';
                     const deviceBaseName = device.base_name;
 
@@ -4925,7 +4951,9 @@
                     const domain = entity.id.split('.')[0];
 
                     // Area
-                    const area = this.previewAreaData() || this.selectedAreaData;
+                    const area = this.selectedDeviceData
+                        ? this.areaForDevice(this.selectedDeviceData)
+                        : this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
@@ -4961,7 +4989,9 @@
                     const parts = [];
 
                     // Area
-                    const area = this.previewAreaData() || this.selectedAreaData;
+                    const area = this.selectedDeviceData
+                        ? this.areaForDevice(this.selectedDeviceData)
+                        : this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
@@ -5223,7 +5253,10 @@
 
                 panelAreaName() {
                     const id = this.panelAreaId();
-                    if (!id) return '';
+                    // Picked, and picked to be in no area at all: the field
+                    // said nothing at all for it, which reads like a field
+                    // nobody has touched.
+                    if (!id) return this.devicePreviewAreaId === '' ? this.t('area.no_area') : '';
                     return this.hierarchy.areas.find(a => a.id === id)?.name || '';
                 },
 
@@ -5241,15 +5274,19 @@
                 },
 
                 pickArea(area) {
-                    this.devicePreviewAreaId = area.id;
+                    this.pickPreviewArea(area.id);
                     this.areaSearch = area.name;
                     this.areaComboOpen = false;
-                    this.stageDeviceWideChange();
                 },
 
                 takeArea() {
-                    const area = this.matchingAreas()[this.areaComboAt];
-                    if (area) this.pickArea(area);
+                    // What the list shows now, not what it showed when the
+                    // arrow key was last pressed: typing shortens it, and
+                    // reaching past its end took nothing at all.
+                    const listed = this.matchingAreas();
+                    if (!listed.length) return;
+                    this.areaComboAt = Math.min(this.areaComboAt, listed.length - 1);
+                    this.pickArea(listed[this.areaComboAt]);
                 },
 
                 closeAreaCombo() {
@@ -5262,11 +5299,14 @@
 
                 // Walk the open list with the arrow keys, keeping the one that
                 // Enter would take in view.
-                comboStep(by, total) {
+                comboStep(by, total, field) {
                     if (!total) return;
                     this.areaComboAt = (this.areaComboAt + by + total) % total;
                     this.$nextTick(() => {
-                        const at = document.querySelector('.combo-list .combo-item.at');
+                        // The list belonging to this field, not the first one
+                        // on the page: a second combo would scroll instead.
+                        const combo = field?.closest('.combo') || document;
+                        const at = combo.querySelector('.combo-list .combo-item.at');
                         if (at) at.scrollIntoView({block: 'nearest'});
                     });
                 },
@@ -5379,9 +5419,7 @@
                 // name below is built from it, so a move shows its full effect
                 // before it is written.
                 previewAreaFor(device) {
-                    if (device && device.id === this.selectedDevice && this.devicePreviewAreaId !== null) {
-                        return this.devicePreviewAreaId || null;
-                    }
+                    if (this.deviceIsMoving(device)) return this.devicePreviewAreaId || null;
                     return device?.area_id || null;
                 },
 
@@ -5402,9 +5440,9 @@
                     const device = entity?.device_id
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
-                    const staged = !!device && device.id === this.selectedDevice;
-                    const moving = staged && this.devicePreviewAreaId !== null;
-                    const areaId = moving ? this.previewAreaFor(device) : (entity?.area_id || device?.area_id);
+                    const areaId = this.deviceIsMoving(device)
+                        ? this.previewAreaFor(device)
+                        : (entity?.area_id || device?.area_id);
                     const area = this.hierarchy.areas.find(a => a.id === areaId);
                     const domain = entity?.id?.split('.')[0] || '';
                     return {
@@ -6758,7 +6796,20 @@
                 async applyDeviceWideChange(driftDevices = []) {
                     const device = this.selectedDeviceData;
                     const deviceId = this.selectedDevice;
-                    if (!device || this.isVirtualDevice(deviceId)) return;
+                    if (!device || this.isVirtualDevice(deviceId) || this.renamingDevice) return;
+
+                    // Shut from here on, not from the request onwards: the
+                    // clash check is awaited first, and a second click during
+                    // it started a second run of the same job.
+                    this.renamingDevice = true;
+                    try {
+                        await this.applyDeviceWideRun(device, deviceId, driftDevices);
+                    } finally {
+                        this.renamingDevice = false;
+                    }
+                },
+
+                async applyDeviceWideRun(device, deviceId, driftDevices) {
 
                     // An empty field is not a name: the device keeps the one
                     // it has, and only the area is then left to write.
@@ -6800,7 +6851,6 @@
                         return;
                     }
 
-                    this.renamingDevice = true;
                     try {
                         const response = await fetch('api/rename_device', {
                             method: 'POST',
@@ -6822,8 +6872,6 @@
                         });
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
-                    } finally {
-                        this.renamingDevice = false;
                     }
                 },
 

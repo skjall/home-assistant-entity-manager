@@ -685,7 +685,9 @@ async def rename_device_handler(job, ctx):
             await device_registry.assign_area(device_id, area_id)
 
         z2m_sync: dict[str, Any] = {}
-        if new_name:
+        # Supplied or not, the same question the area is asked: a name is
+        # absent when the key was left out, not when it reads as false.
+        if new_name is not None:
             success = await device_registry.rename_device(device_id, new_name)
 
             if not success:
@@ -789,9 +791,9 @@ async def rename_device_handler(job, ctx):
             f"Skipped: {entities_skipped}, Dependencies: {dependencies_updated}"
         )
 
-        if new_name and set_area:
+        if new_name is not None and set_area:
             message = f"Device moved and renamed to: {new_name}"
-        elif new_name:
+        elif new_name is not None:
             message = f"Device renamed to: {new_name}"
         else:
             message = "Device moved"
