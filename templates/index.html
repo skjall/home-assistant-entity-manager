@@ -4859,7 +4859,9 @@
                 },
 
                 // Live preview versions - use _editValue for real-time updates
-                getEntityFriendlyNameLive(entity, baseName = null) {
+                // ``baseName`` is the name being written for ``forDeviceId``;
+                // an entity of any other device is named as it stands.
+                getEntityFriendlyNameLive(entity, baseName = null, forDeviceId = null) {
                     const parts = [];
 
                     // The entity's own device, so a name computed while the
@@ -4876,10 +4878,14 @@
 
                     // Device base name (use preview if editing)
                     if (device && !this.isVirtualDevice(device.id)) {
-                        // The name the caller is writing, where it said one:
+                        // The name the caller is writing, where it said one and
+                        // where this entity is under the device it is for:
                         // reading it off the panel had a click on another
-                        // device leave the check asking about the old name.
-                        const typed = baseName !== null
+                        // device leave the check asking about the old name, and
+                        // taking it for every entity would put one device's new
+                        // name into another device's rows.
+                        const written = baseName !== null && device.id === (forDeviceId || this.selectedDevice);
+                        const typed = written
                             ? baseName
                             : (device.id === this.selectedDevice ? this.devicePreviewBaseName : null);
                         parts.push(typed !== null ? typed : device.base_name);
@@ -5079,10 +5085,21 @@
                     this.computePreviewsFor(this.hierarchy.entities);
                 },
 
+                // The rows under one device, whether or not the panel stands
+                // on it.
+                entitiesOfDevice(deviceId) {
+                    return (this.hierarchy?.entities || []).filter(entity => entity.device_id === deviceId);
+                },
+
                 // What a set of entities would be called. Their own previews are
                 // dropped first: the answer changed, which is why they are here.
                 computePreviewsFor(entities) {
                     if (!entities?.length) return;
+
+                    // Once for the computation, not once per row: the full
+                    // recomputation walked the device list for every entity in
+                    // the installation.
+                    const byId = new Map((this.hierarchy?.devices || []).map(device => [device.id, device]));
 
                     for (const entity of entities) {
                         if (entity._justRenamed || entity._currentSuffix !== undefined) continue;
@@ -5101,7 +5118,7 @@
                         // device on its way to another one is left to the
                         // client, which knows where it is going.
                         const moving = this.deviceIsMoving(
-                            entity.device_id ? this.hierarchy.devices.find(d => d.id === entity.device_id) : null
+                            entity.device_id ? byId.get(entity.device_id) || null : null
                         );
                         entity._previewName = (!moving && entity.suggested_name)
                             || this.getEntityFriendlyNameForEntity(entity);
@@ -5451,7 +5468,11 @@
                 // rename. The caller that is renaming reads what it got back.
                 async checkDeviceNameClash(about = null, baseName = null) {
                     const device = about || this.selectedDeviceData;
-                    this.deviceNameClash = [];
+                    // Only the list this call will answer about: clearing it for
+                    // a device the panel has since left took away the warning
+                    // standing against the device it turned to, and the button
+                    // there opened over a real clash.
+                    if (device && device.id === this.selectedDevice) this.deviceNameClash = [];
                     if (!device || this.isVirtualDevice(device.id)) return [];
                     const wanted = this.getExpectedDeviceName(device, baseName);
                     if (!wanted || wanted === device.name) return [];
@@ -5460,7 +5481,9 @@
                     if (!mine.length) return [];
 
                     // The slug rules live in the backend; see fetchNormalized.
-                    const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e, baseName)));
+                    const slugs = await this.fetchNormalized(
+                        mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id))
+                    );
                     const taken = new Map();
                     for (const other of this.hierarchy.entities) {
                         if (other.device_id === device.id) continue;
@@ -6620,8 +6643,6 @@
                 },
 
                 async onRenameDeviceDone(job, deviceId = null) {
-                    // The job is over, so the button opens again.
-                    this.renamingDevice = false;
                     // What the panel holds now may have been typed for another
                     // device while this job ran, and that is not this job's to
                     // throw away.
@@ -6635,6 +6656,12 @@
                         const updated = this.hierarchy.devices.find(d => d.id === id);
                         if (updated) this.selectedDeviceData = updated;
                     }
+                    // The button opens once the panel holds the device as it is
+                    // now. Opened before the list was read again, a second click
+                    // compared the name being typed against the name from before
+                    // the rename - and either said it was already right or
+                    // queued the same rename a second time.
+                    this.renamingDevice = false;
                 },
 
                 async renameDeviceInHA(newBaseName) {
@@ -6681,13 +6708,12 @@
                             // Nothing was written, so nothing stays staged: the
                             // rows went on showing a move that had failed, with
                             // no way to take it back but to pick the old area.
-                            if (this.selectedDevice === deviceId) {
-                                this.devicePreviewAreaId = null;
-                                // And the names computed for the area it did not
-                                // move to. Left standing, a rename run from the
-                                // list would have written every one of them.
-                                this.invalidateEntityPreviews();
-                            }
+                            if (this.selectedDevice === deviceId) this.devicePreviewAreaId = null;
+                            // And the names computed for the area it did not move
+                            // to, whether or not the panel still stands on the
+                            // device: left as they were, a rename run from the
+                            // list would have written every one of them.
+                            this.computePreviewsFor(this.entitiesOfDevice(deviceId));
                             return;
                         }
                         moved = true;
@@ -6724,6 +6750,13 @@
                         // what it held, or it sits there showing a rename that
                         // was not made.
                         this.devicePreviewBaseName = wasPreviewed;
+                        if (moved) {
+                            // The move stands, and this is the one way out that
+                            // said only "Error" about it.
+                            this.showMessage(this.t('device.moved_not_renamed', {error: error.message}), 'error');
+                            await this.loadHierarchy();
+                            return;
+                        }
                         throw error;
                     }
                     if (clashes.length) {
