@@ -3211,8 +3211,16 @@
                 withoutDeviceInArea: new Map(),
                 countInArea: new Map(),
             };
-            const none = [];
+            // The one empty answer every lookup that misses is given. Frozen,
+            // because a caller that pushed into it would hand the next lookup
+            // somebody else's entities.
+            const none = Object.freeze([]);
 
+            // All five maps are built in one pass. Keeping them up to date
+            // one write at a time would mean five kinds of write to get right
+            // - a moved device changes the counts of two areas - against a
+            // pass that costs one walk of lists the page has just been handed
+            // anyway, and only when something changed.
             function indexed(state) {
                 if (index.version === state.hierarchyVersion) return index;
                 index.devicesById = new Map();
@@ -5505,7 +5513,16 @@
                     if (!mine.length) return settle([]);
 
                     // The slug rules live in the backend; see fetchNormalized.
+                    const asked = this.hierarchyVersion;
                     const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e)));
+                    // The registry moved while the slugs were on their way, so
+                    // the entities they were computed for are not the ones the
+                    // index holds now; the next keystroke asks again.
+                    if (asked !== this.hierarchyVersion) return;
+                    // Nor is an answer about a device the panel has left one
+                    // that may be written down: it would sit there unread and
+                    // unrefreshed until some other device happened to clash.
+                    if (device.id !== this.selectedDevice) return;
                     const taken = indexed(this).entitiesById;
 
                     const clashes = [];
@@ -6127,6 +6144,10 @@
                             // Also update entities of this device
                             (indexed(this).byDevice.get(deviceId) || none)
                                 .forEach(e => e.area_id = areaId);
+
+                            // Both areas hold a different number of entities
+                            // now, so the counts have to be worked out again.
+                            this.hierarchyVersion++;
 
                             const area = this.hierarchy.areas.find(a => a.id === areaId);
                             this.showMessage(this.t('area.area_assigned') + ': ' + (area?.name || areaId), 'success');
