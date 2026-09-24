@@ -683,6 +683,12 @@ async def rename_device_handler(job, ctx):
             # step at all, so nothing said which operation the job failed on.
             ctx.log("AREA", f"{device_id} -> {area_id or 'no area'}")
             await device_registry.assign_area(device_id, area_id)
+            # Said again once it is written, under a step of its own. The line
+            # above says which operation a failure happened on; this one says
+            # the move got through, and a rename failing after it leaves the
+            # device somewhere it was not before - which the interface has to
+            # be able to tell the user.
+            ctx.log("MOVED", f"{device_id} is in {area_id or 'no area'}")
 
         z2m_sync: dict[str, Any] = {}
         # Not "is not None": an empty name is not a name, and Home Assistant

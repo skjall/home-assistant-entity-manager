@@ -9,7 +9,7 @@ import asyncio
 
 import pytest
 
-from jobs import TERMINAL_STATES, JobStore, JobWorker
+from jobs import TERMINAL_STATES, JobContext, JobStore, JobWorker
 import routes_entities
 import web_ui
 
@@ -137,3 +137,110 @@ def test_init_client_recreates_missing_restructurer(monkeypatch) -> None:
 
     assert asyncio.run(web_ui.init_client()) is client
     assert web_ui.renamer_state["restructurer"].client is client
+
+
+class _NoWebSocket:
+    """Stands in for the connection the handler opens and closes."""
+
+    def __init__(self, url, token):
+        pass
+
+    async def connect(self):
+        return None
+
+    async def disconnect(self):
+        return None
+
+
+class _NoDependencies:
+    def __init__(self, base_url, token):
+        pass
+
+    async def get_states(self):
+        return []
+
+
+class _NoRestructurer:
+    entities: dict = {}
+
+    async def load_structure(self, ws):
+        return None
+
+
+def _a_handler_that_cannot_rename(monkeypatch, registry):
+    """Everything the handler reaches for, with the rename refused."""
+
+    async def no_client():
+        return None
+
+    monkeypatch.setenv("HA_URL", "http://ha")
+    monkeypatch.setenv("HA_TOKEN", "token")
+    monkeypatch.setattr(routes_entities, "HomeAssistantWebSocket", _NoWebSocket)
+    monkeypatch.setattr(routes_entities, "DeviceRegistry", lambda ws: registry)
+    monkeypatch.setattr(routes_entities, "DependencyUpdater", _NoDependencies)
+    monkeypatch.setattr(routes_entities, "init_client", no_client)
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", _NoRestructurer())
+
+
+def _run(tmp_path, job):
+    store = JobStore(str(tmp_path), terminal_states=TERMINAL_STATES)
+    store.save(job)
+    context = JobContext(job, store)
+    with pytest.raises(RuntimeError):
+        asyncio.run(routes_entities.rename_device_handler(job, context))
+    return [line["step"] for line in job.get("log", [])]
+
+
+def test_a_move_that_went_through_is_logged_before_the_rename_can_fail(tmp_path, monkeypatch) -> None:
+    """The area is written first, so a rename failing after it leaves the device
+    somewhere it was not before. The interface says so, and it can only know
+    from the log: the step is the contract between the two."""
+
+    class Registry:
+        moved_to = "unset"
+
+        async def assign_area(self, device_id, area_id):
+            Registry.moved_to = area_id
+
+        async def rename_device(self, device_id, new_name):
+            return False
+
+    _a_handler_that_cannot_rename(monkeypatch, Registry())
+    steps = _run(
+        tmp_path,
+        {
+            "job_id": "j1",
+            "type": "rename_device",
+            "state": "running",
+            "payload": {"device_id": "dev1", "new_name": "Bad Lampe", "area_id": "bad", "set_area": True},
+        },
+    )
+
+    assert Registry.moved_to == "bad"
+    assert "AREA" in steps, "the step a failure can be pinned on"
+    assert "MOVED" in steps, "and the one that says the move stands"
+
+
+def test_nothing_says_moved_where_no_area_was_asked_for(tmp_path, monkeypatch) -> None:
+    """A rename alone leaves the device where it was, so the interface must not
+    tell the user it was moved."""
+
+    class Registry:
+        async def assign_area(self, device_id, area_id):
+            raise AssertionError("no area was asked for")
+
+        async def rename_device(self, device_id, new_name):
+            return False
+
+    _a_handler_that_cannot_rename(monkeypatch, Registry())
+    steps = _run(
+        tmp_path,
+        {
+            "job_id": "j2",
+            "type": "rename_device",
+            "state": "running",
+            "payload": {"device_id": "dev1", "new_name": "Bad Lampe"},
+        },
+    )
+
+    assert "MOVED" not in steps

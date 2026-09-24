@@ -6976,6 +6976,12 @@
                         // panel holds.
                         this.closeAreaCombo();
                     }
+                    // A job that failed after the move went through left the
+                    // device somewhere it was not before. The job panel says
+                    // what failed; only this says what stands.
+                    if (this.jobFailed(job) && (job.log || []).some(line => line.step === 'MOVED')) {
+                        this.showMessage(this.t('device.moved_not_renamed', {error: job.error || ''}), 'error');
+                    }
                     // The job aligns the Z2M name of the device it renamed; any
                     // other device the view showed as drifted is left to here.
                     if (!this.jobFailed(job) && driftDevices.length) {
