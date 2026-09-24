@@ -239,7 +239,8 @@
     "enabling": "Activation…",
     "enabled": "Appareil activé",
     "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil.",
-    "id_conflict": "Ce nom prendrait un identifiant d'entité déjà attribué : {id}"
+    "id_conflict": "Ce nom prendrait un identifiant d'entité déjà attribué : {id}",
+    "moved_not_renamed": "L’appareil a été déplacé, mais pas renommé : {error}"
   },
   "units": {
     "entities": "Entités",
