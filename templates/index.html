@@ -2468,7 +2468,7 @@
                                             </div>
                                             <code class="entity-id" :title="entity.id"
                                                   x-html="entityNeedsRename(entity)
-                                                          ? diffHtml(entity.id, entity._previewId || getNewEntityIdForEntity(entity), 'old')
+                                                          ? diffHtml(entity.id, getNewEntityIdForEntity(entity), 'old')
                                                           : escapeHtml(entity.id)"></code>
                                         </div>
 
@@ -2483,8 +2483,8 @@
                                             <div class="new-state">
                                                 <div class="friendly-name" :title="entity._previewName || getEntityFriendlyNameForEntity(entity)"
                                                      x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyNameForEntity(entity), 'new')"></div>
-                                                <code class="entity-id" :title="entity._previewId || getNewEntityIdForEntity(entity)"
-                                                      x-html="diffHtml(entity.id, entity._previewId || getNewEntityIdForEntity(entity), 'new')"></code>
+                                                <code class="entity-id" :title="getNewEntityIdForEntity(entity)"
+                                                      x-html="diffHtml(entity.id, getNewEntityIdForEntity(entity), 'new')"></code>
                                             </div>
                                         </template>
 
@@ -3243,6 +3243,7 @@
                 syncingZ2m: false,  // Loading state for Z2M name sync
                 applyingEntityId: null,  // ID of entity currently being renamed
                 previewVersion: 0,  // Incremented to force Alpine reactivity on preview changes
+                _previewsInFlight: null,  // The slug computation under way, if any
 
                 // Filters
                 onlyChanges: false,
@@ -5037,13 +5038,25 @@
                     }
                     if (!pending.length) return;
 
-                    this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
+                    // Kept, so a run that needs the ids can wait for the
+                    // computation already under way instead of asking for the
+                    // same slugs a second time.
+                    this._previewsInFlight = this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
                         pending.forEach((entity, i) => {
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
+                    }).finally(() => {
+                        this._previewsInFlight = null;
                     });
+                },
+
+                // What the rows would be called, once the server has answered.
+                // Before that an id reads as unchanged, which would have a run
+                // write the name and leave the id as it was.
+                async previewsSettled() {
+                    while (this._previewsInFlight) await this._previewsInFlight;
                 },
 
                 // Invalidate cached previews (call after rename to refresh conflict detection)
@@ -5520,6 +5533,7 @@
                 // change away.
                 async quickApplyEntity(entity) {
                     if (!entity || this.applyingEntityId) return;
+                    await this.previewsSettled();
 
                     // Trim suffix before saving
                     if (entity._currentSuffix !== undefined) {
@@ -6578,6 +6592,10 @@
 
                 // Execute ALL pending changes with batch processing to avoid timeouts
                 async executeAllChanges() {
+                    // The ids come from the server; before they are in, a row
+                    // that only needs a new id reads as needing nothing.
+                    await this.previewsSettled();
+
                     // A type typed into a field but not yet applied is a rule or an
                     // exception waiting to be written. The batch renamed with the
                     // word and threw the rule away, so the next entity of that type
@@ -6614,23 +6632,13 @@
                         return;
                     }
 
-                    // The slug is the server's answer and may not have
-                    // arrived for every row yet. Standing in with the current
-                    // id wrote the name and left the id as it was, without
-                    // saying so, so the missing ones are asked for first.
-                    const unanswered = entitiesToChange.filter(e => !e._previewId);
-                    if (unanswered.length) {
-                        const wanted = unanswered.map(e => e._previewName || this.getEntityFriendlyNameForEntity(e));
-                        const slugs = await this.fetchNormalized(wanted);
-                        unanswered.forEach((entity, at) => {
-                            entity._previewId = this.composeEntityId(entity, slugs[at]);
-                        });
-                    }
-
-                    // Build the payload with entity details
+                    // Build the payload with entity details. The id is the
+                    // server's answer, which the wait above made sure of; an
+                    // entity still without one keeps the id it has, and only
+                    // its name is written.
                     const allEntities = entitiesToChange.map(e => ({
                         old_id: e.id,
-                        new_id: e._previewId,
+                        new_id: e._previewId || e.id,
                         new_name: e._previewName || this.getEntityFriendlyNameForEntity(e),
                         registry_id: e.registry_id
                     }));
