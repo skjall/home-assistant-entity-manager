@@ -31,6 +31,7 @@
     "assign_area": "Assign Area",
     "select_area": "Select area...",
     "area_assigned": "Device assigned to area",
+    "area_cleared": "Device taken out of its area",
     "open_in_ha": "Open area in Home Assistant"
   },
   "summary": {

@@ -31,6 +31,7 @@
     "assign_area": "Assigner une Zone",
     "select_area": "Sélectionner une zone...",
     "area_assigned": "Appareil assigné à la zone",
+    "area_cleared": "Appareil retiré de sa zone",
     "open_in_ha": "Ouvrir la zone dans Home Assistant"
   },
   "summary": {

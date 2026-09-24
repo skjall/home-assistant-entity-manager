@@ -4801,7 +4801,7 @@
                 deviceIsMoving(device) {
                     return !!device
                         && device.id === this.selectedDevice
-                        && !this.isVirtualDevice(this.selectedDevice)
+                        && !this.isVirtualDevice(device.id)
                         && this.devicePreviewAreaId !== null;
                 },
 
@@ -4843,21 +4843,24 @@
                     const _ = this.translationsReady;
 
                     const parts = [];
-                    const domain = entity.id.split('.')[0];
+
+                    // The entity's own device, like the live name below: an
+                    // entity of another device carried the selected device's
+                    // area into its name.
+                    const device = entity.device_id
+                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        : null;
 
                     // Area
-                    const area = this.selectedDeviceData
-                        ? this.areaForDevice(this.selectedDeviceData)
-                        : this.selectedAreaData;
+                    const area = device ? this.areaForDevice(device) : this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
 
                     // Device base name (use preview if editing)
-                    const device = this.selectedDeviceData;
-                    if (device && !this.isVirtualDevice(this.selectedDevice)) {
-                        const deviceBase = this.devicePreviewBaseName !== null ? this.devicePreviewBaseName : device.base_name;
-                        parts.push(deviceBase);
+                    if (device && !this.isVirtualDevice(device.id)) {
+                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
+                        parts.push(typed !== null ? typed : device.base_name);
                     }
 
                     // Entity suffix (uses shared logic)
@@ -6023,10 +6026,12 @@
                             // Also update entities of this device
                             this.hierarchy.entities
                                 .filter(e => e.device_id === deviceId)
-                                .forEach(e => e.area_id = areaId);
+                                .forEach(e => e.area_id = areaId || null);
 
-                            const area = this.hierarchy.areas.find(a => a.id === areaId);
-                            this.showMessage(this.t('area.area_assigned') + ': ' + (area?.name || areaId), 'success');
+                            const area = areaId ? this.hierarchy.areas.find(a => a.id === areaId) : null;
+                            this.showMessage(area
+                                ? this.t('area.area_assigned') + ': ' + area.name
+                                : this.t('area.area_cleared'), 'success');
                             return true;
                         }
                         throw new Error(data.error || 'Failed to assign area');
@@ -6523,6 +6528,8 @@
                 },
 
                 async onRenameDeviceDone(job, deviceId = null) {
+                    // The job is over, so the button opens again.
+                    this.renamingDevice = false;
                     // What the panel holds now may have been typed for another
                     // device while this job ran, and that is not this job's to
                     // throw away.
@@ -6549,10 +6556,15 @@
                     const deviceId = this.selectedDevice;
                     this.renamingDevice = true;
                     try {
-                        await this.renameDeviceRun(deviceId, newBaseName);
-                    } finally {
-                        this.renamingDevice = false;
+                        // The run gives back whether a job is now under way. If
+                        // one is, the button stays shut until it reports back -
+                        // a second click would enqueue the same rename twice.
+                        const running = await this.renameDeviceRun(deviceId, newBaseName);
+                        if (running) return;
+                    } catch (error) {
+                        this.showMessage('Error: ' + error.message, 'error');
                     }
+                    this.renamingDevice = false;
                 },
 
                 async renameDeviceRun(deviceId, newBaseName) {
@@ -6590,7 +6602,9 @@
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();
                         this.devicePreviewBaseName = wasPreviewed;
-                        this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
+                        this.showMessage(moved
+                            ? this.t('device.moved_not_renamed', {error: this.t('device.id_conflict', {id: taken})})
+                            : this.t('device.id_conflict', {id: taken}), 'error');
                         return;
                     }
 
@@ -6606,7 +6620,10 @@
                         });
                         const job = await response.json();
                         if (response.status === 409) {
-                            this.showMessage(job.error || 'A rename for this device is already in progress', 'error');
+                            const busy = job.error || 'A rename for this device is already in progress';
+                            this.showMessage(moved
+                                ? this.t('device.moved_not_renamed', {error: busy})
+                                : busy, 'error');
                             return;
                         }
                         if (!response.ok || !job.job_id) {
@@ -6617,6 +6634,7 @@
                             titleKey: 'jobs.rename_device',
                             onDone: (finished) => this.onRenameDeviceDone(finished, deviceId)
                         });
+                        return true;
                     } catch (error) {
                         this.showMessage(moved
                             ? this.t('device.moved_not_renamed', {error: error.message})

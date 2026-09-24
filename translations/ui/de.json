@@ -31,6 +31,7 @@
     "assign_area": "Bereich zuweisen",
     "select_area": "Bereich wählen...",
     "area_assigned": "Gerät wurde Bereich zugewiesen",
+    "area_cleared": "Gerät aus seinem Bereich genommen",
     "open_in_ha": "Bereich in Home Assistant öffnen"
   },
   "summary": {
