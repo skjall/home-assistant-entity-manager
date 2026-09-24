@@ -2164,6 +2164,7 @@
                                     ? devicePreviewAreaId
                                     : (selectedDeviceData?.area_id || '');
                                 $nextTick(() => $el.value = picked)"
+                            :disabled="renamingDevice || applyingEntityId || executing"
                             @change="pickPreviewArea($event.target.value)">
                         <option value="" x-text="t('area.select_area')">Select area...</option>
                         <template x-for="area in hierarchy.areas" :key="area.id">
@@ -4793,14 +4794,6 @@
                     return this.hierarchy.entities.filter(e => e.device_id === deviceId).length;
                 },
 
-                // The area a move in the panel would put the selected device in,
-                // or null where no move is being shown. The three names below
-                // are built out of the navigation's area, which is the device's
-                // own until it is about to leave it.
-                previewAreaData() {
-                    return this.areaForDevice(this.selectedDeviceData);
-                },
-
                 // A move is being shown for this device: an area was picked in
                 // the panel and not yet written. Untouched is null; an empty
                 // pick is a move to no area at all, which is a move like any
@@ -5047,8 +5040,13 @@
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
 
-                    // Find area (from device or entity)
-                    const areaId = device?.area_id || entity.area_id;
+                    // Find area (from device or entity), following a move the
+                    // panel is showing: this is what the cached preview holds,
+                    // and a name computed from the old area would sit there
+                    // unchanged while the panel says otherwise.
+                    const areaId = this.deviceIsMoving(device)
+                        ? this.previewAreaFor(device)
+                        : (device?.area_id || entity.area_id);
                     const area = areaId
                         ? this.hierarchy.areas.find(a => a.id === areaId)
                         : null;
@@ -5372,10 +5370,13 @@
                 // Asked while typing, so the answer has to come from the name
                 // in the field rather than from the previews, which are built
                 // from the name that is stored.
-                async checkDeviceNameClash() {
-                    const device = this.selectedDeviceData;
+                // About the device it is given - the panel may have turned to
+                // another one while the slugs were on their way, and the answer
+                // would then be about whichever device it had turned to.
+                async checkDeviceNameClash(about = null) {
+                    const device = about || this.selectedDeviceData;
                     this.deviceNameClash = [];
-                    if (!device || this.isVirtualDevice(this.selectedDevice)) return;
+                    if (!device || this.isVirtualDevice(device.id)) return;
                     const wanted = this.getExpectedDeviceName(device);
                     if (!wanted || wanted === device.name) return;
 
@@ -6543,9 +6544,12 @@
                     // The area goes first: the name is built out of it, so a
                     // device that moves is renamed to where it moved to rather
                     // than to where it was.
+                    // Picked at all, which includes picking no area: an empty
+                    // pick used to be skipped, and the device was then renamed
+                    // to a name without its area while it was still in one.
                     const picked = this.devicePreviewAreaId;
-                    if (picked && picked !== (device?.area_id || null)) {
-                        if (!await this.assignDeviceArea(deviceId, picked)) return;
+                    if (picked !== null && (picked || null) !== (device?.area_id || null)) {
+                        if (!await this.assignDeviceArea(deviceId, picked || null)) return;
                         moved = true;
                         if (this.selectedDevice === deviceId) this.devicePreviewAreaId = null;
                         device = this.hierarchy.devices.find(d => d.id === deviceId) || device;
@@ -6564,7 +6568,7 @@
                     // is the door the rename actually goes through.
                     const wasPreviewed = this.devicePreviewBaseName;
                     this.devicePreviewBaseName = newBaseName;
-                    await this.checkDeviceNameClash();
+                    await this.checkDeviceNameClash(device);
                     if (this.deviceNameClash.length) {
                         const taken = this.deviceNameClashId();
                         this.devicePreviewBaseName = wasPreviewed;
