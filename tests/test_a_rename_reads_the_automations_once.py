@@ -399,3 +399,30 @@ def test_asking_whether_an_automation_names_an_entity_leaves_it_alone() -> None:
     assert updater.names_entity(config, "sensor.old") is True
     assert config == {"id": "1", "description": "Watches sensor.old", "action": [{"entity_id": "sensor.old"}]}
     assert updater.names_entity(config, "sensor.oldest") is False
+
+
+def test_a_script_that_only_talks_about_the_entity_is_left_alone() -> None:
+    """Read as text, a script named after the entity was reported as a failure."""
+    reads: List[str] = []
+    updater = _updater(reads)
+    fetched: List[str] = []
+
+    async def script_config(script_id: str) -> Dict[str, Any]:
+        fetched.append(script_id)
+        return {"sequence": [{"entity_id": "sensor.other"}]}
+
+    updater.get_script_config = script_config  # type: ignore[assignment]
+
+    states = [
+        {"entity_id": "script.talks_about_it", "attributes": {"friendly_name": "Manages sensor.old"}},
+        {"entity_id": "script.sensor_old_helper", "attributes": {"friendly_name": "sensor.old_helper"}},
+    ]
+
+    async def run() -> Dict[str, Any]:
+        return await updater.update_all_dependencies("sensor.old", "sensor.new", states)
+
+    results = asyncio.run(run())
+
+    assert fetched == [], "neither script names the entity, so neither is read"
+    assert results["scripts"]["failed"] == []
+    assert results["total_failed"] == 0

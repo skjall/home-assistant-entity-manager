@@ -5,7 +5,6 @@ Dependency Updater - Aktualisiert Entity IDs in Scenes, Scripts und Automations
 
 import asyncio
 import copy
-import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -182,23 +181,27 @@ class DependencyUpdater:
         async with aiohttp.ClientSession() as own:
             return await read(own)
 
-    async def load_automation_configs(self, automation_states: List[Dict]) -> Dict[str, Optional[Dict]]:
+    async def load_automation_configs(self, automation_states: List[Dict]) -> None:
         """Read every automation's configuration once, over one connection.
 
         The reads are independent, so a few run at a time; more than a handful
         at once buys little and asks a lot of a Home Assistant that is also
         answering the interface.
+
+        It fills the store for this job and answers nothing: a caller reads
+        through ``read_automation_config``, which is also what answers where
+        this was called with other automations than the ones being asked about.
         """
         # Under the lock: two jobs starting together both found nothing
         # here, both read every automation, and the one that finished second
         # put its own reading in place of the first - along with everything
         # the first had written back into it in the meantime.
         async with self._configs_lock:
-            return await self._load_automation_configs(automation_states)
+            await self._load_automation_configs(automation_states)
 
-    async def _load_automation_configs(self, automation_states: List[Dict]) -> Dict[str, Optional[Dict]]:
+    async def _load_automation_configs(self, automation_states: List[Dict]) -> None:
         if self._automation_configs is not None:
-            return dict(self._automation_configs)
+            return
 
         numeric_ids = []
         for state in automation_states:
@@ -233,7 +236,6 @@ class DependencyUpdater:
         # the reading for the job answered every later entity with nothing.
         if configs or not numeric_ids:
             self._automation_configs = configs
-        return dict(configs)
 
     async def read_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
         """The automation's configuration as it stands, for reading only.
@@ -370,13 +372,13 @@ class DependencyUpdater:
             logger.info(f"Automation {automation_id} now names {new_entity_id}")
             return True
         else:
-            # The caller asks names_entity first and only gets here where the
-            # answer was yes, so this is an automation that stopped naming the
-            # entity between the question and the write. Said out loud, because
-            # it comes back as a failure and the reason is not a failed write.
-            logger.warning(
-                f"Automation {automation_id} no longer names {old_entity_id}; nothing was written"
-            )
+            # Nothing was written, and the caller hears the same "no" it hears
+            # for a write that failed. Said out loud, because the two are worth
+            # telling apart: a rename asks names_entity first and gets here only
+            # where the automation stopped naming the entity in between, while
+            # repairing a broken reference (web_ui) calls this without asking and
+            # gets here for a reference the walk does not recognise.
+            logger.warning(f"Automation {automation_id} names no reference to {old_entity_id}; nothing was written")
 
         return False
 
@@ -438,9 +440,11 @@ class DependencyUpdater:
 
             # SCRIPTS
             elif entity_id.startswith("script."):
-                # Prüfe ob Entity im Script verwendet wird
-                state_str = json.dumps(attributes)
-                if old_entity_id in state_str:
+                # A reference, not a mention, and not a piece of a longer id -
+                # the same question the automations are asked. Read as text, a
+                # script called "Manages sensor.old" was fetched, found to name
+                # nothing, and reported as a rename that had failed.
+                if self.names_entity(attributes, old_entity_id):
                     success = await self.update_script_entities(entity_id, old_entity_id, new_entity_id)
                     if success:
                         results["scripts"]["success"].append(entity_id)
