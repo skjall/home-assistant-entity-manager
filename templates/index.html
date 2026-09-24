@@ -5203,7 +5203,17 @@
                     // part. Every line below names a word and where it came
                     // from; with no word there is none to name, and saying the
                     // integration supplied one left an empty pair of quotes.
-                    if (!value) return this.t('entity.explain_no_type');
+                    // Two cases keep their own line: an override that empties
+                    // the type part is still this one entity's decision, and
+                    // where the supplied name is correctable the paragraph
+                    // beside this one already says where the name comes from.
+                    if (!value) {
+                        if (entity.supplied_correctable) return '';
+                        if (r.won_by === 'override') {
+                            return this.t('entity.explain_exception_no_type', {original});
+                        }
+                        return this.t('entity.explain_no_type');
+                    }
                     switch (r.won_by) {
                         case 'override':
                             return this.t('entity.explain_exception', {value, original});

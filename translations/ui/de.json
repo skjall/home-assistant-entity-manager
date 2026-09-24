@@ -107,6 +107,7 @@
     "explain_rule_integration": "Alle „{original}“-Entitäten von {integration} heißen bei dir „{value}“",
     "explain_rule_model": "Alle „{original}“-Entitäten von {model} heißen bei dir „{value}“",
     "explain_exception": "Nur diese Entität heißt „{value}“ statt „{original}“",
+    "explain_exception_no_type": "Nur diese Entität hat keinen Typ-Teil, statt „{original}“",
     "explain_supplied": "{source} liefert „{value}“",
     "explain_no_type": "Dieser Name hat keinen Typ-Teil",
     "open_rule": "Regel ansehen",

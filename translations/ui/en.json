@@ -107,6 +107,7 @@
     "explain_rule_integration": "All “{original}” entities from {integration} are called “{value}” for you",
     "explain_rule_model": "All “{original}” entities from {model} are called “{value}” for you",
     "explain_exception": "This entity alone is called “{value}” instead of “{original}”",
+    "explain_exception_no_type": "This entity alone has no type part, instead of “{original}”",
     "explain_supplied": "{source} supplies “{value}”",
     "explain_no_type": "This name has no type part",
     "open_rule": "View rule",

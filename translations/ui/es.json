@@ -107,6 +107,7 @@
     "explain_rule_integration": "Todas las entidades “{original}” de {integration} se llaman “{value}” para ti",
     "explain_rule_model": "Todas las entidades “{original}” de {model} se llaman “{value}” para ti",
     "explain_exception": "Solo esta entidad se llama “{value}” en lugar de “{original}”",
+    "explain_exception_no_type": "Solo esta entidad no tiene parte de tipo, en lugar de “{original}”",
     "explain_supplied": "{source} proporciona “{value}”",
     "explain_no_type": "Este nombre no tiene parte de tipo",
     "open_rule": "Ver regla",
