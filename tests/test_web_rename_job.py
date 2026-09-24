@@ -322,6 +322,7 @@ def test_nothing_says_moved_where_no_area_was_asked_for(tmp_path, monkeypatch) -
 
     assert "MOVED" not in steps
 
+
 def test_the_note_does_not_carry_the_type_part() -> None:
     """The type part is what the name is built from, not what a rule matches on.
 
