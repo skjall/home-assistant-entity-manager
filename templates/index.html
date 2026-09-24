@@ -2061,8 +2061,7 @@
                                      :class="{
                                          'selected': selectedDevice === device.id,
                                          'has-changes': deviceNeedsRename(device),
-                                         'is-disabled': device.disabled_by,
-                                         'no-area-mode': selectedArea === '__no_area__'
+                                         'is-disabled': device.disabled_by
                                      }"
                                      @click="selectDevice(device)">
                                     <!-- Main row -->
@@ -2443,10 +2442,9 @@
                             <template x-for="entity in filteredEntities" :key="entity.registry_id">
                                 <div class="entity-card-simple"
                                      :class="{
-                                         'has-changes': selectedArea !== '__no_area__' && entityNeedsRename(entity),
-                                         'no-changes': selectedArea === '__no_area__' || !entityNeedsRename(entity),
-                                         'is-disabled': entity.disabled_by,
-                                         'no-area-mode': selectedArea === '__no_area__'
+                                         'has-changes': entityNeedsRename(entity),
+                                         'no-changes': !entityNeedsRename(entity),
+                                         'is-disabled': entity.disabled_by
                                      }">
 
                                     <!-- Disabled indicator -->
@@ -2458,13 +2456,13 @@
                                         </button>
                                     </div>
 
-                                    <!-- Main: Current → New (or just Current in no-area mode) -->
-                                    <div class="entity-names" @click="selectedArea !== '__no_area__' && toggleEntityExpand(entity)">
+                                    <!-- Main: Current → New -->
+                                    <div class="entity-names" @click="toggleEntityExpand(entity)">
                                         <div class="current-state">
                                             <div class="friendly-name">
                                                 <span :title="entity.original_name || ''"
-                                                      x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
-                                                              ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'old')
+                                                      x-html="entityNeedsRename(entity)
+                                                              ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyNameForEntity(entity), 'old')
                                                               : escapeHtml(entity.original_name || t('entity.no_name'))"></span>
                                                 <span x-show="isOrphanEntity(entity)"
                                                       class="text-xs text-amber-600 ml-2"
@@ -2473,44 +2471,44 @@
                                                 </span>
                                             </div>
                                             <code class="entity-id" :title="entity.id"
-                                                  x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
-                                                          ? diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'old')
+                                                  x-html="entityNeedsRename(entity)
+                                                          ? diffHtml(entity.id, getNewEntityIdForEntity(entity), 'old')
                                                           : escapeHtml(entity.id)"></code>
                                         </div>
 
-                                        <!-- Arrow and new state - hide in no-area mode -->
-                                        <template x-if="selectedArea !== '__no_area__' && entityNeedsRename(entity)">
+                                        <!-- Arrow and new state -->
+                                        <template x-if="entityNeedsRename(entity)">
                                             <div class="arrow-separator">
                                                 <i class="ri-arrow-right-line"></i>
                                             </div>
                                         </template>
 
-                                        <template x-if="selectedArea !== '__no_area__' && entityNeedsRename(entity)">
+                                        <template x-if="entityNeedsRename(entity)">
                                             <div class="new-state">
-                                                <div class="friendly-name" :title="entity._previewName || getEntityFriendlyName(entity)"
-                                                     x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'new')"></div>
-                                                <code class="entity-id" :title="entity._previewId || getNewEntityId(entity)"
-                                                      x-html="diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'new')"></code>
+                                                <div class="friendly-name" :title="entity._previewName || getEntityFriendlyNameForEntity(entity)"
+                                                     x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyNameForEntity(entity), 'new')"></div>
+                                                <code class="entity-id" :title="getNewEntityIdForEntity(entity)"
+                                                      x-html="diffHtml(entity.id, getNewEntityIdForEntity(entity), 'new')"></code>
                                             </div>
                                         </template>
 
-                                        <!-- OK badge - hide in no-area mode -->
-                                        <template x-if="selectedArea !== '__no_area__' && !entityNeedsRename(entity)">
+                                        <!-- OK badge -->
+                                        <template x-if="!entityNeedsRename(entity)">
                                             <div class="no-change-badge">
                                                 <i class="ri-check-line"></i> <span x-text="t('entity.no_change')">OK</span>
                                             </div>
                                         </template>
 
                                         <div class="flex items-center gap-2 ml-auto">
-                                            <!-- Conflict warning - hide in no-area mode -->
-                                            <span x-show="selectedArea !== '__no_area__' && entityNeedsRename(entity) && isEntityIdTaken(entity)"
+                                            <!-- Conflict warning - an id may be taken wherever the entity sits -->
+                                            <span x-show="entityNeedsRename(entity) && isEntityIdTaken(entity)"
                                                   class="text-xs text-red-500 flex items-center gap-1"
-                                                  :title="'Target ID: ' + getNewEntityId(entity)">
+                                                  :title="'Target ID: ' + getNewEntityIdForEntity(entity)">
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
                                             </span>
                                             <div class="btn-group">
-                                                <!-- Quick apply button - hide in no-area mode -->
-                                                <template x-if="selectedArea !== '__no_area__' && staysInChangesFilter(entity)">
+                                                <!-- Quick apply button -->
+                                                <template x-if="staysInChangesFilter(entity)">
                                                     <button @click.stop="quickApplyEntity(entity)"
                                                             class="action-btn"
                                                             :class="{
@@ -2527,22 +2525,25 @@
                                                                    : 'ri-check-line'"></i>
                                                     </button>
                                                 </template>
-                                                <!-- Delete button - always visible, filled red in no-area mode -->
+                                                <!-- Delete button - always there, filled red for an orphan.
+                                                     Red is what says the entity has nothing left behind
+                                                     it; an entity whose device simply has no area still
+                                                     has everything, and deletes like any other. -->
                                                 <button @click.stop="confirmDeleteEntity(entity)"
                                                         class="action-btn"
                                                         :class="{
-                                                            'btn-filled-red': selectedArea === '__no_area__' || isOrphanEntity(entity),
-                                                            'btn-outline-gray hover:btn-filled-red': selectedArea !== '__no_area__' && !isOrphanEntity(entity)
+                                                            'btn-filled-red': isOrphanEntity(entity),
+                                                            'btn-outline-gray hover:btn-filled-red': !isOrphanEntity(entity)
                                                         }"
-                                                        :title="selectedArea === '__no_area__' ? t('entity.delete_entity') : (isOrphanEntity(entity) ? t('entity.delete_orphan') : t('entity.delete_entity'))">
+                                                        :title="isOrphanEntity(entity) ? t('entity.delete_orphan') : t('entity.delete_entity')">
                                                     <i class="ri-delete-bin-line"></i>
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- Edit Panel - hide in no-area mode -->
-                                    <div class="edit-panel" x-show="selectedArea !== '__no_area__' && entity._expanded" @click.stop>
+                                    <!-- Edit Panel -->
+                                    <div class="edit-panel" x-show="entity._expanded" @click.stop>
                                         <div class="edit-row">
                                             <label x-text="t('entity.type_label')">Type:</label>
                                             <div class="edit-input-group">
@@ -3246,6 +3247,8 @@
                 syncingZ2m: false,  // Loading state for Z2M name sync
                 applyingEntityId: null,  // ID of entity currently being renamed
                 previewVersion: 0,  // Incremented to force Alpine reactivity on preview changes
+                _previewsInFlight: new Set(),  // Every slug computation under way
+                _previewAsk: 0,  // Which computation each row's answer is about
 
                 // Filters
                 onlyChanges: false,
@@ -4810,44 +4813,11 @@
                     return deviceBaseName;
                 },
 
-                // Get entity friendly name (full: Area + Device + Entity base)
-                getEntityFriendlyName(entity) {
-                    // Force Alpine to track translationsReady as dependency
-                    const _ = this.translationsReady;
-
-                    const parts = [];
-                    const domain = entity.id.split('.')[0];
-
-                    // Area
-                    const area = this.selectedAreaData;
-                    if (area) {
-                        parts.push(area.name);
-                    }
-
-                    // Device base name (use preview if editing)
-                    const device = this.selectedDeviceData;
-                    if (device && !this.isVirtualDevice(this.selectedDevice)) {
-                        const deviceBase = this.devicePreviewBaseName !== null ? this.devicePreviewBaseName : device.base_name;
-                        parts.push(deviceBase);
-                    }
-
-                    // Entity suffix (uses shared logic)
-                    parts.push(this.getEntitySuffix(entity));
-
-                    return parts.filter(p => p).join(' ');
-                },
-
                 // Get entity display name (short - just the entity suffix)
                 getEntityDisplayName(entity) {
                     // Force Alpine to track translationsReady as dependency
                     const _ = this.translationsReady;
                     return this.getEntitySuffix(entity);
-                },
-
-                // Get new entity ID
-                getNewEntityId(entity) {
-                    // Backend-computed slug is the single source of truth (see fetchNormalized).
-                    return entity._previewId || entity.id;
                 },
 
                 // Live preview versions - use _editValue for real-time updates
@@ -4925,7 +4895,11 @@
                 // list - "0 entities", nothing to do, no way to tell why.
                 deviceStaysInChangesFilter(device) {
                     if (!device) return false;
-                    if (device.disabled_by) return false;
+                    // A switched-off device is out of the way unless the user
+                    // asked to see those: refusing it regardless took a device
+                    // they had asked for out of the list, and with it the only
+                    // way to reach the work outstanding on it.
+                    if (device.disabled_by && !this.showDisabled) return false;
                     if (this.deviceNameNeedsRename(device)) return true;
                     // Z2M-Namens-Drift zählt als Änderung
                     if (device.z2m_drift) return true;
@@ -4987,7 +4961,7 @@
 
                     // Use cached preview values (computed once in precomputeEntityPreviews)
                     const newName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
-                    const newId = entity._previewId || this.getNewEntityIdForEntity(entity);
+                    const newId = this.getNewEntityIdForEntity(entity);
 
                     // A supplied name that froze an old hierarchy is written
                     // back as part of the rename, so there is something to do
@@ -5070,13 +5044,40 @@
                     }
                     if (!pending.length) return;
 
-                    this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
+                    // Which computation asked about each row. A second one
+                    // started while the first was still out asks about the
+                    // same rows from newer names, and the first one's answer
+                    // arriving afterwards wrote ids worked out from names that
+                    // no longer apply - which is then what a rename would have
+                    // written.
+                    const asked = ++this._previewAsk;
+                    for (const entity of pending) entity._previewAsk = asked;
+
+                    // Every computation under way, so a run that needs the ids
+                    // waits for all of them rather than for whichever one
+                    // started last.
+                    const settling = this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
                         pending.forEach((entity, i) => {
+                            // Only where nothing has asked since: this answer
+                            // is about the name the row had when it was asked.
+                            if (entity._previewAsk !== asked) return;
                             entity._previewId = this.composeEntityId(entity, slugs[i]);
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
+                    }).finally(() => {
+                        this._previewsInFlight.delete(settling);
                     });
+                    this._previewsInFlight.add(settling);
+                },
+
+                // What the rows would be called, once the server has answered.
+                // Before that an id reads as unchanged, which would have a run
+                // write the name and leave the id as it was.
+                async previewsSettled() {
+                    while (this._previewsInFlight.size) {
+                        await Promise.all([...this._previewsInFlight]);
+                    }
                 },
 
                 // Invalidate cached previews (call after rename to refresh conflict detection)
@@ -5096,7 +5097,7 @@
 
                 // Check if the target entity ID is already taken by another entity
                 isEntityIdTaken(entity) {
-                    const newId = entity._previewId || this.getNewEntityIdForEntity(entity);
+                    const newId = this.getNewEntityIdForEntity(entity);
                     if (newId === entity.id) return false; // Same ID, no conflict
                     return this.hierarchy.entities.some(e => e.id === newId && e.registry_id !== entity.registry_id);
                 },
@@ -5590,6 +5591,7 @@
                 // change away.
                 async quickApplyEntity(entity) {
                     if (!entity || this.applyingEntityId) return;
+                    await this.previewsSettled();
 
                     // Trim suffix before saving
                     if (entity._currentSuffix !== undefined) {
@@ -5615,14 +5617,20 @@
                         // With a rule just saved the name has to come from the
                         // server, which knows it and the collision numbering.
                         // Without one the preview already holds it.
+                        // The preview answers only where it holds both the
+                        // name and the id: the id is the server's answer and
+                        // may not have arrived yet, and standing in with the
+                        // one the entity has wrote the name and left the id as
+                        // it was, without saying so.
                         let newId, newName;
-                        if (ruleScopeApplied) {
+                        const previewed = !ruleScopeApplied && entity._previewId && entity._previewName;
+                        if (previewed) {
+                            newId = entity._previewId;
+                            newName = entity._previewName;
+                        } else {
                             const rendered = await this.previewEntityNaming(entity, null);
                             newId = rendered.entity_id;
                             newName = rendered.entity_name;
-                        } else {
-                            newId = entity._previewId || this.getNewEntityIdForEntity(entity);
-                            newName = entity._previewName || this.getEntityFriendlyNameForEntity(entity);
                         }
                         const idChanged = entity.id !== newId;
                         const nameChanged = entity.original_name !== newName;
@@ -6642,6 +6650,10 @@
 
                 // Execute ALL pending changes with batch processing to avoid timeouts
                 async executeAllChanges() {
+                    // The ids come from the server; before they are in, a row
+                    // that only needs a new id reads as needing nothing.
+                    await this.previewsSettled();
+
                     // A type typed into a field but not yet applied is a rule or an
                     // exception waiting to be written. The batch renamed with the
                     // word and threw the rule away, so the next entity of that type
@@ -6661,6 +6673,11 @@
                         // a rule reaches every entity of its type, and the server
                         // renders them, numbering included.
                         await this.loadHierarchy();
+                        // Reading the list back computes the ids again, and the
+                        // wait above is about the computation before it: without
+                        // this one every row read as needing no new id and the
+                        // rename wrote the names alone.
+                        await this.previewsSettled();
                     }
 
                     // Find all entities that need renaming
@@ -6678,10 +6695,14 @@
                         return;
                     }
 
-                    // Build the payload with entity details
+                    // Build the payload with entity details. The id is the
+                    // server's answer, which the waits above made sure of -
+                    // both of them, since reading the list back asks again; an
+                    // entity still without one keeps the id it has, and only
+                    // its name is written.
                     const allEntities = entitiesToChange.map(e => ({
                         old_id: e.id,
-                        new_id: e._previewId || this.getNewEntityIdForEntity(e),
+                        new_id: e._previewId || e.id,
                         new_name: e._previewName || this.getEntityFriendlyNameForEntity(e),
                         registry_id: e.registry_id
                     }));
