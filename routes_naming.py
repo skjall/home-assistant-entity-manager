@@ -856,11 +856,20 @@ def naming_rule_item(rule_id):
     if expression is not None and not isinstance(expression, str):
         return jsonify({"error": "match_value has to be text"}), 400
     if expression is not None:
-        # Whitespace is not an expression. Sanitising leaves an empty string,
-        # which read as "something was supplied" and reached compile_pattern,
-        # where it failed with a message about the pattern rather than about
-        # the empty field.
-        expression = sanitize_string(expression, max_length=500).strip() or None
+        # Not put through sanitize_string: that one cuts a string to length and
+        # drops control characters, which for an expression means storing a
+        # pattern the writer did not send - a 501-character regex came back as
+        # its first 500 with a 200, and a literal \x0b was quietly dropped.
+        # An expression is read as it was sent, or refused.
+        if len(expression) > MAX_PATTERN_LENGTH:
+            return jsonify({"error": f"A pattern's expression is at most {MAX_PATTERN_LENGTH} characters"}), 400
+        # Whitespace is not an expression. An empty one read as "something was
+        # supplied" and reached compile_pattern, which answered about the
+        # pattern rather than about the empty field; and where targets came
+        # with it, the emptied expression was dropped without a word.
+        if not expression.strip():
+            return jsonify({"error": "A pattern needs an expression"}), 400
+        expression = expression.strip()
     targets = data.get("targets")
     if targets is not None and not isinstance(targets, dict):
         return jsonify({"error": "targets has to be a mapping of language to text"}), 400

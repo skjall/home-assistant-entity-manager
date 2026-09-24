@@ -424,14 +424,32 @@ def test_the_endpoint_refuses_targets_that_are_not_a_mapping(client):
 
 
 def test_the_endpoint_refuses_an_expression_of_whitespace(client):
-    """It reached compile_pattern and failed about the pattern, not the field."""
+    """It reached compile_pattern and failed about the pattern, not the field.
+
+    Sent alongside targets it was dropped without a word and the targets were
+    written, so the field is answered for rather than passed on empty.
+    """
     rules = web_ui.renamer_state["naming_rules"]
     rule = _pattern_rule(rules)
 
-    response = client.put(f"/api/naming/rules/{rule['id']}", json={"match_value": "   "})
+    for body in ({"match_value": "   "}, {"targets": {"de": "Heizkosten {1}"}, "match_value": "   "}):
+        response = client.put(f"/api/naming/rules/{rule['id']}", json=body)
+
+        assert response.status_code == 400
+        assert "expression" in response.get_json()["error"]
+
+
+def test_the_endpoint_refuses_an_expression_over_the_limit_rather_than_cutting_it(client):
+    """It used to be cut to 500 characters and stored with a 200."""
+    rules = web_ui.renamer_state["naming_rules"]
+    rule = _pattern_rule(rules)
+    too_long = "a" * 501
+
+    response = client.put(f"/api/naming/rules/{rule['id']}", json={"match_value": too_long})
 
     assert response.status_code == 400
-    assert "Nothing to change" in response.get_json()["error"]
+    assert "500" in response.get_json()["error"]
+    assert rules.get(rule["id"])["match"]["value"] == rule["match"]["value"]
 
 
 def test_a_group_that_may_match_nothing_may_not_repeat():

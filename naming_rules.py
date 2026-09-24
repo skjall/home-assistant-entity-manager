@@ -1344,11 +1344,22 @@ class NamingRules:
         ):
             return rule
 
+        # Put back if it cannot be written: the rule in memory answers every
+        # later read, and a disk that refused the write would have left it
+        # saying something the file does not.
+        held = {key: rule[key] for key in ("targets", "match", "filters", "updated_at") if key in rule}
+        added = [key for key in ("updated_at",) if key not in rule]
         rule["targets"] = wanted["targets"]
         rule["match"] = wanted["match"]
         rule["filters"] = wanted["filters"]
         rule["updated_at"] = _now()
-        self.save()
+        try:
+            self.save()
+        except Exception:
+            rule.update(held)
+            for key in added:
+                rule.pop(key, None)
+            raise
         return rule
 
     @guarded

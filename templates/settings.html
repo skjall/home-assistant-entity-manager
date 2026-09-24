@@ -3588,14 +3588,14 @@
                             : await fetch('api/naming/rules', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                // The kind the row is, not "name" for everything:
-                                // a pattern row made a name rule, which matches
-                                // the expression as a word and never fires. A
-                                // row without a rule is a word the integration
-                                // supplies, so today that kind is "name" and
-                                // the key is the whole of what is matched on -
-                                // there is no expression here to send instead.
-                                body: JSON.stringify({ match: { kind: row.kind || 'name', value: row.key }, value })
+                                // A row without a rule is a word the
+                                // integration supplies - ruleRows() gives those
+                                // rows the kind "name" - so this is the one kind
+                                // that can be created from here, and the key is
+                                // the whole of what it matches on. A pattern is
+                                // always a rule already and goes through the PUT
+                                // above, expression and all.
+                                body: JSON.stringify({ match: { kind: 'name', value: row.key }, value })
                               });
 
                         if (response.ok) {

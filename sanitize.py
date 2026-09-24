@@ -25,8 +25,11 @@ def sanitize_string(value: str, max_length: int = MAX_NAME_LENGTH) -> str:
     Sanitize a general string input.
     - Strips whitespace
     - Removes control characters
-    - Escapes HTML entities
     - Limits length
+
+    Nothing is escaped here. What comes back is text, and a caller putting it
+    into markup has to escape it there; the docstring used to promise HTML
+    escaping that this function has never done.
     """
     if value is None:
         return None
