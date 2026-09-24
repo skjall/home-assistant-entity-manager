@@ -1,6 +1,7 @@
 """Tests for the central, word-boundary-safe entity reference replacement."""
 
 from entity_ref_utils import (
+    refers_to_entity,
     extract_entity_ids,
     replace_entity_in_obj,
     replace_entity_ref_in_string,
@@ -54,3 +55,19 @@ def test_extract_entity_ids_from_dashboard_like_structure():
     }
     ids = extract_entity_ids(cfg)
     assert {"sensor.a", "light.b", "sensor.c"} <= ids
+
+
+def test_refers_to_entity_reads_what_the_replacement_would_write():
+    """A reference is a value or a template, never prose that names the id."""
+    assert refers_to_entity({"action": [{"entity_id": "light.kueche"}]}, "light.kueche")
+    assert refers_to_entity({"value_template": "{{ states('light.kueche') }}"}, "light.kueche")
+    assert not refers_to_entity({"description": "Schaltet light.kueche ein"}, "light.kueche")
+    assert not refers_to_entity({"action": [{"entity_id": "light.kueche_2"}]}, "light.kueche")
+    assert not refers_to_entity({"action": []}, "light.kueche")
+
+
+def test_refers_to_entity_does_not_write_into_what_it_reads():
+    config = {"action": [{"entity_id": "light.kueche"}], "description": "light.kueche"}
+
+    assert refers_to_entity(config, "light.kueche")
+    assert config == {"action": [{"entity_id": "light.kueche"}], "description": "light.kueche"}

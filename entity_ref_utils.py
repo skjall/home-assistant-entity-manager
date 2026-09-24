@@ -111,3 +111,23 @@ def replace_entity_in_obj(data: Any, old_entity_id: str, new_entity_id: str) -> 
                     changed = True
 
     return changed
+
+
+def refers_to_entity(data: Any, entity_id: str) -> bool:
+    """Whether the structure refers to the entity, by the rules of a rename.
+
+    The same reading as ``replace_entity_in_obj``, without writing anything and
+    without copying: a value that is the entity id, or a template that names it
+    between word boundaries. Prose that happens to contain the id - an
+    automation described as "watches sensor.old" - is not a reference, and a
+    rename that correctly leaves it alone must not be reported as one that
+    failed.
+    """
+    if isinstance(data, str):
+        _, refers = replace_entity_ref_in_string(data, entity_id, entity_id + "\x00")
+        return refers
+    if isinstance(data, dict):
+        return any(refers_to_entity(value, entity_id) for value in data.values())
+    if isinstance(data, list):
+        return any(refers_to_entity(item, entity_id) for item in data)
+    return False

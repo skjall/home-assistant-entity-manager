@@ -8,24 +8,18 @@ import copy
 import json
 import logging
 import os
-import re
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 from dotenv import load_dotenv
 
-from entity_ref_utils import replace_entity_in_obj
+from entity_ref_utils import refers_to_entity, replace_entity_in_obj
 from helper_options import HelperOptions
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-
-
-def _refers_to(text: str, entity_id: str) -> bool:
-    """Whether the text names the entity rather than something it begins."""
-    return re.search(r"(?<![\w.])" + re.escape(entity_id) + r"(?![\w.])", text) is not None
 
 
 class DependencyUpdater:
@@ -297,10 +291,11 @@ class DependencyUpdater:
 
         Not as text: an automation described as "watches sensor.old" says the
         name without referring to it, and a rename that correctly left the
-        prose alone was then reported as one that had failed. The same walk
-        that would rewrite the references answers whether there are any.
+        prose alone was then reported as one that had failed. The reading is
+        the one the rewrite goes by, asked without writing and without copying
+        the configuration to write into.
         """
-        return self.replace_entity_in_dict(copy.deepcopy(config), entity_id, entity_id + "__probe")
+        return refers_to_entity(config, entity_id)
 
     async def update_automation_entities(
         self,
@@ -375,7 +370,13 @@ class DependencyUpdater:
             logger.info(f"Automation {automation_id} now names {new_entity_id}")
             return True
         else:
-            logger.debug(f"No changes needed for automation {automation_id}")
+            # The caller asks names_entity first and only gets here where the
+            # answer was yes, so this is an automation that stopped naming the
+            # entity between the question and the write. Said out loud, because
+            # it comes back as a failure and the reason is not a failed write.
+            logger.warning(
+                f"Automation {automation_id} no longer names {old_entity_id}; nothing was written"
+            )
 
         return False
 
@@ -489,11 +490,12 @@ class DependencyUpdater:
                     # through the config API. If one of them names the old id,
                     # nothing here will ever change it, so say so rather than
                     # leaving a line in the debug log.
-                    # A whole reference, not a piece of one: "sensor.power" is
-                    # a part of "automation.sensor.power_monitor", and every
-                    # such automation was reported as one this add-on cannot
-                    # reach.
-                    if _refers_to(json.dumps(automation_state), old_entity_id):
+                    # A reference, not a mention: the state is read the same
+                    # way a configuration is, so neither a friendly name that
+                    # says the id in prose nor an id this one only begins -
+                    # "sensor.power" in "automation.sensor.power_monitor" -
+                    # counts as one this add-on cannot reach.
+                    if self.names_entity(automation_state, old_entity_id):
                         results["automations"]["unreachable"].append(automation_entity_id)
                         results["total_unreachable"] += 1
                     else:

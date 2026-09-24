@@ -347,3 +347,55 @@ def test_nothing_read_at_all_is_asked_for_again() -> None:
     asyncio.run(run())
 
     assert sorted(reads) == ["0", "0", "1", "1"]
+
+
+def test_an_automation_nobody_can_read_is_only_unreachable_where_it_refers(monkeypatch) -> None:
+    """Its friendly name may say the id without the automation using it.
+
+    The configuration cannot be read, so the state is all there is; read as
+    text it reported every automation whose name mentions the entity as one
+    this add-on cannot reach. Read as a reference it reports the one that has
+    the id where an id belongs.
+    """
+    reads: List[str] = []
+    updater = _updater(reads)
+
+    async def unreadable(numeric_id: str, session: Optional[Any] = None) -> None:
+        reads.append(numeric_id)
+        return None
+
+    updater.fetch_automation_config = unreadable  # type: ignore[assignment]
+
+    states = [
+        {
+            "entity_id": "automation.talks_about_it",
+            "attributes": {"id": "1", "friendly_name": "Watches sensor.old on boot"},
+        },
+        {
+            "entity_id": "automation.uses_it",
+            "attributes": {"id": "2", "entity_id": ["sensor.old"]},
+        },
+        {
+            "entity_id": "automation.sensor_old_monitor",
+            "attributes": {"id": "3", "friendly_name": "sensor.old_monitor"},
+        },
+    ]
+
+    async def run() -> Dict[str, Any]:
+        return await updater.update_all_dependencies("sensor.old", "sensor.new", states)
+
+    results = asyncio.run(run())
+
+    assert results["automations"]["unreachable"] == ["automation.uses_it"]
+    assert results["total_unreachable"] == 1
+    assert sorted(results["unreachable_configs"]) == ["automation.sensor_old_monitor", "automation.talks_about_it"]
+
+
+def test_asking_whether_an_automation_names_an_entity_leaves_it_alone() -> None:
+    """It used to be asked by rewriting a copy, which cost a copy every time."""
+    updater = _updater([])
+    config = {"id": "1", "description": "Watches sensor.old", "action": [{"entity_id": "sensor.old"}]}
+
+    assert updater.names_entity(config, "sensor.old") is True
+    assert config == {"id": "1", "description": "Watches sensor.old", "action": [{"entity_id": "sensor.old"}]}
+    assert updater.names_entity(config, "sensor.oldest") is False
