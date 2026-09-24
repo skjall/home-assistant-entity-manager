@@ -5207,9 +5207,19 @@
                             // name: one written on a translation key or a
                             // device class catches entities whose supplied
                             // name is something else entirely, or empty.
-                            const anchor = match?.kind === 'translation_key' || match?.kind === 'device_class'
-                                ? this.t('entity.anchor_' + match.kind, {value: match.value})
-                                : this.t('entity.anchor_name', {value: match?.value || original});
+                            // A name rule keys on the canonical form of the
+                            // supplied name ("effect_speed"); the line says the
+                            // name as it was supplied. A kind we do not know a
+                            // line for falls back to the name rather than
+                            // printing a translation key that does not exist.
+                            const anchorKeys = {
+                                translation_key: 'entity.anchor_translation_key',
+                                device_class: 'entity.anchor_device_class',
+                            };
+                            const anchorKey = anchorKeys[match?.kind];
+                            const anchor = anchorKey
+                                ? this.t(anchorKey, {value: match.value})
+                                : this.t('entity.anchor_name', {value: original || match?.value || ''});
                             if (match?.model) {
                                 return this.t('entity.explain_rule_model', {anchor, value, model: match.model});
                             }
