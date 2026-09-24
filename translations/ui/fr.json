@@ -567,6 +567,7 @@
     "pattern_toggle": "Proposer des règles à motif lors du renommage",
     "pick_pattern": "Motif",
     "caught_pattern": "motif",
+    "pattern_needs_an_expression": "Une règle de motif a besoin d'une expression. Rien n'a été enregistré.",
     "pattern_expression": "Expression, p. ex. Chauffage\\ (?P<n1>\\d+)"
   },
   "jobs": {

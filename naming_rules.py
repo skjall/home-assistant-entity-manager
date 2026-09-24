@@ -1295,6 +1295,11 @@ class NamingRules:
         would make the rule a different rule rather than an edited one; a
         pattern is the one kind written to be adjusted.
 
+        ``targets`` is merged into what the rule holds, so a language it does
+        not name keeps the word it has. There is deliberately no way to take a
+        language away: a rule with no target in a language simply has none, and
+        the one honest way to that is a rule that never had it.
+
         Everything asked for is worked out first and checked together, so a
         new expression is judged against the new targets rather than the old.
         """
@@ -1328,21 +1333,25 @@ class NamingRules:
         if filters is not ...:
             wanted["filters"] = clean_filters(filters)
 
-        # Everything the rule would become is judged the same way, whichever
-        # field was supplied: a target carrying a placeholder the expression
-        # does not capture is refused whether or not the expression came with
-        # it, and the stored rules never collide, so re-asking costs nothing.
-        self._refuse_collision(wanted)
-
         # What was asked for is what the rule already says. Stamping it as
         # changed and writing the file put an edit in the history where none
-        # had happened.
+        # had happened - and asked first, because a rule that is already what it
+        # would become must not be refused over something that was true of it
+        # before this call: one restored without its filters answered a request
+        # that changed nothing with "a pattern rule applies within an
+        # integration".
         if (
             wanted["targets"] == rule["targets"]
             and wanted["match"] == rule["match"]
             and wanted["filters"] == rule["filters"]
         ):
             return rule
+
+        # Everything the rule would become is judged the same way, whichever
+        # field was supplied: a target carrying a placeholder the expression
+        # does not capture is refused whether or not the expression came with
+        # it, and the stored rules never collide, so re-asking costs nothing.
+        self._refuse_collision(wanted)
 
         # Put back if it cannot be written: the rule in memory answers every
         # later read, and a disk that refused the write would have left it

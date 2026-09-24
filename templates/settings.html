@@ -3551,10 +3551,11 @@
                     // field threw that correction away without a word.
                     const patternChanged = row.kind === 'pattern' && !!expression && expression !== row.key;
                     // An expression emptied out is not an edit: the rule would
-                    // match nothing at all. There is nothing to save either way,
-                    // since the field was filled from the rule when it opened.
+                    // match nothing at all. Said out loud - closing the row as
+                    // though it had been saved was the one reading the user
+                    // could not have had.
                     if (row.kind === 'pattern' && !expression) {
-                        this.cancelEdit();
+                        alert(this.t('settings.pattern_needs_an_expression'));
                         return;
                     }
                     if (!value && !(patternChanged && row.isRule)) {
@@ -3564,6 +3565,13 @@
                     // Nothing was changed. Sending it anyway stamped the rule
                     // as edited and wrote the file for no reason.
                     if (row.isRule && !patternChanged && value === (row.rule?.targets?.[this.language] || '')) {
+                        this.cancelEdit();
+                        return;
+                    }
+                    // The same for a row that has no rule yet: typing the word
+                    // the built-in default already says and saving it made a
+                    // rule that repeats the default and shadows it for good.
+                    if (!row.isRule && value === (row.system_default || '')) {
                         this.cancelEdit();
                         return;
                     }

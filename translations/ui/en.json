@@ -547,6 +547,7 @@
     "pattern_toggle": "Offer pattern rules when renaming",
     "pick_pattern": "Pattern",
     "caught_pattern": "pattern",
+    "pattern_needs_an_expression": "A pattern rule needs an expression. Nothing was saved.",
     "pattern_expression": "Expression, e.g. Heating\\ (?P<n1>\\d+)"
   },
   "type_mappings": {

@@ -878,6 +878,13 @@ def naming_rule_item(rule_id):
         # reached the rules and came back as "a rule needs at least one
         # target", which reads as though the rule had lost the ones it has.
         return jsonify({"error": "targets needs at least one language with text"}), 400
+    if targets is not None:
+        # And a language sent empty among others is answered for rather than
+        # dropped: the caller asked for two words and would have been told the
+        # request had gone through with one.
+        empty = [language for language, text in targets.items() if not (isinstance(text, str) and text.strip())]
+        if empty:
+            return jsonify({"error": f"No text for {', '.join(sorted(empty))}"}), 400
     if targets is None and expression is None:
         return jsonify({"error": "Nothing to change: neither targets nor an expression"}), 400
     try:

@@ -567,6 +567,7 @@
     "pattern_toggle": "Ofrecer reglas con patrón al renombrar",
     "pick_pattern": "Patrón",
     "caught_pattern": "patrón",
+    "pattern_needs_an_expression": "Una regla de patrón necesita una expresión. No se ha guardado nada.",
     "pattern_expression": "Expresión, p. ej. Calefacción\\ (?P<n1>\\d+)"
   },
   "jobs": {

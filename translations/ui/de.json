@@ -547,6 +547,7 @@
     "pattern_toggle": "Muster-Regeln beim Umbenennen anbieten",
     "pick_pattern": "Muster",
     "caught_pattern": "Muster",
+    "pattern_needs_an_expression": "Eine Muster-Regel braucht einen Ausdruck. Es wurde nichts gespeichert.",
     "pattern_expression": "Ausdruck, z. B. Heizung\\ (?P<n1>\\d+)"
   },
   "type_mappings": {
