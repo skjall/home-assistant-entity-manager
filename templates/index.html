@@ -2461,7 +2461,7 @@
                                             <div class="friendly-name">
                                                 <span :title="entity.original_name || ''"
                                                       x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
-                                                              ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'old')
+                                                              ? diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyNameForEntity(entity), 'old')
                                                               : escapeHtml(entity.original_name || t('entity.no_name'))"></span>
                                                 <span x-show="isOrphanEntity(entity)"
                                                       class="text-xs text-amber-600 ml-2"
@@ -2471,7 +2471,7 @@
                                             </div>
                                             <code class="entity-id" :title="entity.id"
                                                   x-html="entityNeedsRename(entity) && selectedArea !== '__no_area__'
-                                                          ? diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'old')
+                                                          ? diffHtml(entity.id, entity._previewId || getNewEntityIdForEntity(entity), 'old')
                                                           : escapeHtml(entity.id)"></code>
                                         </div>
 
@@ -2484,10 +2484,10 @@
 
                                         <template x-if="selectedArea !== '__no_area__' && entityNeedsRename(entity)">
                                             <div class="new-state">
-                                                <div class="friendly-name" :title="entity._previewName || getEntityFriendlyName(entity)"
-                                                     x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyName(entity), 'new')"></div>
-                                                <code class="entity-id" :title="entity._previewId || getNewEntityId(entity)"
-                                                      x-html="diffHtml(entity.id, entity._previewId || getNewEntityId(entity), 'new')"></code>
+                                                <div class="friendly-name" :title="entity._previewName || getEntityFriendlyNameForEntity(entity)"
+                                                     x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyNameForEntity(entity), 'new')"></div>
+                                                <code class="entity-id" :title="entity._previewId || getNewEntityIdForEntity(entity)"
+                                                      x-html="diffHtml(entity.id, entity._previewId || getNewEntityIdForEntity(entity), 'new')"></code>
                                             </div>
                                         </template>
 
@@ -2502,7 +2502,7 @@
                                             <!-- Conflict warning - hide in no-area mode -->
                                             <span x-show="selectedArea !== '__no_area__' && entityNeedsRename(entity) && isEntityIdTaken(entity)"
                                                   class="text-xs text-red-500 flex items-center gap-1"
-                                                  :title="'Target ID: ' + getNewEntityId(entity)">
+                                                  :title="'Target ID: ' + getNewEntityIdForEntity(entity)">
                                                 <i class="ri-error-warning-line"></i> <span x-text="t('entity.id_conflict')">ID conflict</span>
                                             </span>
                                             <div class="btn-group">
@@ -4882,8 +4882,7 @@
                 // Their names are cached, and a move changes all of them.
                 pickPreviewArea(areaId) {
                     this.devicePreviewAreaId = areaId;
-                    const moved = (this.hierarchy.entities || [])
-                        .filter(e => e.device_id === this.selectedDevice);
+                    const moved = indexed(this).byDevice.get(this.selectedDevice) || none;
                     this.computePreviewsFor(moved);
                 },
 
@@ -4901,46 +4900,11 @@
                     return deviceBaseName;
                 },
 
-                // Get entity friendly name (full: Area + Device + Entity base)
-                getEntityFriendlyName(entity) {
-                    // Force Alpine to track translationsReady as dependency
-                    const _ = this.translationsReady;
-
-                    const parts = [];
-                    const domain = entity.id.split('.')[0];
-
-                    // Area
-                    const area = this.selectedDeviceData
-                        ? this.areaForDevice(this.selectedDeviceData)
-                        : this.selectedAreaData;
-                    if (area) {
-                        parts.push(area.name);
-                    }
-
-                    // Device base name (use preview if editing)
-                    const device = this.selectedDeviceData;
-                    if (device && !this.isVirtualDevice(this.selectedDevice)) {
-                        const deviceBase = this.devicePreviewBaseName !== null ? this.devicePreviewBaseName : device.base_name;
-                        parts.push(deviceBase);
-                    }
-
-                    // Entity suffix (uses shared logic)
-                    parts.push(this.getEntitySuffix(entity));
-
-                    return parts.filter(p => p).join(' ');
-                },
-
                 // Get entity display name (short - just the entity suffix)
                 getEntityDisplayName(entity) {
                     // Force Alpine to track translationsReady as dependency
                     const _ = this.translationsReady;
                     return this.getEntitySuffix(entity);
-                },
-
-                // Get new entity ID
-                getNewEntityId(entity) {
-                    // Backend-computed slug is the single source of truth (see fetchNormalized).
-                    return entity._previewId || entity.id;
                 },
 
                 // Live preview versions - use _editValue for real-time updates
@@ -5233,9 +5197,11 @@
                 dropStagedPreview() {
                     clearTimeout(this._deviceWideTimer);
                     this._deviceWideTimer = null;
-                    // And an answer already on its way, which would otherwise
-                    // write the previous device's ids when it arrives.
+                    // And every answer already on its way, either kind of
+                    // which would otherwise write the previous device's ids
+                    // when it arrives.
                     this._stagedRun++;
+                    this._previewRun++;
                 },
 
                 previewDeviceWide() {
@@ -5562,12 +5528,14 @@
                     const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e)));
                     // The registry moved while the slugs were on their way, so
                     // the entities they were computed for are not the ones the
-                    // index holds now; the next keystroke asks again.
-                    if (asked !== this.hierarchyVersion) return;
+                    // index holds now; the next keystroke asks again. What was
+                    // written down before is cleared with it: left standing, it
+                    // refused a rename over a clash nobody could still see.
+                    if (asked !== this.hierarchyVersion) return settle([]);
                     // Nor is an answer about a device the panel has left one
                     // that may be written down: it would sit there unread and
                     // unrefreshed until some other device happened to clash.
-                    if (device.id !== this.selectedDevice) return;
+                    if (device.id !== this.selectedDevice) return settle([]);
                     const taken = indexed(this).entitiesById;
 
                     const clashes = [];
