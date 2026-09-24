@@ -40,6 +40,8 @@ from registry import sync_ha_language
 from routes_entities import entities as entity_routes
 from routes_naming import (
     SETTINGS_SECTIONS,
+    domain_counts,
+    domain_integration_counts,
     entity_model,
     entity_type_key,
     naming as naming_routes,
@@ -2059,6 +2061,9 @@ async def _get_hierarchy_async():
         type_integration_counts = type_key_integration_counts(restructurer)
         type_model_counts = type_key_model_counts(restructurer)
         type_model_domain_counts = type_key_model_domain_counts(restructurer)
+        # For the anchor that reaches a whole domain: how far it would reach.
+        by_domain = domain_counts(restructurer)
+        by_domain_integration = domain_integration_counts(restructurer)
 
         # One mark for the templates as they are now; every entity compares its
         # stored one against it.
@@ -2121,6 +2126,13 @@ async def _get_hierarchy_async():
                     ),
                     "type_model_count": (
                         type_model_counts.get((type_key, entity_model(restructurer, entity_data)), 0) if type_key else 0
+                    ),
+                    # A rule can also anchor on the domain, for entities whose
+                    # supplied name is not a type. These say how far that would
+                    # reach, which is the only thing that makes it safe to offer.
+                    "domain_count": by_domain.get(entity_id.partition(".")[0], 0),
+                    "domain_integration_count": by_domain_integration.get(
+                        (entity_id.partition(".")[0], entity_data.get("platform")), 0
                     ),
                     # Who the name in the registry belongs to right now, and
                     # whether it was changed outside this add-on since.

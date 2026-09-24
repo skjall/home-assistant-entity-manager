@@ -131,7 +131,10 @@
     "supplied_stale": "El nombre es el título de la entrada del auxiliar: «{supplied}»: al aplicar también se reescribe el título.",
     "scope_domain_hint": "Solo las {count} entidades {domain} en dispositivos del tipo {model}.",
     "keep_current_hint": "Poner «{name}» en el campo: así se llama hoy",
-    "was_already_gone": "La entidad ya estaba eliminada: la lista se ha puesto al día."
+    "was_already_gone": "La entidad ya estaba eliminada: la lista se ha puesto al día.",
+    "anchor_label": "O para cada entidad {domain}:",
+    "anchor_domain_all_hint": "Para las {count} entidades {domain}, sea cual sea la integración. Solo tiene sentido cuando el nombre suministrado no es un tipo.",
+    "anchor_domain_integration_hint": "Para las {count} entidades {domain} de {integration}, sea cual sea el nombre de cada una."
   },
   "virtual_devices": {
     "automations": "Automatizaciones",
@@ -559,7 +562,8 @@
     "caught_name": "nombre entregado",
     "caught_device_class": "clase de dispositivo",
     "caught_none": "—",
-    "reach_open_device": "Abrir «{device}» en Home Assistant"
+    "reach_open_device": "Abrir «{device}» en Home Assistant",
+    "kind_domain": "Dominio"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

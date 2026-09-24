@@ -13,8 +13,8 @@ fill fields in the interface.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-# The three kinds a rule can match an entity by; used in several places.
-RULE_KINDS = ["translation_key", "device_class", "name"]
+# The kinds a rule can match an entity by; used in several places.
+RULE_KINDS = ["translation_key", "device_class", "name", "domain"]
 
 
 class Operation:

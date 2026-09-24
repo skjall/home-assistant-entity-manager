@@ -387,7 +387,33 @@ def type_key_model_domain_counts(restructurer) -> dict:
     return counts
 
 
-def _rule_key_for(entity: dict) -> tuple:
+def domain_counts(restructurer) -> dict:
+    """Entities per domain, for the anchor that reaches a whole domain.
+
+    A rule anchored on the domain says nothing about what an entity measures,
+    so its reach is every entity of that kind. The count is what makes that
+    visible before it is saved.
+    """
+    counts: dict = {}
+    for entity_id in restructurer.entities:
+        domain = entity_id.partition(".")[0]
+        if domain:
+            counts[domain] = counts.get(domain, 0) + 1
+    return counts
+
+
+def domain_integration_counts(restructurer) -> dict:
+    """Entities per domain and integration: every device tracker UniFi supplies."""
+    counts: dict = {}
+    for entity_id, entity_data in restructurer.entities.items():
+        domain = entity_id.partition(".")[0]
+        integration = entity_data.get("platform")
+        if domain and integration:
+            counts[(domain, integration)] = counts.get((domain, integration), 0) + 1
+    return counts
+
+
+def _rule_key_for(entity: dict, entity_id: str = "", anchor: str = "") -> tuple:
     """What a rule learned from this entity should match on.
 
     An integration that declares a translation key is the surest anchor. Where
@@ -395,7 +421,16 @@ def _rule_key_for(entity: dict) -> tuple:
     alone: integrations without native entity names write the device into it,
     as in "Tomate air humidity", and no two of those names are alike. Their
     device class says what the entity measures and holds for all of them.
+
+    ``anchor="domain"`` asks for the last resort instead of any of those: the
+    domain itself. It is for entities whose supplied name is not a type at all
+    and which carry neither a key nor a class - UniFi's device trackers are
+    named after the clients they found, so fourteen of them share nothing but
+    being device trackers. It is never chosen on its own, because it reaches
+    everything of that domain rather than one type within it.
     """
+    if anchor == "domain":
+        return "domain", entity_id.partition(".")[0]
     if entity.get("translation_key"):
         return "translation_key", entity["translation_key"]
     device_class = entity.get("device_class") or entity.get("original_device_class")
@@ -824,7 +859,10 @@ def naming_learn():
         return jsonify({"error": "unknown entity"}), 404
     if not value:
         return jsonify({"error": "value required"}), 400
-    kind, key = _rule_key_for(entity)
+    anchor = sanitize_string(data.get("anchor") or "")
+    if anchor and anchor != "domain":
+        return jsonify({"error": "unknown anchor"}), 400
+    kind, key = _rule_key_for(entity, entity_id, anchor)
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
     # Where the correction should apply, as the one filter it is. "Everywhere"

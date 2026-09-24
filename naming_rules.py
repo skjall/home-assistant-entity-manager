@@ -47,9 +47,17 @@ from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 2
-KINDS = ("translation_key", "name", "device_class")
+KINDS = ("translation_key", "name", "device_class", "domain")
 # Lookup order: the most specific identity first.
-KIND_PRIORITY = {"translation_key": 0, "name": 1, "device_class": 2}
+#
+# The domain is the last of them, and the only one that says nothing about what
+# an entity measures - just what kind of thing it is. It is there for entities
+# whose supplied name is not a type at all: UniFi names each of its device
+# trackers after the client it found, so fourteen of them carry fourteen
+# different names, no translation key and no device class. There is no anchor
+# they share except being device trackers, and without this there is no rule
+# that can reach more than one of them.
+KIND_PRIORITY = {"translation_key": 0, "name": 1, "device_class": 2, "domain": 3}
 
 # What a filter may say. A registry id names one entity and stands alone; the
 # others describe a kind of entity and may be combined.

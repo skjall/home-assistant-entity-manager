@@ -2619,7 +2619,7 @@
                                             <div class="scope-group" role="group">
                                                 <button type="button" class="scope-option"
                                                         :class="entity._ruleScope === 'all' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'all'"
+                                                        @click="entity._ruleScope = 'all'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_all_hint', {count: entity.type_count || 1})">
                                                     <span x-text="t('entity.scope_everywhere')"></span>
                                                     <span class="scope-count" x-text="entity.type_count || 1"></span>
@@ -2627,7 +2627,7 @@
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.platform && entity.type_integration_count"
                                                         :class="entity._ruleScope === 'integration' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'integration'"
+                                                        @click="entity._ruleScope = 'integration'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_integration_hint', {integration: entity.platform, count: entity.type_integration_count || 0})">
                                                     <span x-text="entity.platform"></span>
                                                     <span class="scope-count" x-text="entity.type_integration_count || 0"></span>
@@ -2635,7 +2635,7 @@
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.device_model && entity.type_model_count"
                                                         :class="entity._ruleScope === 'model' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'model'"
+                                                        @click="entity._ruleScope = 'model'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_model_hint', {model: entity.device_model, count: entity.type_model_count || 0})">
                                                     <span class="scope-model" x-text="entity.device_model"></span>
                                                     <span class="scope-count" x-text="entity.type_model_count || 0"></span>
@@ -2645,7 +2645,7 @@
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.device_model && entity.type_model_domain_count"
                                                         :class="entity._ruleScope === 'domain' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'domain'"
+                                                        @click="entity._ruleScope = 'domain'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_domain_hint', {domain: entityDomain(entity), model: entity.device_model, integration: entity.platform, count: entity.type_model_domain_count || 0})">
                                                     <span x-text="entityDomain(entity)"></span>
                                                     <span class="scope-model" x-text="entity.device_model"></span>
@@ -2653,9 +2653,38 @@
                                                 </button>
                                                 <button type="button" class="scope-option"
                                                         :class="entity._ruleScope === 'here' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'here'"
+                                                        @click="entity._ruleScope = 'here'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_here_hint')">
                                                     <span x-text="t('entity.scope_here')"></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <!-- The other axis: not where the rule
+                                             applies but what it recognises an
+                                             entity by. UniFi names every device
+                                             tracker after the client it found,
+                                             so no two share a name, a key or a
+                                             class - only the domain. The count
+                                             says how far that reaches, which is
+                                             what makes it safe to offer. -->
+                                        <div class="scope-bar" x-show="typeEdited(entity) && entity.domain_count > 1">
+                                            <span class="scope-label"
+                                                  x-text="t('entity.anchor_label', {domain: entityDomain(entity)})"></span>
+                                            <div class="scope-group" role="group">
+                                                <button type="button" class="scope-option"
+                                                        :class="entity._ruleAnchor === 'domain' && entity._ruleScope === 'all' ? 'is-active' : ''"
+                                                        @click="entity._ruleAnchor = 'domain'; entity._ruleScope = 'all'"
+                                                        :title="t('entity.anchor_domain_all_hint', {domain: entityDomain(entity), count: entity.domain_count || 0})">
+                                                    <span x-text="t('entity.scope_everywhere')"></span>
+                                                    <span class="scope-count" x-text="entity.domain_count || 0"></span>
+                                                </button>
+                                                <button type="button" class="scope-option"
+                                                        x-show="entity.platform && entity.domain_integration_count"
+                                                        :class="entity._ruleAnchor === 'domain' && entity._ruleScope === 'integration' ? 'is-active' : ''"
+                                                        @click="entity._ruleAnchor = 'domain'; entity._ruleScope = 'integration'"
+                                                        :title="t('entity.anchor_domain_integration_hint', {domain: entityDomain(entity), integration: entity.platform, count: entity.domain_integration_count || 0})">
+                                                    <span x-text="entity.platform"></span>
+                                                    <span class="scope-count" x-text="entity.domain_integration_count || 0"></span>
                                                 </button>
                                             </div>
                                         </div>
@@ -4521,8 +4550,8 @@
                 // A read must leave these alone.
                 THEIRS_NOT_OURS: [
                     'selected', '_editing', '_remember', '_applying', '_expanded',
-                    '_currentSuffix', '_ruleScope', '_justRenamed', '_previewName',
-                    '_previewId',
+                    '_currentSuffix', '_ruleScope', '_ruleAnchor', '_justRenamed',
+                    '_previewName', '_previewId',
                 ],
 
                 // Write onto `mine` only the fields that actually differ, and say
@@ -6631,7 +6660,11 @@
                             body: JSON.stringify({
                                 entity_id: entity.id,
                                 value: typed,
-                                scope: entity._ruleScope || 'global'
+                                scope: entity._ruleScope || 'global',
+                                // What the rule recognises an entity by, where
+                                // that is not the name, key or class it would
+                                // take by itself.
+                                ...(entity._ruleAnchor ? {anchor: entity._ruleAnchor} : {})
                             })
                         });
                         const learned = await learn.json();

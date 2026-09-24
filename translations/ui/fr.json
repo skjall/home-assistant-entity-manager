@@ -131,7 +131,10 @@
     "supplied_stale": "Le nom est le titre de l’entrée de l’auxiliaire : « {supplied} » — appliquer réécrit aussi le titre.",
     "scope_domain_hint": "Seulement les {count} entités {domain} sur les appareils de type {model}.",
     "keep_current_hint": "Mettre « {name} » dans le champ : son nom actuel",
-    "was_already_gone": "L'entité était déjà supprimée — la liste s'est mise à jour."
+    "was_already_gone": "L'entité était déjà supprimée — la liste s'est mise à jour.",
+    "anchor_label": "Ou pour chaque entité {domain} :",
+    "anchor_domain_all_hint": "Pour les {count} entités {domain}, quelle que soit l'intégration. Utile seulement lorsque le nom fourni n'est pas un type.",
+    "anchor_domain_integration_hint": "Pour les {count} entités {domain} de {integration}, quel que soit le nom de chacune."
   },
   "virtual_devices": {
     "automations": "Automatisations",
@@ -559,7 +562,8 @@
     "caught_name": "nom fourni",
     "caught_device_class": "classe d'appareil",
     "caught_none": "—",
-    "reach_open_device": "Ouvrir « {device} » dans Home Assistant"
+    "reach_open_device": "Ouvrir « {device} » dans Home Assistant",
+    "kind_domain": "Domaine"
   },
   "jobs": {
     "rename_device": "Renommage de l'appareil",

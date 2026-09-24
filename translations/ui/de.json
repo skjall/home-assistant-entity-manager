@@ -131,7 +131,10 @@
     "supplied_stale": "Der Name steht so im Titel des Helfers: „{supplied}“ – „Übernehmen“ schreibt den Titel mit um.",
     "scope_domain_hint": "Nur für die {count} {domain}-Entitäten an Geräten vom Typ {model}.",
     "keep_current_hint": "„{name}“ übernehmen – so heißt sie heute",
-    "was_already_gone": "Die Entität war schon gelöscht — die Liste ist jetzt gleichauf."
+    "was_already_gone": "Die Entität war schon gelöscht — die Liste ist jetzt gleichauf.",
+    "anchor_label": "Oder für jede {domain}-Entität:",
+    "anchor_domain_all_hint": "Für alle {count} {domain}-Entitäten, egal welche Integration. Nur sinnvoll, wenn der gelieferte Name kein Typ ist.",
+    "anchor_domain_integration_hint": "Für alle {count} {domain}-Entitäten von {integration}, unabhängig davon, wie sie einzeln heißen."
   },
   "virtual_devices": {
     "automations": "Automatisierungen",
@@ -539,7 +542,8 @@
     "caught_name": "gelieferter Name",
     "caught_device_class": "Geräteklasse",
     "caught_none": "—",
-    "reach_open_device": "„{device}“ in Home Assistant öffnen"
+    "reach_open_device": "„{device}“ in Home Assistant öffnen",
+    "kind_domain": "Domain"
   },
   "type_mappings": {
     "light": "Licht",

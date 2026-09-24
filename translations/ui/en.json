@@ -131,7 +131,10 @@
     "supplied_stale": "The name is the helper’s entry title: “{supplied}” — applying rewrites the title too.",
     "scope_domain_hint": "Only the {count} {domain} entities on devices of type {model}.",
     "keep_current_hint": "Put “{name}” in the field – what it is called today",
-    "was_already_gone": "The entity was already deleted — the list has caught up."
+    "was_already_gone": "The entity was already deleted — the list has caught up.",
+    "anchor_label": "Or for every {domain} entity:",
+    "anchor_domain_all_hint": "For all {count} {domain} entities, whatever the integration. Only worth it where the supplied name is not a type.",
+    "anchor_domain_integration_hint": "For all {count} {domain} entities from {integration}, whatever each one is called."
   },
   "virtual_devices": {
     "automations": "Automations",
@@ -539,7 +542,8 @@
     "caught_name": "supplied name",
     "caught_device_class": "device class",
     "caught_none": "—",
-    "reach_open_device": "Open “{device}” in Home Assistant"
+    "reach_open_device": "Open “{device}” in Home Assistant",
+    "kind_domain": "Domain"
   },
   "type_mappings": {
     "light": "Light",

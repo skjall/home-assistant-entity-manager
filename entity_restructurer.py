@@ -612,6 +612,23 @@ class EntityRestructurer:
                             "matched_on": rules.why(rule, integration, model, domain),
                         }
                     )
+                # Last of the anchors, and the only one that says nothing about
+                # what an entity measures. It is for entities whose supplied
+                # name is not a type: UniFi names every device tracker after
+                # the client it found, so no two of them share anything but
+                # their domain. Unlike a device-class rule this is not held
+                # back where the name says more - a name that is not a type
+                # cannot say more than one.
+                rule = rules.find("domain", domain, integration, language, model, domain)
+                if rule:
+                    candidates.append(
+                        {
+                            "value": rule["targets"][language],
+                            "won_by": "rule:user",
+                            "rule_id": rule["id"],
+                            "matched_on": rules.why(rule, integration, model, domain),
+                        }
+                    )
             # Home Assistant knows its own entities in every language it speaks,
             # which is far more than this add-on could translate itself.
             self._last_ha_source = None
@@ -721,12 +738,14 @@ class EntityRestructurer:
         integration = registry.get("platform") or None
         model = (self.devices.get(registry.get("device_id") or "", {}) or {}).get("model") or None
         device_class = registry.get("device_class") or registry.get("original_device_class") or ""
+        domain = entity_id.partition(".")[0] or None
         for kind, value in (
             ("translation_key", registry.get("translation_key") or ""),
             ("name", name),
             ("device_class", device_class),
+            ("domain", domain or ""),
         ):
-            rule = rules.find(kind, value, integration, self.language, model, entity_id.partition(".")[0] or None)
+            rule = rules.find(kind, value, integration, self.language, model, domain)
             if rule is None:
                 continue
             if kind == "device_class" and not self._names_the_class(
