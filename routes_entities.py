@@ -588,6 +588,11 @@ def _capture_device_entity_naming(
             # edits afterwards only reaches this entity again if the note hands
             # it back the word the rule matches on.
             "base_entity": resolution.get("input") or name,
+            # And what came out of it, which is what the name is built from.
+            # The two are the same word until a rule or a translation changes
+            # it; rendering the first one wrote the name past the rule that
+            # decided it - "Tür" where the user's rule says "Zustand".
+            "type_part": name,
             "won_by": resolution.get("won_by") or "",
             "rule_id": resolution.get("rule_id"),
         }
@@ -608,7 +613,7 @@ def _plan_device_entity_changes(
             *restructurer.generate_new_entity_id(
                 entity_id,
                 states_by_id.get(entity_id, {}),
-                (captured.get(entity_id) or {}).get("base_entity"),
+                (captured.get(entity_id) or {}).get("type_part"),
             ),
         )
         for entity_id, entity_info in restructurer.entities.items()
@@ -707,7 +712,16 @@ async def rename_device_handler(job, ctx):
                     old_entity_id,
                     new_entity_id if id_changed else None,
                     new_friendly_name,
-                    provenance={**(captured.get(old_entity_id) or {}), "template_hash": template_hash},
+                    # type_part is for the name, not for the note: the note
+                    # keeps the word that went in, so a rule still finds it.
+                    provenance={
+                        **{
+                            key: value
+                            for key, value in (captured.get(old_entity_id) or {}).items()
+                            if key != "type_part"
+                        },
+                        "template_hash": template_hash,
+                    },
                 )
                 if not (written or {}).get("verified"):
                     ctx.log("UNVERIFIED", f"{old_entity_id} -> {new_entity_id}: written, not read back")

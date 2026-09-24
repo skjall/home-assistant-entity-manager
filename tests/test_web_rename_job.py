@@ -123,9 +123,62 @@ def test_a_device_rename_notes_the_type_part_it_used() -> None:
 
     assert captured["sensor.kitchen_sofa_energy"] == {
         "base_entity": "Energy",
+        "type_part": "Energy",
         "won_by": "original",
         "rule_id": "rule-7",
     }
+
+
+def test_a_device_rename_renders_what_the_rules_answered() -> None:
+    """The note keeps the word that went in; the name gets the word that came out.
+
+    They are the same until a rule changes it. Rendering the first one wrote
+    the name past the rule that decides it: a contact sensor whose rule says
+    "Zustand" came back out of a device rename called "Tuer", the word the
+    integration supplies.
+    """
+
+    class FakeRestructurer:
+        entities = {"binary_sensor.contact": {"device_id": "device-1"}}
+        last_resolutions = {
+            "binary_sensor.contact": {
+                "input": "Tuer",
+                "value": "Zustand",
+                "won_by": "rule:user",
+                "rule_id": "rule-9",
+            }
+        }
+
+        def build_naming_context(self, entity_id: str, state: dict) -> dict[str, str]:
+            """What the rules answered, which is what a name is built from."""
+            return {"entity": "Zustand"}
+
+        def generate_new_entity_id(
+            self,
+            entity_id: str,
+            state: dict,
+            entity_name: str | None = None,
+        ) -> tuple[str, str]:
+            return "binary_sensor.store_contact_zustand", f"Store Contact {entity_name or ''}".strip()
+
+        def deduplicate_entity_ids(
+            self,
+            proposals: list[tuple[str, str, str]],
+        ) -> list[tuple[str, str, str]]:
+            return list(proposals)
+
+    states = [{"entity_id": "binary_sensor.contact", "attributes": {}}]
+    restructurer = FakeRestructurer()
+
+    captured = routes_entities._capture_device_entity_naming(restructurer, "device-1", states)
+
+    # The note keeps what a rule matches on, so an edit still reaches it.
+    assert captured["binary_sensor.contact"]["base_entity"] == "Tuer"
+    assert captured["binary_sensor.contact"]["type_part"] == "Zustand"
+
+    planned = routes_entities._plan_device_entity_changes(restructurer, "device-1", states, captured)
+
+    assert planned == [("binary_sensor.contact", "binary_sensor.store_contact_zustand", "Store Contact Zustand")]
 
 
 def test_init_client_recreates_missing_restructurer(monkeypatch) -> None:
