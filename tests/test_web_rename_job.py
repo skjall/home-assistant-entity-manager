@@ -6,6 +6,8 @@ touching Home Assistant. The worker is not started, so enqueued jobs stay queued
 """
 
 import asyncio
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -142,35 +144,35 @@ def test_init_client_recreates_missing_restructurer(monkeypatch) -> None:
 class _NoWebSocket:
     """Stands in for the connection the handler opens and closes."""
 
-    def __init__(self, url, token):
+    def __init__(self, url: str, token: str) -> None:
         pass
 
-    async def connect(self):
+    async def connect(self) -> None:
         return None
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         return None
 
 
 class _NoDependencies:
-    def __init__(self, base_url, token):
+    def __init__(self, base_url: str, token: str) -> None:
         pass
 
-    async def get_states(self):
+    async def get_states(self) -> list[dict[str, Any]]:
         return []
 
 
 class _NoRestructurer:
     entities: dict = {}
 
-    async def load_structure(self, ws):
+    async def load_structure(self, ws: Any) -> None:
         return None
 
 
-def _a_handler_that_cannot_rename(monkeypatch, registry):
+def _a_handler_that_cannot_rename(monkeypatch: pytest.MonkeyPatch, registry: Any) -> None:
     """Everything the handler reaches for, with the rename refused."""
 
-    async def no_client():
+    async def no_client() -> None:
         return None
 
     monkeypatch.setenv("HA_URL", "http://ha")
@@ -182,7 +184,7 @@ def _a_handler_that_cannot_rename(monkeypatch, registry):
     monkeypatch.setitem(web_ui.renamer_state, "restructurer", _NoRestructurer())
 
 
-def _run(tmp_path, job):
+def _run(tmp_path: Path, job: dict[str, Any]) -> list[str]:
     store = JobStore(str(tmp_path), terminal_states=TERMINAL_STATES)
     store.save(job)
     context = JobContext(job, store)
@@ -199,10 +201,10 @@ def test_a_move_that_went_through_is_logged_before_the_rename_can_fail(tmp_path,
     class Registry:
         moved_to = "unset"
 
-        async def assign_area(self, device_id, area_id):
+        async def assign_area(self, device_id: str, area_id: str) -> None:
             Registry.moved_to = area_id
 
-        async def rename_device(self, device_id, new_name):
+        async def rename_device(self, device_id: str, new_name: str) -> bool:
             return False
 
     _a_handler_that_cannot_rename(monkeypatch, Registry())
@@ -226,10 +228,10 @@ def test_nothing_says_moved_where_no_area_was_asked_for(tmp_path, monkeypatch) -
     tell the user it was moved."""
 
     class Registry:
-        async def assign_area(self, device_id, area_id):
+        async def assign_area(self, device_id: str, area_id: str) -> None:
             raise AssertionError("no area was asked for")
 
-        async def rename_device(self, device_id, new_name):
+        async def rename_device(self, device_id: str, new_name: str) -> bool:
             return False
 
     _a_handler_that_cannot_rename(monkeypatch, Registry())
