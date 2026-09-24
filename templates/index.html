@@ -5740,6 +5740,18 @@
 
                 // How far the rule that names this entity reaches, as one of the
                 // scope buttons - or null where no rule of the user's does.
+                // Which anchor the rule in force is written on, where that is
+                // not the usual one. A rule keyed on the domain is offered by
+                // its own row of buttons, and a form that opened without this
+                // sent no anchor at all: the correction then made a name rule
+                // for this one entity instead of changing the domain rule that
+                // named it.
+                anchorThatApplied(entity) {
+                    const resolution = entity?.resolution;
+                    if (!resolution || resolution.won_by !== 'rule:user' || !resolution.rule_id) return null;
+                    return (resolution.matched_on || {}).kind === 'domain' ? 'domain' : null;
+                },
+
                 scopeThatApplied(entity) {
                     const resolution = entity?.resolution;
                     if (!resolution || resolution.won_by !== 'rule:user' || !resolution.rule_id) return null;
@@ -5763,6 +5775,10 @@
                         const already = this.scopeThatApplied(entity);
                         if (already) {
                             entity._ruleScope = already;
+                            // And on what the rule is keyed, or the correction
+                            // would be sent without it and make a rule of
+                            // another kind beside the one already in force.
+                            entity._ruleAnchor = this.anchorThatApplied(entity);
                         } else {
                             // A type that several integrations supply means different things
                             // per integration ("Tür" is a contact sensor here, a fridge there),

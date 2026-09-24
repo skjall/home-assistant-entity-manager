@@ -167,24 +167,28 @@ def test_the_rule_stops_at_its_domain(home):
     assert "Standort" not in name_of(restructurer, "sensor.ap_durchsatz")
 
 
-def test_everywhere_takes_no_filter_at_all(home):
+@pytest.mark.parametrize("scope", ["all", "global"])
+def test_everywhere_takes_no_filter_at_all(home, scope):
     """"all" is the word the button sends; "global" is the one the API document
-    uses for the same thing, and both have to reach every device tracker."""
+    uses for the same thing, and both have to reach every device tracker.
+
+    One installation per word, or the second would find the rule the first
+    made and say nothing about the path it came down.
+    """
     client, restructurer, _ = home
 
-    for scope in ("all", "global"):
-        answer = client.post(
-            "/api/naming/learn",
-            json={
-                "entity_id": "device_tracker.unifi_default_de_91_e5_f7_12_73",
-                "value": "Standort",
-                "anchor": "domain",
-                "scope": scope,
-            },
-        )
+    answer = client.post(
+        "/api/naming/learn",
+        json={
+            "entity_id": "device_tracker.unifi_default_de_91_e5_f7_12_73",
+            "value": "Standort",
+            "anchor": "domain",
+            "scope": scope,
+        },
+    )
 
-        assert answer.get_json()["rule"]["filters"] == []
-        assert name_of(restructurer, "device_tracker.jans_iphone") == "Dusche Access Point Standort"
+    assert answer.get_json()["rule"]["filters"] == []
+    assert name_of(restructurer, "device_tracker.jans_iphone") == "Dusche Access Point Standort"
 
 
 def test_a_name_rule_still_decides_before_the_domain(home):

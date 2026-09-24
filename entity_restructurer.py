@@ -784,7 +784,11 @@ class EntityRestructurer:
                 continue
             if kind == "domain" and narrower:
                 # The same stepping back the naming does, or the count over a
-                # domain rule would include entities it never names.
+                # domain rule would include entities it never names. Nothing is
+                # returned rather than the narrower rule: where that one is a
+                # device-class rule the naming holds back, it does not name this
+                # entity either, and saying it did would put the entity in a
+                # list whose rule leaves it alone.
                 return None
             narrower = narrower or kind != "domain"
             if kind == "device_class" and not self._names_the_class(
