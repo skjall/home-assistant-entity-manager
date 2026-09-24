@@ -1069,10 +1069,13 @@ class EntityRestructurer:
             # but a name of ours was rendered by our own templates, so unwinding
             # it gives that part back.
             unwound = self._strip_applied_entity_name(registry.get("name") or "", prefixes, context)
-            # An empty note is an answer - the name is area and device and ends
-            # there - but only where the name says the same. Notes written
-            # before the type part was kept record it empty for every entity.
-            noted = remembered is not None and (bool(remembered) or not unwound)
+            # An empty note is an answer of its own: the name is area and device
+            # and ends there. Notes from before the type part was kept said the
+            # same for every entity, and they no longer reach here - loading the
+            # state file turns their empty type part into "nothing recorded"
+            # (see NamingState._forget_empty_type_parts_of_version_one), so the
+            # note that is empty here is one somebody meant.
+            noted = remembered is not None
             written = remembered if noted else unwound
             if not written:
                 # A rule the user wrote still has its say - it can key on the

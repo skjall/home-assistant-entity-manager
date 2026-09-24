@@ -333,6 +333,14 @@ class NamingTemplates:
                 # A trailing field may be empty, and then the rendered name
                 # ends before the separator in front of it. Separator and field
                 # are therefore one optional unit: both present or both absent.
+                #
+                # The head is what this template renders in front of the field
+                # for this context and no other - a field that is empty here
+                # took its own separator with it when the name was rendered, so
+                # the pattern stays as narrow as the name it describes. Two
+                # templates that differ only in such a field then read the same
+                # name the same way, and which of them is asked first does not
+                # change the answer.
                 # Requiring a character here makes the template miss such a
                 # name, which then falls through to a barer template that
                 # matches anything and returns the name whole.

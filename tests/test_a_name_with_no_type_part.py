@@ -108,3 +108,18 @@ def test_a_template_without_a_separator_does_not_claim_a_separated_name(template
     templates.set_templates({**TEMPLATES, "entity_name": "{area}{entity}"})
 
     assert templates.extract_field("entity_name", "Basement Switch", "entity", CONTEXT) == "Basement Switch"
+
+
+def test_a_device_with_no_name_leaves_the_template_reading_what_it_renders(templates):
+    """An empty field takes its separator with it, on both ways through.
+
+    ``{area} {device} {entity}`` renders "Basement <type>" where the device has
+    no name, so that is what the pattern built from it describes - and reading
+    "Basement Relay" back as "Relay" is what this template rendered it from,
+    not a name it never wrote. The barer "{area} {entity}" says the same thing
+    about such a name, so which of the two is asked first changes nothing.
+    """
+    without_a_device = {"area": "Basement", "device": ""}
+
+    assert templates.extract_field("entity_name", "Basement Relay", "entity", without_a_device) == "Relay"
+    assert templates.extract_field("entity_name", "Basement", "entity", without_a_device) == ""

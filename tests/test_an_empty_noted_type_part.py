@@ -6,6 +6,8 @@ read back as "no type part", not as "nothing noted", or the type part gets
 derived all over again and the supplied name creeps back into the proposal.
 """
 
+import json
+
 import pytest
 
 from entity_restructurer import EntityRestructurer
@@ -108,20 +110,73 @@ def test_ownership_still_reports_a_missing_type_part_as_a_string(restructurer, s
     assert state.ownership(restructurer.entities["switch.a"])["base_entity"] == ""
 
 
-def test_an_empty_note_from_before_the_type_part_was_kept_keeps_the_type_part(restructurer, state):
-    """Older notes recorded an empty type part for every entity.
+def write_a_version_one_file(path, applied_name, base_entity):
+    """A state file as version 1 wrote it, empty type parts and all."""
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "entities": {
+                    "reg-a": {
+                        "applied_name": applied_name,
+                        "applied_entity_id": "switch.a",
+                        "base_entity": base_entity,
+                        "template_hash": "",
+                        "won_by": "",
+                        "rule_id": None,
+                        "applied_at": "2025-01-01T00:00:00+00:00",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    Taken at face value they would strip the type part off every name they
-    cover, so an empty note counts only where the name has none either.
+
+def test_an_empty_note_from_before_the_type_part_was_kept_keeps_the_type_part(tmp_path, restructurer):
+    """Version 1 recorded an empty type part for every entity.
+
+    Taken at face value those notes would strip the type part off every name
+    they cover, and version 1 cannot say which of them meant it. So they say
+    nothing, and the name is taken apart once more.
     """
     entity = restructurer.entities["switch.a"]
     entity["name"] = "Basement Pump Relay"
-    state.record("reg-a", applied_name="Basement Pump Relay", applied_entity_id="switch.a", base_entity="")
+    path = tmp_path / "version_one.json"
+    write_a_version_one_file(path, "Basement Pump Relay", "")
+    restructurer.naming_state = NamingState(str(path))
 
     _, name = restructurer.generate_new_entity_id("switch.a", entity)
 
     assert name == "Basement Pump Relay"
     assert restructurer.last_resolutions["switch.a"]["value"] == "Relay"
+
+
+def test_a_version_one_type_part_that_is_there_is_still_read(tmp_path):
+    """Only the empty ones are ambiguous; a word version 1 recorded still holds."""
+    path = tmp_path / "version_one.json"
+    write_a_version_one_file(path, "Basement Pump Relay", "Relay")
+
+    assert NamingState(str(path)).get("reg-a")["base_entity"] == "Relay"
+
+
+def test_an_empty_note_outlives_a_template_that_changes(restructurer, state):
+    """The adoption is the user's answer, not a reading of the name.
+
+    Where the template stops rendering the device, the name can be taken apart
+    again and yields a word - here the device name. Reading that back would put
+    the device name into the type part and keep proposing it, which is the loop
+    the note was written to end. The name does follow the new template, but it
+    still has no type part.
+    """
+    note(state, "")
+    restructurer.naming_templates.set_templates({**TEMPLATES, "entity_name": "{area} {entity}"})
+
+    _, name = restructurer.generate_new_entity_id("switch.a", restructurer.entities["switch.a"])
+
+    assert name == "Basement"
+    assert restructurer.last_resolutions["switch.a"]["value"] == ""
+    assert restructurer.last_resolutions["switch.a"]["won_by"] == "original"
 
 
 class HomeAssistantNames:
