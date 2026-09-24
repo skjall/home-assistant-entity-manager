@@ -28,8 +28,8 @@ import asgi
 from config_files import out_of_reach as references_out_of_reach
 import core_readiness
 from dependency_updater import DependencyUpdater
-from energy_prefs import EnergyPrefs
 from device_registry import DeviceRegistry
+from energy_prefs import EnergyPrefs
 from entity_registry import EntityRegistry
 from ha_websocket import HomeAssistantWebSocket
 from hierarchy_manager import normalize_name
