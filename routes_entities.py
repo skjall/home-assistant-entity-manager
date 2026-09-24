@@ -685,9 +685,10 @@ async def rename_device_handler(job, ctx):
             await device_registry.assign_area(device_id, area_id)
 
         z2m_sync: dict[str, Any] = {}
-        # Supplied or not, the same question the area is asked: a name is
-        # absent when the key was left out, not when it reads as false.
-        if new_name is not None:
+        # Not "is not None": an empty name is not a name, and Home Assistant
+        # takes one differently from one version to the next. The route refuses
+        # it, and so does this, for anything that reaches the worker directly.
+        if new_name:
             success = await device_registry.rename_device(device_id, new_name)
 
             if not success:
@@ -793,9 +794,9 @@ async def rename_device_handler(job, ctx):
 
         # One of the two was asked for: the route refuses a payload that asks
         # for neither.
-        if new_name is not None and set_area:
+        if new_name and set_area:
             message = f"Device moved and renamed to: {new_name}"
-        elif new_name is not None:
+        elif new_name:
             message = f"Device renamed to: {new_name}"
         else:
             message = "Device moved"

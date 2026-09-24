@@ -2225,7 +2225,8 @@
                         <span class="text-amber-600" x-text="getExpectedDeviceName(selectedDeviceData)"></span>
                     </div>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.area_label')">Area</label>
-                    <div class="combo mb-2" @click.away="closeAreaCombo()" @keydown.escape.stop="closeAreaCombo()">
+                    <div class="combo mb-2" @click.away="closeAreaCombo()"
+                         @keydown.escape="if (areaComboOpen) { $event.stopPropagation(); closeAreaCombo(); }">
                         <div class="combo-field">
                             <i class="ri-search-line"></i>
                             <input type="text" class="edit-input combo-input" autocomplete="off"
@@ -2245,7 +2246,7 @@
                             <template x-for="(area, at) in areaOptions" :key="area.id || '__none__'">
                                 <button type="button" class="combo-item"
                                         :class="(area.id === panelAreaId() ? 'current ' : '')
-                                                + (at === areaComboAt ? 'at' : '')"
+                                                + (at === Math.min(areaComboAt, areaOptions.length - 1) ? 'at' : '')"
                                         @mousemove="areaComboAt = at"
                                         @click="pickArea(area)">
                                     <span x-text="area.name"></span>
@@ -4928,6 +4929,10 @@
                 // What the entities of the device being moved would be called.
                 // Their names are cached, and a move changes all of them.
                 pickPreviewArea(areaId) {
+                    // Offered while the device is in an area, so the same line
+                    // can be clicked twice; computing the rows again for it
+                    // asked the server for slugs that are already in hand.
+                    if (this.devicePreviewAreaId === areaId) return;
                     this.devicePreviewAreaId = areaId;
                     const moved = (this.hierarchy.entities || [])
                         .filter(e => e.device_id === this.selectedDevice);
@@ -5308,7 +5313,10 @@
                 get areaOptions() {
                     const key = [
                         this.areaSearch || '',
-                        this.hierarchy.areas.length,
+                        // The hierarchy as a whole: an area renamed in Home
+                        // Assistant leaves the count where it was, and the
+                        // field went on offering the name it used to have.
+                        this.hierarchyVersion,
                         this.selectedDeviceData?.area_id || '',
                         this.translationsReady
                     ].join('\u0000');
