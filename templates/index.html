@@ -6657,7 +6657,13 @@
                         this.devicePreviewAreaId = null;
                     }
                     await this.loadHierarchy();
-                    const id = deviceId || this.selectedDevice;
+                    // The device the panel stands on, which a job reconnected
+                    // after a reload need not be about: pointing the panel at
+                    // the renamed device left it showing that device's name and
+                    // area while the selection was another one, and the button
+                    // beside them then renamed the selected device to what was
+                    // shown for the other.
+                    const id = this.selectedDevice;
                     if (id) {
                         const updated = this.hierarchy.devices.find(d => d.id === id);
                         if (updated) this.selectedDeviceData = updated;
@@ -6693,7 +6699,11 @@
                 },
 
                 async renameDeviceRun(deviceId, newBaseName) {
-                    let device = this.hierarchy.devices.find(d => d.id === deviceId) || this.selectedDeviceData;
+                    // Out of the list, and no stand-in: falling back to the
+                    // device the panel stands on had the name built out of
+                    // another device's area and base name while the request
+                    // renamed this one.
+                    let device = this.hierarchy.devices.find(d => d.id === deviceId);
                     // The device went while the page was standing on it. Reading
                     // its name below threw where a message belongs.
                     if (!device) {
@@ -6914,6 +6924,11 @@
                     }
                     device.area_id = picked || null;
                     this.devicePreviewAreaId = null;
+                    // Onto the panel's own object as well, as at the button: the
+                    // assignment writes into the one the list holds, and where
+                    // the list no longer holds this device the names below were
+                    // built out of the area it has left.
+                    if (this.selectedDevice === deviceId) this.selectedDeviceData = device;
                     return true;
                 },
 
