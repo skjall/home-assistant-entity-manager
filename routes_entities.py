@@ -602,12 +602,14 @@ def _capture_device_entity_naming(
 def _provenance_note(reading: dict[str, Any], template_hash: str) -> dict[str, Any]:
     """The note kept with a written name.
 
-    The type part is for the name, not for the note: the note keeps the word
-    that went in, so a rule the user edits afterwards still finds the entity by
-    what it matches on.
+    Named one by one rather than by what is left out: the capture carries what
+    the job needs, which is more than the note is for. The type part is for the
+    name; the note keeps the word that went in, so a rule the user edits
+    afterwards still finds the entity by what it matches on.
     """
+    kept = ("base_entity", "won_by", "rule_id")
     return {
-        **{key: value for key, value in reading.items() if key != "type_part"},
+        **{key: reading[key] for key in kept if key in reading},
         "template_hash": template_hash,
     }
 
