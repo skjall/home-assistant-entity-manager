@@ -52,14 +52,14 @@ def refers_to_entity_in_string(value: str, entity_id: str) -> bool:
     replacement with a sentinel value. A reference category added here is
     therefore added to both at once.
     """
-    # Exakter Wert (z.B. entity_id: "light.kueche")
+    # The value itself, as in entity_id: "light.kueche".
     if value == entity_id:
         return True
 
-    # Templates: Entity-ID kann als Teil eines Jinja-Ausdrucks vorkommen.
-    # Nur mit Wortgrenzen, damit `sensor.temp` nicht in `sensor.temperature`
-    # trifft. Auch `{% ... %}` zaehlt als Template: Helfer aus der Oberflaeche
-    # holen ihre Werte oft ueber `{% set %}`.
+    # A template can name the entity inside an expression. Word boundaries, so
+    # that `sensor.temp` does not match `sensor.temperature`. `{% ... %}` counts
+    # as a template too: helpers built in the interface often take their values
+    # through `{% set %}`.
     is_template = ("{{" in value and "}}" in value) or ("{%" in value and "%}" in value)
     return is_template and re.search(_word_bounded(entity_id), value) is not None
 

@@ -251,7 +251,7 @@ class DependencyUpdater:
         return await self.fetch_automation_config(automation_numeric_id)
 
     async def get_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
-        """Hole Automation Konfiguration (aus dem Vorrat dieses Jobs)
+        """The automation's configuration, out of what this job has read.
 
         A copy, because the caller rewrites the entity ids inside it. Handing
         out what is kept would put a rename into the store before it is
