@@ -969,6 +969,23 @@
            Each rule excludes the lone button itself rather than relying on a
            later rule of equal weight to undo it, so reordering them changes
            nothing. */
+        /* Counted by tag first, so a browser without :nth-child(of S) - Chrome
+           before 111, Firefox before 113 - still rounds the group the way it
+           always did. The rules below then say it exactly. */
+        .entity-card-simple .btn-group .action-btn:first-of-type:not(:only-of-type) {
+            border-radius: 4px 0 0 4px;
+        }
+
+        .entity-card-simple .btn-group .action-btn:last-of-type:not(:only-of-type) {
+            border-radius: 0 4px 4px 0;
+            margin-left: -1px;
+        }
+
+        .entity-card-simple .btn-group .action-btn:only-of-type {
+            border-radius: 4px;
+            margin-left: 0;
+        }
+
         .entity-card-simple .btn-group .action-btn:nth-child(1 of .action-btn):not(:nth-last-child(1 of .action-btn)) {
             border-radius: 4px 0 0 4px;
         }
