@@ -1253,3 +1253,28 @@ def test_a_bounded_count_on_a_group_that_repeats_is_refused_however_short(rules)
     for expression in [r"(?P<n1>\d+){2,3}", r"([\w ]+){2,5}"]:
         with pytest.raises(NamingRuleError, match="repeat what already repeats"):
             compile_pattern(expression)
+
+
+def test_a_flag_group_is_a_group(rules):
+    """ "(?i:...)" opens one too: the letters are flags for what is inside it. Read as
+    a plain group, the question mark after the bracket was taken for a quantifier and
+    the group was refused one of its own."""
+    assert compile_pattern(r"(?i:abc)+") is not None
+    assert compile_pattern(r"(?i:Heizung) (?P<n1>\d+)") is not None
+    assert compile_pattern(r"(?im-s:abc)+") is not None
+    # And what it holds is still weighed: this is the shape that runs away,
+    # whatever flags are set for it.
+    with pytest.raises(NamingRuleError, match="repeat what already repeats"):
+        compile_pattern(r"(?i:[a-z]+)+")
+
+
+def test_a_rule_that_stopped_matching_says_nothing_about_the_name(rules):
+    """An expression rewritten while a name was being worked out does not match it
+    any more. A target with no placeholder in it was handed back even so, so the
+    entity was renamed by a rule that had stopped applying to it."""
+    regex, _ = pattern_of("Heizung 12345678")
+    rule = rules.add_filter("pattern", regex, "de", "Heizkessel", {"integration": INTEGRATION})
+
+    assert rules.render(rule, "Heizung 12345678", "de") == "Heizkessel"
+    # The same rule held against a name its expression says nothing about.
+    assert rules.render(rule, "Waschmaschine", "de") == ""

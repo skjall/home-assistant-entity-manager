@@ -199,7 +199,10 @@ def target_of(typed: str, numbers: List[str]) -> str:
 
 # The syntax that opens a group: a plain "(", or one of the extensions whose
 # question mark says what kind of group it is rather than repeating anything.
-_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|<[=!]|[:=!>])")
+# "(?i:...)" and its kin open a group too: the letters are flags for what is
+# inside it. Read as a plain group, the question mark after the bracket was taken
+# for a quantifier and the group was refused one of its own.
+_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|<[=!]|[aiLmsux]*(?:-[aiLmsux]+)?[:=!>])")
 
 # What looks like a group and is not one: a backreference to a group named
 # earlier, and a comment. Read as openers, they put a depth on the stack that
@@ -868,6 +871,14 @@ class NamingRules:
             return False
         if builtin is not None and target == builtin:
             return True
+        # Only where the anchor is the word the entity supplies: there, a target
+        # that is that word as the display spells it changes nothing, which is
+        # what redundant means. A domain is not a name - "device_tracker" is what
+        # the entities are, not what they are called - so a domain rule reading
+        # "Device tracker" renames every one of them, and read as redundant here
+        # it was offered for deletion as a rule that does nothing.
+        if rule["match"]["kind"] == "domain":
+            return False
         key = rule["match"]["value"]
         return canon(target) == key and target == normalize_display(key.replace("_", " "), self.display_case)
 
@@ -1310,7 +1321,12 @@ class NamingRules:
             return unfilled
         match = pattern.fullmatch(name or "")
         if not match:
-            return unfilled
+            # Nothing, whatever the target says: an expression rewritten while
+            # this name was being worked out does not match it any more, and a
+            # rule that does not match says nothing about the name. A target with
+            # no placeholder in it was handed back as one, so the entity was
+            # renamed by a rule that had stopped applying to it.
+            return ""
         filled = self._filled(rule, name or "", language, match) if rule["targets"].get(language) else None
         # Nothing rather than the template: the target with its placeholders
         # still in it is not a name, and it was written to Home Assistant as

@@ -6458,9 +6458,18 @@
                             // Also update entities of this device, and the
                             // names the server computed for them: those are
                             // about the area the device has left.
+                            // The names only: an entity's own area is not the
+                            // device's to write. An entity that follows its device
+                            // carries none - that is what following is - and the
+                            // names below read the device's where it does, so the
+                            // rows move with it either way. Written through, an
+                            // entity pinned to another area was shown in the one
+                            // the device went to and named for it, while Home
+                            // Assistant had left it where it was; and every
+                            // follower was given an area of its own, which read
+                            // as an entity that had stopped following.
                             const mine = this.hierarchy.entities.filter(e => e.device_id === deviceId);
                             mine.forEach(e => {
-                                e.area_id = areaId || null;
                                 e.suggested_name = null;
                                 e.suggested_entity_id = null;
                             });

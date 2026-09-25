@@ -666,3 +666,39 @@ def test_a_row_reopened_does_not_ask_what_it_has_just_unset():
 
     assert "if (entity._expanded && entity._ruleScope === undefined) {" not in body
     assert "entity._ruleScope = undefined;" in body
+
+
+def test_a_domain_rule_is_not_read_as_a_rule_that_does_nothing(home):
+    """A domain is not a name: "device_tracker" is what the entities are, not what
+    they are called. Judged against that word as a supplied name would be, a rule
+    reading "Device tracker" looked like a rule that changes nothing - and it was
+    offered for deletion while it renames every one of them."""
+    client, restructurer, rules = home
+    rule = rules.add_filter("domain", "device_tracker", "de", "Device tracker", {"integration": "unifi"})
+
+    assert rules.is_redundant(rule, "de") is False
+
+    # And a name rule whose target is that name as the display spells it does
+    # change nothing, which is what redundant means.
+    named = rules.add_filter("name", "sensor", "de", "Sensor", None)
+    assert rules.is_redundant(named, "de") is True
+
+
+def test_a_device_moved_does_not_write_its_entities_own_areas():
+    """An entity that follows its device carries no area of its own - that is what
+    following is - and the names read the device's where it does. Written through, an
+    entity pinned to another area was shown in the one the device went to and named
+    for it while Home Assistant had left it where it was, and every follower was
+    given an area of its own."""
+    markup = (Path(__file__).parent.parent / "templates" / "index.html").read_text()
+    at = markup.index("async assignDeviceArea(deviceId, areaId) {")
+    body = markup[at : markup.index("async syncZ2mDrift(", at)]
+
+    moved = body[body.index("const mine = this.hierarchy.entities.filter(") :]
+    assert "area_id" not in moved[: moved.index("});")]
+    # The names the server computed are still dropped: those are about the area
+    # the device has left.
+    assert "e.suggested_name = null;" in body
+    assert "e.suggested_entity_id = null;" in body
+    # The device's own area is the device's to write.
+    assert "device.area_id = areaId || null;" in body
