@@ -3621,14 +3621,21 @@
 
                         if (response.ok) {
                             await this.loadMappings();
-                        } else {
-                            const error = await response.json();
-                            alert('Error: ' + (error.error || 'Unknown error'));
+                            this.cancelEdit();
+                            return;
                         }
+                        // Refused, and what was typed stays where it was typed:
+                        // closed on the answer, an expression the server would
+                        // not take was gone, and the only way back to it was to
+                        // reopen the row and write it again from memory. Said in
+                        // the row for the same reason the empty field is.
+                        const error = await response.json();
+                        this.editError = error.error || this.t('settings.save_failed');
                     } catch (error) {
                         console.error('Error saving mapping:', error);
-                    } finally {
-                        this.cancelEdit();
+                        // The answer never came. The row stays open over what
+                        // was typed, as it does over a refusal.
+                        this.editError = error.message || this.t('settings.save_failed');
                     }
                 },
 

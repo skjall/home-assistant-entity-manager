@@ -91,6 +91,20 @@ class NamingRuleError(ValueError):
     """Raised for an invalid rule."""
 
 
+class UnknownRuleError(NamingRuleError):
+    """A rule was asked about by an id nothing is stored under.
+
+    Its own kind, because it is its own answer: a caller that named a rule that
+    is not there has not sent anything wrong, and a route that reads every
+    refusal as "bad request" told it so. It can also happen between a read and
+    a write - the rule was deleted in between - which no amount of checking
+    beforehand can rule out.
+
+    A NamingRuleError as well, so every caller that already answers for one keeps
+    working; the routes that can say "there is no such thing" ask for this first.
+    """
+
+
 def rule_key(kind: str, value: str) -> str:
     """The form a rule of this kind stores and looks up its value in."""
     return value if kind in VERBATIM_KINDS else canon(value)
@@ -1368,7 +1382,7 @@ class NamingRules:
         """
         rule = self.get(rule_id)
         if rule is None:
-            raise NamingRuleError(f"Unknown rule: {rule_id}")
+            raise UnknownRuleError(f"Unknown rule: {rule_id}")
         if targets is None and value is None and filters is ...:
             # Nothing was asked for. Stamping the rule as changed and writing
             # the file said an edit had happened where none had.
@@ -1421,8 +1435,21 @@ class NamingRules:
         # overlap already - and those rules could not be edited at all.
         if value is not None or filters is not ...:
             self._refuse_collision(wanted)
+        elif wanted["match"]["kind"] != "pattern":
+            pass
         else:
-            self.check_targets(wanted["match"], clean)
+            # The expression here is the stored one, which the caller did not
+            # send and cannot mend from where it is standing. Read out as it
+            # was, the answer to "this target is wrong" was a complaint about
+            # an expression nobody had touched.
+            try:
+                compiled = compile_pattern(wanted["match"]["value"])
+            except NamingRuleError as error:
+                raise NamingRuleError(f"This rule's own expression cannot be read: {error}") from error
+            for target in clean.values():
+                for key in _PLACEHOLDER.findall(target):
+                    if not _known_placeholder(compiled, key):
+                        raise NamingRuleError(f"The pattern captures nothing for {{{key}}}")
 
         # Put back if it cannot be written: the rule in memory answers every
         # later read, and a disk that refused the write would have left it

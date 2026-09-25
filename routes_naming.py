@@ -20,6 +20,7 @@ from naming_rules import (
     MAX_PATTERN_LENGTH,
     VERBATIM_KINDS,
     NamingRuleError,
+    UnknownRuleError,
     compile_pattern,
     pattern_of,
     readable_pattern,
@@ -889,6 +890,9 @@ def naming_rule_item(rule_id):
         standing = rules.get(rule_id)
         if standing is None:
             return jsonify({"error": "unknown rule"}), 404
+        # Said here as well as answered for below: a rule deleted between this
+        # reading and the write cannot be ruled out, and the write says so in
+        # its own words.
         if standing["match"]["kind"] != "pattern":
             return jsonify({"error": "Only a pattern rule is matched on an expression"}), 400
     targets = data.get("targets")
@@ -912,6 +916,11 @@ def naming_rule_item(rule_id):
         # Where a rule applies is added and removed one filter at a time; a
         # single scope here would have to throw the rest of the list away.
         rule = rules.update(rule_id, targets=targets, value=expression)
+    except UnknownRuleError:
+        # Not a bad request: the caller named a rule that is not there, which is
+        # what 404 says. A targets-only call had it answered as though what was
+        # sent was wrong, while the expression path said 404 for the same thing.
+        return jsonify({"error": "unknown rule"}), 404
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()

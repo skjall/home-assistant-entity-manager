@@ -13,7 +13,15 @@ import pytest
 
 from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
-from naming_rules import NamingRuleError, NamingRules, compile_pattern, pattern_of, readable_pattern, target_of
+from naming_rules import (
+    NamingRuleError,
+    NamingRules,
+    UnknownRuleError,
+    compile_pattern,
+    pattern_of,
+    readable_pattern,
+    target_of,
+)
 from naming_templates import NamingTemplates
 import routes_naming
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
@@ -685,6 +693,51 @@ def test_an_expression_for_a_rule_that_is_not_there_says_so(client):
     answer = client.put("/api/naming/rules/nothing", json={"match_value": r"Heizung\ \d+"})
 
     assert answer.status_code == 404
+
+
+def test_a_target_for_a_rule_that_is_not_there_says_so_as_well(client):
+    """The same answer whichever field was sent: a caller that named a rule which
+    is not there has not sent anything wrong, and 400 said it had."""
+    answer = client.put("/api/naming/rules/nothing", json={"targets": {"de": "Heizkosten"}})
+
+    assert answer.status_code == 404
+
+
+def test_a_rule_deleted_between_the_reading_and_the_write_is_still_a_404(rules):
+    """No amount of checking beforehand rules that out, so the write says it in
+    its own words."""
+    rule = _pattern_rule(rules)
+    rules.delete(rule["id"])
+
+    with pytest.raises(UnknownRuleError):
+        rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+
+def test_a_stored_expression_that_cannot_be_read_says_whose_it_is(rules):
+    """The caller editing a target did not send that expression and cannot mend
+    it from where it is standing; read out as it was, the answer to "this target
+    is wrong" was a complaint about something nobody had touched."""
+    rule = _pattern_rule(rules)
+    rule["match"]["value"] = r"Heizung ("
+
+    with pytest.raises(NamingRuleError) as refused:
+        rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+    assert "this rule's own expression" in str(refused.value).lower()
+
+
+def test_a_refused_save_keeps_what_was_typed():
+    """Closed on the answer, an expression the server would not take was gone,
+    and the only way back to it was to write it again from memory."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(here, "templates", "settings.html"), encoding="utf-8") as handle:
+        markup = handle.read()
+
+    at = markup.index("async saveEdit(row) {")
+    body = markup[at : markup.index("async addMapping()", at)]
+    assert "alert(" not in body
+    assert "} finally {" not in body
+    assert "this.editError = error.error || this.t('settings.save_failed');" in body
 
 
 # ---------------------------------------------- what the page says out loud
