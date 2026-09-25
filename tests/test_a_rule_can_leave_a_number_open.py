@@ -379,3 +379,20 @@ def test_a_backreference_is_not_read_as_a_quantifier():
     # or not.
     with pytest.raises(NamingRuleError):
         compile_pattern(r"((?P<n1>\d+)-(?P=n1))+")
+
+
+def test_a_choice_inside_a_repeated_group_is_refused():
+    """ "(a|aa)+" reads one stretch of text in as many ways as it can be cut up.
+
+    It tries all of them on a name that nearly matches, which is the same
+    runaway as "(a+)+" and was let through.
+    """
+    for expression in [r"(a|aa)+", r"((a|aa))+", r"(He|Heating)*X"]:
+        with pytest.raises(NamingRuleError):
+            compile_pattern(expression)
+
+
+def test_a_choice_that_is_not_repeated_is_accepted():
+    """A choice is only a runaway where something repeats it."""
+    for expression in [r"(a|b)", r"(a|b)?c", r"(?:Heizung|Kuehlung) (?P<n1>\d+)"]:
+        assert compile_pattern(expression) is not None
