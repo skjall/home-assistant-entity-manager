@@ -202,7 +202,8 @@
     "entity_marked_for_acceptance": "Entité marquée pour acceptation",
     "core_starting": "Home Assistant est en train de démarrer. Cela reprendra dès qu’il répondra.",
     "rules_saved": "Règles enregistrées",
-    "nothing_to_apply": "Rien à appliquer"
+    "nothing_to_apply": "Rien à appliquer",
+    "device_name_first": "Appliquez d'abord le nom de l'appareil - les entités le suivent"
   },
   "dependencies": {
     "title": "Dépendances pour",

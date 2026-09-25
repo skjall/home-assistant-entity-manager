@@ -202,7 +202,8 @@
     "entity_marked_for_acceptance": "Entität zum Akzeptieren markiert",
     "core_starting": "Home Assistant startet gerade. Sobald es antwortet, geht es weiter.",
     "rules_saved": "Regeln gespeichert",
-    "nothing_to_apply": "Nichts zu übernehmen"
+    "nothing_to_apply": "Nichts zu übernehmen",
+    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",

@@ -202,7 +202,8 @@
     "entity_marked_for_acceptance": "Entidad marcada para aceptación",
     "core_starting": "Home Assistant se está iniciando. Continuará en cuanto responda.",
     "rules_saved": "Reglas guardadas",
-    "nothing_to_apply": "Nada que aplicar"
+    "nothing_to_apply": "Nada que aplicar",
+    "device_name_first": "Aplica primero el nombre del dispositivo: las entidades lo siguen"
   },
   "dependencies": {
     "title": "Dependencias de",

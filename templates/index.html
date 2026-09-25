@@ -2166,7 +2166,8 @@
                                 const picked = devicePreviewAreaId !== null
                                     ? devicePreviewAreaId
                                     : (selectedDeviceData?.area_id || '');
-                                $nextTick(() => $el.value = picked)"
+                                const about = selectedDevice;
+                                $nextTick(() => { if (about === selectedDevice) $el.value = picked; })"
                             :disabled="renamingDevice || applyingEntityId || executing"
                             @change="pickPreviewArea($event.target.value)">
                         <option value="" x-text="t('area.select_area')">Select area...</option>
@@ -5478,7 +5479,13 @@
                     if (device && device.id === this.selectedDevice) this.deviceNameClash = [];
                     if (!device || this.isVirtualDevice(device.id)) return [];
                     const wanted = this.getExpectedDeviceName(device, baseName);
-                    if (!wanted || wanted === device.name) return [];
+                    // The device's own name says nothing about the ids where the
+                    // templates differ: with "{device}" for the device and
+                    // "{area} {device} {entity}" for its entities, a move
+                    // leaves the device called what it was and gives every
+                    // entity a new id. Asked only about the name, the check let
+                    // those through and Home Assistant refused them one by one.
+                    if ((!wanted || wanted === device.name) && !this.deviceIsMoving(device)) return [];
 
                     const mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
                     if (!mine.length) return [];
@@ -6771,7 +6778,11 @@
                     // an id. Asked here as well as at the button, because this
                     // is the door the rename actually goes through.
                     const wasPreviewed = this.devicePreviewBaseName;
-                    this.devicePreviewBaseName = newBaseName;
+                    // Only where the panel still stands on this device: written
+                    // through, a click on another device during the move left
+                    // that device's field holding this device's new name, and
+                    // the button beside it would have written it.
+                    if (this.selectedDevice === deviceId) this.devicePreviewBaseName = newBaseName;
                     let clashes = [];
                     try {
                         clashes = await this.checkDeviceNameClash(device, newBaseName);
@@ -6953,6 +6964,17 @@
                     // A move the panel holds goes in before the names that were
                     // built out of it.
                     if (!await this.commitStagedArea()) return;
+
+                    // A name typed into the panel and not applied is what the
+                    // rows below were named out of. Written from here, every
+                    // entity of the device came out carrying a base name no
+                    // device has, because the device itself was never renamed.
+                    // The tick beside the field writes it, entities and all.
+                    const typedBase = (this.devicePreviewBaseName || '').trim();
+                    if (typedBase && typedBase !== (this.selectedDeviceData?.base_name || '').trim()) {
+                        this.showMessage(this.t('messages.device_name_first'), 'info', true);
+                        return;
+                    }
 
                     // The ids come from the server; before they are in, a row
                     // that only needs a new id reads as needing nothing.
