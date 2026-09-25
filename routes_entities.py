@@ -615,12 +615,18 @@ def _provenance_note(reading: dict[str, Any], template_hash: str) -> dict[str, A
     # left a note of nothing but the fingerprint, and a reader asking it what
     # went into the name found no key at all rather than an empty answer.
     #
-    # The rule id is the one that stays None where there is none, as it does
-    # on every other way into the state file (naming_service.provenance_of):
-    # "" would be an id, and a reader telling a name no rule decided from one
-    # decided by a rule since deleted would be told the same thing for both.
+    # Two of the three stay None where there is nothing. For the rule id, ""
+    # would be an id, and a reader telling a name no rule decided from one
+    # decided by a rule since deleted would be told the same for both. For the
+    # type part, "" is a statement about the name - it is area and device and
+    # ends there - and an entity that turned up only after the capture was read
+    # would have had that statement made on its behalf, with the next run
+    # proposing the type part away. It is None on every other way into the state
+    # file (naming_service.provenance_of) too.
+    noted = reading.get("base_entity")
     return {
-        **{key: reading.get(key) or "" for key in ("base_entity", "won_by")},
+        "base_entity": noted if isinstance(noted, str) else None,
+        "won_by": reading.get("won_by") or "",
         "rule_id": reading.get("rule_id") or None,
         "template_hash": template_hash,
     }
