@@ -42,6 +42,7 @@ one filter.
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from functools import lru_cache
 import json
 import logging
 from pathlib import Path
@@ -89,6 +90,30 @@ EVERYWHERE_RANK = 8
 
 class NamingRuleError(ValueError):
     """Raised for an invalid rule."""
+
+
+class NotAPatternRuleError(NamingRuleError):
+    """An expression was sent for a rule that is not matched on one.
+
+    Its own kind so a caller can tell it from the other refusals: the other
+    kinds are matched on a word the integration supplies, and that word is not
+    the writer's to change. Asked before the write rather than after, it was
+    asked of a reading nothing held still.
+    """
+
+
+class UnknownRuleError(NamingRuleError):
+    """A rule was asked about by an id nothing is stored under.
+
+    Its own kind, because it is its own answer: a caller that named a rule that
+    is not there has not sent anything wrong, and a route that reads every
+    refusal as "bad request" told it so. It can also happen between a read and
+    a write - the rule was deleted in between - which no amount of checking
+    beforehand can rule out.
+
+    A NamingRuleError as well, so every caller that already answers for one keeps
+    working; the routes that can say "there is no such thing" ask for this first.
+    """
 
 
 def rule_key(kind: str, value: str) -> str:
@@ -285,15 +310,38 @@ def _refuse_runaway(regex: str) -> None:
         at += 1
 
 
-def compile_pattern(regex: str) -> "re.Pattern[str]":
-    """A pattern's expression, compiled, or a NamingRuleError saying why not."""
-    if not regex or len(regex) > MAX_PATTERN_LENGTH:
-        raise NamingRuleError("A pattern needs an expression of at most 500 characters")
+@lru_cache(maxsize=512)
+def _read_pattern(regex: str) -> "re.Pattern[str]":
+    """The work of compile_pattern, kept for an expression already read.
+
+    An expression is read where it arrives, to answer about it, and again where
+    the rules judge what the targets ask of it - the runaway walk and the
+    compilation twice for one write. Expressions are few and short: there is one
+    per pattern rule, and every entity of the integration is matched against it.
+
+    Only the expressions that can be read are kept; a refusal is worked out
+    again, which is what a refusal costs.
+
+    Kept under the expression exactly as it was given, because that is what an
+    expression is: a space at the end of one is a space it matches, and two that
+    differ by one are two patterns, not one written twice.
+    """
     _refuse_runaway(regex)
     try:
         return re.compile(regex)
     except re.error as error:
         raise NamingRuleError(f"Not a valid pattern: {error}") from error
+
+
+def compile_pattern(regex: str) -> "re.Pattern[str]":
+    """A pattern's expression, compiled, or a NamingRuleError saying why not."""
+    # Said apart, because the two are different mistakes: a writer who sent
+    # nothing was told about a length limit it had not come near.
+    if not regex:
+        raise NamingRuleError("A pattern needs an expression")
+    if len(regex) > MAX_PATTERN_LENGTH:
+        raise NamingRuleError(f"A pattern's expression is at most {MAX_PATTERN_LENGTH} characters")
+    return _read_pattern(regex)
 
 
 def fill_placeholders(target: str, match: "re.Match[str]") -> Optional[str]:
@@ -331,6 +379,13 @@ def _group(match: "re.Match[str]", key: str) -> Optional[str]:
 
 
 def _known_placeholder(pattern: "re.Pattern[str]", key: str) -> bool:
+    """Whether an expression has something for a placeholder to be filled from.
+
+    The three ways a target can name a group, in the order ``_group`` reads them:
+    by the name the group carries, by the name a learned pattern gives the
+    numbers it left open - "{1}" is the group "n1" - and by position, where "{1}"
+    is the first group of a hand-written expression.
+    """
     return (
         key in pattern.groupindex
         or f"n{key}" in pattern.groupindex
@@ -867,7 +922,32 @@ class NamingRules:
         return None
 
     @staticmethod
-    def check_pattern(rule: Mapping[str, Any]) -> None:
+    def check_targets(
+        match: Mapping[str, Any],
+        targets: Mapping[str, str],
+        compiled: Optional["re.Pattern[str]"] = None,
+    ) -> None:
+        """Refuse a target whose placeholders the expression does not capture.
+
+        These targets, not every target the rule holds: an edit says what one
+        language is to read and nothing about the others, and a rule whose other
+        language had been left carrying a placeholder the expression has no group
+        for could then not be edited at all - not even to mend it.
+
+        ``compiled`` is the expression where the caller has already read it, so
+        an edit that has to say whose expression could not be read does not have
+        to compile it twice to find out.
+        """
+        if match["kind"] != "pattern":
+            return
+        pattern = compiled if compiled is not None else compile_pattern(match["value"])
+        for target in targets.values():
+            for key in _PLACEHOLDER.findall(target):
+                if not _known_placeholder(pattern, key):
+                    raise NamingRuleError(f"The pattern captures nothing for {{{key}}}")
+
+    @classmethod
+    def check_pattern(cls, rule: Mapping[str, Any]) -> None:
         """Refuse a pattern rule that could not be applied as meant.
 
         It has to name the integration it is about, and every placeholder in
@@ -877,14 +957,14 @@ class NamingRules:
         match = rule["match"]
         if match["kind"] != "pattern":
             return
-        pattern = compile_pattern(match["value"])
+        # The expression first: asked about the filters before it was read, a
+        # rule sent with both a broken expression and no integration was answered
+        # about the integration, and the expression only on the next try.
+        compiled = compile_pattern(match["value"])
         filters = rule.get("filters") or []
         if not filters or any(not one.get("integration") or one.get("registry_id") for one in filters):
             raise NamingRuleError("A pattern rule applies within an integration")
-        for target in rule["targets"].values():
-            for key in _PLACEHOLDER.findall(target):
-                if not _known_placeholder(pattern, key):
-                    raise NamingRuleError(f"The pattern captures nothing for {{{key}}}")
+        cls.check_targets(match, rule.get("targets") or {}, compiled)
 
     def _refuse_collision(self, rule: Mapping[str, Any]) -> None:
         self.check_pattern(rule)
@@ -1356,33 +1436,125 @@ class NamingRules:
         rule_id: str,
         targets: Optional[Mapping[str, str]] = None,
         filters: Any = ...,
+        value: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Change what a rule says, or the whole list of places it applies.
+        """Change what a rule says, what it matches, or where it applies.
 
         One place at a time is add_filter and remove_filter; this is for
         replacing the list wholesale, which is the only other honest way to
         change it. There is deliberately no way to set a single scope: on a
         rule reaching three places that could only mean throwing two away.
+
+        ``value`` is the expression of a pattern rule. The other kinds are
+        matched on a word the integration supplies, and changing that word
+        would make the rule a different rule rather than an edited one; a
+        pattern is the one kind written to be adjusted.
+
+        ``targets`` is merged into what the rule holds, so a language it does
+        not name keeps the word it has. There is deliberately no way to take a
+        language away: a rule with no target in a language simply has none, and
+        the one honest way to that is a rule that never had it.
+
+        Everything asked for is worked out first and checked together, so a
+        new expression is judged against the new targets rather than the old.
         """
         rule = self.get(rule_id)
         if rule is None:
-            raise NamingRuleError(f"Unknown rule: {rule_id}")
+            raise UnknownRuleError(f"Unknown rule: {rule_id}")
+        if targets is None and value is None and filters is ...:
+            # Nothing was asked for. Stamping the rule as changed and writing
+            # the file said an edit had happened where none had.
+            return rule
+
+        wanted = dict(rule)
         if targets is not None:
             clean = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
             if not clean:
                 raise NamingRuleError("A rule needs at least one target")
-            # Judged as what it would become, and written only if it passes: a
-            # refused target that was written first stood in the rule, and the
-            # next save of anything else put it on disk.
-            self.check_pattern({**rule, "targets": clean})
-            rule["targets"] = clean
+            # Merged, not replaced: the caller edits the language in front of
+            # it and says nothing about the others. Replacing meant every
+            # writer had to send the whole set back, and a set read before
+            # someone else's edit then wrote that edit away again.
+            # Read with get, like every other field here: a rule out of a
+            # backup may have none, and merging into what is not there answered
+            # an edit with a KeyError.
+            wanted["targets"] = {**(rule.get("targets") or {}), **clean}
+
+        if value is not None:
+            if rule["match"]["kind"] != "pattern":
+                raise NotAPatternRuleError("Only a pattern rule is matched on an expression")
+            # Read as a pattern below, by the check that also asks whether
+            # the targets still have what they need - one compilation, and it
+            # says why it cannot be read, which is what the writer needs back.
+            wanted["match"] = {**rule["match"], "value": value.strip()}
 
         if filters is not ...:
-            wanted = clean_filters(filters)
-            self._refuse_collision({**rule, "filters": wanted})
-            rule["filters"] = wanted
+            wanted["filters"] = clean_filters(filters)
+
+        # What was asked for is what the rule already says. Stamping it as
+        # changed and writing the file put an edit in the history where none
+        # had happened - and asked first, because a rule that is already what it
+        # would become must not be refused over something that was true of it
+        # before this call: one restored without its filters answered a request
+        # that changed nothing with "a pattern rule applies within an
+        # integration".
+        # Read with get: a rule out of a backup, or one built in a test, may be
+        # missing a field this never wrote, and an edit to its target answered
+        # with a KeyError rather than with a rule.
+        if all(wanted.get(key) == rule.get(key) for key in ("targets", "match", "filters")):
+            return rule
+
+        # What the call changes decides what is judged. An expression or a
+        # list of filters is the rule saying which entities it is about, so the
+        # whole rule is judged again - including what claims a filter.
+        #
+        # A target edit is not: it says what one language reads. Judged as a
+        # whole rule it was refused for things the caller had not touched and
+        # could not mend from there - another language left carrying a
+        # placeholder the expression has no group for, two stored rules that
+        # overlap already - and those rules could not be edited at all.
+        if value is not None or filters is not ...:
+            self._refuse_collision(wanted)
+        elif wanted["match"]["kind"] != "pattern":
+            pass
+        else:
+            # The expression here is the stored one, which the caller did not
+            # send and cannot mend from where it is standing. Read out as it
+            # was, the answer to "this target is wrong" was a complaint about
+            # an expression nobody had touched.
+            try:
+                compiled = compile_pattern(wanted["match"]["value"])
+            except NamingRuleError as error:
+                raise NamingRuleError(f"This rule's own expression cannot be read: {error}") from error
+            self.check_targets(wanted["match"], clean, compiled)
+
+        # Put back if it cannot be written: the rule in memory answers every
+        # later read, and a disk that refused the write would have left it
+        # saying something the file does not.
+        #
+        # Only the fields this call changes, so what is put back is what was
+        # taken: assigning all three wrote a field its own value and had the
+        # rollback restoring something that never moved.
+        #
+        # Nothing can come between the reading above and the writing here: every
+        # method that writes runs under the store's lock, this one included.
+        changed = [key for key in ("targets", "match", "filters") if wanted.get(key) != rule.get(key)]
+        held = {key: rule[key] for key in changed + ["updated_at"] if key in rule}
+        # Whatever this call adds, not only the timestamp: a rule missing a field
+        # - one out of a backup - was given it here, and a write that failed left
+        # the rule in memory carrying a field the file on disk does not have.
+        added = [key for key in changed + ["updated_at"] if key not in rule]
+        for key in changed:
+            if key in wanted:
+                rule[key] = wanted[key]
         rule["updated_at"] = _now()
-        self.save()
+        try:
+            self.save()
+        except Exception:
+            rule.update(held)
+            for key in added:
+                rule.pop(key, None)
+            raise
         return rule
 
     @guarded

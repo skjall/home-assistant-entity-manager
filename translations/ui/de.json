@@ -554,6 +554,10 @@
     "pattern_hint": "Manche Integrationen schreiben eine Seriennummer in jeden Namen, etwa „Heizung 12345678“. Eine Muster-Regel lässt die Nummer offen und gilt so für alle Geräte dieser Integration. Bestehende Muster-Regeln wirken auch, wenn der Schalter aus ist.",
     "pattern_toggle": "Muster-Regeln beim Umbenennen anbieten",
     "pick_pattern": "Muster",
+    "save_failed": "Nicht gespeichert",
+    "list_not_read_again": "Die Liste konnte nicht neu gelesen werden – Seite neu laden",
+    "pattern_needs_an_expression": "Eine Muster-Regel braucht einen Ausdruck. Es wurde nichts gespeichert.",
+    "pattern_expression": "Ausdruck, z. B. Heizung\\ (?P<n1>\\d+)",
     "caught_pattern": "Muster"
   },
   "type_mappings": {
