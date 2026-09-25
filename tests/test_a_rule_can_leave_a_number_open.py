@@ -300,8 +300,19 @@ def test_a_counted_repetition_is_not_a_runaway():
     """ "(\\d{4})+" bounds what it repeats, so it finishes; "(\\d{2,})+" does not."""
     assert compile_pattern(r"(\d{4})+") is not None
     assert compile_pattern(r"(?:ab{1,3})+c") is not None
+    assert compile_pattern(r"(\d{4}){2,3}") is not None
     with pytest.raises(NamingRuleError):
         compile_pattern(r"(\d{2,})+")
+
+
+def test_a_bounded_count_on_a_group_that_repeats_is_a_runaway():
+    """A count bounds how often the group is tried, not how many ways there are
+    to read it: "([\\w ]+){2,5}" can split a hundred characters across five
+    groups every way there is, and tries all of them on a name that nearly
+    matches. The bound was read as making any group safe."""
+    for expression in (r"([\w ]+){2,5}", r"(a+){2,3}", r"(a|aa){2,3}"):
+        with pytest.raises(NamingRuleError):
+            compile_pattern(expression)
 
 
 def test_a_placeholder_with_nothing_in_it_leaves_the_name_alone(rules):
