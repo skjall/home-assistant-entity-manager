@@ -390,6 +390,7 @@ class NamingRules:
         self._rule_index = None
         self._by_entity = None
         self._patterns: Optional[List[Tuple[Dict[str, Any], "re.Pattern[str]"]]] = None
+        self._patterns_keyed: Optional[Dict[str, "re.Pattern[str]"]] = None
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -458,6 +459,7 @@ class NamingRules:
         self._rule_index = None
         self._by_entity = None
         self._patterns = None
+        self._patterns_keyed = None
 
     @guarded
     def save(self) -> None:
@@ -970,6 +972,17 @@ class NamingRules:
             self._patterns = compiled
         return self._patterns
 
+    def _patterns_by_id(self) -> Dict[str, "re.Pattern[str]"]:
+        """The same compiled expressions, by rule id.
+
+        Built with them and thrown away with them - ``_forget_index`` drops both,
+        so a rewritten expression is compiled again rather than answered from
+        here.
+        """
+        if self._patterns_keyed is None:
+            self._patterns_keyed = {rule["id"]: pattern for rule, pattern in self._pattern_rules()}
+        return self._patterns_keyed
+
     def _find_pattern(
         self,
         name: str,
@@ -1007,8 +1020,10 @@ class NamingRules:
         while at < len(found):
             reach = found[at][0]
             # All of them, not the first two: a third rule written to settle
-            # the tie between the other two joined it without a word.
-            tied = [rule for rank, rule in found if rank == reach]
+            # the tie between the other two joined it without a word. Counted
+            # from here on, since the list is sorted and what came before
+            # reaches further.
+            tied = [rule for rank, rule in found[at:] if rank == reach]
             if len(tied) == 1:
                 return tied[0]
             logger.warning(
@@ -1044,9 +1059,12 @@ class NamingRules:
 
     def _compiled_pattern(self, rule: Mapping[str, Any]) -> Optional["re.Pattern[str]"]:
         """The compiled expression of a stored pattern rule, or of a passing one."""
-        for kept, pattern in self._pattern_rules():
-            if kept["id"] == rule.get("id"):
-                return pattern
+        # Looked up by id: render is asked once for every entity of the home, and
+        # walking the stored patterns for each of them was a scan per entity per
+        # rule where one lookup does.
+        kept = self._patterns_by_id().get(rule.get("id") or "")
+        if kept is not None:
+            return kept
         try:
             return compile_pattern(rule["match"]["value"])
         except NamingRuleError:
