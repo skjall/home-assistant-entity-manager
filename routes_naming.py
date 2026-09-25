@@ -20,6 +20,8 @@ from naming_rules import (
     MAX_PATTERN_LENGTH,
     VERBATIM_KINDS,
     NamingRuleError,
+    NotAPatternRuleError,
+    UnknownRuleError,
     pattern_of,
     readable_pattern,
     target_of,
@@ -922,10 +924,66 @@ def naming_rule_item(rule_id):
         renamer_state["type_mappings"]._refresh_user_view()
         return jsonify({"success": True})
     data = request.json if isinstance(request.json, dict) else {}
+    # The expression of a pattern rule, which is the one kind written to be
+    # adjusted afterwards: the others are matched on a word the integration
+    # supplies, and that word is not the writer's to change.
+    expression = data.get("match_value")
+    if expression is not None and not isinstance(expression, str):
+        return jsonify({"error": "match_value has to be text"}), 400
+    if expression is not None:
+        # Not put through sanitize_string: that one cuts a string to length and
+        # drops control characters, which for an expression means storing a
+        # pattern the writer did not send - a 501-character regex came back as
+        # its first 500 with a 200, and a literal \x0b was quietly dropped.
+        # An expression is read as it was sent, or refused.
+        # Measured as it will be stored: the length was taken before the
+        # trimming, so an expression of 499 characters with a space after it was
+        # refused for being 501.
+        expression = expression.strip()
+        # Whitespace is not an expression. An empty one read as "something was
+        # supplied" and reached compile_pattern, which answered about the
+        # pattern rather than about the empty field; and where targets came
+        # with it, the emptied expression was dropped without a word.
+        if not expression:
+            return jsonify({"error": "A pattern needs an expression"}), 400
+        if len(expression) > MAX_PATTERN_LENGTH:
+            return jsonify({"error": f"A pattern's expression is at most {MAX_PATTERN_LENGTH} characters"}), 400
+        # What is wrong with the expression itself is answered by the rules,
+        # under their own lock: asked here first, the answer came out of a
+        # reading nothing held still - the rule could be rewritten or deleted
+        # between that reading and the write - and the same two questions were
+        # then asked again a moment later, in another place, where they could
+        # drift apart.
+    targets = data.get("targets")
+    if targets is not None and not isinstance(targets, dict):
+        return jsonify({"error": "targets has to be a mapping of language to text"}), 400
+    if targets is not None and not any(isinstance(text, str) and text.strip() for text in targets.values()):
+        # A mapping with nothing usable in it is not a target. Passed on it
+        # reached the rules and came back as "a rule needs at least one
+        # target", which reads as though the rule had lost the ones it has.
+        return jsonify({"error": "targets needs at least one language with text"}), 400
+    if targets is not None:
+        # And a language sent empty among others is answered for rather than
+        # dropped: the caller asked for two words and would have been told the
+        # request had gone through with one.
+        empty = [language for language, text in targets.items() if not (isinstance(text, str) and text.strip())]
+        if empty:
+            return jsonify({"error": f"No text for {', '.join(sorted(empty))}"}), 400
+    if targets is None and expression is None:
+        return jsonify({"error": "Nothing to change: neither targets nor an expression"}), 400
     try:
         # Where a rule applies is added and removed one filter at a time; a
         # single scope here would have to throw the rest of the list away.
-        rule = rules.update(rule_id, targets=data.get("targets"))
+        rule = rules.update(rule_id, targets=targets, value=expression)
+    except UnknownRuleError:
+        # Not a bad request: the caller named a rule that is not there, which is
+        # what 404 says. A targets-only call had it answered as though what was
+        # sent was wrong, while the expression path said 404 for the same thing.
+        return jsonify({"error": "unknown rule"}), 404
+    except NotAPatternRuleError as error:
+        # A rule of another kind cannot be given an expression. Its own answer, so
+        # what was sent with it is not reported as the problem.
+        return jsonify({"error": str(error)}), 400
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()
@@ -1068,7 +1126,21 @@ def naming_preview():
     if not entity:
         return jsonify({"error": "unknown entity"}), 404
     entity_name = sanitize_string(type_value) if isinstance(type_value, str) else None
-    new_entity_id, new_name = restructurer.generate_new_entity_id(entity_id, entity, entity_name)
+    # What the form holds but the registry does not yet. Both the area and the
+    # base name are picked in the panel and written only when the change is
+    # applied; a preview built without them answers from what the integration
+    # supplied - for a UniFi access point its MAC address, and no area at all.
+    # An area sent as "" is one picked away, which is not the same as none sent.
+    device_name = data.get("device_name")
+    pending_device_name = sanitize_string(device_name) if isinstance(device_name, str) else None
+    area_id = data.get("area_id")
+    pending_area_id = sanitize_string(area_id, max_length=255) if isinstance(area_id, str) else None
+    new_entity_id, new_name = restructurer.generate_new_entity_id(
+        entity_id, entity, entity_name, pending_device_name, pending_area_id
+    )
+    # What named the entity as it stands. A name asked about for a device name
+    # or an area the panel holds and the registry does not is not a decision
+    # anything made, and build_naming_context leaves no such answer behind.
     resolution = restructurer.last_resolutions.get(entity_id)
     # Number away from IDs other entities hold, as a batched rename would.
     domain, _, object_id = new_entity_id.partition(".")

@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 # to "nothing recorded" on the first read.
 SCHEMA_VERSION = 2
 
+# The version from which an empty type part means "this name has none" rather
+# than "nothing was recorded". Files written before it are read once more; see
+# _forget_empty_type_parts_of_version_one.
+FORGOT_EMPTY_TYPE_PARTS = 2
+
 # Who the current registry name belongs to.
 ENTITY_MANAGER = "entity_manager"  # we wrote it and it is unchanged
 HA_UI = "ha_ui"  # we wrote it and it has been changed since
@@ -80,7 +85,14 @@ class NamingState:
         nothing and the name is taken apart once more - the type part it holds
         is then recorded properly, and the question does not come back.
         """
-        if data.get("version") == SCHEMA_VERSION:
+        # Anything from this version on has been through it. Named rather than
+        # asked as "is it the current version": a file written by a later version
+        # - or by a later add-on that was rolled back - would then have the
+        # migration run over it again and turn every recorded "this name has no
+        # type part" back into "nothing recorded", which is the distinction it
+        # exists to keep. It is a version of its own for that reason and does not
+        # follow SCHEMA_VERSION.
+        if data.get("version", 0) >= FORGOT_EMPTY_TYPE_PARTS:
             return
         for entry in data.get("entities", {}).values():
             if isinstance(entry, dict) and entry.get("base_entity") == "":
