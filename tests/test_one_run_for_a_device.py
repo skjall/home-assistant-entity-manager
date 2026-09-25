@@ -584,3 +584,20 @@ def test_the_name_is_built_for_the_area_this_run_writes() -> None:
     assert "deviceNamingContext(device, baseName = null, areaId = undefined) {" in body
     assert "const wanted = areaId === undefined ? this.previewAreaFor(device) : areaId;" in body
     assert "renderDeviceName(device, baseName = null, areaId = undefined) {" in body
+
+
+def test_a_name_typed_back_as_it_was_is_not_a_question() -> None:
+    """The field holds what the registry holds, which is what typing a name and
+    typing it back leaves. Read as a question either way, the real answer the call
+    had just worked out was thrown away and the list went on showing the one
+    before it."""
+    with open(os.path.join(HERE, "entity_restructurer.py"), encoding="utf-8") as reading:
+        source = reading.read()
+    at = source.index("        stored_device_name = None")
+    body = source[at : source.index('        partial_context["entity"] = self._base_entity_name(', at)]
+
+    assert "asked_for_another_name = pending_device_name is not None and pending_device_name != (" in body
+    assert "asking_only = ignore_exception or asked_for_another_name or area_id != stored_area" in body
+    # Worked out only where a name was passed in, which is the form asking and
+    # not the list being built.
+    assert body.count("self._base_device_name(raw_device_name, partial_context)") == 2

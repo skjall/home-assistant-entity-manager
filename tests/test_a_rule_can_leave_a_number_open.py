@@ -910,3 +910,51 @@ def test_a_count_around_a_count_is_weighed_as_what_the_two_come_to(rules):
     assert compile_pattern(r"(a|aa){2,3}") is not None
     assert compile_pattern(r"(open|closed){1,2}") is not None
     assert compile_pattern(r"(?:Heizung|Kuehlung) (?P<n1>\d+)") is not None
+
+
+def test_a_target_that_cannot_be_filled_is_no_name(client):
+    """An expression rewritten while a name is being worked out does not match it
+    any more, and the render comes back with nothing. Offered as a name, that stood
+    first among the candidates - nothing else in the walk takes it out, since it is
+    not the shown name either - and the entity was renamed to nothing at all."""
+    response = client.post(
+        "/api/naming/learn",
+        json={"entity_id": "sensor.reg-1", "value": "Heizkostenverteiler 12345678", "scope": "pattern"},
+    )
+    assert response.status_code == 200
+    assert _resolved("sensor.reg-2")["value"] == "Heizkostenverteiler 12345679"
+
+    # As a rewrite leaves it: the rule still applies and its render answers with
+    # nothing for this name.
+    rules = web_ui.renamer_state["naming_rules"]
+    rules.render = lambda rule, name, language: ""
+
+    resolution = _resolved("sensor.reg-2")
+
+    assert resolution["value"] != ""
+    assert "" not in [one["value"] for one in resolution["candidates"]]
+
+
+def test_a_possessive_quantifier_is_not_the_shape_this_refuses(rules):
+    """From Python 3.11 on "?+" is possessive: the group is matched once and never
+    gone back into, which is the opposite of what runs away."""
+    compiled = compile_pattern(r"([a-z ]+)?+")
+
+    assert compiled is not None
+    # A near miss answers rather than hanging, which is what possessive means.
+    assert compiled.fullmatch("a" * 40 + "1") is None
+
+
+def test_an_expression_is_stored_as_it_was_sent(client):
+    """Cut to length and stripped of control characters, a 501-character expression
+    came back as its first 500 with a 200 - a pattern the writer never sent. The
+    route that rewrites one already reads it as sent; this one refuses it."""
+    answer = client.post(
+        "/api/naming/rules",
+        json={
+            "match": {"kind": "pattern", "value": "a" * 501, "integration": INTEGRATION},
+            "targets": {"de": "Heizung"},
+        },
+    )
+
+    assert answer.status_code == 400

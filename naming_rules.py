@@ -309,6 +309,12 @@ def _refuse_runaway(regex: str) -> None:
             # there are ways to cut it up, and it tries all of them.
             if branched and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat a choice: it would never finish")
+            # A question mark is let through where the others are refused, and
+            # "([a-z ]+)?+" is what that lets through: from Python 3.11 on the
+            # second quantifier there is possessive, so the group is matched once
+            # and never gone back into - the opposite of the shape this walk is
+            # about, and a near miss answers at once.
+            #
             # "?" and "*" as well: "((ab)?)+" repeats a group that can match
             # nothing, and the inner group alone said nothing about that.
             if inside or after in {"*", "+", "{", "?"}:
@@ -1556,6 +1562,12 @@ class NamingRules:
                 compiled = compile_pattern(wanted["match"]["value"])
             except NamingRuleError as error:
                 raise NamingRuleError(f"This rule's own expression cannot be read: {error}") from error
+            # What this edit writes, and not the targets it leaves alone: a
+            # language nobody touched is judged where it is written, and judging
+            # it again here would refuse an unrelated correction over a target
+            # already stored - a rule out of a hand-edited file would have no way
+            # back at all. An expression rewritten is judged against every
+            # target, which is the other side of the same rule.
             self.check_targets(wanted["match"], clean, compiled)
 
         # Put back if it cannot be written: the rule in memory answers every

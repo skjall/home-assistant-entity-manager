@@ -441,12 +441,14 @@ class EntityRestructurer:
             "model": device.get("model", ""),
             "integration": integration,
         }
+        stored_device_name = None
         if pending_device_name is not None:
             # What was typed is already a base name - it is the field the
             # interface strips the area prefix out of - so it goes in as it is.
             device_name = pending_device_name
         else:
-            device_name = self._base_device_name(raw_device_name, partial_context)
+            stored_device_name = self._base_device_name(raw_device_name, partial_context)
+            device_name = stored_device_name
         partial_context["device"] = device_name
         # A hypothetical answer must not replace the real one that the entity
         # list reads back out of last_resolutions. A name asked about for a
@@ -458,7 +460,18 @@ class EntityRestructurer:
         # Asked of what came out, not of how it was chosen: the two were
         # worked out from the same question in two places, and a change to one
         # of them would have had hypothetical answers kept as real ones.
-        asking_only = ignore_exception or pending_device_name is not None or area_id != stored_area
+        # A name asked about that is the name the device has is not
+        # hypothetical: the field holds what the registry holds, which is what
+        # typing a name and typing it back leaves. Read as a question either way,
+        # the real answer this call worked out was thrown away and the list went
+        # on showing the one before it. Worked out only where a name was passed
+        # in, which is the form asking and not the list being built.
+        asked_for_another_name = pending_device_name is not None and pending_device_name != (
+            stored_device_name
+            if stored_device_name is not None
+            else self._base_device_name(raw_device_name, partial_context)
+        )
+        asking_only = ignore_exception or asked_for_another_name or area_id != stored_area
         previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(
             entity_id,
@@ -663,14 +676,23 @@ class EntityRestructurer:
                 # there are devices; a pattern answers for all of them.
                 rule = rules.find("pattern", name, integration, language, model, domain)
                 if rule:
-                    candidates.append(
-                        {
-                            "value": rules.render(rule, name, language),
-                            "won_by": "rule:user",
-                            "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model, domain),
-                        }
-                    )
+                    # What the rule makes of this name, which can be nothing: an
+                    # expression rewritten while the name was being worked out
+                    # does not match it any more, and a target that cannot be
+                    # filled is not a name. Offered as one, the empty answer stood
+                    # first among the candidates - nothing else in the walk takes
+                    # it out, since it is not the shown name either - and the
+                    # entity was renamed to nothing at all.
+                    offered = rules.render(rule, name, language)
+                    if offered:
+                        candidates.append(
+                            {
+                                "value": offered,
+                                "won_by": "rule:user",
+                                "rule_id": rule["id"],
+                                "matched_on": rules.why(rule, integration, model, domain),
+                            }
+                        )
                 # The device class is the widest anchor: it says what a value
                 # measures where neither a key nor a name matched.
                 device_class = registry.get("device_class") or registry.get("original_device_class")
