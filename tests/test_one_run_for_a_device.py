@@ -6,6 +6,7 @@ and every entity name below it are built out of the area.
 """
 
 import asyncio
+import os
 from typing import Any
 
 import pytest
@@ -13,6 +14,8 @@ import pytest
 from jobs import TERMINAL_STATES, JobStore, JobWorker
 import routes_entities
 import web_ui
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 @pytest.fixture
@@ -214,3 +217,75 @@ def test_the_area_step_is_logged_before_it_is_written(monkeypatch) -> None:
         ctx,
     )
     assert ("AREA", "dev1 -> kitchen") in ctx.lines
+
+
+# --- What the rows hold when the panel turns away -------------------------
+#
+# These read the page's own source. The staged previews are written by the
+# browser, and what is held down here is which of them the page keeps: a name
+# computed for a move that is not staged any more is a name nothing is going to
+# write, and it sat on the rows of the device the panel had left.
+
+
+def _panel_source():
+    with open(os.path.join(HERE, "templates", "index.html"), encoding="utf-8") as handle:
+        return handle.read()
+
+
+def test_leaving_a_device_puts_its_rows_back():
+    """Every panel switch says which device is being left, and the rows of that
+    device are computed again from the registry."""
+    markup = _panel_source()
+
+    assert "dropStagedPreview(deviceId = null)" in markup
+    # Read before it is written over, in all three switches.
+    assert markup.count("const left = this.selectedDevice;") == 3
+    assert markup.count("this.dropStagedPreview(left);") == 3
+    at = markup.index("dropStagedPreview(deviceId = null)")
+    body = markup[at : markup.index("previewDeviceWide() {", at)]
+    assert "entity._previewName = null;" in body
+    assert "this.computePreviewsFor(rows);" in body
+
+
+def test_picking_an_area_asks_the_panel_for_the_names():
+    """The computed previews are worked out from the registry, which knows
+    nothing of a name typed into the field: the rows went back to the stored
+    name at every pick, and only the next keystroke brought them forward."""
+    markup = _panel_source()
+    at = markup.index("pickPreviewArea(areaId) {")
+    body = markup[at : markup.index("getDeviceDisplayName(device) {", at)]
+
+    assert "this.previewDeviceWide();" in body
+
+
+def test_the_row_renders_the_template_like_everything_else():
+    """Joined with spaces, a template that puts the area last - or anything
+    between the parts - had the row saying one name while the live answer and
+    the server said another, and the id was made out of the row's answer."""
+    markup = _panel_source()
+    at = markup.index("getEntityFriendlyNameForEntity(entity) {")
+    body = markup[at : markup.index("withoutLeading(text, prefix) {", at)]
+
+    assert "renderNamingTemplate(" in body
+    assert "parts.filter" not in body
+    assert "join(' ')" not in body
+
+
+def test_the_row_asks_for_the_id_once():
+    """getNewEntityIdForEntity answers with the computed preview where there is
+    one, so asking for that preview first said the same thing twice."""
+    markup = _panel_source()
+
+    assert "_previewId || getNewEntityIdForEntity" not in markup
+
+
+def test_the_areas_are_looked_up_rather_than_walked():
+    """Every name a row shows is built out of an area, and finding it walked the
+    list once per row on every keystroke."""
+    markup = _panel_source()
+    at = markup.index("function indexed(state)")
+    body = markup[at : markup.index("return {\n                // State", at)]
+
+    assert "index.areasById.set(area.id, area);" in body
+    # And the readings that used to walk the list ask the index.
+    assert "indexed(this).areasById.get(areaId)" in markup

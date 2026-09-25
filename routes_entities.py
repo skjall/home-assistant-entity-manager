@@ -725,6 +725,10 @@ async def rename_device_handler(job, ctx):
         if set_area:
             # Said before it is done: a write that raises left the log with no
             # step at all, so nothing said which operation the job failed on.
+            # The log is the job's account of what it set out to do, not a
+            # receipt that it succeeded - the failure is reported by the
+            # exception, and tests/test_web_rename_job.py holds this order
+            # down for both steps.
             ctx.log("AREA", f"{device_id} -> {area_id or 'no area'}")
             await device_registry.assign_area(device_id, area_id)
 
