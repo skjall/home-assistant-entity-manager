@@ -5680,9 +5680,14 @@
                     // device's rows, the typed-but-unwritten name of the selected
                     // device was read into them.
                     const staged = !!device && device.id === (forDeviceId || this.selectedDevice);
-                    const areaId = this.deviceIsMoving(device)
-                        ? this.previewAreaFor(device)
-                        : (entity?.area_id || device?.area_id);
+                    // The entity's own area first, staged move or not: the move
+                    // is written onto the device, and an entity that carries an
+                    // area of its own is left where it is. Read the other way
+                    // round, every row of a device staged for a move was named
+                    // and given an id for the area it is not going to - and the
+                    // tick beside it would have written that id.
+                    const areaId = entity?.area_id
+                        || (this.deviceIsMoving(device) ? this.previewAreaFor(device) : device?.area_id);
                     const area = indexed(this).areasById.get(areaId);
                     const domain = entity?.id?.split('.')[0] || '';
                     const wantedDevice = baseName !== null ? baseName : (staged ? this.devicePreviewBaseName : null);
@@ -5999,18 +6004,22 @@
                     // apply always passes one, and reading that as "a name the
                     // rows know nothing about" asked the server the same
                     // question a second time on every apply.
+                    // What the panel holds as a name, which an emptied field is
+                    // not: cleared, it holds "" and the rows are computed with the
+                    // device's own name, exactly as they are where nothing was
+                    // ever typed.
+                    const typedName = (this.devicePreviewBaseName || '').trim() || null;
                     const rowsHoldIt = baseName === null
-                        || baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim())
-                        // Nothing typed at all: the rows were computed with the
-                        // device's own name, which is the name being asked about.
-                        // Read as a name they know nothing about, a move with no
-                        // rename beside it asked the server a second time for the
-                        // ids they already held - and the two answers were about
-                        // two readings of the list. A name is needed for the two
-                        // to be the same name: where the device has none either,
-                        // there is nothing to compare and the server answers.
-                        || (this.devicePreviewBaseName === null
-                            && !!baseName && baseName === (device.base_name || '').trim());
+                        || baseName === typedName
+                        // Nothing typed: the rows were computed with the device's
+                        // own name, which is the name being asked about. Read as a
+                        // name they know nothing about, a move with no rename
+                        // beside it asked the server a second time for the ids
+                        // they already held - and the two answers were about two
+                        // readings of the list. A name is needed for the two to be
+                        // the same name: where the device has none either, there
+                        // is nothing to compare and the server answers.
+                        || (typedName === null && !!baseName && baseName === (device.base_name || '').trim());
                     let ids = null;
                     if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {
                         await this.previewsSettled();
@@ -7632,6 +7641,13 @@
                     const device = indexed(this).devicesById.get(deviceId);
                     if (!device || (this.devicePreviewAreaId || null) === (device.area_id || null)) return true;
                     const picked = this.devicePreviewAreaId;
+                    // What was computed for the staged move is about the device as
+                    // it was a moment ago, and the write below settles it either
+                    // way: left standing, an answer still on its way arrived after
+                    // the ordinary previews had been worked out again and wrote
+                    // its ids over them - the row was then renamed to an id worked
+                    // out for an area that had already been written.
+                    this.dropStagedPreview();
                     if (!await this.assignDeviceArea(deviceId, picked || null)) {
                         // Nothing was written, so nothing stays staged, here as
                         // at the panel's own button.

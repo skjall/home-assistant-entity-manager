@@ -718,7 +718,11 @@ async def rename_device_handler(job, ctx):
     # tests/test_one_run_for_a_device.py holds both down.
     if "new_name" in payload and payload["new_name"] is None:
         raise RuntimeError("A rename needs a name")
-    set_area = bool(payload.get("set_area")) or "area_id" in payload
+    # The flag where it is spelled out, and the key standing alone where it is
+    # not: a caller that says "set_area": false and names an area beside it is
+    # saying not to move the device, and reading the key through that had it
+    # moved against what the payload said.
+    set_area = bool(payload.get("set_area")) if "set_area" in payload else ("area_id" in payload)
     # An area asked for is an area spelled out, null included - null is "take it
     # out of every area", which is a thing to ask for. The key missing is nobody
     # asking, and read as null it took the device out of its area on a payload

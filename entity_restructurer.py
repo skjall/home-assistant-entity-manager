@@ -468,6 +468,9 @@ class EntityRestructurer:
         # on showing the one before it. Worked out only where a name was passed
         # in, which is the form asking and not the list being built.
         asked_for_another_name = pending_device_name is not None and pending_device_name != stored_device_name
+        # Both sides of that comparison come out of the same reading above, where
+        # "no area" is "" on either side, so a device without one does not read as
+        # a question about an area it might be moved to.
         asking_only = ignore_exception or asked_for_another_name or area_id != stored_area
         previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(

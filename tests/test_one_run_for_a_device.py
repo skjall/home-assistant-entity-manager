@@ -497,11 +497,13 @@ def test_the_apply_reads_what_the_rows_were_told(monkeypatch) -> None:
     body = markup[at : markup.index("const registry = indexed(this);", at)]
 
     assert "const rowsHoldIt = baseName === null" in body
-    assert "|| baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim())" in body
+    # What the panel holds as a name, which an emptied field is not: cleared, it
+    # holds "" and the rows are computed with the device's own name.
+    assert "const typedName = (this.devicePreviewBaseName || '').trim() || null;" in body
+    assert "|| baseName === typedName" in body
     # And where nothing was typed at all: the rows were computed with the device's
     # own name, which is the name a move asks about.
-    assert "|| (this.devicePreviewBaseName === null" in body
-    assert "&& !!baseName && baseName === (device.base_name || '').trim());" in body
+    assert "|| (typedName === null && !!baseName && baseName === (device.base_name || '').trim());" in body
     assert "if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {" in body
 
 
@@ -726,3 +728,41 @@ def test_a_staged_device_is_counted_once() -> None:
     assert "const staged = this.deviceChangeStaged && !this.renamingDevice;" in body
     assert "one => one.device_id === this.selectedDevice && this.staysInChangesFilter(one));" in body
     assert "return entityChanges + z2mDrift + (staged && !ticked ? 1 : 0);" in body
+
+
+def test_an_entity_with_an_area_of_its_own_does_not_move_with_the_device() -> None:
+    """The move is written onto the device, and an entity carrying an area of its own
+    is left where it is. Read the other way round, every row of a device staged for a
+    move was named and given an id for the area it is not going to - and the tick
+    beside it would have written that id."""
+    markup = _panel_source()
+    at = markup.index("entityNamingContext(entity, suffix = null")
+    body = markup[at : markup.index("pendingDeviceContext(entity) {", at)]
+
+    assert "const areaId = entity?.area_id" in body
+    assert "|| (this.deviceIsMoving(device) ? this.previewAreaFor(device) : device?.area_id);" in body
+
+
+def test_an_area_written_settles_the_staged_answer() -> None:
+    """What was computed for the staged move is about the device as it was a moment
+    ago. Left standing, an answer still on its way arrived after the ordinary
+    previews had been worked out again and wrote its ids over them - and the row was
+    renamed to an id worked out for an area that had already been written."""
+    markup = _panel_source()
+    at = markup.index("async commitStagedArea() {")
+    body = markup[at : markup.index("async executeAllChanges() {", at)]
+
+    assert "this.dropStagedPreview();" in body
+    assert body.index("this.dropStagedPreview();") < body.index("await this.assignDeviceArea(")
+
+
+def test_an_area_named_beside_a_flag_that_says_no_is_not_written(monkeypatch) -> None:
+    """A caller that says "set_area": false and names an area beside it is saying not
+    to move the device. Read through the key alone, it was moved against what the
+    payload said."""
+    written = _run_handler(
+        monkeypatch,
+        {"device_id": "dev1", "new_name": "Kitchen Plug", "set_area": False, "area_id": "kitchen"},
+    )
+
+    assert written == ["name:Kitchen Plug"]
