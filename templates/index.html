@@ -4067,9 +4067,15 @@
                     const entityChanges = this.filteredEntities.filter(e => this.staysInChangesFilter(e)).length;
                     const z2mDrift = this.filteredDevices.filter(d => d.z2m_drift).length;
                     // An area picked or a name typed in the panel is a change of
-                    // its own: it is the one thing "apply all" writes that no
-                    // entity row carries a tick for.
-                    return entityChanges + z2mDrift + (this.deviceChangeStaged && !this.renamingDevice ? 1 : 0);
+                    // its own where no entity row says so already: the rows of the
+                    // staged device carry ticks as soon as their names are worked
+                    // out, and counted beside them the one change read as two - a
+                    // device with five renamed rows showed six.
+                    const staged = this.deviceChangeStaged && !this.renamingDevice;
+                    const ticked = staged
+                        && this.filteredEntities.some(
+                            one => one.device_id === this.selectedDevice && this.staysInChangesFilter(one));
+                    return entityChanges + z2mDrift + (staged && !ticked ? 1 : 0);
                 },
 
                 // Computed: Count of disabled entities in current selection (only when showDisabled is true)
@@ -7477,7 +7483,10 @@
                     if (payload.new_name === undefined && nameStaged && areaStaged) {
                         // And the field goes back to what it held: the name is not
                         // being written, and left standing it read as a rename
-                        // waiting to be applied.
+                        // waiting to be applied. It is not left standing for long -
+                        // the job that writes the move clears the field when it
+                        // reports back, in onRenameDeviceDone, where every other
+                        // staged thing is dropped as well.
                         if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
                         this.showMessage(this.t('messages.name_has_no_place'), 'info', true);
                     }

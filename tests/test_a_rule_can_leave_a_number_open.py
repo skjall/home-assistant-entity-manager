@@ -1462,3 +1462,19 @@ def test_the_quantifier_is_not_the_counter():
 
     assert "def _at_most(quantifier: str) -> int:" in source
     assert "def _at_most(count:" not in source
+
+
+def test_a_count_is_held_down_before_it_is_used_as_a_power(rules):
+    """ "(a|b){9999999999}" is 22 characters and asked Python for a number with three
+    billion digits in it - a gigabyte to work out and throw away, for an answer that
+    was going to be "past the bound" either way."""
+    import time
+
+    started = time.monotonic()
+    with pytest.raises(NamingRuleError, match="repeat a choice"):
+        compile_pattern(r"(a|b){9999999999}")
+    assert time.monotonic() - started < 1
+
+    # And the answers within the bound are unchanged.
+    assert compile_pattern(r"(?:a|aa){4}") is not None
+    assert compile_pattern(r"(a|aa){2,3}") is not None

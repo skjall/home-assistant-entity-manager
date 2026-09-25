@@ -713,7 +713,9 @@ async def rename_device_handler(job, ctx):
         raise RuntimeError("A rename needs a name")
     # And the key carrying null is the same kind of payload: this route omits the
     # key where no rename is asked for, so a null was written by something else -
-    # read as "no rename", the job skipped it and reported success.
+    # read as "no rename", the job skipped it and reported success. The check above
+    # steps over null, which is why this one is here rather than folded into it;
+    # tests/test_one_run_for_a_device.py holds both down.
     if "new_name" in payload and payload["new_name"] is None:
         raise RuntimeError("A rename needs a name")
     set_area = bool(payload.get("set_area")) or "area_id" in payload

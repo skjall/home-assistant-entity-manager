@@ -403,7 +403,7 @@ def test_a_typed_name_with_nowhere_to_go_is_said_out_loud_over_a_move():
     it, so there was nowhere for it to go."""
     markup = _panel_source()
     at = markup.index("const payload = { device_id: deviceId };")
-    body = markup[at : at + 2000]
+    body = markup[at : at + 2600]
 
     assert "if (payload.new_name === undefined && nameStaged && areaStaged) {" in body
     assert body.count("messages.name_has_no_place") == 2
@@ -555,7 +555,7 @@ def test_a_job_under_way_is_not_counted_as_a_change_to_apply() -> None:
     at = markup.index("get pendingChangesCount() {")
     body = markup[at : markup.index("get disabledEntitiesCount() {", at)]
 
-    assert "this.deviceChangeStaged && !this.renamingDevice ? 1 : 0" in body
+    assert "const staged = this.deviceChangeStaged && !this.renamingDevice;" in body
 
 
 def test_a_move_asked_for_without_an_area_is_refused(monkeypatch) -> None:
@@ -713,3 +713,16 @@ def test_apply_all_is_shut_from_the_click() -> None:
     # And the button says so while it runs.
     assert "applyingAll: false," in markup
     assert ':disabled="applyingAll || applyingEntityId || renamingDevice"' in markup
+
+
+def test_a_staged_device_is_counted_once() -> None:
+    """The rows of the staged device carry ticks of their own as soon as their names
+    are worked out. Counted beside them, the one change read as two - a device with
+    five renamed rows showed six."""
+    markup = _panel_source()
+    at = markup.index("get pendingChangesCount() {")
+    body = markup[at : markup.index("get disabledEntitiesCount() {", at)]
+
+    assert "const staged = this.deviceChangeStaged && !this.renamingDevice;" in body
+    assert "one => one.device_id === this.selectedDevice && this.staysInChangesFilter(one));" in body
+    assert "return entityChanges + z2mDrift + (staged && !ticked ? 1 : 0);" in body

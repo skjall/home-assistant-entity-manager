@@ -410,7 +410,13 @@ def _refuse_runaway(regex: str) -> None:
                         # the expression.
                         reads = MAX_CHOICE_WAYS + 1
                     else:
-                        reads = min(reads**times, MAX_CHOICE_WAYS + 1)
+                        # The count is held down before it is used as a power, not
+                        # after: "(a|b){9999999999}" is 22 characters and asked
+                        # Python for a number with three billion digits in it,
+                        # which is a gigabyte of memory to work out and throw away.
+                        # One turn past the bound answers the same, since two ways
+                        # taken that many times is already past it.
+                        reads = min(reads ** min(times, MAX_CHOICE_REPEATS + 1), MAX_CHOICE_WAYS + 1)
                     if not branched or reads <= MAX_CHOICE_WAYS:
                         after = ""
             # A group that reads no text is nothing to repeat: "((?=\\d+))+" and
