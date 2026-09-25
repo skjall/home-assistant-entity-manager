@@ -7,11 +7,13 @@ and every entity name below it are built out of the area.
 
 import asyncio
 import os
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from jobs import TERMINAL_STATES, JobStore, JobWorker
+import naming_service
 import routes_entities
 import web_ui
 
@@ -125,6 +127,9 @@ def _run(monkeypatch, payload: dict[str, Any], ctx: Any = None) -> tuple[list[st
         def __init__(self) -> None:
             self.entities: dict[str, dict[str, Any]] = {}
             self.last_resolutions: dict[str, dict[str, Any]] = {}
+            # Where the devices are, which the job reads before it writes an
+            # area: a device already in the area asked for is not moved by it.
+            self.devices: dict[str, dict[str, Any]] = {}
 
         async def load_structure(self, ws: Any) -> None:
             pass
@@ -243,6 +248,14 @@ def test_the_area_step_is_logged_before_it_is_written(monkeypatch) -> None:
 # browser, and what is held down here is which of them the page keeps: a name
 # computed for a move that is not staged any more is a name nothing is going to
 # write, and it sat on the rows of the device the panel had left.
+# --- One answer to "is an area move staged" --------------------------------
+#
+# The field that marks itself as holding a change, the apply button that counts
+# what is staged and the run that writes it each worked it out for themselves,
+# and they disagreed: an area deleted in Home Assistant while it stood staged
+# here left the field blank and the button open on a move that could not be
+# made. Clicking it said "nothing to apply", and there was no way to clear the
+# staging but to turn to another device.
 
 
 def _panel_source():
@@ -766,3 +779,345 @@ def test_an_area_named_beside_a_flag_that_says_no_is_not_written(monkeypatch) ->
     )
 
     assert written == ["name:Kitchen Plug"]
+
+
+def test_only_one_place_asks_whether_the_area_is_still_there():
+    """The guard against a deleted area lives in areaMoveStaged and nowhere else."""
+    markup = _panel_source()
+
+    assert "areaMoveStaged(picked, device)" in markup
+    # The three that used to work it out now ask it.
+    assert "return this.areaMoveStaged(this.devicePreviewAreaId, this.selectedDeviceData);" in markup
+    assert "const areaStaged = this.areaMoveStaged(this.devicePreviewAreaId, device);" in markup
+    assert "const areaStaged = this.areaMoveStaged(picked, device);" in markup
+    # And the guard is in that one place: asked for once, by name. The ids come
+    # out of one walk per registry change - asked by the field, by the button and
+    # by the run, every repaint walked the areas once for each of them.
+    assert markup.count("if (picked && !this.knownAreaId(picked)) return false;") == 1
+    assert "areaIds.ids = new Set(this.hierarchy.areas.map(area => area.id));" in markup
+    assert markup.count("this.hierarchy.areas.some(a => a.id === picked)") == 0
+
+
+def test_a_pick_forgets_where_the_list_stood():
+    """The field keeps the focus after Enter, and an arrow key pressed straight
+    afterwards went on from the item just chosen rather than to the top."""
+    markup = _panel_source()
+    at = markup.index("pickArea(area) {")
+    body = markup[at : markup.index("takeArea() {", at)]
+
+    assert "this.areaComboAt = 0;" in body
+
+
+def test_the_field_follows_the_areas_without_reading_what_it_writes():
+    """areaOptions reads areaSearch, and the effect writes it: listed as a
+    dependency, every pick and every panel change paid for a second run of the
+    effect, and anything written there conditionally would have looped."""
+    markup = _panel_source()
+    at = markup.index('x-effect="devicePreviewAreaId')
+    effect = markup[at : markup.index('"', at + 10)]
+
+    assert "areaOptions" not in effect
+    assert "panelAreaName()" in effect
+
+
+def test_a_single_rename_notes_nothing_where_the_resolution_says_nothing() -> None:
+    """ "" is the note for a name that has no type part at all. Written for "the
+    resolution said neither an input nor a value", the next run read it as that
+    answer and proposed stripping the type part off a name that has one.
+
+    The whole-run path says None here; this is the entity renamed by itself.
+
+    The note carries the fingerprint of the templates in renamer_state, which the
+    add-on sets up as it starts (app_state). Without it this raises rather than
+    answering, so the assertion below cannot pass on a note that was never built.
+    """
+
+    class _Resolutions:
+        last_resolutions = {"sensor.x": {"won_by": "ha", "input": None, "value": None}}
+
+    web_ui.renamer_state["restructurer"] = _Resolutions()
+    try:
+        note = naming_service.provenance_for("sensor.x")
+    finally:
+        web_ui.renamer_state.pop("restructurer", None)
+
+    assert note["base_entity"] is None
+
+
+def test_the_field_stands_on_a_pick_only_while_it_is_a_move():
+    """A pick of "no area" that Home Assistant has since carried out itself is
+    not a move any more: the field said "No area" with no border to say it was
+    staged, the apply button ignored it, and nothing could clear it."""
+    markup = _panel_source()
+    at = markup.index("panelAreaId(staged = this.deviceChangeStagedArea()) {")
+    body = markup[at : markup.index("panelAreaName() {", at)]
+
+    assert "this.devicePreviewAreaId === ''" not in body
+    assert "if (staged) {" in body
+    # Asked once by the caller that needs the answer twice: reading the field
+    # walked the areas twice for the same question on every repaint.
+    name = markup[markup.index("panelAreaName() {") :]
+    name = name[: name.index("matchingAreas() {")]
+    assert "const staged = this.deviceChangeStagedArea();" in name
+    assert "const id = this.panelAreaId(staged);" in name
+    assert name.count("this.deviceChangeStagedArea()") == 1
+
+
+def test_the_arrow_keys_start_where_the_highlight_is():
+    """An area deleted in Home Assistant shortens the list without a keystroke,
+    and stepping from a position past its end landed one item off what was lit."""
+    markup = _panel_source()
+    at = markup.index("comboStep(by, total, field) {")
+    body = markup[at : at + 1400]
+
+    assert "const from = Math.min(this.areaComboAt, total - 1);" in body
+    assert "this.areaComboAt = (from + by + total) % total;" in body
+    # Nothing lit up is not a position to step from: the step comes in from the
+    # end it is pressed towards. Counted as one, -1 stepped up into the line above
+    # the last and skipped the last one altogether.
+    assert "if (this.areaComboAt < 0) {" in body
+    assert "this.areaComboAt = by > 0 ? 0 : total - 1;" in body
+
+
+def test_the_clash_check_answers_about_the_device_it_was_asked_for():
+    """It is asked 300ms after the keystroke, and the panel may have turned to
+    another device in between. Cleared for whatever is selected then, it took the
+    warning away from the device it had turned to, and the button there opened
+    over a real clash."""
+    markup = _panel_source()
+    at = markup.index("async checkDeviceNameClash(")
+    body = markup[at : markup.index("const wanted =", at)]
+
+    assert "const device = about || this.selectedDeviceData;" in body
+    assert "if (device && device.id === this.selectedDevice) this.deviceNameClash = [];" in body
+
+
+def test_a_rename_that_went_through_is_not_reported_as_one_that_did_not():
+    """The job logs the rename once it is written, so a failure after it - the
+    registry read again, the entities renamed - is not told to the user as a
+    rename that never happened. Home Assistant carries the new name by then,
+    and the retry renamed a device that was named already."""
+    markup = _panel_source()
+    at = markup.index("line => line.step === 'MOVED'")
+    body = markup[at : at + 900]
+
+    assert "const renamed = steps.includes('RENAMED');" in body
+    # And which device it is about: the job runs on the device it was started for,
+    # and the panel may have turned to another one since - told "the device", the
+    # user had no way of knowing which one is somewhere it was not.
+    assert "const about = deviceId ? indexed(this).devicesById.get(deviceId) : null;" in markup
+    # Its id where nothing else names it: a device deleted in Home Assistant while
+    # the job ran is in no list to be read out of, and the message named nothing.
+    assert "(about?.name || (job.payload || {}).new_name || deviceId || '').trim();" in markup
+    assert "this.t(key, {device: named, error: job.error || ''})" in markup
+    # A move with no rename beside it is not a rename that failed either.
+    assert "const askedForARename = !!(job.payload || {}).new_name;" in body
+    assert "!renamed && askedForARename ? 'device.moved_not_renamed' : 'device.moved_job_failed'" in body
+
+
+def test_the_list_opens_on_the_area_the_device_is_in():
+    """Enter is what a keyboard reaches for, and the field takes the focus on the
+    way in. Opened at the top, that staged a move to whatever area comes first
+    alphabetically - with nothing the user did saying to move the device."""
+    markup = _panel_source()
+    at = markup.index('x-model="areaSearch"')
+    handler = markup[at : at + 700]
+
+    # Every way into the list opens it there: the field taking the focus, a click
+    # on a field that already has it - after Escape there is no focus left to take,
+    # and the list could only be reopened by tabbing away and back - and an arrow
+    # key on the closed list, stepped into which its first line could not be
+    # reached at all, because the step went from the top to the line below it.
+    assert '@focus="openAreaCombo($el)"' in handler
+    assert handler.count("if (!areaComboOpen) openAreaCombo($el)") == 3
+
+    at = markup.index("openAreaCombo(field = null) {")
+    body = markup[at : markup.index("showComboLine(field) {", at)]
+    assert "this.areaComboAt = this.areaComboStart();" in body
+    # The whole list, whatever the field holds: closed with Escape it holds the
+    # name of the area the panel stands on, and that read as a filter the user had
+    # typed - no other area could be reached without clearing it by hand.
+    assert "this.areaSearch = '';" in body
+    # And the highlighted line in view: on a device in the eighth area, the list
+    # opened showing the first seven with nothing lit up in it.
+    assert "this.showComboLine(field);" in body
+
+    at = markup.index("areaComboStart() {")
+    start = markup[at : markup.index("takeArea() {", at)]
+    # Which line that is comes off the line itself, marked as the list is built.
+    assert "return this.areaOptions.findIndex(area => area.current);" in start
+    # And nothing where the panel stands on nothing the list holds - an area
+    # deleted in Home Assistant before the page read the registry again. Read as
+    # the top line, Enter staged a move to the first area there was, which is the
+    # very thing opening on the current area prevents.
+    assert "at < 0 ? 0 : at" not in start
+    take = markup[markup.index("takeArea() {") : markup.index("closeAreaCombo() {")]
+    assert "if (this.areaComboAt < 0) return;" in take
+    # One place scrolls, for the list opening and for a step through it.
+    assert markup.count("at.scrollIntoView({block: 'nearest'});") == 1
+
+
+def test_a_device_in_no_area_can_take_back_a_pick():
+    """The entry that clears a pick was offered off the device's own area, so a
+    device in no area that was picked into one had no way back: the pick could
+    only be dropped by turning to another device and again to this one."""
+    markup = _panel_source()
+    at = markup.index("matchingAreas() {")
+    body = markup[at : markup.index("pickArea(area) {", at)]
+
+    # The device's own area, or whatever pick the panel holds - the pick of no
+    # area included, which has to stay in the list to be seen as chosen. Asked
+    # for the area it names, that pick took itself out of the list, the highlight
+    # had nowhere to stand and Enter took the first area there was.
+    # A move that can be made, not a pick that is merely held: an area deleted in
+    # Home Assistant leaves the pick standing with nothing staged, and the entry
+    # was offered where there was no move to take back.
+    assert "const somethingToLeave = staged || !!this.selectedDeviceData?.area_id;" in body
+    assert "if (somethingToLeave &&" in body
+
+
+def test_the_area_the_device_is_in_is_not_a_pick():
+    """Clicking the area it is in says nothing to change, so nothing is held. Held
+    as a pick, a move made in Home Assistant while it stood here turned it into a
+    staged move back - green border, apply button and all - and applying it moved
+    the device back without the user ever asking for it."""
+    markup = _panel_source()
+    at = markup.index("pickPreviewArea(areaId) {")
+    body = markup[at : markup.index("getDeviceDisplayName(device) {", at)]
+
+    assert "const own = this.selectedDeviceData?.area_id || '';" in body
+    assert "const picked = (areaId || '') === own ? null : areaId;" in body
+    assert "this.devicePreviewAreaId = picked;" in body
+
+
+def test_the_list_says_which_line_the_panel_stands_on():
+    """The class on each item asked the panel, so a list of fifty areas asked
+    fifty times per repaint what one answer would have said."""
+    markup = _panel_source()
+
+    assert "\"(area.current ? 'current ' : '')" in markup
+    assert "area.id === panelAreaId()" not in markup
+    at = markup.index("matchingAreas() {")
+    body = markup[at : markup.index("pickArea(area) {", at)]
+    # Asked once and handed to both readers: the answer walks what is staged, and
+    # this list is built again on every repaint the combo needs.
+    assert "const staged = this.deviceChangeStagedArea();" in body
+    assert "const holds = this.panelAreaId(staged);" in body
+    assert body.count("this.deviceChangeStagedArea()") == 1
+    assert ".map(area => ({...area, current: area.id === holds}));" in body
+    assert "current: !holds };" in body
+
+
+def test_a_pick_is_not_lost_to_the_list_closing_under_it():
+    """Clicking an item takes the focus off the field in some browsers, and the
+    field closes the list when it loses it - with the list hidden before the click
+    lands, the pick was never made. The item does not take the focus."""
+    markup = _panel_source()
+    at = markup.index('x-for="(area, at) in areaOptions"')
+    body = markup[at : at + 800]
+
+    assert "@mousedown.prevent" in body
+    assert '@click="pickArea(area)"' in body
+
+
+def test_what_the_field_says_on_closing_has_one_owner():
+    """The effect on the field reads whether the list is open, so it writes the
+    field again as it closes. Said in both places, the same answer - which walks
+    what is staged - was worked out twice on every close."""
+    markup = _panel_source()
+    at = markup.index("closeAreaCombo() {")
+    body = markup[at : markup.index("comboStep(by, total, field) {", at)]
+
+    assert "this.areaSearch = this.panelAreaName();" not in body
+    # And the effect that owns it says what it writes.
+    assert "if (!areaComboOpen) areaSearch = panelAreaName()" in markup
+    # And worked out where it is written: read on every repaint while the list is
+    # open, the answer - which walks what is staged - was thrown away again.
+    assert "const shown = panelAreaName();" not in markup
+    # A pick does not write it either: the name off the list was written over by
+    # the one the registry holds now - the same name, unless the area was renamed
+    # in Home Assistant since the list was built.
+    pick = markup[markup.index("pickArea(area) {") : markup.index("areaComboStart() {")]
+    assert "this.areaSearch = area.name;" not in pick
+
+
+def test_the_list_is_keyed_on_the_question_the_filter_asks():
+    """Typed with another capital or a space at the end, the same question missed
+    the answer already worked out for it."""
+    markup = _panel_source()
+    at = markup.index("get areaOptions() {")
+    body = markup[at : markup.index("matchingAreas() {", at)]
+
+    assert "(this.areaSearch || '').trim().toLowerCase()," in body
+    # Said as what each part is rather than glued into one string with a character
+    # nobody types between them: an id carrying that character read as nothing
+    # picked, and the list it had been built for was handed out again.
+    assert "const key = JSON.stringify([" in body
+    assert "this.devicePreviewAreaId," in body
+    assert "\\u0003" not in body
+    # And on the wording of the entry it writes, not only on the flag that says the
+    # translations are in: loaded without that flag turning over, the entry that
+    # takes a device out of its area kept the name it had in the language before.
+    assert "this.t('area.no_area')" in body
+
+
+def test_the_area_list_is_keyed_on_when_the_registry_moved():
+    """The list is read by the combo, by every item's class and by the empty
+    line, so writing the areas out walked them several times per repaint."""
+    markup = _panel_source()
+    at = markup.index("get areaOptions() {")
+    body = markup[at : markup.index("matchingAreas() {", at)]
+
+    assert "this.hierarchyVersion," in body
+    assert ".map(a => a.id" not in body
+
+
+def test_an_empty_type_part_is_noted_as_one() -> None:
+    """ "" is an answer - a name built out of area and device with no type part.
+    Asked for with `or`, it read as no answer at all, and the note then said
+    "nothing recorded" about a name whose type part is genuinely empty."""
+
+    class _Resolutions:
+        last_resolutions = {"sensor.x": {"won_by": "rule:user", "input": "", "value": "Licht"}}
+
+    web_ui.renamer_state["restructurer"] = _Resolutions()
+    try:
+        note = naming_service.provenance_for("sensor.x")
+    finally:
+        web_ui.renamer_state.pop("restructurer", None)
+
+    assert note["base_entity"] == ""
+
+
+def test_the_word_the_rules_made_of_it_is_not_noted_as_the_input() -> None:
+    """The note is what a rule the user writes afterwards finds the entity by, so
+    it holds what went in. Falling through to the rendered value, a resolution
+    that does not say what went in was noted as having supplied "Bewegung" - and
+    a rule about "Motion" never reached the entity again."""
+
+    class _Resolutions:
+        last_resolutions = {"sensor.x": {"won_by": "rule:user", "input": None, "value": "Bewegung"}}
+
+    web_ui.renamer_state["restructurer"] = _Resolutions()
+    try:
+        note = naming_service.provenance_for("sensor.x")
+    finally:
+        web_ui.renamer_state.pop("restructurer", None)
+
+    assert note["base_entity"] is None
+
+
+def test_what_went_in_is_read_once_for_the_whole_proposal() -> None:
+    """The proposal says the supplied word twice - as what was supplied and as what
+    the note would keep. Read twice, the two could answer differently, and a reader
+    comparing them to decide whether to rename would be told the entity supplied a
+    word that nothing supplied."""
+    source = Path(naming_service.__file__).read_text(encoding="utf-8")
+
+    assert "    noted = _noted_type_part(resolution)\n" in source
+    assert '"supplied_name": noted,' in source
+    assert '"base_entity": noted,' in source
+    assert '"supplied_name": resolution.get("input")' not in source
+    # In this proposal, once. provenance_for reads it for its own note.
+    proposal = source[source.index("async def proposed_naming(") : source.index("def _noted_type_part(")]
+    assert proposal.count("_noted_type_part(resolution)") == 1

@@ -297,6 +297,73 @@
             transform: rotate(180deg);
         }
 
+        /* Typing into a list to pick from it, the same shape the settings
+           page uses for integrations and models. */
+        .combo { position: relative; }
+
+        .combo-field { position: relative; }
+
+        .combo-field > i.ri-search-line {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--color-gray-400);
+            pointer-events: none;
+        }
+
+        .combo-field input.combo-input {
+            width: 100%;
+            padding: 8px 12px 8px 32px;
+        }
+
+        .combo-input.chosen {
+            border-color: var(--color-emerald-300);
+        }
+
+        .combo-list {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            z-index: 20;
+            margin-top: 4px;
+            max-height: 240px;
+            overflow-y: auto;
+            background: var(--color-white);
+            border: 1px solid var(--color-gray-200);
+            border-radius: 8px;
+            box-shadow: 0 10px 24px var(--shadow-colour);
+        }
+
+        .combo-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+            padding: 9px 12px;
+            border: none;
+            border-bottom: 1px solid var(--color-gray-100);
+            background: none;
+            text-align: left;
+            font-size: 0.9rem;
+            color: var(--color-gray-700);
+            cursor: pointer;
+        }
+
+        .combo-item:last-child { border-bottom: none; }
+        .combo-item:hover, .combo-item:focus, .combo-item.at { background: var(--color-blue-50); outline: none; }
+        .combo-item.at { box-shadow: inset 2px 0 0 var(--color-blue-500); }
+        .combo-item.current { background: var(--color-blue-100); font-weight: 600; }
+        .combo-item .tally { color: var(--color-gray-400); font-size: 0.78rem; white-space: nowrap; }
+
+        .combo-empty {
+            padding: 9px 12px;
+            color: var(--color-gray-400);
+            font-size: 0.85rem;
+        }
+
         /* NEW: Simple Entity Cards */
         .entity-card-simple {
             margin: 8px 0;
@@ -2176,20 +2243,44 @@
                         <span class="text-amber-600" x-text="getExpectedDeviceName(selectedDeviceData)"></span>
                     </div>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.area_label')">Area</label>
-                    <select class="edit-input w-full mb-2"
-                            x-effect="hierarchy.areas.length;
-                                const picked = devicePreviewAreaId !== null
-                                    ? devicePreviewAreaId
-                                    : (selectedDeviceData?.area_id || '');
-                                const about = selectedDevice;
-                                $nextTick(() => { if (about === selectedDevice) $el.value = picked; })"
-                            :disabled="renamingDevice || applyingEntityId || executing"
-                            @change="pickPreviewArea($event.target.value)">
-                        <option value="" x-text="t('area.select_area')">Select area...</option>
-                        <template x-for="area in hierarchy.areas" :key="area.id">
-                            <option :value="area.id" x-text="area.name"></option>
-                        </template>
-                    </select>
+                    <div class="combo mb-2" @click.away="closeAreaCombo()"
+                         @focusout="if (!$el.contains($event.relatedTarget)) closeAreaCombo()"
+                         @keydown.escape="if (areaComboOpen) { $event.stopPropagation(); closeAreaCombo(); }">
+                        <div class="combo-field">
+                            <i class="ri-search-line"></i>
+                            <input type="text" class="edit-input combo-input" autocomplete="off"
+                                   x-effect="devicePreviewAreaId; selectedDeviceData;
+                                             if (!areaComboOpen) areaSearch = panelAreaName()"
+                                   :class="deviceChangeStagedArea() ? 'chosen' : ''"
+                                   :placeholder="t('area.select_area')"
+                                   x-model="areaSearch"
+                                   :disabled="renamingDevice || applyingEntityId || executing"
+                                   @focus="openAreaCombo($el)"
+                                   @click="if (!areaComboOpen) openAreaCombo($el)"
+                                   @input="areaComboOpen = true; areaComboAt = 0"
+                                   @keydown.arrow-down.prevent="if (!areaComboOpen) openAreaCombo($el);
+                                                                 else comboStep(1, areaOptions.length, $el)"
+                                   @keydown.arrow-up.prevent="if (!areaComboOpen) openAreaCombo($el);
+                                                              else comboStep(-1, areaOptions.length, $el)"
+                                   @keydown.enter="if (areaComboOpen) { $event.preventDefault(); takeArea(); }">
+                        </div>
+                        <div class="combo-list" x-show="areaComboOpen" x-cloak>
+                            <template x-for="(area, at) in areaOptions" :key="area.id || '__none__'">
+                                <button type="button" class="combo-item"
+                                        :class="(area.current ? 'current ' : '')
+                                                + (at === Math.min(areaComboAt, areaOptions.length - 1) ? 'at' : '')"
+                                        @mousemove="areaComboAt = at"
+                                        @mousedown.prevent
+                                        @click="pickArea(area)">
+                                    <span x-text="area.name"></span>
+                                    <span class="tally" x-show="area.id"
+                                          x-text="getAreaEntityCount(area.id)"></span>
+                                </button>
+                            </template>
+                            <div class="combo-empty" x-show="!areaOptions.length"
+                                 x-text="t('area.no_match')">No area of that name</div>
+                        </div>
+                    </div>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.base_name_label')">Device Base Name (without Area prefix)</label>
                     <div class="flex gap-2">
                         <input type="text"
@@ -3269,6 +3360,13 @@
 
     <script>
         function entityManager() {
+            // The area list the combo shows, worked out once per change of what
+            // it depends on. It lives outside the reactive data on purpose:
+            // writing to it while a repaint reads it must not set another off.
+            const areaList = { key: null, listed: [] };
+            // The area ids, for the existence check that every repaint makes.
+            const areaIds = { key: null, ids: new Set() };
+
             // Every binding of every card reads these lists, so one repaint
             // reads them dozens of times, and each reading used to walk all
             // entities of the installation - a few thousand of them, behind
@@ -3395,6 +3493,9 @@
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
                 _deviceWideTimer: null,  // Debounce for the device-wide entity preview
+                areaSearch: '',  // What is typed into the area field of the panel
+                areaComboOpen: false,
+                areaComboAt: 0,
                 _stagedRun: 0,  // Which computation of the staged device's rows is current
                 _stagedAsking: false,  // Whether an answer for those rows is on its way
                 // Whether "apply all" is under way. Shut from the click rather
@@ -4920,6 +5021,7 @@
                     // remembered for afterwards, so it is answered rather than
                     // dropped without a word.
                     if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
+                    this.closeAreaCombo();
                     // Read before it is written over: the rows to be put
                     // back are the ones of the device being left.
                     const left = this.selectedDevice;
@@ -4945,6 +5047,9 @@
                 // Select device
                 selectDevice(device) {
                     if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
+                    this.closeAreaCombo();
+                    // Read before it is written over: the rows to be put back are
+                    // the ones of the device being left.
                     const left = this.selectedDevice;
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
@@ -4963,6 +5068,9 @@
                 // Select a virtual device group (automations, scenes, helpers, etc.)
                 selectVirtualDevice(virtualDeviceId) {
                     if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
+                    this.closeAreaCombo();
+                    // Read before it is written over: the rows to be put back are
+                    // the ones of the device being left.
                     const left = this.selectedDevice;
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
@@ -5011,7 +5119,18 @@
                 // What the entities of the device being moved would be called.
                 // Their names are cached, and a move changes all of them.
                 pickPreviewArea(areaId) {
-                    this.devicePreviewAreaId = areaId;
+                    // The area the device is already in is not a pick: held as
+                    // one, a move made in Home Assistant while it stood here
+                    // turned it into a staged move back, and the field said the
+                    // user had asked for something they never asked for - green
+                    // border, apply button and all.
+                    const own = this.selectedDeviceData?.area_id || '';
+                    const picked = (areaId || '') === own ? null : areaId;
+                    // Offered while the device is in an area, so the same line
+                    // can be clicked twice; computing the rows again for it
+                    // asked the server for slugs that are already in hand.
+                    if (this.devicePreviewAreaId === picked) return;
+                    this.devicePreviewAreaId = picked;
                     // Through the panel's own preview where the panel holds a
                     // change, which includes this pick: the computed previews
                     // are worked out from the registry, so a name typed into
@@ -5467,11 +5586,275 @@
                 get deviceChangeStaged() {
                     const device = this.selectedDeviceData;
                     if (!device || this.isVirtualDevice(this.selectedDevice)) return false;
-                    const areaStaged = this.devicePreviewAreaId !== null
-                        && (this.devicePreviewAreaId || null) !== (device.area_id || null);
+                    const areaStaged = this.areaMoveStaged(this.devicePreviewAreaId, device);
                     const typed = this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim();
                     const nameStaged = !!typed && typed !== (device.base_name || '').trim();
                     return areaStaged || nameStaged;
+                },
+
+                // The area the panel stands on: the one picked while it is only
+                // picked, the device's own otherwise.
+                // Whether the pick in the field is a move, rather than the
+                // area the device is in picked again: the field was marked as
+                // holding a change while the apply button stayed shut.
+                deviceChangeStagedArea() {
+                    return this.areaMoveStaged(this.devicePreviewAreaId, this.selectedDeviceData);
+                },
+
+                // Whether a picked area is a move this device can be made to.
+                // Asked by the field that marks itself as holding a change, by
+                // the apply button that counts what is staged, and by the run
+                // that writes it - each of those had worked it out for itself,
+                // and they disagreed: an area deleted in Home Assistant while
+                // it stood staged here left the field blank and the button
+                // open on a move that could not be made, and clicking it said
+                // "nothing to apply" with no way to clear the staging but to
+                // turn to another device.
+                //
+                // The pick is passed in rather than read here, because the run
+                // reads it before it waits and must not read it again after.
+                // Whether Home Assistant still has an area of this id, out of
+                // one walk per registry change: this is asked by the field, by the
+                // apply button and by the run, so every repaint walked the areas
+                // once for each of them.
+                knownAreaId(id) {
+                    if (areaIds.key !== this.hierarchyVersion) {
+                        areaIds.key = this.hierarchyVersion;
+                        areaIds.ids = new Set(this.hierarchy.areas.map(area => area.id));
+                    }
+                    return areaIds.ids.has(id);
+                },
+
+                areaMoveStaged(picked, device) {
+                    // Nothing picked at all. Picking no area is a move, and
+                    // that pick is the empty string.
+                    if (picked === null || picked === undefined) return false;
+                    // An area that has gone from Home Assistant is nothing to
+                    // move into: asking for it wrote a device into an area that
+                    // is not there.
+                    if (picked && !this.knownAreaId(picked)) return false;
+                    return (picked || null) !== (device?.area_id || null);
+                },
+
+                panelAreaId(staged = this.deviceChangeStagedArea()) {
+                    // The device's own where the staged one is not a move: an
+                    // area deleted in Home Assistant is no longer one to stand
+                    // on, and neither is "no area" once Home Assistant has taken
+                    // the device out of its area itself - the field said "No
+                    // area" with no border to say it was staged, the apply
+                    // button ignored it, and there was no way to clear it.
+                    //
+                    // Asked once by the caller that needs the answer twice, and
+                    // worked out here otherwise: every repaint that reads the
+                    // field reads this, and asking twice walked the areas twice.
+                    if (staged) {
+                        return this.devicePreviewAreaId || '';
+                    }
+                    return this.selectedDeviceData?.area_id || '';
+                },
+
+                panelAreaName() {
+                    const staged = this.deviceChangeStagedArea();
+                    const id = this.panelAreaId(staged);
+                    // Picked, and picked to be in no area at all: the field
+                    // said nothing at all for it, which reads like a field
+                    // nobody has touched.
+                    if (!id) return staged ? this.t('area.no_area') : '';
+                    // Nothing is written from here: reading what the field
+                    // says was setting the staged area as it went, and the
+                    // effect that reads it ran again over its own writing.
+                    return this.hierarchy.areas.find(a => a.id === id)?.name || '';
+                },
+
+                // The areas the typed text still matches, with taking the device
+                // out of its area offered as one of them - it is a move like any
+                // other, and the field is the only place that can ask for it.
+                // Worked out once for a repaint: the list, the empty line and
+                // the arrow keys all ask for it, and the filter ran for each.
+                get areaOptions() {
+                    // Said as what each part is rather than glued into one
+                    // string: no separator has to be a character an area id
+                    // cannot hold.
+                    const key = JSON.stringify([
+                        // As the filter reads it: typed with another capital or a
+                        // space at the end, the same question missed the answer
+                        // already worked out for it.
+                        (this.areaSearch || '').trim().toLowerCase(),
+                        // When the registry last moved, not the areas written
+                        // out: the list is read by the combo's x-show, by every
+                        // item's class and by the empty line, so writing them
+                        // out walked the areas several times per repaint. The
+                        // count alone would not do - an area renamed in Home
+                        // Assistant leaves it where it was, and the field went
+                        // on offering the name it used to have.
+                        this.hierarchyVersion,
+                        this.selectedDeviceData?.area_id || '',
+                        // And the area picked and not yet written: matchingAreas
+                        // reads it through panelAreaId, which decides whether the
+                        // "no area" entry is in the list at all. Nothing picked is
+                        // null and stays null here - written into one string with a
+                        // character nobody types, an id carrying that character
+                        // would have read as nothing picked.
+                        this.devicePreviewAreaId,
+                        // The wording itself, not only the flag that says the
+                        // translations are in: loaded without that flag turning
+                        // over, the entry that takes a device out of its area kept
+                        // the name it had in the language before.
+                        this.t('area.no_area')
+                    ]);
+                    if (areaList.key !== key) {
+                        areaList.key = key;
+                        areaList.listed = this.matchingAreas();
+                    }
+                    return areaList.listed;
+                },
+
+                matchingAreas() {
+                    const typed = (this.areaSearch || '').trim().toLowerCase();
+                    // Which one the panel stands on, said once as the list is
+                    // built rather than asked for by every line of it: the class
+                    // on each item asked, so a list of fifty areas asked fifty
+                    // times per repaint what the panel holds.
+                    // Asked once and handed to both readers below: the answer
+                    // walks what is staged, and this is the list every repaint of
+                    // the combo is built from.
+                    const staged = this.deviceChangeStagedArea();
+                    const holds = this.panelAreaId(staged);
+                    const areas = this.hierarchy.areas
+                        .filter(a => !typed || a.name.toLowerCase().includes(typed))
+                        .map(area => ({...area, current: area.id === holds}));
+                    // Offered wherever there is an area to leave or a pick to
+                    // take back: the device's own area, or whatever pick the panel
+                    // holds. Read off the device alone, a device in no area that
+                    // was picked into one had no way back - the entry never
+                    // appeared, and the pick could only be dropped by turning to
+                    // another device and again to this one. Asked as "does the
+                    // panel hold a pick" rather than "is it an area", because the
+                    // pick of no area is one: taken out of the list once it was
+                    // chosen, the highlight had nowhere to stand and Enter took
+                    // the first area in the list instead.
+                    const none = { id: '', name: this.t('area.no_area'), current: !holds };
+                    // A move that can be made, not merely a pick that is held:
+                    // an area deleted in Home Assistant leaves the pick standing
+                    // with nothing staged, and the entry that takes a move back
+                    // was then offered where there was no move to take back.
+                    const somethingToLeave = staged || !!this.selectedDeviceData?.area_id;
+                    if (somethingToLeave && (!typed || none.name.toLowerCase().includes(typed))) {
+                        return [...areas, none];
+                    }
+                    return areas;
+                },
+
+                pickArea(area) {
+                    this.pickPreviewArea(area.id);
+                    // What the field says is written by the effect on it, which
+                    // reads whether the list is open and runs again as this closes
+                    // it. Said here too, the name from the list was written over by
+                    // the one the registry holds now - the same name, unless the
+                    // area was renamed in Home Assistant since the list was built,
+                    // and then the older of the two was the one shown for a moment.
+                    this.areaComboOpen = false;
+                    // Where the list stood is forgotten with it, as when it is
+                    // closed any other way: the field keeps the focus after a
+                    // pick, and an arrow key pressed straight afterwards went
+                    // on from the item just chosen rather than to the top.
+                    this.areaComboAt = 0;
+                },
+
+                // Opened where the area the panel holds is, whether the field
+                // took the focus or an arrow key asked for the list. Stepped into
+                // from the closed list, the first line could not be reached at
+                // all: the step went from where the highlight stood - the top -
+                // to the line below it.
+                openAreaCombo(field = null) {
+                    this.areaComboOpen = true;
+                    // The whole list, whatever the field holds: closed with
+                    // Escape, the field goes back to the name of the area the
+                    // panel stands on, and reopening read that name as something
+                    // the user had typed to narrow the list with - there was no
+                    // way to reach any other area without clearing it by hand.
+                    this.areaSearch = '';
+                    this.areaComboAt = this.areaComboStart();
+                    // And where the highlight is, in view: on a device in the
+                    // eighth area the list opened showing the first seven, with
+                    // nothing lit up in it, and Enter took a line that could not
+                    // be seen.
+                    this.showComboLine(field);
+                },
+
+                // The highlighted line of this field's list, scrolled to.
+                showComboLine(field) {
+                    this.$nextTick(() => {
+                        // The list belonging to this field, not the first one
+                        // on the page: a second combo would scroll instead.
+                        const combo = field?.closest('.combo');
+                        const at = combo?.querySelector('.combo-list .combo-item.at');
+                        if (at) at.scrollIntoView({block: 'nearest'});
+                    });
+                },
+
+                // Where the highlight stands when the list opens: on the area
+                // the panel holds. At the top, Enter pressed straight after the
+                // field took the focus - which is what a keyboard reaches for -
+                // staged a move to whatever area comes first alphabetically,
+                // with nothing the user did saying to move the device at all.
+                areaComboStart() {
+                    // Nothing lit up where the panel stands on nothing the list
+                    // holds - an area deleted in Home Assistant before the page
+                    // read the registry again. At the top of the list instead,
+                    // Enter staged a move to the first area there was, which is
+                    // the very thing opening on the current area prevents.
+                    return this.areaOptions.findIndex(area => area.current);
+                },
+
+                takeArea() {
+                    // What the list shows now, not what it showed when the
+                    // arrow key was last pressed: typing shortens it, and
+                    // reaching past its end took nothing at all.
+                    const listed = this.areaOptions;
+                    if (!listed.length) return;
+                    // Nothing is lit up, so Enter takes nothing: the list opens
+                    // that way where the area the device is in has gone from Home
+                    // Assistant, and reading it as the top line would have staged
+                    // a move nobody asked for.
+                    if (this.areaComboAt < 0) return;
+                    this.areaComboAt = Math.min(this.areaComboAt, listed.length - 1);
+                    this.pickArea(listed[this.areaComboAt]);
+                },
+
+                closeAreaCombo() {
+                    if (!this.areaComboOpen) return;
+                    this.areaComboOpen = false;
+                    // Where the list stood is forgotten with it: reopened with
+                    // an arrow key it went on from there, so the highlight
+                    // appeared in the middle of the list rather than at its top.
+                    this.areaComboAt = 0;
+                    // Typing and then looking elsewhere picks nothing: the field
+                    // goes back to the area the panel stands on. Written by the
+                    // effect on the field, which reads whether the list is open
+                    // and runs again as this closes it - said here as well, the
+                    // same answer was worked out twice on every close.
+                },
+
+                // Walk the open list with the arrow keys, keeping the one that
+                // Enter would take in view.
+                comboStep(by, total, field) {
+                    if (!total) return;
+                    // Nothing lit up, so the step comes in from the end it is
+                    // pressed towards: down takes the first line, up the last.
+                    // Counted as a position, -1 stepped up into the line above
+                    // the last one and skipped the last one altogether.
+                    if (this.areaComboAt < 0) {
+                        this.areaComboAt = by > 0 ? 0 : total - 1;
+                    } else {
+                        // From where the highlight is, which is where the list
+                        // shows it: an area deleted in Home Assistant shortened
+                        // the list without a keystroke, and stepping from a
+                        // position past its end landed one item off what was lit.
+                        const from = Math.min(this.areaComboAt, total - 1);
+                        this.areaComboAt = (from + by + total) % total;
+                    }
+                    this.showComboLine(field);
                 },
 
                 // The entity rows follow the panel while it is still only typed
@@ -5492,6 +5875,12 @@
                     // And every answer already on its way, either kind of
                     // which would otherwise write the previous device's ids
                     // when it arrives.
+                    // The staged rows only: the ordinary previews say which
+                    // computation each row's answer is about, so an answer
+                    // arriving late writes the id of the name that row held
+                    // when it was asked - and a device clicked during the first
+                    // load no longer throws away the answer the whole
+                    // installation is waiting for.
                     this._stagedRun++;
                     // And the flag that says one is being asked for: the answer
                     // dropped here leaves its own "finally" to see a run that is
@@ -7340,6 +7729,37 @@
                     if (!deviceId || deviceId === this.selectedDevice) {
                         this.devicePreviewBaseName = null;
                         this.devicePreviewAreaId = null;
+                        // With the list open the field keeps whatever was typed
+                        // into it, which after the write is no longer what the
+                        // panel holds.
+                        this.closeAreaCombo();
+                    }
+                    // A job that failed after the move went through left the
+                    // device somewhere it was not before. The job panel says
+                    // what failed; only this says what stands.
+                    if (this.jobFailed(job) && (job.log || []).some(line => line.step === 'MOVED')) {
+                        // Which of the two it was: the rename logs a step of its
+                        // own once it is through, so a failure after that one -
+                        // reading the registry again, renaming the entities -
+                        // must not be reported as a rename that did not happen.
+                        // Home Assistant carries the new name by then, and the
+                        // user was being sent to rename a device already named.
+                        const steps = (job.log || []).map(line => line.step);
+                        const renamed = steps.includes('RENAMED');
+                        const askedForARename = !!(job.payload || {}).new_name;
+                        const key = !renamed && askedForARename ? 'device.moved_not_renamed' : 'device.moved_job_failed';
+                        // Which device, by name: the job runs on whichever device
+                        // it was started for, and the panel may have turned to
+                        // another one since. Told "the device", the user had no
+                        // way of knowing which one is somewhere it was not, and
+                        // the one in front of them was the obvious guess.
+                        const about = deviceId ? indexed(this).devicesById.get(deviceId) : null;
+                        // Its id where nothing else names it: a device deleted in
+                        // Home Assistant while the job ran is in no list to be
+                        // read out of, and the message then named nothing at all -
+                        // " was moved; the job failed afterwards".
+                        const named = (about?.name || (job.payload || {}).new_name || deviceId || '').trim();
+                        this.showMessage(this.t(key, {device: named, error: job.error || ''}), 'error');
                     }
                     // The job aligns the Z2M name of the device it renamed; any
                     // other device the view showed as drifted is left to here.
@@ -7472,7 +7892,7 @@
                         this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
                         return 'refused';
                     }
-                    const areaStaged = picked !== null && (picked || null) !== (device.area_id || null);
+                    const areaStaged = this.areaMoveStaged(picked, device);
                     // Rendered with the staged area, so a device that moves is
                     // named where it moved to rather than where it was - and with
                     // the one this run writes, read before the wait above. Read

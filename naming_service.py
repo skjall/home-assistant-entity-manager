@@ -9,7 +9,7 @@ a web server.
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from app_state import renamer_state, ws_url
 from config_files import out_of_reach
@@ -190,6 +190,7 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         new_name = f"{new_name} {suffix}"
 
     resolution = restructurer.last_resolutions.get(entity_id) or {}
+    noted = _noted_type_part(resolution)
     return {
         "entity_id": entity_id,
         "current_name": entry.get("name") or entry.get("original_name") or "",
@@ -197,14 +198,59 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         "proposed_name": new_name,
         "name_comes_from": resolution.get("won_by"),
         "rule_id": resolution.get("rule_id"),
-        "supplied_name": resolution.get("input"),
+        # Both out of one reading: they are the same fact - what went into the
+        # name - and asking twice let them answer differently, which a reader
+        # comparing the two to decide whether to rename would read as the entity
+        # supplying a word that nothing supplied.
+        "supplied_name": noted,
         # The type part as it went in, kept with the name once it is written so
         # a later read gets it back without taking the rendered name apart.
         # What went in, not what came out: a rule the user edits afterwards has
         # to reach this entity again, and it only does if the note hands it the
         # word the rule matches on.
-        "base_entity": resolution.get("input") or resolution.get("value") or "",
+        #
+        # None where the resolution says neither: "" is the note for a name that
+        # has no type part at all, and writing it for "nothing to say about the
+        # type part" had the next run strip the type part off a name that has
+        # one. provenance_for below says the same thing.
+        #
+        # Asked for as "is there a string", not "is there something truthy": a
+        # resolution that says the type part is empty says "" , and reading that
+        # as nothing put the question back that it had just answered.
+        "base_entity": noted,
     }
+
+
+def _as_type_part(value: Any) -> Optional[str]:
+    """``value`` where it is a type part at all, None where it is not.
+
+    A string is one, "" included - that is the statement that the name is area
+    and device and ends there. Anything else says nothing about the type part,
+    and saying nothing is what None is for. Both readings of a type part go
+    through here so they cannot come to differ.
+    """
+    return value if isinstance(value, str) else None
+
+
+def _noted_type_part(resolution: Mapping[str, Any]) -> Optional[str]:
+    """What the resolution says the type part was, or None where it says nothing.
+
+    What went into the name, not what came out of it: a rule the user edits
+    afterwards only reaches this entity again if the note hands it back the word
+    the rule matches on.
+
+    "" is an answer - a name built out of area and device with no type part - and
+    it is kept as one. Asked for with ``or``, it read as no answer at all, and
+    the note then said "nothing recorded" about a name whose type part is
+    genuinely empty, which put the question back that it had just answered.
+
+    Only the input, never the value: the value is what the rules made of it, and
+    a note holding "Bewegung" where "Motion" went in is a note no rule the user
+    writes about "Motion" can be found by. Nothing recorded is the honest answer
+    for a resolution that does not say what went in - the next read works it out
+    from the name and records it (NamingState.resupply).
+    """
+    return _as_type_part(resolution.get("input"))
 
 
 def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
@@ -216,13 +262,21 @@ def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
     """
     restructurer = renamer_state.get("restructurer")
     resolution = (getattr(restructurer, "last_resolutions", None) or {}).get(entity_id)
+    # An empty one says as little as none at all: every field of the note is read
+    # out of it, so what it would hold is "nothing" in each of them - which is
+    # what no note says too, and without claiming a naming that nothing recorded.
     if not resolution:
         return None
     return {
         # What went into the name, not what came out of it: a rule the user
         # edits afterwards only reaches this entity again if the note hands it
         # back the word the rule matches on.
-        "base_entity": resolution.get("input") or resolution.get("value") or "",
+        #
+        # And None where it says neither, as the proposal above does: "" is the
+        # note for a name that has no type part at all, so the entity renamed
+        # one at a time was noted as having none and the next run proposed
+        # stripping the type part off a name that has one.
+        "base_entity": _noted_type_part(resolution),
         "won_by": resolution.get("won_by") or "",
         "rule_id": resolution.get("rule_id"),
         "template_hash": renamer_state["naming_templates"].fingerprint(),
@@ -230,9 +284,20 @@ def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
 
 
 def provenance_of(proposed: Dict[str, Any]) -> Dict[str, Any]:
-    """Turn a proposal into the note that is kept with the written name."""
+    """Turn a proposal into the note that is kept with the written name.
+
+    A proposal that says nothing about the type part leaves the note saying
+    nothing about it. "" is a statement - the name is area and device and ends
+    there - and writing it where nothing was worked out had the next run
+    propose stripping the type part off a name that has one.
+
+    Which is why None here takes nothing away from an entity that genuinely has
+    no type part: that entity says so with "", a string, and a string is kept as
+    it is. None is only for a proposal whose type part is not a string at all -
+    absent, or null - and there is nothing to keep in that.
+    """
     return {
-        "base_entity": proposed.get("base_entity") or "",
+        "base_entity": _as_type_part(proposed.get("base_entity")),
         "won_by": proposed.get("name_comes_from") or "",
         "rule_id": proposed.get("rule_id"),
         "template_hash": renamer_state["naming_templates"].fingerprint(),

@@ -756,6 +756,12 @@ async def rename_device_handler(job, ctx):
         # The area goes first: the device name and every entity name below is
         # built out of it, so a device that moves is named where it moved to.
         if set_area:
+            # Where it is now, read before the write: the step below says the
+            # device is somewhere it was not, and a move Home Assistant had
+            # already made itself - by a user, by another client - is not that.
+            # Said all the same, the interface told the user about a move that
+            # nothing made.
+            was_in = (renamer_state["restructurer"].devices.get(device_id) or {}).get("area_id")
             # Said before it is done: a write that raises left the log with no
             # step at all, so nothing said which operation the job failed on.
             # The log is the job's account of what it set out to do, not a
@@ -764,6 +770,13 @@ async def rename_device_handler(job, ctx):
             # down for both steps.
             ctx.log("AREA", f"{device_id} -> {area_id or 'no area'}")
             await device_registry.assign_area(device_id, area_id)
+            # Said again once it is written, under a step of its own. The line
+            # above says which operation a failure happened on; this one says
+            # the move got through, and a rename failing after it leaves the
+            # device somewhere it was not before - which the interface has to
+            # be able to tell the user.
+            if (area_id or None) != (was_in or None):
+                ctx.log("MOVED", f"{device_id} is in {area_id or 'no area'}")
 
         z2m_sync: dict[str, Any] = {}
         if new_name is not None:
@@ -774,6 +787,14 @@ async def rename_device_handler(job, ctx):
             # writing it back is a second write that can fail in its own turn and
             # would take the device out of the area the user had just put it in.
             await device_registry.rename_device(device_id, new_name)
+            # Said once it is written, as MOVED is: everything after this can
+            # fail in its own turn, and without a step of its own the interface
+            # could only tell "the rename never happened" from "it happened and
+            # the entities did not" by the absence of entity steps - which a
+            # device with no entities has as well. It then told the user the
+            # rename had not happened while Home Assistant already carried the
+            # new name, and the retry renamed a device that was named already.
+            ctx.log("RENAMED", f"{device_id} is called {new_name}")
 
             # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
             z2m_sync = await sync_z2m_name(device_registry, device_id, new_name)
@@ -874,7 +895,10 @@ async def rename_device_handler(job, ctx):
         )
 
         # One of the two was asked for: the route refuses a payload that asks
-        # for neither.
+        # for neither. Asked as "is not None", as the rename itself is above: a
+        # name is a name whatever it says, and the two must answer the same
+        # question or the message could say "moved" about a job that went on to
+        # rename the device.
         if new_name is not None and set_area:
             message = f"Device moved and renamed to: {new_name}"
         elif new_name is not None:

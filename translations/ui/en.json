@@ -31,8 +31,9 @@
     "assign_area": "Assign Area",
     "select_area": "Select area...",
     "area_assigned": "Device assigned to area",
-    "area_cleared": "Device taken out of its area",
-    "open_in_ha": "Open area in Home Assistant"
+    "open_in_ha": "Open area in Home Assistant",
+    "no_match": "No area of that name",
+    "area_cleared": "Device taken out of its area"
   },
   "summary": {
     "entities": "Entities",
@@ -256,7 +257,8 @@
     "id_conflict": "This name would take an entity id that is already held: {id}",
     "name_already_correct": "The device is already called that",
     "gone": "This device is no longer in Home Assistant",
-    "moved_not_renamed": "The device was moved, but not renamed: {error}"
+    "moved_not_renamed": "{device} was moved, but not renamed: {error}",
+    "moved_job_failed": "{device} was moved; the job failed afterwards: {error}"
   },
   "units": {
     "entities": "Entities",

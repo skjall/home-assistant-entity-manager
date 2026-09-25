@@ -6,10 +6,12 @@ touching Home Assistant. The worker is not started, so enqueued jobs stay queued
 """
 
 import asyncio
+from pathlib import Path
+from typing import Any
 
 import pytest
 
-from jobs import TERMINAL_STATES, JobStore, JobWorker
+from jobs import TERMINAL_STATES, JobContext, JobStore, JobWorker
 import routes_entities
 import web_ui
 
@@ -212,6 +214,233 @@ def test_init_client_recreates_missing_restructurer(monkeypatch) -> None:
 
     assert asyncio.run(web_ui.init_client()) is client
     assert web_ui.renamer_state["restructurer"].client is client
+
+
+class _NoWebSocket:
+    """Stands in for the connection the handler opens and closes."""
+
+    def __init__(self, url: str, token: str) -> None:
+        pass
+
+    async def connect(self) -> None:
+        return None
+
+    async def disconnect(self) -> None:
+        return None
+
+
+class _NoDependencies:
+    def __init__(self, base_url: str, token: str) -> None:
+        pass
+
+    async def get_states(self) -> list[dict[str, Any]]:
+        return []
+
+
+class _NoRestructurer:
+    def __init__(self) -> None:
+        # Its own, not the class's: written to, one test's entities would have
+        # been every later test's.
+        self.entities: dict = {}
+        self.devices: dict = {}
+        self.last_resolutions: dict = {}
+
+    async def load_structure(self, ws: Any) -> None:
+        return None
+
+    def deduplicate_entity_ids(self, changes: list) -> list:
+        # There are no entities here, so nothing can collide; the handler asks
+        # all the same, and a stub that cannot answer fails the rename for the
+        # wrong reason.
+        return changes
+
+
+class _ARegistryThatGoesAwayAfterTheRename(_NoRestructurer):
+    """Read once before the rename, and gone when it is read again.
+
+    The handler reads the registry a second time after the rename, because the
+    names below are built out of the renamed device. That read can fail on its
+    own - a connection that dropped in between - and the rename has gone through
+    by then.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.reads = 0
+
+    async def load_structure(self, ws: Any) -> None:
+        self.reads += 1
+        if self.reads > 1:
+            raise RuntimeError("the connection went away")
+
+
+def _a_handler_that_cannot_rename(
+    monkeypatch: pytest.MonkeyPatch,
+    registry: Any,
+    restructurer: Any = None,
+) -> None:
+    """Everything the handler reaches for, with the rename refused."""
+
+    async def no_client() -> None:
+        return None
+
+    monkeypatch.setenv("HA_URL", "http://ha")
+    monkeypatch.setenv("HA_TOKEN", "token")
+    monkeypatch.setattr(routes_entities, "HomeAssistantWebSocket", _NoWebSocket)
+    monkeypatch.setattr(routes_entities, "DeviceRegistry", lambda ws: registry)
+    monkeypatch.setattr(routes_entities, "DependencyUpdater", _NoDependencies)
+    monkeypatch.setattr(routes_entities, "init_client", no_client)
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer or _NoRestructurer())
+
+
+def _run(tmp_path: Path, job: dict[str, Any]) -> list[str]:
+    store = JobStore(str(tmp_path), terminal_states=TERMINAL_STATES)
+    store.save(job)
+    context = JobContext(job, store)
+    with pytest.raises(RuntimeError):
+        asyncio.run(routes_entities.rename_device_handler(job, context))
+    return [line["step"] for line in job.get("log", [])]
+
+
+def test_a_move_that_went_through_is_logged_before_the_rename_can_fail(tmp_path, monkeypatch) -> None:
+    """The area is written first, so a rename failing after it leaves the device
+    somewhere it was not before. The interface says so, and it can only know
+    from the log: the step is the contract between the two."""
+
+    class Registry:
+        moved_to = "unset"
+
+        async def assign_area(self, device_id: str, area_id: str) -> None:
+            Registry.moved_to = area_id
+
+        async def rename_device(self, device_id: str, new_name: str) -> dict:
+            # As the registry fails: it raises rather than answering falsely,
+            # and the handler lets it through.
+            raise RuntimeError("Failed to rename device: refused")
+
+    _a_handler_that_cannot_rename(monkeypatch, Registry())
+    steps = _run(
+        tmp_path,
+        {
+            "job_id": "j1",
+            "type": "rename_device",
+            "state": "running",
+            "payload": {"device_id": "dev1", "new_name": "Bad Lampe", "area_id": "bad", "set_area": True},
+        },
+    )
+
+    assert Registry.moved_to == "bad"
+    assert "AREA" in steps, "the step a failure can be pinned on"
+    assert "MOVED" in steps, "and the one that says the move stands"
+    assert "RENAMED" not in steps, "the rename did not go through"
+
+
+def test_a_rename_that_went_through_says_so_before_the_job_can_fail(tmp_path, monkeypatch) -> None:
+    """Everything after the rename can fail in its own turn, and Home Assistant
+    carries the new name by then. Without a step of its own, the interface read
+    the move alone as "moved but not renamed" and sent the user to rename a
+    device that was named already."""
+
+    class Registry:
+        async def assign_area(self, device_id: str, area_id: str) -> None:
+            return None
+
+        async def rename_device(self, device_id: str, new_name: str) -> dict:
+            return {"success": True}
+
+    async def no_z2m(*args: Any, **kwargs: Any) -> dict:
+        return {"supported": False}
+
+    monkeypatch.setattr(routes_entities, "sync_z2m_name", no_z2m)
+    _a_handler_that_cannot_rename(monkeypatch, Registry(), _ARegistryThatGoesAwayAfterTheRename())
+    steps = _run(
+        tmp_path,
+        {
+            "job_id": "j3",
+            "type": "rename_device",
+            "state": "running",
+            "payload": {"device_id": "dev1", "new_name": "Bad Lampe", "area_id": "bad", "set_area": True},
+        },
+    )
+
+    assert "MOVED" in steps
+    assert "RENAMED" in steps, "the name is written; what failed came after it"
+
+
+def test_nothing_says_moved_where_no_area_was_asked_for(tmp_path, monkeypatch) -> None:
+    """A rename alone leaves the device where it was, so the interface must not
+    tell the user it was moved."""
+
+    class Registry:
+        async def assign_area(self, device_id: str, area_id: str) -> None:
+            raise AssertionError("no area was asked for")
+
+        async def rename_device(self, device_id: str, new_name: str) -> dict:
+            # As the registry fails: it raises rather than answering falsely,
+            # and the handler lets it through.
+            raise RuntimeError("Failed to rename device: refused")
+
+    _a_handler_that_cannot_rename(monkeypatch, Registry())
+    steps = _run(
+        tmp_path,
+        {
+            "job_id": "j2",
+            "type": "rename_device",
+            "state": "running",
+            "payload": {"device_id": "dev1", "new_name": "Bad Lampe"},
+        },
+    )
+
+    assert "MOVED" not in steps
+
+
+def test_a_name_that_says_nothing_is_still_a_rename_in_the_message() -> None:
+    """The message asks the same question the rename does. Read for truth, a name
+    the validation ever let through as "" would have said "Device moved" about a
+    job that renamed the device."""
+    source = Path(routes_entities.__file__).read_text(encoding="utf-8")
+    at = source.index("        if new_name is not None and set_area:")
+    body = source[at : at + 300]
+
+    assert 'message = f"Device moved and renamed to: {new_name}"' in body
+    assert "elif new_name is not None:" in body
+
+
+def test_nothing_says_moved_where_the_device_was_already_there(tmp_path, monkeypatch) -> None:
+    """Home Assistant may have made the move itself - a user, another client - and
+    writing the same area again moves nothing. Logged all the same, the interface
+    told the user about a move that nothing made."""
+
+    class Registry:
+        asked_for = "unset"
+
+        async def assign_area(self, device_id: str, area_id: str) -> None:
+            Registry.asked_for = area_id
+
+        async def rename_device(self, device_id: str, new_name: str) -> dict:
+            raise RuntimeError("Failed to rename device: refused")
+
+    class AlreadyThere(_NoRestructurer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.devices = {"dev1": {"id": "dev1", "area_id": "bad"}}
+
+    _a_handler_that_cannot_rename(monkeypatch, Registry(), AlreadyThere())
+    steps = _run(
+        tmp_path,
+        {
+            "job_id": "j4",
+            "type": "rename_device",
+            "state": "running",
+            "payload": {"device_id": "dev1", "new_name": "Bad Lampe", "area_id": "bad", "set_area": True},
+        },
+    )
+
+    # The write is still made: what the job was asked for is what it writes, and
+    # the registry is the one that says whether anything changed.
+    assert Registry.asked_for == "bad"
+    assert "AREA" in steps
+    assert "MOVED" not in steps, "nothing moved"
 
 
 def test_the_note_does_not_carry_the_type_part() -> None:

@@ -12,7 +12,7 @@ import json
 import pytest
 
 from entity_registry import EntityRegistry
-from naming_state import ENTITY_MANAGER, HA_UI, INTEGRATION, UNKNOWN, NamingState
+from naming_state import ENTITY_MANAGER, HA_UI, INTEGRATION, SCHEMA_VERSION, UNKNOWN, NamingState
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ def test_what_was_written_survives_a_restart(state, tmp_path):
     again = NamingState(str(tmp_path / "naming_state.json"))
 
     assert again.get("abc")["applied_name"] == "Küche Temperatur"
-    assert json.loads((tmp_path / "naming_state.json").read_text())["version"] == 2
+    assert json.loads((tmp_path / "naming_state.json").read_text())["version"] == SCHEMA_VERSION
 
 
 def test_an_unreadable_file_costs_provenance_but_not_the_add_on(tmp_path):
@@ -184,3 +184,44 @@ def test_a_broken_state_file_does_not_break_a_rename(tmp_path, monkeypatch):
     registry = EntityRegistry(MockWebSocket())
 
     asyncio.run(registry.rename_entity("sensor.old", "sensor.new", "Küche Temperatur"))
+
+
+def test_the_empty_type_parts_of_version_one_are_forgotten(tmp_path):
+    """Version 1 wrote "" for "nothing to say about the type part" as well.
+
+    Both callers that note a name did, so a file that carries such an entry
+    cannot say which of the two it means. It is read as saying nothing, and the
+    name is taken apart once more.
+    """
+    path = tmp_path / "naming_state.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "entities": {
+                    "abc": {"applied_name": "Küche Temperatur", "base_entity": ""},
+                    "def": {"applied_name": "Küche Licht", "base_entity": "Licht"},
+                },
+            }
+        )
+    )
+
+    state = NamingState(str(path))
+
+    assert state.get("abc")["base_entity"] is None
+    assert state.get("def")["base_entity"] == "Licht"
+
+
+def test_what_this_version_writes_is_left_alone(tmp_path):
+    """From FORGOT_EMPTY_TYPE_PARTS on "" means what it says, and a restart keeps it."""
+    path = tmp_path / "naming_state.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": SCHEMA_VERSION,
+                "entities": {"abc": {"applied_name": "Küche Licht", "base_entity": ""}},
+            }
+        )
+    )
+
+    assert NamingState(str(path)).get("abc")["base_entity"] == ""
