@@ -316,3 +316,92 @@ async def test_device_class_of_an_entity_without_a_state_is_asked_for(restructur
 
     assert context["device_class"] == "power"
     assert ws_client.asked == ["sensor.controller_power"]
+
+
+# --- A name typed but not applied -----------------------------------------
+#
+# The interface writes an area through the moment it is chosen, but a device
+# base name waits for its button. What the preview says in between is not idle
+# decoration: confirming the entity writes exactly what the preview showed.
+
+
+def test_a_device_name_typed_but_not_applied_is_what_the_preview_uses(restructurer):
+    """Otherwise the answer comes from the name the integration supplied - for a
+    UniFi access point its MAC address, which is what one was named after."""
+    restructurer.naming_templates.apply_preset("entity_manager")
+
+    assert restructurer.generate_new_entity_id("sensor.existing_id", {}, None, "Access point") == (
+        "sensor.living_room_access_point_temperature",
+        "Living room Access point Temperature",
+    )
+
+
+def test_the_name_being_typed_is_taken_back_out_of_the_entity_name(restructurer):
+    """An integration writes the device's name into every entity's. The one the
+    device is about to get has to be stripped as the registry's one would be, or
+    the entity reads its device twice."""
+    restructurer.naming_templates.apply_preset("entity_manager")
+    restructurer.devices["device-1"]["name"] = "00:70:07:24:e6:38"
+    restructurer.entities["sensor.existing_id"]["original_name"] = "Bluetooth Proxy Location"
+
+    new_entity_id, new_name = restructurer.generate_new_entity_id("sensor.existing_id", {}, None, "Bluetooth Proxy")
+
+    assert new_entity_id == "sensor.living_room_bluetooth_proxy_location"
+    assert new_name == "Living room Bluetooth Proxy Location"
+
+
+def test_without_a_typed_name_the_registry_still_answers(restructurer):
+    """The preview only steps aside where something was actually typed."""
+    restructurer.naming_templates.apply_preset("entity_manager")
+
+    assert restructurer.generate_new_entity_id("sensor.existing_id", {}) == (
+        "sensor.living_room_controller_temperature",
+        "Living room Controller Temperature",
+    )
+
+
+def test_a_name_typed_empty_is_not_the_registry_name(restructurer):
+    """Clearing the field asks what the entity would be called without a device
+    name at all, which is not the same as not having typed anything."""
+    restructurer.naming_templates.apply_preset("entity_manager")
+
+    new_entity_id, _ = restructurer.generate_new_entity_id("sensor.existing_id", {}, None, "")
+
+    assert new_entity_id == "sensor.living_room_temperature"
+
+
+def test_the_area_the_panel_holds_moves_the_entities_that_follow_the_device(restructurer):
+    """A device moving takes the entities with no area of their own."""
+    restructurer.areas["bedroom"] = {"area_id": "bedroom", "name": "Bedroom", "floor_id": "ground"}
+
+    context = restructurer.build_naming_context("sensor.existing_id", {}, pending_area_id="bedroom")
+
+    assert context["area"] == "Bedroom"
+
+
+def test_an_entity_with_an_area_of_its_own_stays_where_it_was_put(restructurer):
+    """Home Assistant writes the move onto the device, and that entity keeps its
+    own area - a preview that moved it with the device said a name the rename
+    would not have written."""
+    restructurer.areas["bedroom"] = {"area_id": "bedroom", "name": "Bedroom", "floor_id": "ground"}
+    restructurer.areas["bathroom"] = {"area_id": "bathroom", "name": "Bathroom", "floor_id": "ground"}
+    restructurer.entities["sensor.existing_id"]["area_id"] = "bathroom"
+
+    context = restructurer.build_naming_context("sensor.existing_id", {}, pending_area_id="bedroom")
+
+    assert context["area"] == "Bathroom"
+
+
+def test_a_move_takes_the_old_area_out_of_the_name(restructurer):
+    """The integration wrote the area into the name, and the move changes it.
+
+    Only the area being asked about was taken off, so the old one stayed in the
+    middle: "Bedroom Controller Living room Temperature".
+    """
+    restructurer.areas["bedroom"] = {"area_id": "bedroom", "name": "Bedroom", "floor_id": "ground"}
+    restructurer.entities["sensor.existing_id"]["original_name"] = "Living room Temperature"
+
+    context = restructurer.build_naming_context("sensor.existing_id", {}, pending_area_id="bedroom")
+
+    assert context["area"] == "Bedroom"
+    assert context["entity"] == "Temperature"

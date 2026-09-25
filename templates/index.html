@@ -2285,11 +2285,11 @@
                                x-ref="deviceNameInput"
                                :value="devicePreviewBaseName !== null ? devicePreviewBaseName : selectedDeviceData?.base_name"
                                @input="devicePreviewBaseName = $event.target.value;
-                                        stageDeviceWideChange();
                                         clearTimeout(_deviceNameTimer);
-                                        const typedFor = selectedDeviceData;
-                                        const typedName = $event.target.value;
-                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(typedFor, typedName), 300)"
+                                        _deviceNameTimer = setTimeout(() => {
+                                            previewDeviceWide();
+                                            checkDeviceNameClash();
+                                        }, 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
                                :placeholder="selectedDeviceData?.base_name"
                                :disabled="renamingDevice || applyingEntityId || executing">
@@ -2579,7 +2579,7 @@
                                             </div>
                                             <code class="entity-id" :title="entity.id"
                                                   x-html="entityNeedsRename(entity)
-                                                          ? diffHtml(entity.id, entity._previewId || getNewEntityIdForEntity(entity), 'old')
+                                                          ? diffHtml(entity.id, getNewEntityIdForEntity(entity), 'old')
                                                           : escapeHtml(entity.id)"></code>
                                         </div>
 
@@ -2594,8 +2594,8 @@
                                             <div class="new-state">
                                                 <div class="friendly-name" :title="entity._previewName || getEntityFriendlyNameForEntity(entity)"
                                                      x-html="diffHtml(entity.original_name || '', entity._previewName || getEntityFriendlyNameForEntity(entity), 'new')"></div>
-                                                <code class="entity-id" :title="entity._previewId || getNewEntityIdForEntity(entity)"
-                                                      x-html="diffHtml(entity.id, entity._previewId || getNewEntityIdForEntity(entity), 'new')"></code>
+                                                <code class="entity-id" :title="getNewEntityIdForEntity(entity)"
+                                                      x-html="diffHtml(entity.id, getNewEntityIdForEntity(entity), 'new')"></code>
                                             </div>
                                         </template>
 
@@ -2725,16 +2725,16 @@
                                             <span class="scope-label" x-text="t('entity.scope_label', {name: typeOriginal(entity)})"></span>
                                             <div class="scope-group" role="group">
                                                 <button type="button" class="scope-option"
-                                                        :class="entity._ruleScope === 'all' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'all'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'all' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'all'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_all_hint', {count: entity.type_count || 1})">
                                                     <span x-text="t('entity.scope_everywhere')"></span>
                                                     <span class="scope-count" x-text="entity.type_count || 1"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.platform && entity.type_integration_count"
-                                                        :class="entity._ruleScope === 'integration' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'integration'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'integration' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'integration'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_integration_hint', {integration: entity.platform, count: entity.type_integration_count || 0})">
                                                     <span x-text="entity.platform"></span>
                                                     <span class="scope-count" x-text="entity.type_integration_count || 0"></span>
@@ -2760,8 +2760,8 @@
                                                 </button>
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.device_model && entity.type_model_count"
-                                                        :class="entity._ruleScope === 'model' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'model'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'model' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'model'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_model_hint', {model: entity.device_model, count: entity.type_model_count || 0})">
                                                     <span class="scope-model" x-text="entity.device_model"></span>
                                                     <span class="scope-count" x-text="entity.type_model_count || 0"></span>
@@ -2770,18 +2770,49 @@
                                                      and what it sets; the domain is what tells them apart. -->
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.device_model && entity.type_model_domain_count"
-                                                        :class="entity._ruleScope === 'domain' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'domain'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'domain' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'domain'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_domain_hint', {domain: entityDomain(entity), model: entity.device_model, integration: entity.platform, count: entity.type_model_domain_count || 0})">
                                                     <span x-text="entityDomain(entity)"></span>
                                                     <span class="scope-model" x-text="entity.device_model"></span>
                                                     <span class="scope-count" x-text="entity.type_model_domain_count || 0"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
-                                                        :class="entity._ruleScope === 'here' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'here'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'here' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'here'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_here_hint')">
                                                     <span x-text="t('entity.scope_here')"></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <!-- The other axis: not where the rule
+                                             applies but what it recognises an
+                                             entity by. UniFi names every device
+                                             tracker after the client it found,
+                                             so no two share a name, a key or a
+                                             class - only the domain. The count
+                                             says how far that reaches, which is
+                                             what makes it safe to offer. -->
+                                        <div class="scope-bar"
+                                             x-show="typeEdited(entity)
+                                                     && (entity.domain_count > 1 || entity._ruleAnchor === 'domain')">
+                                            <span class="scope-label"
+                                                  x-text="t('entity.anchor_label', {domain: entityDomain(entity)})"></span>
+                                            <div class="scope-group" role="group">
+                                                <button type="button" class="scope-option"
+                                                        :class="entity._ruleAnchor === 'domain' && entity._ruleScope === 'all' ? 'is-active' : ''"
+                                                        @click="entity._ruleAnchor = 'domain'; entity._ruleScope = 'all'"
+                                                        :title="t('entity.anchor_domain_all_hint', {domain: entityDomain(entity), count: entity.domain_count || 0})">
+                                                    <span x-text="t('entity.scope_everywhere')"></span>
+                                                    <span class="scope-count" x-text="entity.domain_count || 0"></span>
+                                                </button>
+                                                <button type="button" class="scope-option"
+                                                        x-show="entity.platform && entity.domain_integration_count"
+                                                        :class="entity._ruleAnchor === 'domain' && entity._ruleScope === 'integration' ? 'is-active' : ''"
+                                                        @click="entity._ruleAnchor = 'domain'; entity._ruleScope = 'integration'"
+                                                        :title="t('entity.anchor_domain_integration_hint', {domain: entityDomain(entity), integration: entity.platform, count: entity.domain_integration_count || 0})">
+                                                    <span x-text="entity.platform"></span>
+                                                    <span class="scope-count" x-text="entity.domain_integration_count || 0"></span>
                                                 </button>
                                             </div>
                                         </div>
@@ -2825,9 +2856,9 @@
                     </button>
                     <button @click="executeAllChanges()"
                             x-show="pendingChangesCount > 0"
-                            :disabled="applyingEntityId || renamingDevice"
+                            :disabled="applyingAll || applyingEntityId || renamingDevice"
                             class="btn btn-success"
-                            :class="{'opacity-50 cursor-not-allowed': applyingEntityId || renamingDevice}">
+                            :class="{'opacity-50 cursor-not-allowed': applyingAll || applyingEntityId || renamingDevice}">
                         <i class="ri-check-double-line mr-2"></i>
                         <span x-text="t('action_bar.apply_all')">Apply All Changes</span>
                     </button>
@@ -3340,8 +3371,10 @@
             // must not set another repaint off. `hierarchyVersion` says when
             // the registry moved on and the pass has to run again.
             const index = {
+                owner: null,
                 version: -1,
                 devicesById: new Map(),
+                areasById: new Map(),
                 entitiesById: new Map(),
                 byDevice: new Map(),
                 withoutDeviceInArea: new Map(),
@@ -3352,14 +3385,24 @@
             // somebody else's entities.
             const none = Object.freeze([]);
 
-            // All five maps are built in one pass. Keeping them up to date
+            // All six maps are built in one pass. Keeping them up to date
             // one write at a time would mean five kinds of write to get right
             // - a moved device changes the counts of two areas - against a
             // pass that costs one walk of lists the page has just been handed
             // anyway, and only when something changed.
             function indexed(state) {
-                if (index.version === state.hierarchyVersion) return index;
+                // The version and whose it is: two components mounted at once -
+                // a test harness, a reload that leaves the first standing - each
+                // count their own versions, and the second was handed the first
+                // one's devices wherever the two numbers happened to agree.
+                // Neither of them rebuilds the other's pass: this index is built
+                // inside entityManager(), so each component has one of its own,
+                // and "owner" is about the proxy that reads it rather than about
+                // two components sharing this one.
+                if (index.owner === state && index.version === state.hierarchyVersion) return index;
+                index.owner = state;
                 index.devicesById = new Map();
+                index.areasById = new Map();
                 index.entitiesById = new Map();
                 index.byDevice = new Map();
                 index.withoutDeviceInArea = new Map();
@@ -3367,6 +3410,11 @@
 
                 for (const device of state.hierarchy.devices || []) {
                     index.devicesById.set(device.id, device);
+                }
+                // Every name a row shows is built out of an area, and finding it
+                // walked the list - once per row, on every keystroke.
+                for (const area of state.hierarchy.areas || []) {
+                    index.areasById.set(area.id, area);
                 }
                 for (const entity of state.hierarchy.entities || []) {
                     index.entitiesById.set(entity.id, entity);
@@ -3444,6 +3492,12 @@
                 areaComboOpen: false,
                 areaComboAt: 0,
                 _stagedRun: 0,  // Which computation of the staged device's rows is current
+                _stagedAsking: false,  // Whether an answer for those rows is on its way
+                // Whether "apply all" is under way. Shut from the click rather
+                // than from the first write: the run waits for the previews and
+                // may read the list back before it starts a job, and a second
+                // click during those waits ran everything a second time.
+                applyingAll: false,
                 // The area picked in the panel, before anything is written.
                 // null means nothing picked; a string is an area id.
                 devicePreviewAreaId: null,
@@ -4109,9 +4163,15 @@
                     const entityChanges = this.filteredEntities.filter(e => this.staysInChangesFilter(e)).length;
                     const z2mDrift = this.filteredDevices.filter(d => d.z2m_drift).length;
                     // An area picked or a name typed in the panel is a change of
-                    // its own: it is the one thing "apply all" writes that no
-                    // entity row carries a tick for.
-                    return entityChanges + z2mDrift + (this.deviceChangeStaged ? 1 : 0);
+                    // its own where no entity row says so already: the rows of the
+                    // staged device carry ticks as soon as their names are worked
+                    // out, and counted beside them the one change read as two - a
+                    // device with five renamed rows showed six.
+                    const staged = this.deviceChangeStaged && !this.renamingDevice;
+                    const ticked = staged
+                        && this.filteredEntities.some(
+                            one => one.device_id === this.selectedDevice && this.staysInChangesFilter(one));
+                    return entityChanges + z2mDrift + (staged && !ticked ? 1 : 0);
                 },
 
                 // Computed: Count of disabled entities in current selection (only when showDisabled is true)
@@ -4492,8 +4552,14 @@
                         this.brokenRefsCached = true;
 
                         // Load suggestions for each broken reference (in parallel)
+                        // Settled, not all: one id the server cannot answer for
+                        // threw the whole list away, and the page then showed no
+                        // suggestions at all for the references it could answer.
+                        // The other two Promise.all calls on this page ask for
+                        // halves of one answer, where either half missing means
+                        // there is nothing to show.
                         const uniqueMissingIds = [...new Set(this.brokenReferences.map(r => r.missing_entity_id))];
-                        await Promise.all(uniqueMissingIds.map(id => this.loadSuggestionsFor(id)));
+                        await Promise.allSettled(uniqueMissingIds.map(id => this.loadSuggestionsFor(id)));
                     } catch (error) {
                         console.error('Error loading broken references:', error);
                         this.showMessage(this.t('messages.error') + ': ' + error.message, 'error');
@@ -4729,8 +4795,8 @@
                 // A read must leave these alone.
                 THEIRS_NOT_OURS: [
                     'selected', '_editing', '_remember', '_applying', '_expanded',
-                    '_currentSuffix', '_ruleScope', '_justRenamed', '_previewName',
-                    '_previewId',
+                    '_currentSuffix', '_ruleScope', '_ruleAnchor', '_justRenamed',
+                    '_previewName', '_previewId',
                 ],
 
                 // Write onto `mine` only the fields that actually differ, and say
@@ -4951,6 +5017,9 @@
                     // dropped without a word.
                     if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
                     this.closeAreaCombo();
+                    // Read before it is written over: the rows to be put
+                    // back are the ones of the device being left.
+                    const left = this.selectedDevice;
                     this.selectedArea = area.id;
                     this.selectedAreaData = area;
                     this.selectedDevice = null;
@@ -4960,7 +5029,7 @@
                     // to the next one, it offered to move that device instead,
                     // and said so in its name before anybody asked for it.
                     this.devicePreviewAreaId = null;
-                    this.dropStagedPreview();
+                    this.dropStagedPreview(left);
                     this.deviceFilter = '';  // Reset device filter
                     this.saveState();
 
@@ -4974,11 +5043,14 @@
                 selectDevice(device) {
                     if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
                     this.closeAreaCombo();
+                    // Read before it is written over: the rows to be put back are
+                    // the ones of the device being left.
+                    const left = this.selectedDevice;
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
                     this.devicePreviewAreaId = null;  // and the area it was about to move to
-                    this.dropStagedPreview();
+                    this.dropStagedPreview(left);
                     this.deviceNameClash = [];
                     this.saveState();
 
@@ -4992,11 +5064,14 @@
                 selectVirtualDevice(virtualDeviceId) {
                     if (this.renamingDevice) return this.showMessage(this.t('messages.rename_running'), 'info', true);
                     this.closeAreaCombo();
+                    // Read before it is written over: the rows to be put back are
+                    // the ones of the device being left.
+                    const left = this.selectedDevice;
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
                     this.devicePreviewAreaId = null;  // and the area it was about to move to
-                    this.dropStagedPreview();
+                    this.dropStagedPreview(left);
                     this.deviceNameClash = [];
                     this.saveState();
 
@@ -5036,15 +5111,6 @@
                         && (this.devicePreviewAreaId || null) !== (device.area_id || null);
                 },
 
-                // The area every name below is built out of: the picked one
-                // while a move is being shown, the device's own otherwise -
-                // never the area the sidebar happens to stand in.
-                areaForDevice(device) {
-                    const areaId = this.previewAreaFor(device);
-                    if (!areaId) return null;
-                    return this.hierarchy.areas.find(a => a.id === areaId) || null;
-                },
-
                 // What the entities of the device being moved would be called.
                 // Their names are cached, and a move changes all of them.
                 pickPreviewArea(areaId) {
@@ -5053,39 +5119,19 @@
                     // asked the server for slugs that are already in hand.
                     if (this.devicePreviewAreaId === areaId) return;
                     this.devicePreviewAreaId = areaId;
-                    const moved = indexed(this).byDevice.get(this.selectedDevice) || none;
-                    this.computePreviewsFor(moved);
-                },
-
-                // A move is being shown for this device: an area was picked in
-                // the panel and not yet written. Untouched is null; an empty
-                // pick is a move to no area at all, which is a move like any
-                // other and not the absence of one.
-                deviceIsMoving(device) {
-                    return !!device
-                        && device.id === this.selectedDevice
-                        && !this.isVirtualDevice(device.id)
-                        && this.devicePreviewAreaId !== null
-                        // The area it is in, picked again, is not a move: every
-                        // row was computed afresh for it and the fast answer
-                        // thrown away for nothing.
-                        && (this.devicePreviewAreaId || null) !== (device.area_id || null);
-                },
-
-                // The area every name below is built out of: the picked one
-                // while a move is being shown, the device's own otherwise -
-                // never the area the sidebar happens to stand in.
-                areaForDevice(device) {
-                    const areaId = this.previewAreaFor(device);
-                    if (!areaId) return null;
-                    return this.hierarchy.areas.find(a => a.id === areaId) || null;
-                },
-
-                // What the entities of the device being moved would be called.
-                // Their names are cached, and a move changes all of them.
-                pickPreviewArea(areaId) {
-                    this.devicePreviewAreaId = areaId;
-                    this.computePreviewsFor(this.entitiesOfDevice(this.selectedDevice));
+                    // Through the panel's own preview where the panel holds a
+                    // change, which includes this pick: the computed previews
+                    // are worked out from the registry, so a name typed into
+                    // the field and not written yet was left out of them, and
+                    // the rows went back to the stored name at every pick.
+                    // Asked for straight away rather than through the timer:
+                    // a pick is one action and is answered at once.
+                    if (this.deviceChangeStaged) {
+                        this.dropStagedPreview();
+                        this.previewDeviceWide();
+                        return;
+                    }
+                    this.computePreviewsFor(indexed(this).byDevice.get(this.selectedDevice) || none);
                 },
 
                 // Get device display name (full name with area prefix)
@@ -5128,12 +5174,17 @@
                 // rename would write, not the one the entity carries now.
                 getEntityFriendlyNameLive(entity, baseName = null, forDeviceId = null) {
                     const template = this.namingConfig?.templates?.entity_name || '{area} {device} {entity}';
-                    const typed = entity._editValue
-                        || (entity._currentSuffix !== undefined ? entity._currentSuffix : null);
+                    // A field emptied is an answer, not an absent one: the name
+                    // then has no type part, which is what clearing it asks for.
+                    // Read as nothing supplied, the check went back to the stored
+                    // word and worked out ids for a name nobody was writing.
+                    const typed = entity._editValue !== undefined
+                        ? entity._editValue
+                        : (entity._currentSuffix !== undefined ? entity._currentSuffix : null);
                     const mine = !!entity.device_id && entity.device_id === (forDeviceId || this.selectedDevice);
                     return this.renderNamingTemplate(
                         template,
-                        this.entityNamingContext(entity, typed, mine ? baseName : null)
+                        this.entityNamingContext(entity, typed, mine ? baseName : null, forDeviceId)
                     );
                 },
 
@@ -5146,21 +5197,36 @@
                 // The backend (normalize_name / slugify) is the single source of truth for
                 // the naming convention -- the frontend must NOT reimplement the slug rules,
                 // otherwise the two drift apart (e.g. accented characters get stripped here).
-                async fetchNormalized(names) {
-                    if (!names.length) return [];
+                // The slugs for these names. With ``forEntities`` the answer
+                // also carries the ids and names a rename of them would write,
+                // numbering and all; ``normalizedFor`` is the older caller that
+                // wants the slugs alone.
+                async fetchNormalizedFor(names, forEntities = null) {
+                    const empty = {normalized: names.map(() => '')};
+                    if (!names.length) return {normalized: []};
                     try {
                         const resp = await fetch('api/normalize', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ names })
+                            body: JSON.stringify(forEntities ? { names, for: forEntities } : { names })
                         });
                         if (!resp.ok) throw new Error('normalize HTTP ' + resp.status);
                         const data = await resp.json();
-                        return Array.isArray(data.normalized) ? data.normalized : names.map(() => '');
+                        if (!Array.isArray(data.normalized)) return empty;
+                        const numbered = Array.isArray(data.ids) && Array.isArray(data.names)
+                            && data.ids.length === names.length && data.names.length === names.length;
+                        return numbered
+                            ? {normalized: data.normalized, ids: data.ids, names: data.names}
+                            : {normalized: data.normalized};
                     } catch (e) {
                         console.error('normalize failed', e);
-                        return names.map(() => '');
+                        return empty;
                     }
+                },
+
+                async fetchNormalized(names, forEntities = null) {
+                    const answer = await this.fetchNormalizedFor(names, forEntities);
+                    return forEntities ? answer : answer.normalized;
                 },
 
                 // Build the entity ID from a domain and a backend-provided slug.
@@ -5265,50 +5331,83 @@
 
                 // Get friendly name using entity's own device/area (not selected)
                 getEntityFriendlyNameForEntity(entity) {
+                    // Asked once: this runs for every row of a device on every
+                    // keystroke, and each question walked the device list.
+                    const panel = this.pendingDeviceContext(entity);
+                    if (entity.suggested_name && entity._currentSuffix === undefined
+                            && Object.keys(panel).length === 0) {
+                        return entity.suggested_name;
+                    }
+
                     // Find entity's device
                     const device = entity.device_id
                         ? indexed(this).devicesById.get(entity.device_id)
                         : null;
 
-                    // What the server precomputed is about the area the device
-                    // is in. A device the panel is moving is not there any
-                    // more, so the rows would have gone on showing the old
-                    // area while the panel said otherwise.
-                    const moving = this.deviceIsMoving(device);
-                    if (entity.suggested_name && entity._currentSuffix === undefined && !moving) {
-                        return entity.suggested_name;
+                    // The area the panel holds where it holds one and the
+                    // entity follows the device into it: the name the server
+                    // computed is about the area the registry has, and the row
+                    // would have read the old one while the form said otherwise.
+                    // "" is an area picked away. An entity with an area of its
+                    // own keeps it - the move is written onto the device, and
+                    // the rename leaves that entity where it is - and that area
+                    // comes first here as it does at the server.
+                    const follows = !entity.area_id;
+                    const areaId = (panel.area_id !== undefined && follows)
+                        ? panel.area_id
+                        : (entity.area_id || device?.area_id);
+                    // Out of the index: this runs for every row of a device on
+                    // every keystroke, and each question walked the area list.
+                    const area = areaId ? indexed(this).areasById.get(areaId) : null;
+
+                    // The entity's own part, with the name being typed taken
+                    // back out of it: an integration that writes the device name
+                    // into every entity name - a Bluetooth proxy called after
+                    // its MAC, whose entities are "Bluetooth Proxy Location" -
+                    // leaves it sitting in front, and the row said it twice.
+                    // The server does the same thing with the name it is given.
+                    // An integration writes the area into the name just as
+                    // readily as the device - "Bad Temperature" - so an area
+                    // sitting in front of the entity's own part comes out of it
+                    // too. Both areas: the entity's part was read under the one
+                    // the device is in, and it is being shown under the one the
+                    // panel holds.
+                    let own = this.withoutLeading(this.getEntitySuffix(entity), panel.device_name);
+                    if (panel.area_id !== undefined && follows) {
+                        // The area the entity's own part was read under, which
+                        // is the entity's own where it has one: taken as the
+                        // device's, the row showed the area twice.
+                        const underId = entity.area_id || device?.area_id;
+                        const here = underId ? indexed(this).areasById.get(underId) : null;
+                        own = this.withoutLeading(this.withoutLeading(own, area?.name), here?.name);
                     }
-                    const parts = [];
+                    // Through the template, as the live answer and the server
+                    // both do: joined with spaces, a template that puts the area
+                    // last or puts anything between the parts had the row saying
+                    // one name and everything else saying another.
+                    const template = this.namingConfig?.templates?.entity_name || '{area} {device} {entity}';
+                    return this.renderNamingTemplate(
+                        template,
+                        this.entityNamingContext(entity, own, panel.device_name !== undefined ? panel.device_name : null)
+                    );
+                },
 
-                    // Find area (from device or entity), following a move the
-                    // panel is showing: this is what the cached preview holds,
-                    // and a name computed from the old area would sit there
-                    // unchanged while the panel says otherwise.
-                    const areaId = moving
-                        ? this.previewAreaFor(device)
-                        : (device?.area_id || entity.area_id);
-                    const area = areaId
-                        ? this.hierarchy.areas.find(a => a.id === areaId)
-                        : null;
-
-                    // Area
-                    if (area) {
-                        parts.push(area.name);
+                // ``text`` without ``prefix`` in front of it, whole word and
+                // case aside. Nothing to take off means the text as it is.
+                withoutLeading(text, prefix) {
+                    if (!text || !prefix) return text || '';
+                    const head = prefix.toLowerCase();
+                    if (text.toLowerCase() === head) return '';
+                    // Compared over as many characters as are cut off, not over
+                    // the lower-cased text: "İ" lower-cases into two characters,
+                    // so a name starting with it was cut one short and kept a
+                    // stray combining dot in front.
+                    if (text.length > prefix.length
+                        && text.slice(0, prefix.length).toLowerCase() === head
+                        && text[prefix.length] === ' ') {
+                        return text.slice(prefix.length).trim();
                     }
-
-                    // Device base name, as the panel holds it: a name typed
-                    // there and not written yet is what the row would be
-                    // renamed to, and the row showed the stored one instead -
-                    // which is then what a run would have written.
-                    if (device) {
-                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
-                        parts.push(typed !== null ? typed : device.base_name);
-                    }
-
-                    // Entity suffix (uses shared logic)
-                    parts.push(this.getEntitySuffix(entity));
-
-                    return parts.filter(p => p).join(' ');
+                    return text;
                 },
 
                 // Get new entity ID using entity's own context
@@ -5357,33 +5456,34 @@
                         entity._previewId = null;
                     }
 
-                    // Asked once, not once per entity: the scan was walking
-                    // the device list again for every row.
-                    const devicesById = indexed(this).devicesById;
-
                     const pending = [];
                     let stagedUnanswered = false;
                     for (const entity of entities) {
                         // Skip if already computed (e.g. from user edit) or just renamed
                         if (staged && entity.device_id === staged) {
                             // A row the staged computation has not reached -
-                            // an entity that arrived with this refresh.
-                            if (!entity._previewName) stagedUnanswered = true;
+                            // an entity that arrived with this refresh. Nothing
+                            // rather than anything falsy: a name that comes out
+                            // empty - no area, no device name, no type part - was
+                            // read as a row nobody had answered for, and the panel
+                            // asked the server about it again on every poll for as
+                            // long as the change stood.
+                            if (entity._previewName === null || entity._previewName === undefined) {
+                                stagedUnanswered = true;
+                            }
                             continue;
                         }
                         if (entity._previewName || entity._justRenamed) continue;
 
                         // Friendly-name composition stays client-side; only the slug comes
-                        // from the backend (source of truth). What the server
-                        // precomputed is about the area the device is in, so a
-                        // device on its way to another one is left to the
-                        // client, which knows where it is going.
-                        const moving = this.deviceIsMoving(
-                            entity.device_id ? devicesById.get(entity.device_id) || null : null
-                        );
-                        entity._previewName = (!moving && entity.suggested_name)
+                        // from the backend (source of truth).
+                        // The hierarchy's own answer, except where a device base
+                        // name has been typed since: it was worked out from the
+                        // registry and does not know about it.
+                        const stale = this.snapshotIsStale(entity);
+                        entity._previewName = (!stale && entity.suggested_name)
                             || this.getEntityFriendlyNameForEntity(entity);
-                        if (!moving && entity.suggested_entity_id) {
+                        if (entity.suggested_entity_id && !stale) {
                             entity._previewId = entity.suggested_entity_id;
                             continue;
                         }
@@ -5394,7 +5494,15 @@
                     // staging itself asks for them, and asking again on every
                     // background refresh was one slug request per poll for
                     // rows that already held their answer.
-                    if (stagedUnanswered) this.previewDeviceWide();
+                    // Through the wait, not straight away: this runs on every
+                    // background refresh of the list, and asking from here was a
+                    // slug request per poll beside the ones the typing asks for.
+                    //
+                    // And not while one is on its way: asking again moved the run
+                    // number on, which called the answer already coming off, and
+                    // every staged row was left without an id until the new answer
+                    // arrived - twice the wait for nothing.
+                    if (stagedUnanswered && !this._stagedAsking) this.stageDeviceWideChange();
                     if (!pending.length) return;
 
                     // Which computation asked about each row. A second one
@@ -5409,12 +5517,34 @@
                     // Every computation under way, so a run that needs the ids
                     // waits for all of them rather than for whichever one
                     // started last.
-                    const settling = this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
+                    // Asked about these entities, so the answer carries the
+                    // ids and names a rename of them would write: two rows can
+                    // come out of one name, and which of them keeps the plain id
+                    // is the rename's own reckoning. Worked out here instead, the
+                    // preview and the write disagreed about it.
+                    const settling = this.fetchNormalized(
+                        pending.map(e => e._previewName),
+                        pending.map(e => e.id)
+                    ).then(answer => {
+                        const slugs = answer.normalized;
                         pending.forEach((entity, i) => {
                             // Only where nothing has asked since: this answer
                             // is about the name the row had when it was asked.
                             if (entity._previewAsk !== asked) return;
-                            entity._previewId = this.composeEntityId(entity, slugs[i]);
+                            // Where the answer has nothing for this row - a
+                            // name that came out empty, so there was no id to
+                            // number - the slug answers as before. Written
+                            // through, the empty answer emptied the row and the
+                            // next computation asked about it again.
+                            entity._previewId = (answer.ids && answer.ids[i])
+                                || this.composeEntityId(entity, slugs[i]);
+                            // The name carries the number too, or the row would
+                            // read as one thing and be written as another.
+                            // Empty is an answer - a name of area and device
+                            // with no type part - and only "nothing at all" is
+                            // not. Skipped as falsy, the row kept the old name
+                            // beside the new id.
+                            if (answer.names && answer.names[i] != null) entity._previewName = answer.names[i];
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
@@ -5432,8 +5562,8 @@
                         // Settled, not resolved: a computation that failed says
                         // nothing about the ids it did not answer for, and those
                         // rows read as unchanged. Left to reject, it threw out of
-                        // here - before the run had even said it was working -
-                        // and what the user asked for stopped without a word.
+                        // here and the run the user had asked for gave up without
+                        // a word about why.
                         await Promise.allSettled([...this._previewsInFlight]);
                     }
                 },
@@ -5614,7 +5744,7 @@
                 // about the next one: left running, the timer answered for
                 // whatever the panel had turned to and threw away the previews
                 // that had just been computed for it.
-                dropStagedPreview() {
+                dropStagedPreview(deviceId = null) {
                     clearTimeout(this._deviceWideTimer);
                     this._deviceWideTimer = null;
                     // And every answer already on its way, either kind of
@@ -5627,6 +5757,28 @@
                     // load no longer throws away the answer the whole
                     // installation is waiting for.
                     this._stagedRun++;
+                    // And the flag that says one is being asked for: the answer
+                    // dropped here leaves its own "finally" to see a run that is
+                    // not current any more and step over the reset, so nothing
+                    // else would ever have asked again.
+                    this._stagedAsking = false;
+                    // And the names those rows hold: computed for a move and a
+                    // rename that are not staged any more, they sat on the rows
+                    // of the device the panel has left until something else
+                    // happened to ask about them - and the list showed names
+                    // built out of an area nothing was going to be written to.
+                    if (!deviceId) return;
+                    const rows = (indexed(this).byDevice.get(deviceId) || none).filter(e => !e._justRenamed);
+                    if (!rows.length) return;
+                    for (const entity of rows) {
+                        // Not the row being typed in, as everywhere else: it
+                        // holds what the user is writing.
+                        if (entity._currentSuffix !== undefined) continue;
+                        entity._previewName = null;
+                        entity._previewId = null;
+                    }
+                    this.computePreviewsFor(rows);
+                    this.previewVersion++;
                 },
 
                 previewDeviceWide() {
@@ -5660,13 +5812,47 @@
                     }
                     this.previewVersion++;
                     const run = ++this._stagedRun;
-                    this.fetchNormalized(entities.map(e => e._previewName)).then(slugs => {
+                    // Counted among the answers the page waits for: a run that
+                    // asked before this one had said it was working wrote the
+                    // names and left the ids as they were. And a failure is
+                    // absorbed here, as it is for every other computation -
+                    // left to reject, it was an unhandled rejection with no
+                    // message, no fallback, and in some browsers nothing on the
+                    // page answering afterwards.
+                    this._stagedAsking = true;
+                    const settling = this.fetchNormalizedFor(
+                        entities.map(e => e._previewName),
+                        entities.map(e => e.id)
+                    ).then(answer => {
                         if (run !== this._stagedRun) return;
                         entities.forEach((entity, i) => {
-                            entity._previewId = this.composeEntityId(entity, slugs[i]);
+                            // The name the server worked out, where it worked one
+                            // out: two rows of one device that come to the same
+                            // name are written as "Temperature" and
+                            // "Temperature 2", and the ids showed that while the
+                            // names beside them did not - the list offered two
+                            // rows called the same thing and the run wrote
+                            // something else.
+                            // Every row it answered for, the one being typed in
+                            // included: the name that went to the server was
+                            // rendered from what is being typed, so the answer is
+                            // that name numbered - not the stored one coming back
+                            // over it. Held back, the row showed a name of its own
+                            // beside the id the run will write. Empty is an answer
+                            // - area and device with no type part - and only
+                            // nothing at all is not.
+                            if (answer.names && answer.names[i] != null) entity._previewName = answer.names[i];
+                            entity._previewId = (answer.ids && answer.ids[i])
+                                || this.composeEntityId(entity, (answer.normalized || [])[i]);
                         });
                         this.previewVersion++;
+                    }).catch(error => {
+                        console.error('Error computing staged previews:', error);
+                    }).finally(() => {
+                        if (run === this._stagedRun) this._stagedAsking = false;
+                        this._previewsInFlight.delete(settling);
                     });
+                    this._previewsInFlight.add(settling);
                 },
 
                 // Invalidate cached previews (call after rename to refresh conflict detection)
@@ -5729,28 +5915,44 @@
                     return device?.area_id || null;
                 },
 
-                deviceNamingContext(device, baseName = null) {
-                    const area = this.hierarchy.areas.find(a => a.id === this.previewAreaFor(device));
+                deviceNamingContext(device, baseName = null, areaId = undefined) {
+                    // Out of the index, like every other area lookup: this is
+                    // asked for every device name the page renders. The area may
+                    // be spelled out by the caller: a run that read it off the
+                    // panel again built the name for the area the device is
+                    // leaving wherever a poll had cleared the staged one in the
+                    // meantime.
+                    const wanted = areaId === undefined ? this.previewAreaFor(device) : areaId;
+                    const area = indexed(this).areasById.get(wanted);
                     return {
                         ...this.baseNamingContext(area, device),
                         device: baseName !== null ? baseName : (device?.base_name || '')
                     };
                 },
 
-                renderDeviceName(device, baseName = null) {
+                renderDeviceName(device, baseName = null, areaId = undefined) {
                     const template = this.namingConfig?.templates?.device_name || '{area} {device}';
-                    return this.renderNamingTemplate(template, this.deviceNamingContext(device, baseName));
+                    return this.renderNamingTemplate(template, this.deviceNamingContext(device, baseName, areaId));
                 },
 
-                entityNamingContext(entity, suffix = null, baseName = null) {
+                entityNamingContext(entity, suffix = null, baseName = null, forDeviceId = null) {
                     const device = entity?.device_id
                         ? indexed(this).devicesById.get(entity.device_id)
                         : null;
-                    const staged = !!device && device.id === this.selectedDevice;
-                    const areaId = this.deviceIsMoving(device)
-                        ? this.previewAreaFor(device)
-                        : (entity?.area_id || device?.area_id);
-                    const area = this.hierarchy.areas.find(a => a.id === areaId);
+                    // The device this name is being worked out for, which is not
+                    // always the one the panel stands on: asked about another
+                    // device's rows, the typed-but-unwritten name of the selected
+                    // device was read into them.
+                    const staged = !!device && device.id === (forDeviceId || this.selectedDevice);
+                    // The entity's own area first, staged move or not: the move
+                    // is written onto the device, and an entity that carries an
+                    // area of its own is left where it is. Read the other way
+                    // round, every row of a device staged for a move was named
+                    // and given an id for the area it is not going to - and the
+                    // tick beside it would have written that id.
+                    const areaId = entity?.area_id
+                        || (this.deviceIsMoving(device) ? this.previewAreaFor(device) : device?.area_id);
+                    const area = indexed(this).areasById.get(areaId);
                     const domain = entity?.id?.split('.')[0] || '';
                     const wantedDevice = baseName !== null ? baseName : (staged ? this.devicePreviewBaseName : null);
                     return {
@@ -5771,11 +5973,58 @@
                     };
                 },
 
+                // The device base name as the form holds it, where that is not
+                // what the registry holds. An area is written through the moment
+                // it is chosen, but a base name waits for its button, and until
+                // then the registry still has the name the integration supplied -
+                // for a UniFi access point its MAC address. The server builds its
+                // answer from the registry unless it is told otherwise, and that
+                // answer is what a confirmed rename writes.
+                // Whether the hierarchy's own answer for this entity still holds.
+                // It was worked out from the registry, so a device base name
+                // typed since is not in it - and seeding a preview from it puts
+                // the old name back, which is what expanding a row did.
+                snapshotIsStale(entity) {
+                    return Object.keys(this.pendingDeviceContext(entity)).length > 0;
+                },
+
+                pendingDeviceContext(entity) {
+                    // Asked for every row of the list on every keystroke, so
+                    // what can be answered without looking anything up is
+                    // answered first: nothing staged means nothing pending, and
+                    // an entity of another device is not this panel's business.
+                    if (this.devicePreviewBaseName === null && this.devicePreviewAreaId === null) {
+                        return {};
+                    }
+                    if (!entity?.device_id || entity.device_id !== this.selectedDevice) return {};
+                    if (this.isVirtualDevice(this.selectedDevice)) return {};
+                    // Out of the index: this is asked for every row of the
+                    // list on every keystroke, which is what the index is for.
+                    const device = indexed(this).devicesById.get(entity.device_id);
+                    if (!device) return {};
+                    const pending = {};
+                    if (this.devicePreviewBaseName !== null && this.devicePreviewBaseName !== device.base_name) {
+                        pending.device_name = this.devicePreviewBaseName;
+                    }
+                    // An area picked in the panel is written when the change
+                    // is applied, not when it is picked. Empty means picked
+                    // away, which is not the same as nothing picked.
+                    if (this.devicePreviewAreaId !== null
+                            && (this.devicePreviewAreaId || null) !== (device.area_id || null)) {
+                        pending.area_id = this.devicePreviewAreaId || '';
+                    }
+                    return pending;
+                },
+
                 async previewEntityNaming(entity, suffix = null) {
                     const response = await fetch('api/naming/preview', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ entity_id: entity.id, type_value: suffix })
+                        body: JSON.stringify({
+                            entity_id: entity.id,
+                            type_value: suffix,
+                            ...this.pendingDeviceContext(entity)
+                        })
                     });
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'Failed to preview naming');
@@ -6007,15 +6256,69 @@
                     const mine = indexed(this).byDevice.get(device.id) || none;
                     if (!mine.length) return [];
 
+                    // What the panel's own preview has just worked out, where it
+                    // has: those are the ids this check is about, so a keystroke
+                    // asked the server the same question twice - once for the
+                    // rows and once for the button beside them - and the two
+                    // answers had to agree to mean anything. Only where no name
+                    // was passed in: a caller that brings its own is asking
+                    // about a name the rows know nothing about.
+                    // The name the rows were computed for is the name being
+                    // asked about, whether the caller spelled it out or not: the
+                    // apply always passes one, and reading that as "a name the
+                    // rows know nothing about" asked the server the same
+                    // question a second time on every apply.
+                    // What the panel holds as a name, which an emptied field is
+                    // not: cleared, it holds "" and the rows are computed with the
+                    // device's own name, exactly as they are where nothing was
+                    // ever typed.
+                    const typedName = (this.devicePreviewBaseName || '').trim() || null;
+                    const rowsHoldIt = baseName === null
+                        || baseName === typedName
+                        // Nothing typed: the rows were computed with the device's
+                        // own name, which is the name being asked about. Read as a
+                        // name they know nothing about, a move with no rename
+                        // beside it asked the server a second time for the ids
+                        // they already held - and the two answers were about two
+                        // readings of the list. A name is needed for the two to be
+                        // the same name: where the device has none either, there
+                        // is nothing to compare and the server answers.
+                        || (typedName === null && !!baseName && baseName === (device.base_name || '').trim());
+                    let ids = null;
+                    if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {
+                        await this.previewsSettled();
+                        const staged = mine.map(e => e._previewId);
+                        if (staged.every(Boolean)) ids = staged;
+                    }
                     // The slug rules live in the backend; see fetchNormalized.
-                    const slugs = await this.fetchNormalized(
-                        mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id))
-                    );
-                    const taken = indexed(this).entitiesById;
+                    // Asked with the entities, so the ids come back as a rename
+                    // would write them. Worked out from the slugs alone, two of
+                    // the device's own entities landing on one slug read as one
+                    // taken id, and the panel refused a rename that nothing was
+                    // in the way of - the rename writes _1 and _2.
+                    const answer = ids
+                        ? {ids}
+                        : await this.fetchNormalizedFor(
+                            mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id)),
+                            mine.map(e => e.id)
+                        );
+                    // Both sides of the comparison out of one reading of the
+                    // registry: "mine" was taken before the server answered, and
+                    // a poll arriving in between left it holding rows the device
+                    // does not have any more, compared against ids that no
+                    // longer knew them. A row that has gone is not renamed, so
+                    // it is not asked about either: it has no wanted id for
+                    // anything to clash with, and working one out for it would
+                    // refuse a rename over an entity that is not there.
+                    const registry = indexed(this);
+                    const taken = registry.entitiesById;
+                    const stillMine = new Set((registry.byDevice.get(device.id) || none).map(e => e.id));
 
                     const clashes = [];
-                    mine.forEach((entity, position) => {
-                        const wantedId = this.composeEntityId(entity, slugs[position]);
+                    mine.forEach((entity, index) => {
+                        if (!stillMine.has(entity.id)) return;
+                        const wantedId = (answer.ids && answer.ids[index])
+                            || this.composeEntityId(entity, (answer.normalized || [])[index]);
                         const holder = taken.get(wantedId);
                         if (holder && holder.device_id !== device.id) {
                             clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
@@ -6232,6 +6535,18 @@
                     // not in, and the next read proposed the old name straight
                     // back - for ever, since nothing had moved.
                     if (entity.device_id && entity.device_id === this.selectedDevice) {
+                        // But a device name sitting in the field is not written
+                        // from here: the row is named out of it, so applying the
+                        // row alone gave the entity a name saying a device name
+                        // Home Assistant has never seen - and it stayed that way
+                        // if the rename was never applied. The device's own
+                        // button writes the name and every row under it.
+                        const typed = this.devicePreviewBaseName === null ? '' : this.devicePreviewBaseName.trim();
+                        const device = indexed(this).devicesById.get(entity.device_id);
+                        if (typed && typed !== (device?.base_name || '').trim()) {
+                            this.showMessage(this.t('messages.device_name_first'), 'info', true);
+                            return;
+                        }
                         if (!await this.commitStagedArea()) return;
                     }
                     await this.previewsSettled();
@@ -6355,14 +6670,59 @@
 
                 // How far the rule that names this entity reaches, as one of the
                 // scope buttons - or null where no rule of the user's does.
-                scopeThatApplied(entity) {
+                // Which anchor the rule in force is written on, where that is
+                // not the usual one. A rule keyed on the domain is offered by
+                // its own row of buttons, and a form that opened without this
+                // sent no anchor at all: the correction then made a name rule
+                // for this one entity instead of changing the domain rule that
+                // named it.
+                anchorThatApplied(entity) {
+                    const applies = this.ruleInForce(entity);
+                    return applies && (applies.matched_on || {}).kind === 'domain' ? 'domain' : null;
+                },
+
+                // The rule of the user's that applies to this entity, whether or
+                // not the name came from it: one whose word is already the shown
+                // spelling has no effect on the name and still applies. Read off
+                // the source alone, the form opened as though no rule were in
+                // force and the correction made a second one beside it.
+                ruleInForce(entity) {
                     const resolution = entity?.resolution;
-                    if (!resolution || resolution.won_by !== 'rule:user' || !resolution.rule_id) return null;
-                    const match = resolution.matched_on;
+                    if (!resolution) return null;
+                    // One shape either way: handing back the whole resolution in
+                    // the one case and two of its fields in the other had a
+                    // reader of any other field answered with nothing, and only
+                    // sometimes.
+                    if (resolution.won_by === 'rule:user' && resolution.rule_id) {
+                        return {rule_id: resolution.rule_id, matched_on: resolution.matched_on};
+                    }
+                    const applies = resolution.applies;
+                    return applies && applies.rule_id
+                        ? {rule_id: applies.rule_id, matched_on: applies.matched_on}
+                        : null;
+                },
+
+                scopeThatApplied(entity) {
+                    const applies = this.ruleInForce(entity);
+                    if (!applies) return null;
+                    const match = applies.matched_on;
                     if (!match) return null;
-                    const named = (match.filters || []).some(one => one.registry_id === entity.registry_id);
+                    // What caught this entity, not everything the rule holds: a
+                    // rule naming one entity and one integration caught another
+                    // entity through the integration, and the form then offered
+                    // "this entity only" for a rule reaching every entity of that
+                    // integration. Caught by a filter of any kind, it was not
+                    // caught by name.
+                    const caught = !!(match.integration || match.model || match.domain);
+                    const named = !caught
+                        && (match.filters || []).some(one => one.registry_id === entity.registry_id);
                     if (named) return 'here';
                     if (match.kind === 'pattern') return 'pattern';
+                    // The narrowest reach first: a rule of the domain scope
+                    // carries the model as well, so read model-first the row lit
+                    // the model button beside a rule that has the domain in it -
+                    // and saving from there wrote a model-only rule over it.
+                    if (match.domain) return 'domain';
                     if (match.model) return 'model';
                     if (match.integration) return 'integration';
                     return 'all';
@@ -6371,7 +6731,32 @@
                 // Toggle entity expand state
                 toggleEntityExpand(entity) {
                     entity._expanded = !entity._expanded;
-                    if (entity._expanded && entity._ruleScope === undefined) {
+                    if (entity._expanded) {
+                        // Read again every time the row opens, and both of them
+                        // together: the rule in force may have been deleted or
+                        // rewritten since the row was last open, and the anchor
+                        // kept from then had the save write a second rule of the
+                        // kind that had just been removed.
+                        //
+                        // The anchor alone was not enough. Read again while the
+                        // reach was kept, the row came back saying "domain" with
+                        // a reach only a narrower rule can have: no button was
+                        // lit, and the save was refused for a combination the
+                        // buttons cannot make. A row reopened starts where the
+                        // rules are.
+                        entity._ruleScope = undefined;
+                        // The anchor with it: kept while the reach was read
+                        // again, a row whose domain rule had been deleted came
+                        // back with the domain button lit beside a reach worked
+                        // out for a rule that is not there, and the save wrote
+                        // a new domain rule nobody had asked for. It is set
+                        // below, out of whatever rule is in force now.
+                        entity._ruleAnchor = null;
+                    }
+                    // Not "where nothing is set": the reset above has just
+                    // unset it, so asking again could only get the answer written
+                    // two lines up. A row reopened starts where the rules are.
+                    if (entity._expanded) {
                         // Where a rule already names this entity, its own reach is the
                         // answer: changing the word is a change to that rule, and
                         // offering a wider reach than the one in force would quietly
@@ -6379,6 +6764,10 @@
                         const already = this.scopeThatApplied(entity);
                         if (already) {
                             entity._ruleScope = already;
+                            // And on what the rule is keyed, or the correction
+                            // would be sent without it and make a rule of
+                            // another kind beside the one already in force.
+                            entity._ruleAnchor = this.anchorThatApplied(entity);
                         } else {
                             // A type that several integrations supply means different things
                             // per integration ("Tür" is a contact sensor here, a fridge there),
@@ -6401,10 +6790,13 @@
                     }
                     if (entity._expanded && entity._currentSuffix === undefined) {
                         const initialSuffix = this.getEntitySuffix(entity);
-                        if (entity.suggested_entity_id) {
+                        if (entity.suggested_entity_id && !this.snapshotIsStale(entity)) {
                             // Seed from what the hierarchy already resolved. Rendering the
                             // template here instead would miss the collision numbering the
-                            // backend applies and flag a rename that is not needed.
+                            // backend applies and flag a rename that is not needed. Only
+                            // where nothing has been typed since: otherwise it seeds the
+                            // name the device no longer has, and expanding a row would
+                            // undo what the field above it says.
                             entity._currentSuffix = initialSuffix;
                             entity._previewName = entity.suggested_name;
                             entity._previewId = entity.suggested_entity_id;
@@ -6661,12 +7053,18 @@
                             // names the server computed for them: those are
                             // about the area the device has left.
                             //
-                            // The same value the device holds: an empty pick is
-                            // no area, and "" beside the device's null read as
-                            // two different answers to the same question.
+                            // The names only: an entity's own area is not the
+                            // device's to write. An entity that follows its device
+                            // carries none - that is what following is - and the
+                            // names below read the device's where it does, so the
+                            // rows move with it either way. Written through, an
+                            // entity pinned to another area was shown in the one
+                            // the device went to and named for it, while Home
+                            // Assistant had left it where it was; and every
+                            // follower was given an area of its own, which read
+                            // as an entity that had stopped following.
                             const mine = indexed(this).byDevice.get(deviceId) || none;
                             mine.forEach(e => {
-                                e.area_id = areaId || null;
                                 e.suggested_name = null;
                                 e.suggested_entity_id = null;
                             });
@@ -7224,24 +7622,32 @@
                         if (z.failed > 0) this.showMessage(`${z.failed} Z2M failed`, 'error', true);
                         else if (z.synced > 0) this.showMessage(`${z.synced} Z2M synced`, 'success', true);
                     }
-                    await this.loadHierarchy();
-                    // The device the panel stands on, which a job reconnected
-                    // after a reload need not be about: pointing the panel at
-                    // the renamed device left it showing that device's name and
-                    // area while the selection was another one, and the button
-                    // beside them then renamed the selected device to what was
-                    // shown for the other.
-                    const id = this.selectedDevice;
-                    if (id) {
-                        const updated = this.hierarchy.devices.find(d => d.id === id);
-                        if (updated) this.selectedDeviceData = updated;
-                    }
                     // The button opens once the panel holds the device as it is
                     // now. Opened before the list was read again, a second click
                     // compared the name being typed against the name from before
-                    // the rename - and either said it was already right or
-                    // queued the same rename a second time.
-                    this.renamingDevice = false;
+                    // the rename - and either said it was already right or queued
+                    // the same rename a second time.
+                    //
+                    // And it opens even where reading the list back throws - Home
+                    // Assistant is restarting, the connection dropped. Left shut,
+                    // every device in the panel answered "a rename is running"
+                    // until the page was loaded again, and nothing was running.
+                    try {
+                        await this.loadHierarchy();
+                        // The device the panel stands on, which a job reconnected
+                        // after a reload need not be about: pointing the panel at
+                        // the renamed device left it showing that device's name
+                        // and area while the selection was another one, and the
+                        // button beside them then renamed the selected device to
+                        // what was shown for the other.
+                        const id = this.selectedDevice;
+                        if (id) {
+                            const updated = this.hierarchy.devices.find(d => d.id === id);
+                            if (updated) this.selectedDeviceData = updated;
+                        }
+                    } finally {
+                        this.renamingDevice = false;
+                    }
                 },
 
                 // The tick beside the name field asks for the same thing the
@@ -7260,22 +7666,27 @@
                 async applyDeviceWideChange(driftDevices = []) {
                     const device = this.selectedDeviceData;
                     const deviceId = this.selectedDevice;
-                    if (!device || this.isVirtualDevice(deviceId) || this.renamingDevice) return;
+                    if (!device || this.isVirtualDevice(deviceId) || this.renamingDevice) return 'refused';
 
                     // Shut from here on, not from the request onwards: the
                     // clash check is awaited first, and a second click during
                     // it started a second run of the same job.
                     this.renamingDevice = true;
                     try {
-                        // The run gives back whether a job is now under way. If
-                        // one is, the button stays shut until it reports back -
-                        // a second click would enqueue the same rename twice.
-                        const running = await this.applyDeviceWideRun(device, deviceId, driftDevices);
-                        if (running) return;
+                        // The run says what it did: "running" if a job is now
+                        // under way - the button then stays shut until it reports
+                        // back, since a second click would enqueue the same
+                        // rename twice - "refused" if it would not start, and
+                        // "nothing" if there was nothing for it to write.
+                        const outcome = await this.applyDeviceWideRun(device, deviceId, driftDevices);
+                        if (outcome === 'running') return outcome;
+                        this.renamingDevice = false;
+                        return outcome;
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     }
                     this.renamingDevice = false;
+                    return 'refused';
                 },
 
                 async applyDeviceWideRun(device, deviceId, driftDevices) {
@@ -7289,7 +7700,7 @@
                     const live = indexed(this).devicesById.get(deviceId);
                     if (!live) {
                         this.showMessage(this.t('device.gone'), 'error');
-                        return;
+                        return 'refused';
                     }
                     device = live;
 
@@ -7333,16 +7744,35 @@
                         const taken = clashes[0].id;
                         if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
                         this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
-                        return;
+                        return 'refused';
                     }
                     const areaStaged = this.areaMoveStaged(picked, device);
                     // Rendered with the staged area, so a device that moves is
-                    // named where it moved to rather than where it was.
-                    const newFullName = this.renderDeviceName(device, base);
+                    // named where it moved to rather than where it was - and with
+                    // the one this run writes, read before the wait above. Read
+                    // off the panel again, a poll that cleared the staged area
+                    // during the check had the name built for the area the device
+                    // is leaving while the move went to the one it was given.
+                    const newFullName = this.renderDeviceName(
+                        device, base, areaStaged ? (picked || null) : (device.area_id || null));
 
                     const payload = { device_id: deviceId };
                     if (newFullName && newFullName !== device.name) payload.new_name = newFullName;
                     if (areaStaged) payload.area_id = picked || null;
+                    // A name was typed and there is nowhere in the template for it
+                    // to go. Said even where the move goes ahead: the move was
+                    // written, the run reported success, and the name the user had
+                    // typed was dropped without a word about it.
+                    if (payload.new_name === undefined && nameStaged && areaStaged) {
+                        // And the field goes back to what it held: the name is not
+                        // being written, and left standing it read as a rename
+                        // waiting to be applied. It is not left standing for long -
+                        // the job that writes the move clears the field when it
+                        // reports back, in onRenameDeviceDone, where every other
+                        // staged thing is dropped as well.
+                        if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
+                        this.showMessage(this.t('messages.name_has_no_place'), 'info', true);
+                    }
                     if (payload.new_name === undefined && !areaStaged) {
                         // A name was typed and the device is still called what
                         // it was: the device-name template has no {device} in
@@ -7355,7 +7785,7 @@
                         this.showMessage(nameStaged
                             ? this.t('messages.name_has_no_place')
                             : this.t('messages.nothing_to_apply'), 'info', true);
-                        return;
+                        return 'nothing';
                     }
 
                     try {
@@ -7370,7 +7800,7 @@
                             // move, the name and the entity names together, so
                             // a refused start leaves the device as it was.
                             this.showMessage(job.error || 'A rename for this device is already in progress', 'error');
-                            return;
+                            return 'refused';
                         }
                         if (!response.ok || !job.job_id) {
                             throw new Error(job.error || 'Failed to start apply');
@@ -7380,10 +7810,11 @@
                             titleKey: 'jobs.applying',
                             onDone: (finished) => this.onRenameDeviceDone(finished, deviceId, driftDevices)
                         });
-                        return true;
+                        return 'running';
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     }
+                    return 'refused';
                 },
 
                 // Z2M-friendly_name an den HA-Namen angleichen (nur Z2M-Geräte)
@@ -7449,7 +7880,11 @@
                             body: JSON.stringify({
                                 entity_id: entity.id,
                                 value: typed,
-                                scope: entity._ruleScope || 'global'
+                                scope: entity._ruleScope || 'global',
+                                // What the rule recognises an entity by, where
+                                // that is not the name, key or class it would
+                                // take by itself.
+                                ...(entity._ruleAnchor ? {anchor: entity._ruleAnchor} : {})
                             })
                         });
                         const learned = await learn.json();
@@ -7474,9 +7909,19 @@
                 async commitStagedArea() {
                     const deviceId = this.selectedDevice;
                     if (!deviceId || this.devicePreviewAreaId === null || this.isVirtualDevice(deviceId)) return true;
-                    const device = this.hierarchy.devices.find(one => one.id === deviceId);
+                    // Out of the index, like every other device lookup: it is
+                    // the list as the last read left it, so a row applied after
+                    // a refresh is answered about the device that refresh holds.
+                    const device = indexed(this).devicesById.get(deviceId);
                     if (!device || (this.devicePreviewAreaId || null) === (device.area_id || null)) return true;
                     const picked = this.devicePreviewAreaId;
+                    // What was computed for the staged move is about the device as
+                    // it was a moment ago, and the write below settles it either
+                    // way: left standing, an answer still on its way arrived after
+                    // the ordinary previews had been worked out again and wrote
+                    // its ids over them - the row was then renamed to an id worked
+                    // out for an area that had already been written.
+                    this.dropStagedPreview();
                     if (!await this.assignDeviceArea(deviceId, picked || null)) {
                         // Nothing was written, so nothing stays staged, here as
                         // at the panel's own button.
@@ -7495,6 +7940,22 @@
                 },
 
                 async executeAllChanges() {
+                    // Shut here, where the click arrives, and not where the first
+                    // write happens: everything below waits - for the previews,
+                    // for a rule to be written, for the list to be read again -
+                    // and every one of those waits let a second click through to
+                    // start the same work beside this one. The device-wide job
+                    // shuts its own button, but not before the waits above it.
+                    if (this.applyingAll) return;
+                    this.applyingAll = true;
+                    try {
+                        return await this.runAllChanges();
+                    } finally {
+                        this.applyingAll = false;
+                    }
+                },
+
+                async runAllChanges() {
                     // A move the panel holds is not written here: the job below
                     // writes it together with the name and the entity names, and
                     // writing it first left that job nothing to move.
@@ -7537,11 +7998,27 @@
                     // while it is the selected one, and the list below is that
                     // device's own entities.
                     if (this.deviceChangeStaged) {
+                        // The selected device among them unless the job writes its
+                        // name: the rename is what carries the Z2M name over, so a
+                        // run that only moves the device left the drift standing -
+                        // counted as a pending change, and nothing here could
+                        // resolve it.
+                        const typed = this.devicePreviewBaseName === null ? '' : this.devicePreviewBaseName.trim();
+                        const staged = indexed(this).devicesById.get(this.selectedDevice);
+                        const renaming = !!typed && typed !== (staged?.base_name || '').trim();
                         const others = this.filteredDevices
-                            .filter(d => d.z2m_drift && d.id !== this.selectedDevice)
+                            .filter(d => d.z2m_drift && (d.id !== this.selectedDevice || !renaming))
                             .map(d => d.id);
-                        await this.applyDeviceWideChange(others);
-                        return;
+                        // Only where there was nothing for that job to write - a
+                        // name with nowhere to go - does the batch below go on:
+                        // returning there left the rest of the list unapplied and
+                        // the click had done nothing at all. A job under way
+                        // renames the device and every entity under it, and a
+                        // start that was refused - a clash, a run already going -
+                        // means this device is not to be written at all: falling
+                        // through wrote the move and the names one by one, which
+                        // is what the refusal was about.
+                        if ((await this.applyDeviceWideChange(others)) !== 'nothing') return;
                     }
 
                     // Find all entities that need renaming

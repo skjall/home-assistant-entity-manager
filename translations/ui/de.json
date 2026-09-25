@@ -134,6 +134,9 @@
     "scope_domain_hint": "Nur für die {count} {domain}-Entitäten an Geräten vom Typ {model}.",
     "keep_current_hint": "„{name}“ übernehmen – so heißt sie heute",
     "was_already_gone": "Die Entität war schon gelöscht — die Liste ist jetzt gleichauf.",
+    "anchor_label": "Oder für jede {domain}-Entität:",
+    "anchor_domain_all_hint": "Für alle {count} {domain}-Entitäten, egal welche Integration. Nur sinnvoll, wenn der gelieferte Name kein Typ ist.",
+    "anchor_domain_integration_hint": "Für alle {count} {domain}-Entitäten von {integration}, unabhängig davon, wie sie einzeln heißen.",
     "scope_pattern_hint": "Für alle {count} Entitäten von {integration}, deren Name „{pattern}“ lautet – die Nummer darf jede sein.",
     "explain_rule_pattern": "Alle „{pattern}“-Entitäten von {integration} heißen bei dir so – hier „{value}“"
   },
@@ -208,7 +211,8 @@
     "nothing_to_apply": "Nichts zu übernehmen",
     "name_has_no_place": "Die Vorlage für den Gerätenamen hat keinen Platz für einen eigenen Namen, der eingegebene Name kann also nicht geschrieben werden",
     "rename_running": "Umbenennung läuft - bitte abwarten",
-    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm"
+    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm",
+    "area_move_failed": "Das Gerät ist nicht umgezogen, also wurde nichts umbenannt"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",
@@ -517,6 +521,7 @@
     "pick_name": "Gelieferter Name",
     "pick_device_class": "Geräteklasse",
     "pick_translation_key": "Übersetzungsschlüssel",
+    "pick_domain": "Domain",
     "filter_search_integration": "Integration suchen …",
     "model_count": "{count} Modelle",
     "more_matches": "… {count} weitere — Suche eingrenzen",
@@ -549,12 +554,17 @@
     "caught_translation_key": "Übersetzungsschlüssel",
     "caught_name": "gelieferter Name",
     "caught_device_class": "Geräteklasse",
+    "caught_domain": "Domain",
     "caught_none": "—",
     "reach_open_device": "„{device}“ in Home Assistant öffnen",
     "pattern_section": "Muster-Regeln",
     "pattern_hint": "Manche Integrationen schreiben eine Seriennummer in jeden Namen, etwa „Heizung 12345678“. Eine Muster-Regel lässt die Nummer offen und gilt so für alle Geräte dieser Integration. Bestehende Muster-Regeln wirken auch, wenn der Schalter aus ist.",
     "pattern_toggle": "Muster-Regeln beim Umbenennen anbieten",
     "pick_pattern": "Muster",
+    "save_failed": "Nicht gespeichert",
+    "list_not_read_again": "Die Liste konnte nicht neu gelesen werden – Seite neu laden",
+    "pattern_needs_an_expression": "Eine Muster-Regel braucht einen Ausdruck. Es wurde nichts gespeichert.",
+    "pattern_expression": "Ausdruck, z. B. Heizung\\ (?P<n1>\\d+)",
     "caught_pattern": "Muster"
   },
   "type_mappings": {

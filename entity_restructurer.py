@@ -23,6 +23,7 @@ from hierarchy_manager import normalize_name
 from naming_canon import canon
 from naming_display import DEFAULT_CASE, normalize_display
 from naming_overrides import NamingOverrides
+from naming_rules import KIND_PRIORITY
 from naming_templates import NamingTemplates
 
 # Import new modules - optional for backward compatibility
@@ -368,20 +369,42 @@ class EntityRestructurer:
         return "sensor"  # Default
 
     def build_naming_context(
-        self, entity_id: str, state_info: Dict[str, Any], ignore_exception: bool = False
+        self,
+        entity_id: str,
+        state_info: Dict[str, Any],
+        ignore_exception: bool = False,
+        pending_device_name: Optional[str] = None,
+        pending_area_id: Optional[str] = None,
     ) -> Dict[str, str]:
         """Build the complete template context for an entity.
 
         ``ignore_exception`` answers what the entity would be called if it had
         no exception - the one question needed to tell an exception that still
         changes something from one a rule has meanwhile caught up with.
+
+        ``pending_device_name`` and ``pending_area_id`` answer the same question
+        for a device that is in the middle of being edited: they are what the
+        panel holds and the registry does not yet, whether because the write is
+        still to come or because it has not been read back. Until then the
+        registry answers with what the integration supplied - for a UniFi access
+        point its MAC address, and whatever area the device was in - and that
+        answer is what a confirmed rename would write.
+
+        ``pending_area_id`` distinguishes "nothing picked" from "picked, no
+        area": ``None`` leaves the stored area alone, ``""`` takes it away.
         """
         domain, _, object_id = entity_id.partition(".")
         entity_reg = self.entities.get(entity_id, {})
         device_id = entity_reg.get("device_id") or ""
         device = self.devices.get(device_id, {}) if device_id else {}
 
-        area_id = entity_reg.get("area_id") or device.get("area_id") or ""
+        stored_area = entity_reg.get("area_id") or device.get("area_id") or ""
+        # An entity with an area of its own is not moved by its device moving:
+        # Home Assistant writes the move onto the device, and the entity stays
+        # where it was put. Answering for it under the area the panel holds had
+        # the preview disagree with what the rename then wrote.
+        follows_device = not entity_reg.get("area_id")
+        area_id = pending_area_id if pending_area_id is not None and follows_device else stored_area
         area = self.areas.get(area_id, {}) if area_id else {}
         floor_id = area.get("floor_id") or ""
         floor = self.floors.get(floor_id, {}) if floor_id else {}
@@ -419,11 +442,37 @@ class EntityRestructurer:
             "model": device.get("model", ""),
             "integration": integration,
         }
-        device_name = self._base_device_name(raw_device_name, partial_context)
+        # Once, and before anything is written into the context: read afterwards,
+        # with the typed name already standing in it, this answered about the name
+        # being asked about rather than the one the device has. One call either
+        # way, which is what the list has always paid for the name it uses.
+        stored_device_name = self._base_device_name(raw_device_name, partial_context)
+        # What was typed is already a base name - it is the field the interface
+        # strips the area prefix out of - so it goes in as it is.
+        device_name = pending_device_name if pending_device_name is not None else stored_device_name
         partial_context["device"] = device_name
         # A hypothetical answer must not replace the real one that the entity
-        # list reads back out of last_resolutions.
-        previous = self.last_resolutions.get(entity_id) if ignore_exception else None
+        # list reads back out of last_resolutions. A name asked about for a
+        # device name or an area that is not written yet is hypothetical in the
+        # same way: left behind, it had the list saying a rule decided a name
+        # that only the form has.
+        # An area asked about that is the one the entity is in makes the answer
+        # the real one, which the list may keep.
+        # Asked of what came out, not of how it was chosen: the two were
+        # worked out from the same question in two places, and a change to one
+        # of them would have had hypothetical answers kept as real ones.
+        # A name asked about that is the name the device has is not
+        # hypothetical: the field holds what the registry holds, which is what
+        # typing a name and typing it back leaves. Read as a question either way,
+        # the real answer this call worked out was thrown away and the list went
+        # on showing the one before it. Worked out only where a name was passed
+        # in, which is the form asking and not the list being built.
+        asked_for_another_name = pending_device_name is not None and pending_device_name != stored_device_name
+        # Both sides of that comparison come out of the same reading above, where
+        # "no area" is "" on either side, so a device without one does not read as
+        # a question about an area it might be moved to.
+        asking_only = ignore_exception or asked_for_another_name or area_id != stored_area
+        previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(
             entity_id,
             entity_reg,
@@ -433,6 +482,14 @@ class EntityRestructurer:
             (
                 raw_device_name,
                 partial_context["area"],
+                # The area the name carries is the one it was written under,
+                # which is not the one being asked about while a move is
+                # staged: taken from the answer alone, the old area stayed in
+                # the name and the row read "Bedroom Controller Kitchen
+                # Temperature".
+                self.areas.get(stored_area, {}).get("name", "") if stored_area else "",
+                # Which is the name the device is about to be given where
+                # one was typed, so it is in here once, not twice.
                 device_name,
                 # An integration may still write the name the device had when it
                 # was added, or its model, into every entity name.
@@ -441,7 +498,7 @@ class EntityRestructurer:
             ),
             partial_context,
         )
-        if ignore_exception:
+        if asking_only:
             if previous is None:
                 self.last_resolutions.pop(entity_id, None)
             else:
@@ -539,9 +596,15 @@ class EntityRestructurer:
             context = self.build_naming_context(entity_id, {})
         device = self.devices.get(registry.get("device_id") or "", {})
         raw_device_name = device.get("name_by_user") or device.get("name") or device.get("model") or ""
+        # The area the name carries is the one it was written under, which is
+        # not the one being asked about while a move is staged: taken from the
+        # context alone, the old area stayed in the name and the row read
+        # "Bedroom Controller Kitchen Temperature".
+        under = registry.get("area_id") or device.get("area_id") or ""
         prefixes = (
             raw_device_name,
             context.get("area", ""),
+            self.areas.get(under, {}).get("name", "") if under else "",
             context.get("device", ""),
             device.get("name", ""),
             device.get("model", ""),
@@ -589,46 +652,104 @@ class EntityRestructurer:
             language = self.language
             if rules is not None:
                 translation_key = registry.get("translation_key")
-                rule = rules.find("translation_key", translation_key, integration, language, model, domain)
-                if rule:
-                    candidates.append(
-                        {
-                            "value": rule["targets"][language],
-                            "won_by": "rule:user",
-                            "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model, domain),
-                        }
-                    )
-                rule = rules.find("name", name, integration, language, model, domain)
-                if rule:
-                    candidates.append(
-                        {
-                            "value": rule["targets"][language],
-                            "won_by": "rule:user",
-                            "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model, domain),
-                        }
-                    )
-                # A name with a serial number in it is one of as many names as
-                # there are devices; a pattern answers for all of them.
-                rule = rules.find("pattern", name, integration, language, model, domain)
-                if rule:
-                    candidates.append(
-                        {
-                            "value": rules.render(rule, name, language),
-                            "won_by": "rule:user",
-                            "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model, domain),
-                        }
-                    )
-                # The device class is the widest anchor: it says what a value
-                # measures where neither a key nor a name matched.
+                # Whether the user wrote a rule about this entity that is
+                # not the domain. The domain anchor is the last resort and
+                # stands back where one of them speaks - including one the
+                # naming holds back, because the user said something narrower
+                # about this entity than "every entity of this kind".
+                # The device class is the widest anchor that says what a
+                # value measures; the domain is the last of them and says only
+                # what kind of thing the entity is. It is for entities whose
+                # supplied name is not a type: UniFi names every device tracker
+                # after the client it found, so no two of them share anything
+                # but their domain.
                 device_class = registry.get("device_class") or registry.get("original_device_class")
-                rule = rules.find("device_class", device_class, integration, language, model, domain)
-                if rule and self._names_the_class(name, entity_id, device_class, rule["targets"].get(language, "")):
+                asked = {
+                    "translation_key": translation_key,
+                    "name": name,
+                    # A name with a serial number in it is one of as many names
+                    # as there are devices; a pattern answers for all of them,
+                    # and is tried against the same name.
+                    "pattern": name,
+                    "device_class": device_class,
+                    # As rule_behind asks it: a value of None where an entity id
+                    # has no domain in it, and the lookup answers nothing either
+                    # way - but the two callers say the same thing.
+                    "domain": domain or "",
+                }
+                # In the order the naming asks them in, out of the one place
+                # that says what that order is - the same walk rule_behind
+                # makes, so the two cannot drift and a kind added to
+                # KIND_PRIORITY is asked about in both.
+                narrower = False
+                for kind in sorted(asked, key=lambda one: KIND_PRIORITY[one]):
+                    # The domain stands back where a narrower rule of the
+                    # user's speaks about this entity, even where that rule
+                    # changes nothing: a rule that says what the entity already
+                    # says is still the user saying which entities this one is
+                    # about, and the widest anchor must not overrule it. Asked
+                    # about at all only where it could win.
+                    if kind == "domain" and narrower:
+                        continue
+                    rule = rules.find(
+                        kind,
+                        asked[kind],
+                        integration,
+                        language,
+                        model,
+                        # A domain rule is not narrowed to a domain - the API
+                        # does not let it be - so asking as though it might be
+                        # looked the rule up under scopes nothing can be stored
+                        # under, for every entity of the home.
+                        None if kind == "domain" else domain,
+                    )
+                    if rule is None:
+                        continue
+                    # Before the hold-back below, and meant that way: held back
+                    # or not, the user said something narrower about this entity
+                    # than "every entity of this kind", and the widest anchor
+                    # does not step in over it. A device-class rule is held back
+                    # where the entity's own name says more than its class does -
+                    # a domain rule says less still, so letting it answer there
+                    # would put that name back exactly where it was kept.
+                    #
+                    # The entity is then named by neither, and nothing is reported
+                    # as in force, which is the truth: the class rule does not
+                    # name this entity - that is what holding it back means - and
+                    # the domain rule is not allowed to. The class rule is still
+                    # the user's and still shown, on its own row and in its own
+                    # entity list, where it says what it does reach.
+                    narrower = narrower or kind != "domain"
+                    # Unlike the others, a device-class rule is held back where
+                    # the name says more than the class does.
+                    if kind == "device_class" and not self._names_the_class(
+                        name, entity_id, device_class, rule["targets"].get(language, "")
+                    ):
+                        continue
+                    # Read straight out: a rule is only answered for where it
+                    # has a target in this language, which is what the lookup goes
+                    # by. A pattern rule is rendered, and that can come back with
+                    # nothing: an expression rewritten while this name was being
+                    # worked out does not match it any more, and a target that
+                    # cannot be filled is not a name. Offered as one, the empty
+                    # answer stood first among the candidates - nothing else in
+                    # the walk takes it out, since it is not the shown name
+                    # either - and the entity was renamed to nothing at all.
+                    # Read as the rules read a pattern's target, spaces and all:
+                    # a stored target written with one around it - a backup, a
+                    # file edited by hand - was compared against the shown name
+                    # with them, so a rule that says exactly what the name says
+                    # was reported as changing it.
+                    offered = (
+                        rules.render(rule, name, language)
+                        if kind == "pattern"
+                        else (rule["targets"][language] or "").strip()
+                    )
+                    if not offered:
+                        continue
                     candidates.append(
                         {
-                            "value": rule["targets"][language],
+                            "value": offered,
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
                             "matched_on": rules.why(rule, integration, model, domain),
@@ -686,11 +807,33 @@ class EntityRestructurer:
             or not self._counts_rather_than_names(candidate["value"])
             or not self._says_more(name, candidate["value"])
         ]
+        # A rule of the user's that says what the name already says has no
+        # effect on it, so it is not reported as the source - but it does apply,
+        # and the form that corrects the name has to open on it. Sent without it,
+        # a correction made a second rule of another kind beside the one in
+        # force, and both then named the entity.
+        # Exactly the shown name, and not "the same word differently spelled":
+        # a target that differs from it at all - in case, in spacing - is a name
+        # the rule changes, so that rule wins the name and is reported as its
+        # source, and the form opens on it from there. This is for the rule that
+        # changes nothing, which is the one the report would otherwise lose.
+        # The first of them, in the order the naming asked them in: where two
+        # rules of the user's say the same word about one entity, the narrower
+        # one is the one in force, and that is the one the form has to open on.
+        in_force = next(
+            (
+                one
+                for one in candidates
+                if one["value"] == shown and one["won_by"] == "rule:user" and one.get("rule_id")
+            ),
+            None,
+        )
         # A rule or default that only repeats the shown spelling has no effect
         # and is not reported as the source.
         candidates = [candidate for candidate in candidates if candidate["value"] != shown]
         candidates.append({"value": shown, "won_by": won_by, "rule_id": None, "matched_on": None})
         winner = dict(candidates[0])
+        winner["applies"] = {"rule_id": in_force["rule_id"], "matched_on": in_force["matched_on"]} if in_force else None
         winner["input"] = name
         winner["normalized"] = winner["value"] != name and winner["won_by"] == won_by
         winner["platform"] = integration
@@ -745,28 +888,66 @@ class EntityRestructurer:
                 "kind": caught.get("kind") or "",
                 "value": caught.get("value") or "",
             }
+        # A rule that only repeats what the entity already says wins nothing and
+        # still applies, and the naming has just said which one that was. Asked
+        # again from here, every anchor was looked up a second time for every
+        # such entity - and the two answers had to agree to be worth anything.
+        applies = resolution.get("applies") or None
+        if applies and applies.get("rule_id"):
+            caught = applies.get("matched_on") or {}
+            return {
+                "rule_id": applies["rule_id"],
+                "kind": caught.get("kind") or "",
+                "value": caught.get("value") or "",
+            }
         name = resolution.get("input") or ""
         integration = registry.get("platform") or None
         model = (self.devices.get(registry.get("device_id") or "", {}) or {}).get("model") or None
         device_class = registry.get("device_class") or registry.get("original_device_class") or ""
-        for kind, value in (
-            ("translation_key", registry.get("translation_key") or ""),
-            ("name", name),
-            ("pattern", name),
-            ("device_class", device_class),
-        ):
-            rule = rules.find(kind, value, integration, self.language, model, entity_id.partition(".")[0] or None)
+        domain = entity_id.partition(".")[0] or None
+        asked = {
+            "translation_key": registry.get("translation_key") or "",
+            "name": name,
+            "pattern": name,
+            "device_class": device_class,
+            "domain": domain or "",
+        }
+        # In the order the naming asks them in, out of the one place that says
+        # what that order is. Written out here a second time, the two drifted.
+        narrower = False
+        for kind in sorted(asked, key=lambda one: KIND_PRIORITY[one]):
+            # Asked about at all only where it could win, as the naming asks it:
+            # the lookup ran for every entity that has a narrower rule in force
+            # and its answer was thrown away two lines further down.
+            #
+            # Stepped over rather than returned from, as the naming steps over
+            # it: the domain is the last kind today, so the two come to the same
+            # thing - and a kind added after it would have been asked about here
+            # and not there, which is the drift this walk was written to stop.
+            # The narrower rule is not answered with either: where that one is a
+            # device-class rule the naming holds back, it does not name this
+            # entity, and saying it did would put the entity in a list whose rule
+            # leaves it alone.
+            if kind == "domain" and narrower:
+                continue
+            # Not narrowed to a domain where the domain is what it matches on;
+            # see build_naming_context.
+            rule = rules.find(
+                kind, asked[kind], integration, self.language, model, None if kind == "domain" else domain
+            )
             if rule is None:
                 continue
+            narrower = narrower or kind != "domain"
             if kind == "device_class" and not self._names_the_class(
                 name, entity_id, device_class, rule["targets"].get(self.language, "")
             ):
                 continue
-            # A pattern rule is matched on its expression; the name is only
-            # what was held against it, and reading it back as the value said
-            # the rule was written for this one entity.
-            matched = rule["match"]["value"] if kind == "pattern" else value
-            return {"rule_id": rule["id"], "kind": kind, "value": matched}
+            # What the rule matches on, not what was held against it: a pattern
+            # rule read back by the name it caught said it was written for this
+            # one entity, and for every other kind the rule's own spelling is
+            # what the reading above this one gives - asked the two ways, the
+            # same rule came back with two values.
+            return {"rule_id": rule["id"], "kind": kind, "value": rule["match"]["value"]}
         return None
 
     @staticmethod
@@ -1081,8 +1262,13 @@ class EntityRestructurer:
         # off it works only until the device is renamed; afterwards the old one
         # sits in the middle of every proposal. The note does not go stale that
         # way, and rules still have their say on what it holds.
-        remembered = self._remembered_type(registry)
-        if self._our_note(registry) is not None:
+        # Read once, and the type part taken out of it: asked twice, every
+        # entity with a note paid for two lookups on the path a rename of a
+        # hundred entities walks a hundred times.
+        note = self._our_note(registry)
+        remembered = note.get("base_entity") if note else None
+        remembered = remembered if isinstance(remembered, str) else None
+        if note is not None:
             # A note from before the type part was kept holds nothing to go by,
             # but a name of ours was rendered by our own templates, so unwinding
             # it gives that part back.
@@ -1258,10 +1444,21 @@ class EntityRestructurer:
         entity_id: str,
         state_info: Dict[str, Any],
         entity_name: Optional[str] = None,
+        pending_device_name: Optional[str] = None,
+        pending_area_id: Optional[str] = None,
     ) -> Tuple[str, str]:
-        """Generate an entity ID and entity-registry name from active templates."""
+        """Generate an entity ID and entity-registry name from active templates.
+
+        ``pending_device_name`` and ``pending_area_id`` are what the panel holds
+        but has not applied; see ``build_naming_context``.
+        """
         domain = entity_id.split(".", 1)[0]
-        context = self.build_naming_context(entity_id, state_info)
+        context = self.build_naming_context(
+            entity_id,
+            state_info,
+            pending_device_name=pending_device_name,
+            pending_area_id=pending_area_id,
+        )
         if entity_name is not None:
             context["entity"] = entity_name
         object_id = self.naming_templates.render("entity_id", context, normalize=True)

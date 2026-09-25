@@ -543,12 +543,16 @@ def rename_device():
     if not device_id:
         return jsonify({"error": "Invalid device ID"}), 400
 
-    payload: dict[str, Any] = {"device_id": device_id, "new_name": None}
+    # Without a name until one is asked for: written as null, a job carrying
+    # "new_name" that means "no rename" reads to anything that asks whether the
+    # key is there as a rename with nothing to write.
+    payload: dict[str, Any] = {"device_id": device_id}
 
     # The name is optional: a device that only moves to another area is renamed
     # by its template rather than by hand, and may come out called the same.
-    if data.get("new_name") is not None:
-        new_name = sanitize_name(data.get("new_name"))
+    supplied_name = data.get("new_name")
+    if supplied_name is not None:
+        new_name = sanitize_name(supplied_name)
         if not new_name:
             return jsonify({"error": "Invalid device name"}), 400
         payload["new_name"] = new_name
@@ -565,8 +569,13 @@ def rename_device():
         payload["area_id"] = area_id
         payload["set_area"] = True
 
-    if payload["new_name"] is None and not payload.get("set_area"):
+    if payload.get("new_name") is None and not payload.get("set_area"):
         return jsonify({"error": "Nothing to change: neither a name nor an area"}), 400
+
+    # Nothing here asks whether an area was named: this route writes "set_area"
+    # only where it writes "area_id" beside it, so the one cannot arrive without
+    # the other. A payload that carries the flag alone was written somewhere else,
+    # and the worker answers for it where it reads it.
 
     # Do not rename the same device twice concurrently.
     for existing in renamer_state["job_store"].list_unfinished():
@@ -695,7 +704,31 @@ async def rename_device_handler(job, ctx):
     payload = job["payload"]
     device_id = payload["device_id"]
     new_name = payload.get("new_name")
-    set_area = bool(payload.get("set_area"))
+    # Asked for and empty is not the same as not asked for: a job carrying "" -
+    # a call straight to the API, or a job store somebody edited - had the rename
+    # skipped and the run reported as done. A name is a string; anything else,
+    # including 0 and False, is refused here rather than read as "no rename" by
+    # the truth test that writes it.
+    if new_name is not None and (not isinstance(new_name, str) or not new_name.strip()):
+        raise RuntimeError("A rename needs a name")
+    # And the key carrying null is the same kind of payload: this route omits the
+    # key where no rename is asked for, so a null was written by something else -
+    # read as "no rename", the job skipped it and reported success. The check above
+    # steps over null, which is why this one is here rather than folded into it;
+    # tests/test_one_run_for_a_device.py holds both down.
+    if "new_name" in payload and payload["new_name"] is None:
+        raise RuntimeError("A rename needs a name")
+    # The flag where it is spelled out, and the key standing alone where it is
+    # not: a caller that says "set_area": false and names an area beside it is
+    # saying not to move the device, and reading the key through that had it
+    # moved against what the payload said.
+    set_area = bool(payload.get("set_area")) if "set_area" in payload else ("area_id" in payload)
+    # An area asked for is an area spelled out, null included - null is "take it
+    # out of every area", which is a thing to ask for. The key missing is nobody
+    # asking, and read as null it took the device out of its area on a payload
+    # that said nothing about areas at all.
+    if set_area and "area_id" not in payload:
+        raise RuntimeError("A move needs an area, or null to clear it")
     area_id = payload.get("area_id")
 
     base_url = os.getenv("HA_URL")
@@ -725,6 +758,10 @@ async def rename_device_handler(job, ctx):
         if set_area:
             # Said before it is done: a write that raises left the log with no
             # step at all, so nothing said which operation the job failed on.
+            # The log is the job's account of what it set out to do, not a
+            # receipt that it succeeded - the failure is reported by the
+            # exception, and tests/test_web_rename_job.py holds this order
+            # down for both steps.
             ctx.log("AREA", f"{device_id} -> {area_id or 'no area'}")
             await device_registry.assign_area(device_id, area_id)
             # Said again once it is written, under a step of its own. The line
@@ -735,14 +772,14 @@ async def rename_device_handler(job, ctx):
             ctx.log("MOVED", f"{device_id} is in {area_id or 'no area'}")
 
         z2m_sync: dict[str, Any] = {}
-        # Not "is not None": an empty name is not a name, and Home Assistant
-        # takes one differently from one version to the next. The route refuses
-        # it, and so does this, for anything that reaches the worker directly.
-        if new_name:
-            success = await device_registry.rename_device(device_id, new_name)
-
-            if not success:
-                raise RuntimeError("Failed to rename device in Home Assistant")
+        if new_name is not None:
+            # It answers with what it wrote or raises; there is no third answer
+            # for a truth test to catch, and the test read as though there were.
+            # What it raises is what fails the job, and the log above says which
+            # steps had run - the area is left where it was moved to, since
+            # writing it back is a second write that can fail in its own turn and
+            # would take the device out of the area the user had just put it in.
+            await device_registry.rename_device(device_id, new_name)
 
             # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
             z2m_sync = await sync_z2m_name(device_registry, device_id, new_name)

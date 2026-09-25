@@ -242,9 +242,17 @@ class _NoRestructurer:
         # Its own, not the class's: written to, one test's entities would have
         # been every later test's.
         self.entities: dict = {}
+        self.devices: dict = {}
+        self.last_resolutions: dict = {}
 
     async def load_structure(self, ws: Any) -> None:
         return None
+
+    def deduplicate_entity_ids(self, changes: list) -> list:
+        # There are no entities here, so nothing can collide; the handler asks
+        # all the same, and a stub that cannot answer fails the rename for the
+        # wrong reason.
+        return changes
 
 
 def _a_handler_that_cannot_rename(monkeypatch: pytest.MonkeyPatch, registry: Any) -> None:
@@ -282,8 +290,10 @@ def test_a_move_that_went_through_is_logged_before_the_rename_can_fail(tmp_path,
         async def assign_area(self, device_id: str, area_id: str) -> None:
             Registry.moved_to = area_id
 
-        async def rename_device(self, device_id: str, new_name: str) -> bool:
-            return False
+        async def rename_device(self, device_id: str, new_name: str) -> dict:
+            # As the registry fails: it raises rather than answering falsely,
+            # and the handler lets it through.
+            raise RuntimeError("Failed to rename device: refused")
 
     _a_handler_that_cannot_rename(monkeypatch, Registry())
     steps = _run(
@@ -309,8 +319,10 @@ def test_nothing_says_moved_where_no_area_was_asked_for(tmp_path, monkeypatch) -
         async def assign_area(self, device_id: str, area_id: str) -> None:
             raise AssertionError("no area was asked for")
 
-        async def rename_device(self, device_id: str, new_name: str) -> bool:
-            return False
+        async def rename_device(self, device_id: str, new_name: str) -> dict:
+            # As the registry fails: it raises rather than answering falsely,
+            # and the handler lets it through.
+            raise RuntimeError("Failed to rename device: refused")
 
     _a_handler_that_cannot_rename(monkeypatch, Registry())
     steps = _run(

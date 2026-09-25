@@ -40,6 +40,7 @@ from registry import sync_ha_language
 from routes_entities import entities as entity_routes
 from routes_naming import (
     SETTINGS_SECTIONS,
+    domain_reach,
     entity_model,
     entity_type_key,
     naming as naming_routes,
@@ -532,6 +533,13 @@ def normalize_names():
     the two drift apart -- e.g. accented characters get stripped client-side).
 
     Body: ``{"names": ["Foo Bar", ...]}`` -> ``{"normalized": ["foo_bar", ...]}``
+
+    With ``"for": [entity_id, ...]`` of the same length, the answer also carries
+    the ids and names these entities would be written under: several of them can
+    come out of one name, and which number each one then carries is the rename's
+    own reckoning (``deduplicate_entity_ids``). Asked for here so that a preview
+    and the write it leads to say the same thing - worked out a second time in
+    the interface, the two disagreed about which entity keeps the plain id.
     """
     data = request.json
     if not isinstance(data, dict) or not isinstance(data.get("names"), list):
@@ -542,7 +550,53 @@ def normalize_names():
         return jsonify({"error": "Too many names"}), 400
 
     normalized = [normalize_name(n) if isinstance(n, str) else "" for n in names]
-    return jsonify({"normalized": normalized})
+    answer = {"normalized": normalized}
+
+    for_entities = data.get("for")
+    restructurer = renamer_state.get("restructurer")
+    if isinstance(for_entities, list) and len(for_entities) == len(names) and restructurer is not None:
+        known = getattr(restructurer, "entities", None) or {}
+        proposals = []
+        places = []
+        for place, (entity_id, slug, name) in enumerate(zip(for_entities, normalized, names)):
+            # Only what there is something to number: one name in the batch
+            # that came out empty used to leave every other entity in it
+            # without its number, and two of them then showed the same id
+            # while the rename wrote _1 and _2.
+            if not isinstance(entity_id, str) or not slug:
+                continue
+            # The domain out of the registry where the entity is known. Taken
+            # from what the caller sent, an id that is not the entity's had the
+            # answer name a domain the entity is not in.
+            here = known.get(entity_id) or {}
+            domain_of = str(here.get("entity_id") or entity_id).partition(".")[0]
+            proposals.append((entity_id, f"{domain_of}.{slug}", name if isinstance(name, str) else ""))
+            places.append(place)
+        if proposals:
+            # What the numbering tells the user about is the rename they asked
+            # for, not a preview: left behind here, the list would report a
+            # collision nobody had run into.
+            held = getattr(restructurer, "last_numbering", {})
+            try:
+                resolved = restructurer.deduplicate_entity_ids(proposals)
+            except Exception as error:  # noqa: BLE001 - the slugs are still an answer
+                # The slugs are what was asked for; the numbering is what the
+                # rename would make of them. One entity it cannot work out is
+                # no reason to answer the whole batch with an error, which left
+                # every row showing "sensor." for an id until the next reload.
+                logger.error(f"Could not number the proposed ids: {error}", exc_info=True)
+                resolved = None
+            finally:
+                restructurer.last_numbering = held
+            if resolved is not None and len(resolved) == len(proposals):
+                ids = [None] * len(names)
+                written = [None] * len(names)
+                for place, (_, new_id, numbered) in zip(places, resolved):
+                    ids[place] = new_id
+                    written[place] = numbered
+                answer["ids"] = ids
+                answer["names"] = written
+    return jsonify(answer)
 
 
 @app.route("/api/preview", methods=["POST"])
@@ -2063,6 +2117,8 @@ async def _get_hierarchy_async():
         type_model_domain_counts = type_key_model_domain_counts(restructurer)
         # Pattern scopes are offered only where the user switched them on.
         pattern_counts = type_pattern_counts(restructurer) if renamer_state["naming_rules"].pattern_rules else None
+        # For the anchor that reaches a whole domain: how far it would reach.
+        by_domain, by_domain_integration = domain_reach(restructurer)
 
         # One mark for the templates as they are now; every entity compares its
         # stored one against it.
@@ -2071,6 +2127,9 @@ async def _get_hierarchy_async():
         entities = []
         for entity_id, entity_data in restructurer.entities.items():
             registry_id = entity_data.get("id", "")
+            # Once per entity: three of the counts below are keyed on it, and a
+            # home has thousands of entities.
+            entity_domain = entity_id.partition(".")[0]
             override = renamer_state["naming_overrides"].get_entity_override(registry_id)
             type_key = entity_type_key(entity_data)
             device_class = entity_data.get("device_class") or entity_data.get("original_device_class")
@@ -2118,7 +2177,7 @@ async def _get_hierarchy_async():
                     "device_model": entity_model(restructurer, entity_data),
                     "type_model_domain_count": (
                         type_model_domain_counts.get(
-                            (type_key, entity_model(restructurer, entity_data), entity_id.partition(".")[0]), 0
+                            (type_key, entity_model(restructurer, entity_data), entity_domain), 0
                         )
                         if type_key
                         else 0
@@ -2128,6 +2187,13 @@ async def _get_hierarchy_async():
                     ),
                     "type_model_count": (
                         type_model_counts.get((type_key, entity_model(restructurer, entity_data)), 0) if type_key else 0
+                    ),
+                    # A rule can also anchor on the domain, for entities whose
+                    # supplied name is not a type. These say how far that would
+                    # reach, which is the only thing that makes it safe to offer.
+                    "domain_count": by_domain.get(entity_domain, 0),
+                    "domain_integration_count": by_domain_integration.get(
+                        (entity_domain, entity_data.get("platform")), 0
                     ),
                     # Who the name in the registry belongs to right now, and
                     # whether it was changed outside this add-on since.

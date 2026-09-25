@@ -114,5 +114,14 @@ def test_the_page_starts_the_choice_where_the_rule_is(markup):
 
 def test_a_name_no_rule_of_the_users_decided_still_guesses(markup):
     body = markup[markup.index("scopeThatApplied(entity) {") : markup.index("toggleEntityExpand(entity) {")]
-    assert "resolution.won_by !== 'rule:user'" in body
+    assert "this.ruleInForce(entity)" in body
+    in_force = markup[markup.index("ruleInForce(entity) {") : markup.index("scopeThatApplied(entity) {")]
+    assert "resolution.won_by === 'rule:user'" in in_force
     assert "entity.type_integration_count" in markup
+
+
+def test_the_page_reads_the_rule_that_applies_without_having_won(markup):
+    """A rule saying what the name already says is still the rule to change."""
+    in_force = markup[markup.index("ruleInForce(entity) {") : markup.index("scopeThatApplied(entity) {")]
+
+    assert "resolution.applies" in in_force

@@ -31,7 +31,12 @@ logger = logging.getLogger(__name__)
 # 2 tells an empty type part apart from one that was never recorded. Version 1
 # wrote "" for both, so its entries cannot say which they mean and are migrated
 # to "nothing recorded" on the first read.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 2
+
+# The version from which an empty type part means "this name has none" rather
+# than "nothing was recorded". Files written before it are read once more; see
+# _forget_empty_type_parts_of_version_one.
+FORGOT_EMPTY_TYPE_PARTS = 2
 
 # Who the current registry name belongs to.
 ENTITY_MANAGER = "entity_manager"  # we wrote it and it is unchanged
@@ -58,7 +63,7 @@ class NamingState:
                 data = json.load(file)
             if not isinstance(data, dict) or not isinstance(data.get("entities"), dict):
                 raise ValueError("naming state must be an object with an entities map")
-            self._forget_empty_type_parts_written_as_nothing(data)
+            self._forget_empty_type_parts_of_version_one(data)
             data["version"] = SCHEMA_VERSION
             return data
         except (OSError, ValueError, json.JSONDecodeError) as error:
@@ -69,8 +74,8 @@ class NamingState:
             return {"version": SCHEMA_VERSION, "entities": {}}
 
     @staticmethod
-    def _forget_empty_type_parts_written_as_nothing(data: Dict[str, Any]) -> None:
-        """Turn the empty type parts of versions 1 and 2 into "nothing recorded".
+    def _forget_empty_type_parts_of_version_one(data: Dict[str, Any]) -> None:
+        """Turn version 1's empty type parts into "nothing recorded".
 
         Version 1 stored ``""`` both for a name built out of area and device
         alone and for a caller that had nothing to say about the type part.
@@ -79,28 +84,15 @@ class NamingState:
         again. Neither can be told from the other, so the older entries say
         nothing and the name is taken apart once more - the type part it holds
         is then recorded properly, and the question does not come back.
-
-        Version 2 wrote the same ``""`` for "nothing to say": the two callers
-        that note a name - a whole naming run and an entity renamed by itself -
-        both turned a resolution with neither an input nor a value into ``""``,
-        and a file written by that code is a version-2 file. So version 2 is
-        read once more the same way, and only what this add-on writes from
-        version 3 on means what it says.
-
-        This costs the entries that did mean "no type part": their names are taken
-        apart again, and a home with many of them sees many names worked out
-        afresh on the next run. That is the cheaper of the two, and the only one
-        that is honest - the alternative is reading "nothing to say" as an answer
-        and stripping the type part off names that have one, which is a wrong
-        name written to Home Assistant rather than a right one worked out twice.
-        Where the rules have not changed, what comes out is what is already there.
         """
-        # Anything from version 3 on has been through this. Asked as "is it the
-        # current version", the next version to be written would have the
-        # migration run over a version-3 file and turn every "this name has no
-        # type part" back into "nothing recorded" - which is the answer this
-        # migration exists to stop being lost.
-        if data.get("version", 0) >= 3:
+        # Anything from this version on has been through it. Named rather than
+        # asked as "is it the current version": a file written by a later version
+        # - or by a later add-on that was rolled back - would then have the
+        # migration run over it again and turn every recorded "this name has no
+        # type part" back into "nothing recorded", which is the distinction it
+        # exists to keep. It is a version of its own for that reason and does not
+        # follow SCHEMA_VERSION.
+        if data.get("version", 0) >= FORGOT_EMPTY_TYPE_PARTS:
             return
         for entry in data.get("entities", {}).values():
             if isinstance(entry, dict) and entry.get("base_entity") == "":
@@ -153,9 +145,7 @@ class NamingState:
         entry = self.data.get("entities", {}).get(registry_id or "")
         if not isinstance(entry, dict) or entry.get("base_entity") == base_entity:
             return False
-        # As it was given: "" is the statement that the name has no type part,
-        # and record() keeps the same distinction.
-        entry["base_entity"] = base_entity if isinstance(base_entity, str) else None
+        entry["base_entity"] = base_entity or ""
         self._save()
         return True
 

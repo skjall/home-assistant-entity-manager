@@ -779,6 +779,14 @@
         /* A list of integrations or models is far too long to scroll through in
            a dropdown, so it is typed into and narrowed as you type, the way
            devices are picked when one is swapped. */
+        /* An expression is read character by character, so it is set in the
+           face that makes one character look like one character. */
+        .rule-pattern-input {
+            flex: 1 1 200px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85rem;
+        }
+
         .combo { position: relative; }
 
         .combo-field { position: relative; }
@@ -1471,10 +1479,25 @@
                                 <span class="rule-to" x-text="row.isRule ? row.value : row.system_default"></span>
                             </div>
                             <div class="rule-says" x-show="editingKey === row.id">
-                                <span class="rule-from" x-text="row.shown || row.key"></span>
+                                <!-- A pattern is matched on an expression the user
+                                     wrote, so it is edited here like the target. The
+                                     other kinds are matched on the word an integration
+                                     supplies; changing that word would make the rule a
+                                     different rule, so it stays as it reads. -->
+                                <template x-if="row.kind === 'pattern'">
+                                    <input type="text" class="edit-input rule-pattern-input" x-model="editPattern"
+                                           :title="t('settings.pattern_expression')"
+                                           :placeholder="t('settings.pattern_expression')"
+                                           @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
+                                </template>
+                                <template x-if="row.kind !== 'pattern'">
+                                    <span class="rule-from" x-text="row.shown || row.key"></span>
+                                </template>
                                 <i class="ri-arrow-right-line rule-arrow"></i>
                                 <input type="text" class="edit-input" style="flex: 1 1 200px;" x-model="editValue"
                                        @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
+                                <span x-show="editError" style="color:var(--color-red-600); font-size:0.85rem"
+                                      x-text="editError"></span>
                             </div>
                             <!-- And where it applies. A rule reaches a list of
                                  places, so each is its own chip and goes on its own. -->
@@ -2170,6 +2193,8 @@
                 reachBusy: false,
                 reachError: '',
                 editValue: '',
+                editPattern: '',  // The expression, while a pattern rule is being edited
+                editError: '',  // What is wrong with what is typed, said in the row
                 filterFor: null,
                 comboOpen: '',
                 comboAt: 0,
@@ -2805,8 +2830,17 @@
                         this.systemRules = data.system || [];
                         this.migration = (await migrationResponse.json()).report || null;
                         this.filterRules();
+                        return true;
                     } catch (error) {
                         console.error('Error loading rules:', error);
+                        // Said out loud, and said for what it is: the list
+                        // stands as it was read last, so somebody who had just
+                        // saved a rule would open it again and see the old words.
+                        // Not "not saved" - the save had gone through, and saying
+                        // otherwise had the same write sent a second time.
+                        this.namingMessage = this.t('settings.list_not_read_again');
+                        this.namingError = true;
+                        return false;
                     } finally {
                         this.loading = false;
                     }
@@ -3110,6 +3144,7 @@
                         device_class:    row => row.kind === 'device_class',
                         translation_key: row => row.kind === 'translation_key',
                         pattern:         row => row.kind === 'pattern',
+                        domain:          row => row.kind === 'domain',
                     },
                 },
 
@@ -3162,9 +3197,9 @@
                               { user: 'ri-user-line', no_effect: 'ri-eye-off-line', system: 'ri-shield-line' }),
                         fixed('reach', ['everywhere', 'narrowed', 'entity'],
                               { everywhere: 'ri-global-line', narrowed: 'ri-filter-line', entity: 'ri-focus-3-line' }),
-                        fixed('kind', ['name', 'device_class', 'translation_key', 'pattern'],
+                        fixed('kind', ['name', 'device_class', 'translation_key', 'pattern', 'domain'],
                               { name: 'ri-text', device_class: 'ri-shapes-line', translation_key: 'ri-translate-2',
-                                pattern: 'ri-hashtag' }),
+                                pattern: 'ri-hashtag', domain: 'ri-stack-line' }),
                         { key: 'integration', label: this.t('settings.filter_integration'), options: seen('integration') },
                         { key: 'model', label: this.t('settings.filter_model'), options: seen('model') },
                     ];
@@ -3500,44 +3535,127 @@
 
                 startEdit(row) {
                     this.editingKey = row.id;
-                    this.editValue = row.isRule ? row.value : '';
+                    // This language's target, not the one the list shows for it:
+                    // the list falls back to another language where this one has
+                    // nothing, and saving then wrote that other language's words
+                    // into this one without anybody having typed them.
+                    this.editValue = row.isRule ? (row.rule?.targets?.[this.language] || '') : '';
+                    // The expression as it is, not as it reads: what goes back
+                    // has to be the thing the rule matches on. Every pattern
+                    // row is a rule - a built-in default is a word the
+                    // integration supplies, and ruleRows() gives those rows
+                    // the kind "name" - so the field is filled whenever the
+                    // row has an expression to fill it with.
+                    this.editPattern = row.kind === 'pattern' ? row.key : '';
+                    // Opened afresh, the row does not still hold what was wrong
+                    // with what somebody typed into it last time.
+                    this.editError = '';
                 },
 
                 cancelEdit() {
                     this.editingKey = null;
                     this.editValue = '';
+                    this.editPattern = '';
+                    this.editError = '';
                 },
 
                 async saveEdit(row) {
-                    if (!this.editValue.trim()) {
+                    const expression = this.editPattern.trim();
+                    const value = this.editValue.trim();
+                    // A pattern rule may hold a target in another language, and
+                    // then this field is empty while the expression is what is
+                    // being corrected. Dropping the whole save on the empty
+                    // field threw that correction away without a word.
+                    const patternChanged = row.kind === 'pattern' && !!expression && expression !== row.key;
+                    // An expression emptied out is not an edit: the rule would
+                    // match nothing at all. Said out loud - closing the row as
+                    // though it had been saved was the one reading the user
+                    // could not have had.
+                    if (row.kind === 'pattern' && !expression) {
+                        // In the row, not in a window the browser blocks
+                        // everything for: the rest of this page answers where
+                        // the question was asked, and an alert stops the
+                        // reactivity and the answers still on their way until
+                        // somebody dismisses it.
+                        this.editError = this.t('settings.pattern_needs_an_expression');
+                        return;
+                    }
+                    this.editError = '';
+                    // Nothing typed anywhere is not an edit. An expression on
+                    // its own is - whether or not this row is a rule already:
+                    // read as "only a rule can be edited by its expression", a
+                    // row that is not one closed on the expression without a
+                    // word about it, and the server is the one that can say
+                    // whether it can be written.
+                    if (!value && !patternChanged) {
+                        this.cancelEdit();
+                        return;
+                    }
+                    // Nothing was changed. Sending it anyway stamped the rule
+                    // as edited and wrote the file for no reason.
+                    if (row.isRule && !patternChanged && value === (row.rule?.targets?.[this.language] || '')) {
+                        this.cancelEdit();
+                        return;
+                    }
+                    // The same for a row that has no rule yet: typing the word
+                    // the built-in default already says and saving it made a
+                    // rule that repeats the default and shadows it for good.
+                    if (!row.isRule && value === (row.system_default || '')) {
                         this.cancelEdit();
                         return;
                     }
 
                     try {
-                        const value = this.editValue.trim();
+                        // Only what changed: an expression sent back unchanged
+                        // would be checked against the other rules for nothing.
+                        const changes = {};
+                        // This language alone. Sending the whole set back wrote
+                        // the other languages as they were read, which undid an
+                        // edit made to one of them in the meantime; the server
+                        // merges what it is given into what it holds.
+                        const stored = row.rule?.targets?.[this.language] || '';
+                        if (value && value !== stored) changes.targets = { [this.language]: value };
+                        if (patternChanged) changes.match_value = expression;
                         const response = row.isRule
                             ? await fetch(`api/naming/rules/${encodeURIComponent(row.id)}`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ targets: { ...row.rule.targets, [this.language]: value } })
+                                body: JSON.stringify(changes)
                               })
                             : await fetch('api/naming/rules', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
+                                // A row without a rule is a word the
+                                // integration supplies - ruleRows() gives those
+                                // rows the kind "name" - so this is the one kind
+                                // that can be created from here, and the key is
+                                // the whole of what it matches on. A pattern is
+                                // always a rule already and goes through the PUT
+                                // above, expression and all.
                                 body: JSON.stringify({ match: { kind: 'name', value: row.key }, value })
                               });
 
                         if (response.ok) {
+                            // Closed because the save went through: the reading
+                            // back is a second request, and letting it fall into
+                            // the catch below left the row open saying "not
+                            // saved" about a rule that had been saved.
+                            this.cancelEdit();
                             await this.loadMappings();
-                        } else {
-                            const error = await response.json();
-                            alert('Error: ' + (error.error || 'Unknown error'));
+                            return;
                         }
+                        // Refused, and what was typed stays where it was typed:
+                        // closed on the answer, an expression the server would
+                        // not take was gone, and the only way back to it was to
+                        // reopen the row and write it again from memory. Said in
+                        // the row for the same reason the empty field is.
+                        const error = await response.json();
+                        this.editError = error.error || this.t('settings.save_failed');
                     } catch (error) {
                         console.error('Error saving mapping:', error);
-                    } finally {
-                        this.cancelEdit();
+                        // The answer never came. The row stays open over what
+                        // was typed, as it does over a refusal.
+                        this.editError = error.message || this.t('settings.save_failed');
                     }
                 },
 

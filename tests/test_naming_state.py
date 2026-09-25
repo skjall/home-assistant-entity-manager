@@ -186,19 +186,18 @@ def test_a_broken_state_file_does_not_break_a_rename(tmp_path, monkeypatch):
     asyncio.run(registry.rename_entity("sensor.old", "sensor.new", "Küche Temperatur"))
 
 
-def test_the_empty_type_parts_of_version_two_are_forgotten_too(tmp_path):
-    """Version 2 wrote "" for "nothing to say about the type part" as well.
+def test_the_empty_type_parts_of_version_one_are_forgotten(tmp_path):
+    """Version 1 wrote "" for "nothing to say about the type part" as well.
 
-    Both callers that note a name did, so a file that carries such an entry is
-    a version-2 file and cannot be told from one whose "" means "this name has
-    no type part". It is read as saying nothing, and the name is taken apart
-    once more.
+    Both callers that note a name did, so a file that carries such an entry
+    cannot say which of the two it means. It is read as saying nothing, and the
+    name is taken apart once more.
     """
     path = tmp_path / "naming_state.json"
     path.write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 1,
                 "entities": {
                     "abc": {"applied_name": "Küche Temperatur", "base_entity": ""},
                     "def": {"applied_name": "Küche Licht", "base_entity": "Licht"},
@@ -214,7 +213,7 @@ def test_the_empty_type_parts_of_version_two_are_forgotten_too(tmp_path):
 
 
 def test_what_this_version_writes_is_left_alone(tmp_path):
-    """From version 3 on "" means what it says, and a restart keeps it."""
+    """From FORGOT_EMPTY_TYPE_PARTS on "" means what it says, and a restart keeps it."""
     path = tmp_path / "naming_state.json"
     path.write_text(
         json.dumps(
