@@ -5950,7 +5950,15 @@
                     if (!applies) return null;
                     const match = applies.matched_on;
                     if (!match) return null;
-                    const named = (match.filters || []).some(one => one.registry_id === entity.registry_id);
+                    // What caught this entity, not everything the rule holds: a
+                    // rule naming one entity and one integration caught another
+                    // entity through the integration, and the form then offered
+                    // "this entity only" for a rule reaching every entity of that
+                    // integration. Caught by a filter of any kind, it was not
+                    // caught by name.
+                    const caught = !!(match.integration || match.model || match.domain);
+                    const named = !caught
+                        && (match.filters || []).some(one => one.registry_id === entity.registry_id);
                     if (named) return 'here';
                     if (match.kind === 'pattern') return 'pattern';
                     if (match.model) return 'model';

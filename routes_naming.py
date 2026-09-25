@@ -9,7 +9,7 @@ than an HTTP request.
 import asyncio
 import logging
 import random
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from flask import Blueprint, jsonify, request
 
@@ -581,6 +581,22 @@ def _rule_affected_counts(restructurer, rules):
     return counts
 
 
+def _not_a_word(rule: Mapping[str, Any]) -> bool:
+    """Whether what this rule matches on is something the system's table cannot answer for.
+
+    An expression is not a word: held against that table it answers nothing
+    today, and would answer wrongly the moment a key there happened to read like
+    one. A domain is not a type either - asked about "device_tracker", the lookup
+    can answer with an entity type of that name from some integration, and the
+    rule was then reported as saying no more than a built-in and listed among the
+    unused ones while it was renaming entities.
+
+    Asked in one place, because two readings of it drifted: one of them counted
+    domain rules as used and the other looked their wording up anyway.
+    """
+    return rule["match"]["kind"] in VERBATIM_KINDS or rule["match"]["kind"] == "domain"
+
+
 def _rule_builtins(rules) -> dict:
     """The built-in name each rule competes with, by rule id."""
     mappings = renamer_state["type_mappings"]
@@ -592,7 +608,7 @@ def _rule_builtins(rules) -> dict:
         # integration, and the rule was then reported as saying no more than a
         # built-in and listed among the unused ones while it was renaming
         # entities.
-        if rule["match"]["kind"] in VERBATIM_KINDS or rule["match"]["kind"] == "domain":
+        if _not_a_word(rule):
             # An expression is not a word: held against the system's table it
             # answers nothing today, and would answer wrongly the moment a key
             # there happened to read like one.
@@ -623,7 +639,7 @@ def _rule_payload(rule: dict, affected: dict, entity_ids: Optional[dict] = None)
     language = rules.language
     builtin = None
     # An expression and a domain are not words; see _rule_builtins.
-    if rule["match"]["kind"] not in VERBATIM_KINDS and rule["match"]["kind"] != "domain":
+    if not _not_a_word(rule):
         builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
     return {
         **rule,

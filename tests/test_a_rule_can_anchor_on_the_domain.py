@@ -512,3 +512,50 @@ def test_an_integration_scope_needs_an_integration(home):
 
     assert answer.status_code == 400
     assert "integration" in answer.get_json()["error"]
+
+
+def test_the_domain_is_not_looked_up_where_it_cannot_win(home):
+    """The lookup ran for every entity that has a narrower rule in force, and its
+    answer was thrown away two lines later."""
+    client, restructurer, rules = home
+    rules.add_filter("domain", "device_tracker", "de", "Standort", {"integration": "unifi"})
+    rules.add_filter("name", "iPhone", "de", "Telefon", None)
+    entity_id = "device_tracker.unifi_default_de_91_e5_f7_12_73"
+
+    asked = []
+    original = rules.find
+
+    def counted(kind, value, *args, **kwargs):
+        asked.append(kind)
+        return original(kind, value, *args, **kwargs)
+
+    rules.find = counted
+    try:
+        behind = restructurer.rule_behind(entity_id, restructurer.entities[entity_id])
+    finally:
+        rules.find = original
+
+    assert behind["kind"] == "name"
+    assert "domain" not in asked
+
+
+def test_a_rule_that_names_one_entity_and_an_integration_is_not_read_as_naming_this_one(home):
+    """Caught through the integration, it was offered as "this entity only" - a
+    reach it does not have - because the check read every filter the rule holds
+    rather than what caught this entity."""
+    markup = (Path(__file__).parent.parent / "templates" / "index.html").read_text()
+    at = markup.index("scopeThatApplied(entity) {")
+    body = markup[at : markup.index("toggleEntityExpand(entity) {", at)]
+
+    assert "const caught = !!(match.integration || match.model || match.domain);" in body
+    assert "const named = !caught" in body
+
+
+def test_one_place_says_which_kinds_the_table_cannot_answer_for():
+    """Two readings of it drifted: one counted domain rules as used and the other
+    looked their wording up anyway."""
+    source = (Path(__file__).parent.parent / "routes_naming.py").read_text()
+
+    assert source.count("def _not_a_word(") == 1
+    # Both readings ask it, rather than each naming the kind for itself.
+    assert source.count("_not_a_word(rule)") == 2

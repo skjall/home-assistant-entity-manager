@@ -610,7 +610,10 @@ class EntityRestructurer:
                     # and is tried against the same name.
                     "pattern": name,
                     "device_class": device_class,
-                    "domain": domain,
+                    # As rule_behind asks it: a value of None where an entity id
+                    # has no domain in it, and the lookup answers nothing either
+                    # way - but the two callers say the same thing.
+                    "domain": domain or "",
                 }
                 # In the order the naming asks them in, out of the one place
                 # that says what that order is - the same walk rule_behind
@@ -817,6 +820,11 @@ class EntityRestructurer:
         # what that order is. Written out here a second time, the two drifted.
         narrower = False
         for kind in sorted(asked, key=lambda one: KIND_PRIORITY[one]):
+            # Asked about at all only where it could win, as the naming asks it:
+            # the lookup ran for every entity that has a narrower rule in force
+            # and its answer was thrown away two lines further down.
+            if kind == "domain" and narrower:
+                return None
             # Not narrowed to a domain where the domain is what it matches on;
             # see build_naming_context.
             rule = rules.find(

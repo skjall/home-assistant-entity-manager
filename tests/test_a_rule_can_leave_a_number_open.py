@@ -606,3 +606,30 @@ def test_the_generation_moves_on_once_per_change(rules):
         seen.add(rules._filling_generation)
 
     assert len(seen) == 4
+
+
+def test_a_brace_that_is_not_a_count_is_a_brace(rules):
+    """Marked as a repetition where it is a literal, the group around it was
+    refused a quantifier it could have had."""
+    assert compile_pattern(r"(?P<n1>\d+)(?P=n1){x}") is not None
+    # And the group holding it may be repeated: it holds a backreference and a
+    # literal brace, and neither of those repeats.
+    assert compile_pattern(r"(?P<n1>\d)((?P=n1){x})+") is not None
+
+
+def test_a_rule_without_filters_loses_to_one_that_names_the_integration(rules):
+    """It covers everything, which is the widest reach there is, so any rule that
+    says where it applies decides before it."""
+    regex, _ = pattern_of("Heizung 12345678")
+    # Written with an integration and left without one: a pattern rule names its
+    # integration on the way in, so this is a rule out of an older file.
+    everywhere = rules.add_filter("pattern", regex, "de", "Überall {1}", {"integration": "somewhere_else"})
+    everywhere["filters"] = []
+    rules.add_filter("pattern", regex, "de", "Heizkostenverteiler {1}", {"integration": INTEGRATION})
+
+    found = rules.find("pattern", "Heizung 12345678", INTEGRATION, "de")
+
+    assert rules.render(found, "Heizung 12345678", "de") == "Heizkostenverteiler 12345678"
+    # And it is the one that answers where no other reaches.
+    other = rules.find("pattern", "Heizung 12345678", "somewhere_else", "de")
+    assert rules.render(other, "Heizung 12345678", "de") == "Überall 12345678"

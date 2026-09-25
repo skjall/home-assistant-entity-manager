@@ -219,19 +219,22 @@ def _refuse_runaway(regex: str) -> None:
             if after == "{":
                 # Bounded here as anywhere: "((?P=n1){2})+" repeats the
                 # backreference twice and finishes, and reading the count as an
-                # open repetition refused it. Read once: walked past here, the
-                # main loop matched the same count again.
+                # open repetition refused it. Read once either way: walked past
+                # here, the main loop matched the same count again.
                 counted = _COUNT.match(regex, at)
                 if counted:
-                    # Either way the count is read once: walked past here, the
-                    # main loop matched the same one again.
                     if not counted.group("open"):
                         after = ""
                     at = counted.end()
                     if after:
                         repeats[-1] = True
                     continue
-            if after in {"*", "+", "?", "{"}:
+                # A brace that is not a count is a brace: left to the walk that
+                # follows, which reads it as the literal it is. Marked as a
+                # repetition here, the group around it was refused a quantifier
+                # it could have had.
+                continue
+            if after in {"*", "+", "?"}:
                 repeats[-1] = True
             continue
         opening = _GROUP_OPEN.match(regex, at)
@@ -295,7 +298,6 @@ def _refuse_runaway(regex: str) -> None:
                     repeats[-1] = True
                 at = counted.end()
                 continue
-            repeats[-1] = True
         elif char in {"*", "+", "?"}:
             # A question mark counts: "(Sensor ?)+" repeats a group that can
             # match nothing, which backtracks just as badly as "(a+)+". A
