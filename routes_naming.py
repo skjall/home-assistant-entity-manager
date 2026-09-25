@@ -9,17 +9,27 @@ than an HTTP request.
 import asyncio
 import logging
 import random
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from flask import Blueprint, jsonify, request
 
 from app_state import ha_translations, renamer_state
 from naming_canon import canon
 import naming_overrides
-from naming_rules import NamingRuleError
+from naming_rules import (
+    MAX_PATTERN_LENGTH,
+    VERBATIM_KINDS,
+    NamingRuleError,
+    pattern_of,
+    readable_pattern,
+    target_of,
+)
 from naming_templates import NamingTemplateError
 from registry import ensure_registry_loaded
 from sanitize import sanitize_name, sanitize_registry_id, sanitize_string, validate_json_input
+
+if TYPE_CHECKING:  # the type is only read, so the import stays out of the runtime
+    from entity_restructurer import EntityRestructurer
 
 logger = logging.getLogger(__name__)
 
@@ -355,6 +365,37 @@ def type_key_integration_counts(restructurer) -> dict:
     return counts
 
 
+def type_pattern_counts(restructurer: "EntityRestructurer") -> dict:
+    """Entities per integration and pattern: names that differ only in their numbers.
+
+    Keyed by (integration, expression), which is what a pattern rule learned
+    from any one of them would match on.
+    """
+    counts: dict = {}
+    for entity_data in restructurer.entities.values():
+        integration = entity_data.get("platform")
+        learned = pattern_of(entity_data.get("original_name") or "")
+        if integration and learned:
+            counts[(integration, learned[0])] = counts.get((integration, learned[0]), 0) + 1
+    return counts
+
+
+def type_pattern_of(entity_data: dict, counts: dict) -> Optional[dict]:
+    """The pattern this entity's supplied name makes, for offering it as a scope.
+
+    Only where it reaches more than this one entity: a pattern that matches a
+    single name says nothing the exact rule would not.
+    """
+    integration = entity_data.get("platform")
+    learned = pattern_of(entity_data.get("original_name") or "")
+    if not integration or not learned:
+        return None
+    count = counts.get((integration, learned[0]), 0)
+    if count < 2:
+        return None
+    return {"label": readable_pattern(learned[0]), "numbers": learned[1], "count": count}
+
+
 def entity_model(restructurer, entity_data: dict) -> str:
     device = restructurer.devices.get(entity_data.get("device_id") or "", {})
     return device.get("model") or ""
@@ -546,11 +587,15 @@ def _rule_builtins(rules) -> dict:
     language = rules.language
     builtins = {}
     for rule in rules.rules:
-        # A domain is not a type: asked about "device_tracker", the lookup can
-        # answer with an entity type of that name from some integration, and the
-        # rule was then reported as saying no more than a built-in and listed
-        # among the unused ones while it was renaming entities.
-        if rule["match"]["kind"] in ("translation_key", "domain"):
+        # A domain is not a type either: asked about "device_tracker", the
+        # lookup can answer with an entity type of that name from some
+        # integration, and the rule was then reported as saying no more than a
+        # built-in and listed among the unused ones while it was renaming
+        # entities.
+        if rule["match"]["kind"] in VERBATIM_KINDS or rule["match"]["kind"] == "domain":
+            # An expression is not a word: held against the system's table it
+            # answers nothing today, and would answer wrongly the moment a key
+            # there happened to read like one.
             continue
         builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
         if builtin is not None:
@@ -577,13 +622,15 @@ def _rule_payload(rule: dict, affected: dict, entity_ids: Optional[dict] = None)
     mappings = renamer_state["type_mappings"]
     language = rules.language
     builtin = None
-    # A domain is not a type; see _rule_builtins.
-    if rule["match"]["kind"] not in ("translation_key", "domain"):
+    # An expression and a domain are not words; see _rule_builtins.
+    if rule["match"]["kind"] not in VERBATIM_KINDS and rule["match"]["kind"] != "domain":
         builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
     return {
         **rule,
         "affected": affected.get(rule["id"], 0) if affected is not None else None,
         "redundant": rules.is_redundant(rule, language, builtin),
+        # A pattern as a person reads it; the expression stays in match.
+        "label": readable_pattern(rule["match"]["value"]) if rule["match"]["kind"] == "pattern" else None,
         # A rule written for one entity is about that entity, and a registry id
         # says nothing to a reader. The entity it belongs to does.
         "entities": [
@@ -601,17 +648,22 @@ def naming_settings():
         data = request.json if isinstance(request.json, dict) else {}
         language = sanitize_string(data.get("language", ""), max_length=8)
         display_case = sanitize_string(data.get("display_case", ""), max_length=16)
-        if not language and not display_case:
-            return jsonify({"error": "language or display_case required"}), 400
+        pattern_rules = data.get("pattern_rules")
+        if not language and not display_case and not isinstance(pattern_rules, bool):
+            return jsonify({"error": "language, display_case or pattern_rules required"}), 400
         try:
             if language:
                 rules.set_language(language)
             if display_case:
                 rules.set_display_case(display_case)
+            if isinstance(pattern_rules, bool):
+                rules.set_pattern_rules(pattern_rules)
         except NamingRuleError as error:
             return jsonify({"error": str(error)}), 400
         renamer_state["type_mappings"]._refresh_user_view()
-    return jsonify({"language": rules.language, "display_case": rules.display_case})
+    return jsonify(
+        {"language": rules.language, "display_case": rules.display_case, "pattern_rules": rules.pattern_rules}
+    )
 
 
 @naming.route("/api/naming/rules", methods=["GET", "POST"])
@@ -626,10 +678,11 @@ def naming_rules_collection():
         target = targets.get(language) or data.get("value")
         if not target:
             return jsonify({"error": f"target for language {language} required"}), 400
+        kind = sanitize_string(match.get("kind", "name"), max_length=32)
         try:
             rule = rules.upsert(
-                sanitize_string(match.get("kind", "name"), max_length=32),
-                sanitize_string(match.get("value", ""), max_length=128),
+                kind,
+                sanitize_string(match.get("value", ""), max_length=MAX_PATTERN_LENGTH if kind == "pattern" else 128),
                 sanitize_string(match.get("integration") or "", max_length=64) or None,
                 language,
                 sanitize_string(target),
@@ -890,6 +943,14 @@ def naming_learn():
     if anchor == "domain" and scope not in ("global", "all", "integration"):
         return jsonify({"error": "A domain rule applies everywhere or within one integration"}), 400
     kind, key = _rule_key_for(entity, entity_id, anchor)
+    if scope == "pattern":
+        # The supplied name with its numbers left open, and the typed name
+        # carrying each number on where it repeats it.
+        learned = pattern_of(entity.get("original_name") or "")
+        if not learned or not entity.get("platform"):
+            return jsonify({"error": "a pattern needs a supplied name with a number, from an integration"}), 400
+        kind, key = "pattern", learned[0]
+        value = target_of(value, learned[1])
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
     # Home Assistant does not say which integration supplies this entity, so
@@ -906,7 +967,7 @@ def naming_learn():
     one = None
     if scope == "entity":
         one = {"registry_id": entity.get("id") or ""}
-    elif scope in ("integration", "model", "domain"):
+    elif scope in ("integration", "model", "domain", "pattern"):
         one = {"integration": entity.get("platform") or ""}
         if scope in ("model", "domain"):
             one["model"] = entity_model(restructurer, entity) or ""

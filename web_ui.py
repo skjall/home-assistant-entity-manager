@@ -49,6 +49,8 @@ from routes_naming import (
     type_key_integration_counts,
     type_key_model_counts,
     type_key_model_domain_counts,
+    type_pattern_counts,
+    type_pattern_of,
 )
 from routes_swap import swap as swap_routes
 from routes_system import system as system_routes
@@ -2061,6 +2063,8 @@ async def _get_hierarchy_async():
         type_integration_counts = type_key_integration_counts(restructurer)
         type_model_counts = type_key_model_counts(restructurer)
         type_model_domain_counts = type_key_model_domain_counts(restructurer)
+        # Pattern scopes are offered only where the user switched them on.
+        pattern_counts = type_pattern_counts(restructurer) if renamer_state["naming_rules"].pattern_rules else None
         # For the anchor that reaches a whole domain: how far it would reach.
         by_domain = domain_counts(restructurer)
         by_domain_integration = domain_integration_counts(restructurer)
@@ -2123,6 +2127,9 @@ async def _get_hierarchy_async():
                         )
                         if type_key
                         else 0
+                    ),
+                    "type_pattern": (
+                        type_pattern_of(entity_data, pattern_counts) if pattern_counts is not None else None
                     ),
                     "type_model_count": (
                         type_model_counts.get((type_key, entity_model(restructurer, entity_data)), 0) if type_key else 0

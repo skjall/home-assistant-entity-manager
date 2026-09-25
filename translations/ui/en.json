@@ -31,6 +31,7 @@
     "assign_area": "Assign Area",
     "select_area": "Select area...",
     "area_assigned": "Device assigned to area",
+    "area_cleared": "Device taken out of its area",
     "open_in_ha": "Open area in Home Assistant"
   },
   "summary": {
@@ -134,7 +135,9 @@
     "was_already_gone": "The entity was already deleted — the list has caught up.",
     "anchor_label": "Or for every {domain} entity:",
     "anchor_domain_all_hint": "For all {count} {domain} entities, whatever the integration. Only worth it where the supplied name is not a type.",
-    "anchor_domain_integration_hint": "For all {count} {domain} entities from {integration}, whatever each one is called."
+    "anchor_domain_integration_hint": "For all {count} {domain} entities from {integration}, whatever each one is called.",
+    "scope_pattern_hint": "For all {count} entities from {integration} named “{pattern}”, whatever the number.",
+    "explain_rule_pattern": "All “{pattern}” entities from {integration} are named this way for you – here “{value}”"
   },
   "virtual_devices": {
     "automations": "Automations",
@@ -204,7 +207,8 @@
     "entity_marked_for_acceptance": "Entity marked for acceptance",
     "core_starting": "Home Assistant is starting up. This continues as soon as it answers.",
     "rules_saved": "Rules saved",
-    "nothing_to_apply": "Nothing to apply"
+    "nothing_to_apply": "Nothing to apply",
+    "device_name_first": "Apply the device name first - the entities follow it"
   },
   "dependencies": {
     "title": "Dependencies for",
@@ -232,6 +236,7 @@
     "new_name": "New name",
     "open_details": "Open device details",
     "base_name_label": "Device Base Name (without Area prefix)",
+    "area_label": "Area",
     "name_conflict": "A device with this name already exists",
     "z2m_drift_label": "Z2M name differs",
     "open_in_ha": "Open device in Home Assistant",
@@ -245,7 +250,10 @@
     "enabling": "Enabling…",
     "enabled": "Device enabled",
     "enable_it_first": "The device is disabled – enable the device first.",
-    "id_conflict": "This name would take an entity id that is already held: {id}"
+    "id_conflict": "This name would take an entity id that is already held: {id}",
+    "name_already_correct": "The device is already called that",
+    "gone": "This device is no longer in Home Assistant",
+    "moved_not_renamed": "The device was moved, but not renamed: {error}"
   },
   "units": {
     "entities": "Entities",
@@ -544,7 +552,12 @@
     "caught_device_class": "device class",
     "caught_domain": "domain",
     "caught_none": "—",
-    "reach_open_device": "Open “{device}” in Home Assistant"
+    "reach_open_device": "Open “{device}” in Home Assistant",
+    "pattern_section": "Pattern rules",
+    "pattern_hint": "Some integrations put a serial number into every name, such as “Heating 12345678”. A pattern rule leaves the number open and so applies to every device of that integration. Existing pattern rules keep applying when this is switched off.",
+    "pattern_toggle": "Offer pattern rules when renaming",
+    "pick_pattern": "Pattern",
+    "caught_pattern": "pattern"
   },
   "type_mappings": {
     "light": "Light",
