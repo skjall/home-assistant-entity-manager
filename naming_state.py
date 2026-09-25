@@ -184,13 +184,19 @@ class NamingState:
                 "rule_id": None,
             }
 
+        noted = stored.get("base_entity")
         drifted = current != stored["applied_name"]
         stale = bool(template_hash) and bool(stored["template_hash"]) and template_hash != stored["template_hash"]
         return {
             "name_owner": HA_UI if drifted else ENTITY_MANAGER,
             "drift": drifted,
             "template_changed": stale,
-            "base_entity": stored.get("base_entity") or "",
+            # A string either way, deliberately: this is what the interface
+            # reads to show a name, and nothing decides a rename by it - the
+            # difference between "no type part" and "nothing recorded" is read
+            # out of the state file itself, where resupply and the rename keep
+            # it apart. See test_ownership_still_reports_a_missing_type_part.
+            "base_entity": noted or "",
             "applied_name": stored["applied_name"],
             "won_by": stored["won_by"],
             "rule_id": stored["rule_id"],
