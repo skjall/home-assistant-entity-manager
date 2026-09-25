@@ -706,7 +706,7 @@ async def rename_device_handler(job, ctx):
     # the truth test that writes it.
     if new_name is not None and (not isinstance(new_name, str) or not new_name.strip()):
         raise RuntimeError("A rename needs a name")
-    set_area = bool(payload.get("set_area"))
+    set_area = bool(payload.get("set_area")) or "area_id" in payload
     area_id = payload.get("area_id")
 
     base_url = os.getenv("HA_URL")
@@ -748,6 +748,11 @@ async def rename_device_handler(job, ctx):
             success = await device_registry.rename_device(device_id, new_name)
 
             if not success:
+                # The area is left where it was moved to. Writing it back is a
+                # second write that can fail in its own turn, and it would take
+                # the device out of the area the user had just put it in - the
+                # move is not the step that failed. What did is reported here,
+                # and the log above says which steps had run.
                 raise RuntimeError("Failed to rename device in Home Assistant")
 
             # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)

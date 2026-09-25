@@ -3271,6 +3271,10 @@
                 // a test harness, a reload that leaves the first standing - each
                 // count their own versions, and the second was handed the first
                 // one's devices wherever the two numbers happened to agree.
+                // Neither of them rebuilds the other's pass: this index is built
+                // inside entityManager(), so each component has one of its own,
+                // and "owner" is about the proxy that reads it rather than about
+                // two components sharing this one.
                 if (index.owner === state && index.version === state.hierarchyVersion) return index;
                 index.owner = state;
                 index.devicesById = new Map();
@@ -3361,6 +3365,7 @@
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
                 _deviceWideTimer: null,  // Debounce for the device-wide entity preview
                 _stagedRun: 0,  // Which computation of the staged device's rows is current
+                _stagedAsking: false,  // Whether an answer for those rows is on its way
                 // The area picked in the panel, before anything is written.
                 // null means nothing picked; a string is an area id.
                 devicePreviewAreaId: null,
@@ -4028,7 +4033,7 @@
                     // An area picked or a name typed in the panel is a change of
                     // its own: it is the one thing "apply all" writes that no
                     // entity row carries a tick for.
-                    return entityChanges + z2mDrift + (this.deviceChangeStaged ? 1 : 0);
+                    return entityChanges + z2mDrift + (this.deviceChangeStaged && !this.renamingDevice ? 1 : 0);
                 },
 
                 // Computed: Count of disabled entities in current selection (only when showDisabled is true)
@@ -5025,7 +5030,7 @@
                     const mine = !!entity.device_id && entity.device_id === (forDeviceId || this.selectedDevice);
                     return this.renderNamingTemplate(
                         template,
-                        this.entityNamingContext(entity, typed, mine ? baseName : null)
+                        this.entityNamingContext(entity, typed, mine ? baseName : null, forDeviceId)
                     );
                 },
 
@@ -5297,10 +5302,6 @@
                         entity._previewId = null;
                     }
 
-                    // Asked once, not once per entity: the scan was walking
-                    // the device list again for every row.
-                    const devicesById = indexed(this).devicesById;
-
                     const pending = [];
                     let stagedUnanswered = false;
                     for (const entity of entities) {
@@ -5508,7 +5509,7 @@
                         if (run !== this._stagedRun) return;
                         entities.forEach((entity, i) => {
                             entity._previewId = (answer.ids && answer.ids[i])
-                                || this.composeEntityId(entity, answer.normalized[i]);
+                                || this.composeEntityId(entity, (answer.normalized || [])[i]);
                         });
                         this.previewVersion++;
                     }).catch(error => {
@@ -5595,11 +5596,15 @@
                     return this.renderNamingTemplate(template, this.deviceNamingContext(device, baseName));
                 },
 
-                entityNamingContext(entity, suffix = null, baseName = null) {
+                entityNamingContext(entity, suffix = null, baseName = null, forDeviceId = null) {
                     const device = entity?.device_id
                         ? indexed(this).devicesById.get(entity.device_id)
                         : null;
-                    const staged = !!device && device.id === this.selectedDevice;
+                    // The device this name is being worked out for, which is not
+                    // always the one the panel stands on: asked about another
+                    // device's rows, the typed-but-unwritten name of the selected
+                    // device was read into them.
+                    const staged = !!device && device.id === (forDeviceId || this.selectedDevice);
                     const areaId = this.deviceIsMoving(device)
                         ? this.previewAreaFor(device)
                         : (entity?.area_id || device?.area_id);
@@ -5953,7 +5958,7 @@
                     mine.forEach((entity, index) => {
                         if (!stillMine.has(entity.id)) return;
                         const wantedId = (answer.ids && answer.ids[index])
-                            || this.composeEntityId(entity, answer.normalized[index]);
+                            || this.composeEntityId(entity, (answer.normalized || [])[index]);
                         const holder = taken.get(wantedId);
                         if (holder && holder.device_id !== device.id) {
                             clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
@@ -7296,6 +7301,10 @@
                     // written, the run reported success, and the name the user had
                     // typed was dropped without a word about it.
                     if (payload.new_name === undefined && nameStaged && areaStaged) {
+                        // And the field goes back to what it held: the name is not
+                        // being written, and left standing it read as a rename
+                        // waiting to be applied.
+                        if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
                         this.showMessage(this.t('messages.name_has_no_place'), 'info', true);
                     }
                     if (payload.new_name === undefined && !areaStaged) {

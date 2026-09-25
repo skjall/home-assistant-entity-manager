@@ -403,10 +403,14 @@ def test_a_typed_name_with_nowhere_to_go_is_said_out_loud_over_a_move():
     it, so there was nowhere for it to go."""
     markup = _panel_source()
     at = markup.index("const payload = { device_id: deviceId };")
-    body = markup[at : at + 1600]
+    body = markup[at : at + 2000]
 
     assert "if (payload.new_name === undefined && nameStaged && areaStaged) {" in body
     assert body.count("messages.name_has_no_place") == 2
+    # And the field goes back to what it held, as it does where nothing at all
+    # was written: left standing, it read as a rename waiting to be applied until
+    # the job's own answer cleared it.
+    assert body.count("this.devicePreviewBaseName = wasPreviewed;") == 2
 
 
 def test_apply_all_goes_on_where_there_was_nothing_to_write():
@@ -448,7 +452,7 @@ def test_the_index_belongs_to_the_component_that_asked():
     was handed the first one's devices wherever the two numbers agreed."""
     markup = _panel_source()
     at = markup.index("function indexed(state)")
-    body = markup[at : at + 700]
+    body = markup[at : at + 1200]
 
     assert "index.owner === state" in body
     assert "index.owner = state;" in body
@@ -495,3 +499,56 @@ def test_the_apply_reads_what_the_rows_were_told(monkeypatch) -> None:
     assert "const rowsHoldIt = baseName === null" in body
     assert "|| baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim());" in body
     assert "if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {" in body
+
+
+def test_an_area_asked_for_without_the_flag_is_still_written(monkeypatch) -> None:
+    """The route writes both keys together, so a payload carrying an area and no
+    flag is a call straight to the API or a job store edited by hand. Read as no
+    move at all, the area was dropped and the run reported as done."""
+    written = _run_handler(monkeypatch, {"device_id": "dev1", "area_id": "kitchen"})
+    assert written == ["area:kitchen"]
+
+
+def test_a_typed_name_is_read_for_the_device_it_was_typed_for() -> None:
+    """The staged name belongs to the device the caller is asking about. Read off
+    the panel whatever device that was, one device's unwritten name went into
+    another device's rows - and into the clash check made from them."""
+    markup = _panel_source()
+    at = markup.index("entityNamingContext(entity, suffix = null")
+    body = markup[at : markup.index("pendingDeviceContext(entity) {", at)]
+
+    assert "entityNamingContext(entity, suffix = null, baseName = null, forDeviceId = null) {" in body
+    assert "const staged = !!device && device.id === (forDeviceId || this.selectedDevice);" in body
+
+    at = markup.index("getEntityFriendlyNameLive(entity, baseName = null, forDeviceId = null) {")
+    body = markup[at : markup.index("getNewEntityIdLive(entity) {", at)]
+    assert "this.entityNamingContext(entity, typed, mine ? baseName : null, forDeviceId)" in body
+
+
+def test_the_staged_ids_are_an_answer_without_slugs_beside_them() -> None:
+    """The rows' own ids are the answer, and there are no normalized names next to
+    them. Read for a fallback, that threw where the fallback belongs - and the
+    clash check stopped without saying anything."""
+    markup = _panel_source()
+
+    assert "answer.normalized[i]" not in markup
+    assert "answer.normalized[index]" not in markup
+    assert markup.count("(answer.normalized || [])[") == 2
+
+
+def test_the_flag_for_an_answer_on_its_way_starts_out_false() -> None:
+    """Read before anything set it, "not asking" and "never asked" were the same
+    word: the guard let a second request go out that cancelled the one in flight."""
+    markup = _panel_source()
+
+    assert "_stagedAsking: false," in markup
+
+
+def test_a_job_under_way_is_not_counted_as_a_change_to_apply() -> None:
+    """The staged state it was started from stands until the job answers, and the
+    job is already shown as running."""
+    markup = _panel_source()
+    at = markup.index("get pendingChangesCount() {")
+    body = markup[at : markup.index("get disabledEntitiesCount() {", at)]
+
+    assert "this.deviceChangeStaged && !this.renamingDevice ? 1 : 0" in body

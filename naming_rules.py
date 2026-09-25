@@ -197,13 +197,18 @@ MAX_CHOICE_REPEATS = 4
 
 
 def _at_most(count: str) -> int:
-    """The largest number of repetitions a counted quantifier allows.
+    """The number of repetitions a counted quantifier allows at most.
 
     ``count`` is the quantifier as it is written - "{4}", "{1,3}" - and the answer
     is the last number in it.
     """
     numbers = [int(part) for part in re.findall(r"\d+", count)]
-    return max(numbers) if numbers else 0
+    # The last of them rather than the largest: a reversed range -
+    # "{3,1}" - is not a quantifier Python compiles, so the two differ
+    # only for an expression that was refused before this was asked,
+    # and the largest would be the wrong bound to test if that ever
+    # stopped being true.
+    return numbers[-1] if numbers else 0
 
 
 def _refuse_runaway(regex: str) -> None:
