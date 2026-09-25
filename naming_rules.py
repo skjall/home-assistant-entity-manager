@@ -842,7 +842,24 @@ class NamingRules:
         return None
 
     @staticmethod
-    def check_pattern(rule: Mapping[str, Any]) -> None:
+    def check_targets(match: Mapping[str, Any], targets: Mapping[str, str]) -> None:
+        """Refuse a target whose placeholders the expression does not capture.
+
+        These targets, not every target the rule holds: an edit says what one
+        language is to read and nothing about the others, and a rule whose other
+        language had been left carrying a placeholder the expression has no group
+        for could then not be edited at all - not even to mend it.
+        """
+        if match["kind"] != "pattern":
+            return
+        pattern = compile_pattern(match["value"])
+        for target in targets.values():
+            for key in _PLACEHOLDER.findall(target):
+                if not _known_placeholder(pattern, key):
+                    raise NamingRuleError(f"The pattern captures nothing for {{{key}}}")
+
+    @classmethod
+    def check_pattern(cls, rule: Mapping[str, Any]) -> None:
         """Refuse a pattern rule that could not be applied as meant.
 
         It has to name the integration it is about, and every placeholder in
@@ -852,14 +869,10 @@ class NamingRules:
         match = rule["match"]
         if match["kind"] != "pattern":
             return
-        pattern = compile_pattern(match["value"])
         filters = rule.get("filters") or []
         if not filters or any(not one.get("integration") or one.get("registry_id") for one in filters):
             raise NamingRuleError("A pattern rule applies within an integration")
-        for target in rule["targets"].values():
-            for key in _PLACEHOLDER.findall(target):
-                if not _known_placeholder(pattern, key):
-                    raise NamingRuleError(f"The pattern captures nothing for {{{key}}}")
+        cls.check_targets(match, rule["targets"])
 
     def _refuse_collision(self, rule: Mapping[str, Any]) -> None:
         self.check_pattern(rule)
@@ -1397,20 +1410,35 @@ class NamingRules:
         ):
             return rule
 
-        # Everything the rule would become is judged the same way, whichever
-        # field was supplied: a target carrying a placeholder the expression
-        # does not capture is refused whether or not the expression came with
-        # it, and the stored rules never collide, so re-asking costs nothing.
-        self._refuse_collision(wanted)
+        # What the call changes decides what is judged. An expression or a
+        # list of filters is the rule saying which entities it is about, so the
+        # whole rule is judged again - including what claims a filter.
+        #
+        # A target edit is not: it says what one language reads. Judged as a
+        # whole rule it was refused for things the caller had not touched and
+        # could not mend from there - another language left carrying a
+        # placeholder the expression has no group for, two stored rules that
+        # overlap already - and those rules could not be edited at all.
+        if value is not None or filters is not ...:
+            self._refuse_collision(wanted)
+        else:
+            self.check_targets(wanted["match"], clean)
 
         # Put back if it cannot be written: the rule in memory answers every
         # later read, and a disk that refused the write would have left it
         # saying something the file does not.
-        held = {key: rule[key] for key in ("targets", "match", "filters", "updated_at") if key in rule}
+        #
+        # Only the fields this call changes, so what is put back is what was
+        # taken: assigning all three wrote a field its own value and had the
+        # rollback restoring something that never moved.
+        #
+        # Nothing can come between the reading above and the writing here: every
+        # method that writes runs under the store's lock, this one included.
+        changed = [key for key in ("targets", "match", "filters") if wanted[key] != rule[key]]
+        held = {key: rule[key] for key in changed + ["updated_at"] if key in rule}
         added = [key for key in ("updated_at",) if key not in rule]
-        rule["targets"] = wanted["targets"]
-        rule["match"] = wanted["match"]
-        rule["filters"] = wanted["filters"]
+        for key in changed:
+            rule[key] = wanted[key]
         rule["updated_at"] = _now()
         try:
             self.save()

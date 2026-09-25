@@ -20,6 +20,7 @@ from naming_rules import (
     MAX_PATTERN_LENGTH,
     VERBATIM_KINDS,
     NamingRuleError,
+    compile_pattern,
     pattern_of,
     readable_pattern,
     target_of,
@@ -873,6 +874,23 @@ def naming_rule_item(rule_id):
             return jsonify({"error": "A pattern needs an expression"}), 400
         if len(expression) > MAX_PATTERN_LENGTH:
             return jsonify({"error": f"A pattern's expression is at most {MAX_PATTERN_LENGTH} characters"}), 400
+        # Read as a pattern here, not only in the rules: the length is the
+        # smaller half of what makes an expression usable, and a caller that
+        # had been told a 499-character expression was within bounds then got
+        # "a pattern may not repeat what already repeats" out of the model as
+        # though the two answers came from different places.
+        try:
+            compile_pattern(expression)
+        except NamingRuleError as error:
+            return jsonify({"error": str(error)}), 400
+        # And a rule that is not matched on an expression cannot be given one.
+        # Passed on, the whole call was refused by the model - the targets sent
+        # with it among them - and nothing said which half was the problem.
+        standing = rules.get(rule_id)
+        if standing is None:
+            return jsonify({"error": "unknown rule"}), 404
+        if standing["match"]["kind"] != "pattern":
+            return jsonify({"error": "Only a pattern rule is matched on an expression"}), 400
     targets = data.get("targets")
     if targets is not None and not isinstance(targets, dict):
         return jsonify({"error": "targets has to be a mapping of language to text"}), 400

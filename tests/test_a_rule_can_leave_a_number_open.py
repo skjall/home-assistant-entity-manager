@@ -7,6 +7,8 @@ again. A pattern rule matches every name that differs only in its numbers and
 carries the number on into the new name.
 """
 
+import os
+
 import pytest
 
 from entity_restructurer import EntityRestructurer
@@ -588,3 +590,115 @@ def test_a_choice_that_is_not_repeated_is_accepted():
     """A choice is only a runaway where something repeats it."""
     for expression in [r"(a|b)", r"(a|b)?c", r"(?:Heizung|Kuehlung) (?P<n1>\d+)"]:
         assert compile_pattern(expression) is not None
+
+
+# --------------------------------------- what an edit to a rule is judged on
+
+
+def test_a_target_edit_is_not_refused_over_another_language(rules):
+    """An edit says what one language reads and nothing about the others.
+
+    A rule can hold a target in a language whose placeholders the expression has
+    no group for - written before the expression was corrected, or put there by
+    hand. Judged as a whole rule, that language refused every edit to every
+    other one, the edit that would have mended it among them.
+    """
+    rule = _pattern_rule(rules)
+    # Put there past the check on the way in, because the state that has to be
+    # editable is not the state that can be created.
+    rule["targets"]["en"] = "Heat meter {9}"
+
+    updated = rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+    assert updated["targets"]["de"] == "Heizkosten {1}"
+    assert updated["targets"]["en"] == "Heat meter {9}"
+
+
+def test_a_target_edit_is_still_judged_against_the_expression(rules):
+    """The language being written is: a placeholder with no group behind it
+    would put a hole in every name the rule makes."""
+    rule = _pattern_rule(rules)
+
+    with pytest.raises(NamingRuleError):
+        rules.update(rule["id"], targets={"de": "Heizkosten {9}"})
+
+
+def test_a_new_expression_is_judged_against_every_target(rules):
+    """An expression says which entities the rule is about, so the whole rule is
+    judged again - a target left without its group is the rule not applying."""
+    rule = _pattern_rule(rules, target="Heizkostenverteiler {1}")
+
+    with pytest.raises(NamingRuleError):
+        rules.update(rule["id"], value=r"Heizung\ \d+")
+
+
+def test_an_edit_writes_only_what_it_changes(rules):
+    """Assigning all three fields wrote one its own value, and the rollback then
+    put back something that had never moved."""
+    rule = _pattern_rule(rules)
+    match_before = rule["match"]
+    filters_before = rule["filters"]
+
+    updated = rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+    assert updated["match"] is match_before
+    assert updated["filters"] is filters_before
+
+
+# ------------------------------------------- what the route says beforehand
+
+
+def test_the_route_reads_the_expression_as_a_pattern(client):
+    """Length is the smaller half of what makes an expression usable. Told that a
+    499-character expression was within bounds, the caller then got an answer
+    about repeated groups out of the rules as though from somewhere else."""
+    rule = client.post(
+        "/api/naming/learn",
+        json={"entity_id": "sensor.reg-1", "value": "Heizkostenverteiler 12345678", "scope": "pattern"},
+    ).get_json()["rule"]
+
+    answer = client.put(f"/api/naming/rules/{rule['id']}", json={"match_value": r"(\d+)+"})
+
+    assert answer.status_code == 400
+    assert "repeat" in answer.get_json()["error"]
+
+
+def test_the_route_refuses_an_expression_for_a_rule_that_has_none(client):
+    """Passed on, the whole call was refused by the rules - the targets sent with
+    it among them - and nothing said which half of it was the problem."""
+    rule = client.post(
+        "/api/naming/learn",
+        json={"entity_id": "sensor.reg-3", "value": "Heizung gesamt"},
+    ).get_json()["rule"]
+    assert rule["match"]["kind"] != "pattern"
+
+    answer = client.put(
+        f"/api/naming/rules/{rule['id']}",
+        json={"targets": {"de": "Heizung gesamt"}, "match_value": r"Heizung\ \d+"},
+    )
+
+    assert answer.status_code == 400
+    assert "pattern rule" in answer.get_json()["error"]
+
+
+def test_an_expression_for_a_rule_that_is_not_there_says_so(client):
+    answer = client.put("/api/naming/rules/nothing", json={"match_value": r"Heizung\ \d+"})
+
+    assert answer.status_code == 404
+
+
+# ---------------------------------------------- what the page says out loud
+
+
+def test_an_empty_expression_is_answered_in_the_row():
+    """The rest of the page answers where the question was asked. An alert stops
+    the reactivity and every answer still on its way until it is dismissed."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(here, "templates", "settings.html"), encoding="utf-8") as handle:
+        markup = handle.read()
+
+    at = markup.index("async saveEdit(row) {")
+    body = markup[at : at + 4000]
+    assert "alert(this.t('settings.pattern_needs_an_expression'))" not in body
+    assert "this.editError = this.t('settings.pattern_needs_an_expression');" in body
+    assert 'x-text="editError"' in markup

@@ -1496,6 +1496,8 @@
                                 <i class="ri-arrow-right-line rule-arrow"></i>
                                 <input type="text" class="edit-input" style="flex: 1 1 200px;" x-model="editValue"
                                        @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
+                                <span x-show="editError" style="color:var(--color-red-600); font-size:0.85rem"
+                                      x-text="editError"></span>
                             </div>
                             <!-- And where it applies. A rule reaches a list of
                                  places, so each is its own chip and goes on its own. -->
@@ -2192,6 +2194,7 @@
                 reachError: '',
                 editValue: '',
                 editPattern: '',  // The expression, while a pattern rule is being edited
+                editError: '',  // What is wrong with what is typed, said in the row
                 filterFor: null,
                 comboOpen: '',
                 comboAt: 0,
@@ -3534,12 +3537,16 @@
                     // the kind "name" - so the field is filled whenever the
                     // row has an expression to fill it with.
                     this.editPattern = row.kind === 'pattern' ? row.key : '';
+                    // Opened afresh, the row does not still hold what was wrong
+                    // with what somebody typed into it last time.
+                    this.editError = '';
                 },
 
                 cancelEdit() {
                     this.editingKey = null;
                     this.editValue = '';
                     this.editPattern = '';
+                    this.editError = '';
                 },
 
                 async saveEdit(row) {
@@ -3555,9 +3562,15 @@
                     // though it had been saved was the one reading the user
                     // could not have had.
                     if (row.kind === 'pattern' && !expression) {
-                        alert(this.t('settings.pattern_needs_an_expression'));
+                        // In the row, not in a window the browser blocks
+                        // everything for: the rest of this page answers where
+                        // the question was asked, and an alert stops the
+                        // reactivity and the answers still on their way until
+                        // somebody dismisses it.
+                        this.editError = this.t('settings.pattern_needs_an_expression');
                         return;
                     }
+                    this.editError = '';
                     if (!value && !(patternChanged && row.isRule)) {
                         this.cancelEdit();
                         return;
