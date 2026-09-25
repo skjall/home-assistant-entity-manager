@@ -941,6 +941,9 @@ def naming_learn():
     # the rule came back to a form that could not show it: neither row of
     # buttons had one to light up, and the next save wrote the same state again.
     if anchor == "domain" and scope not in ("global", "all", "integration"):
+        # Including the pattern scope, which writes an anchor of its own below:
+        # accepted, the call came back with a pattern rule while the caller had
+        # asked for a domain rule, and nothing said the anchor was dropped.
         return jsonify({"error": "A domain rule applies everywhere or within one integration"}), 400
     kind, key = _rule_key_for(entity, entity_id, anchor)
     if scope == "pattern":

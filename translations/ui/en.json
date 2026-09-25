@@ -208,7 +208,8 @@
     "core_starting": "Home Assistant is starting up. This continues as soon as it answers.",
     "rules_saved": "Rules saved",
     "nothing_to_apply": "Nothing to apply",
-    "device_name_first": "Apply the device name first - the entities follow it"
+    "device_name_first": "Apply the device name first - the entities follow it",
+    "area_move_failed": "The device did not move, so nothing was renamed"
   },
   "dependencies": {
     "title": "Dependencies for",

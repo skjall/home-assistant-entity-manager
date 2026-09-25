@@ -15,7 +15,7 @@ import pytest
 
 from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
-from naming_rules import NamingRules
+from naming_rules import KIND_PRIORITY, NamingRules
 from naming_templates import NamingTemplates
 import routes_naming
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
@@ -368,3 +368,64 @@ def test_a_rule_the_naming_holds_back_is_not_counted_as_reached(home):
     behind = restructurer.rule_behind("button.passwort_neu", restructurer.entities["button.passwort_neu"])
 
     assert (behind or {}).get("rule_id") != domain_rule
+
+
+# --- What stands back for what --------------------------------------------
+
+
+def test_every_other_anchor_holds_the_domain_rule_back(home):
+    """The domain is the widest anchor, so any of the others speaking about an
+    entity takes the decision away from it.
+
+    Written out for each of them, because the naming works the anchors out one
+    by one rather than in a loop: a kind added to KIND_PRIORITY and not given
+    its own line here would let the domain rule decide over it, and the count
+    below is what says a kind was added.
+    """
+    client, restructurer, rules = home
+    assert set(KIND_PRIORITY) == {"translation_key", "name", "pattern", "device_class", "domain"}
+
+    rules.add_filter("domain", "sensor", "de", "Messwert", None)
+    # The pattern is the one that was missed: it matched, it renamed the entity
+    # to what it is already called, and its value was dropped for saying
+    # nothing - after which the domain rule was the only candidate left.
+    rules.add_filter("pattern", r"Durchsatz(?P<n1>\d*)", "de", "Durchsatz", {"integration": "unifi"})
+
+    assert name_of(restructurer, "sensor.ap_durchsatz") == "Dusche Access Point Durchsatz"
+
+
+def test_a_pattern_rule_that_changes_nothing_still_holds_the_domain_back(home):
+    """A rule of the user's that renames an entity to what it already says is
+    still the user saying which entities this one is about."""
+    client, restructurer, rules = home
+    rules.add_filter("domain", "sensor", "de", "Messwert", None)
+
+    before = name_of(restructurer, "sensor.ap_durchsatz")
+    assert before == "Dusche Access Point Messwert"
+
+    rules.add_filter("pattern", r"Durchsatz(?P<n1>\d*)", "de", "Durchsatz", {"integration": "unifi"})
+
+    assert name_of(restructurer, "sensor.ap_durchsatz") == "Dusche Access Point Durchsatz"
+
+
+# --- The anchor and the scope have to agree -------------------------------
+
+
+def test_a_domain_anchor_is_refused_where_the_scope_writes_its_own(home):
+    """The pattern scope writes an anchor of its own. Accepted, the call came
+    back with a pattern rule while the caller had asked for a domain rule, and
+    nothing said the anchor had been dropped."""
+    client, _, _ = home
+
+    answer = client.post(
+        "/api/naming/learn",
+        json={
+            "entity_id": "device_tracker.unifi_default_de_91_e5_f7_12_73",
+            "value": "Standort",
+            "anchor": "domain",
+            "scope": "pattern",
+        },
+    )
+
+    assert answer.status_code == 400
+    assert "domain rule" in answer.get_json()["error"]

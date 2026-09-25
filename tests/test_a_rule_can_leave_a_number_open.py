@@ -7,11 +7,23 @@ again. A pattern rule matches every name that differs only in its numbers and
 carries the number on into the new name.
 """
 
+import logging
+import re
+
 import pytest
 
 from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
-from naming_rules import NamingRuleError, NamingRules, compile_pattern, pattern_of, readable_pattern, target_of
+import naming_rules
+from naming_rules import (
+    NamingRuleError,
+    NamingRules,
+    compile_pattern,
+    fill_placeholders,
+    pattern_of,
+    readable_pattern,
+    target_of,
+)
 from naming_templates import NamingTemplates
 import routes_naming
 from type_mappings import DEFAULT_SYSTEM_MAPPINGS, TypeMappings
@@ -396,3 +408,94 @@ def test_a_choice_that_is_not_repeated_is_accepted():
     """A choice is only a runaway where something repeats it."""
     for expression in [r"(a|b)", r"(a|b)?c", r"(?:Heizung|Kuehlung) (?P<n1>\d+)"]:
         assert compile_pattern(expression) is not None
+
+
+# ------------------------------------------- what only looks like a group
+
+
+def test_a_backreference_is_not_read_as_a_group(rules):
+    """ "(?P=n1)" repeats what a group caught; it does not open one.
+
+    Read as an opener it put a depth on the stack that its own ")" took off
+    again, and the quantifier after that ")" was then weighed against the wrong
+    group: "((?P=n1)+)+" was refused for repeating something that repeats,
+    while what repeats is the outer group.
+    """
+    assert compile_pattern(r"(?P<n1>\d+) (?P=n1)") is not None
+    assert compile_pattern(r"(?P<n1>\d+)(?:x(?P=n1))?") is not None
+    # A comment is not a group either.
+    assert compile_pattern(r"(?#the serial)(?P<n1>\d+)") is not None
+    # And the shape that does run away is still refused, at the depth it is on.
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"(?P<n1>\d*)((?P=n1)+)+")
+
+
+# ------------------------------------------------ what the log has to say
+
+
+def test_a_placeholder_the_expression_has_no_group_for_is_said_out_loud(caplog):
+    """A rule that can never apply to anything looked exactly like one that
+    does not apply to this name: both simply never applied.
+
+    Such a target is refused where a rule is written, so this is the net under
+    that: a rule out of a hand-edited file, or one whose expression was
+    rewritten somewhere the target was not read again.
+    """
+    match = re.fullmatch(r"Heizung (?P<n1>\d+)", "Heizung 12345678")
+
+    with caplog.at_level(logging.WARNING):
+        assert fill_placeholders("Heizung {2}", match) is None
+
+    assert "{2}" in caplog.text
+    assert "does not have" in caplog.text
+
+
+def test_an_empty_capture_is_said_out_loud_as_well(rules, caplog):
+    """And not as the same mistake: this rule applies to other names."""
+    rule = rules.add_filter("pattern", r"Zone\ (?P<n1>\d*)", "de", "Zimmer {1}", {"integration": INTEGRATION})
+
+    with caplog.at_level(logging.INFO):
+        assert rules.render(rule, "Zone ", "de") == ""
+
+    assert "caught nothing" in caplog.text
+    assert "Zone " in caplog.text
+
+
+# ---------------------------------------------- filled once, not twice
+
+
+def test_the_target_is_filled_once_for_a_name(rules, monkeypatch):
+    """Every pattern rule is tried against every supplied name, and the one that
+    wins is then asked to render the same name again."""
+    rule = _pattern_rule(rules)
+    calls = []
+    original = naming_rules.fill_placeholders
+
+    def counted(target, match):
+        calls.append(target)
+        return original(target, match)
+
+    monkeypatch.setattr(naming_rules, "fill_placeholders", counted)
+
+    found = rules.find("pattern", "Heizung 12345678", INTEGRATION, "de")
+    assert found["id"] == rule["id"]
+    assert rules.render(found, "Heizung 12345678", "de") == "Heizkostenverteiler 12345678"
+    assert len(calls) == 1
+
+    # Another name is worked out again rather than answered with this one's.
+    assert rules.render(found, "Heizung 87654321", "de") == "Heizkostenverteiler 87654321"
+    assert len(calls) == 2
+
+
+def test_a_rewritten_target_is_filled_again(rules):
+    """What was worked out for a name belongs to the rule as it was then."""
+    rule = _pattern_rule(rules)
+    assert rules.render(rules.find("pattern", "Heizung 12345678", INTEGRATION, "de"), "Heizung 12345678", "de") == (
+        "Heizkostenverteiler 12345678"
+    )
+
+    rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+    assert rules.render(rules.find("pattern", "Heizung 12345678", INTEGRATION, "de"), "Heizung 12345678", "de") == (
+        "Heizkosten 12345678"
+    )

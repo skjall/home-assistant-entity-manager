@@ -622,6 +622,12 @@ class EntityRestructurer:
                 # there are devices; a pattern answers for all of them.
                 rule = rules.find("pattern", name, integration, language, model, domain)
                 if rule:
+                    # Narrower, like every anchor but the domain: a pattern the
+                    # user wrote about these names says which entities this one
+                    # is about, and the domain rule stands back where it does -
+                    # including where the pattern renames the entity to what it
+                    # is already called and the value is dropped below.
+                    narrower = True
                     candidates.append(
                         {
                             "value": rules.render(rule, name, language),

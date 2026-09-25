@@ -208,7 +208,8 @@
     "core_starting": "Home Assistant startet gerade. Sobald es antwortet, geht es weiter.",
     "rules_saved": "Regeln gespeichert",
     "nothing_to_apply": "Nichts zu übernehmen",
-    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm"
+    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm",
+    "area_move_failed": "Das Gerät ist nicht umgezogen, also wurde nichts umbenannt"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",

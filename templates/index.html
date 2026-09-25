@@ -6862,6 +6862,14 @@
                             // device: left as they were, a rename run from the
                             // list would have written every one of them.
                             this.computePreviewsFor(this.entitiesOfDevice(deviceId));
+                            // What the failed write means for what was asked
+                            // for: the area says what the name is, so a rename
+                            // that went ahead would have written a name about an
+                            // area the device is not in. The write itself said
+                            // it had failed; only this says the rename did not
+                            // run, and the button was clicked again with the
+                            // preview still showing the new names.
+                            this.showMessage(this.t('messages.area_move_failed'), 'error');
                             return;
                         }
                         moved = true;

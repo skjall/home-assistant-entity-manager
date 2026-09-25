@@ -168,7 +168,14 @@ def target_of(typed: str, numbers: List[str]) -> str:
 
 # The syntax that opens a group: a plain "(", or one of the extensions whose
 # question mark says what kind of group it is rather than repeating anything.
-_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|P=\w+|<[=!]|[:=!>#])")
+_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|<[=!]|[:=!>])")
+
+# What looks like a group and is not one: a backreference to a group named
+# earlier, and a comment. Read as openers, they put a depth on the stack that
+# their own ")" then took off again, and the quantifier after that ")" was
+# weighed against the wrong group: "((?P=n1)+)+" was refused for repeating
+# something that repeats, while the group that repeats is the outer one.
+_GROUP_LOOKALIKE = re.compile(r"\(\?(?:P=\w+|#[^)]*)\)")
 
 # A counted quantifier: "{4}", "{1,3}", or the open-ended "{2,}".
 _COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
@@ -197,6 +204,17 @@ def _refuse_runaway(regex: str) -> None:
         char = regex[at]
         if char == "\\":
             at += 2
+            continue
+        lookalike = _GROUP_LOOKALIKE.match(regex, at)
+        if lookalike and not in_class:
+            # A backreference is one thing, like a character: a quantifier after
+            # it repeats it, which is weighed at the depth it sits in. A
+            # backreference to a group that caught nothing can be repeated for
+            # ever, and that is the group's doing - "(?P<n1>\\d*)" is refused
+            # where the target needs what it caught.
+            at = lookalike.end()
+            if regex[at : at + 1] in {"*", "+", "?", "{"}:
+                repeats[-1] = True
             continue
         opening = _GROUP_OPEN.match(regex, at)
         if opening and not in_class:
@@ -282,14 +300,36 @@ def fill_placeholders(target: str, match: "re.Match[str]") -> Optional[str]:
     "Zone (?P<n1>\\d*)" matches "Zone" with no number at all, and the target
     then came out as the text around a hole. The rule does not apply to such a
     name rather than renaming it to half of what it says.
+
+    Which of the two happened is said in the log. Both came out as the same
+    silence - the rule simply never applied - and the two are not the same
+    mistake: a placeholder naming a group the expression does not have is a
+    rule that can never apply to anything, an empty capture is one that does
+    not apply to this name.
     """
     missing = False
 
     def value(found: "re.Match[str]") -> str:
         nonlocal missing
-        got = _group(match, found.group(1))
+        key = found.group(1)
+        got = _group(match, key)
+        if got is None:
+            missing = True
+            logger.warning(
+                "Target %r asks for {%s}, which the expression %r does not have; the rule cannot apply",
+                target,
+                key,
+                match.re.pattern,
+            )
+            return ""
         if not got:
             missing = True
+            logger.info(
+                "Expression %r caught nothing for {%s} in %r; the rule does not apply to this name",
+                match.re.pattern,
+                key,
+                match.string,
+            )
             return ""
         return got
 
@@ -419,6 +459,9 @@ class NamingRules:
         self._by_entity = None
         self._patterns: Optional[List[Tuple[Dict[str, Any], "re.Pattern[str]"]]] = None
         self._patterns_keyed: Optional[Dict[str, "re.Pattern[str]"]] = None
+        # The name the filled targets below belong to, and those targets by rule.
+        self._filled_for: Optional[Tuple[str, str]] = None
+        self._filled_by_rule: Dict[str, Optional[str]] = {}
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -488,6 +531,9 @@ class NamingRules:
         self._by_entity = None
         self._patterns = None
         self._patterns_keyed = None
+        # A rewritten target is filled again rather than answered from here.
+        self._filled_for = None
+        self._filled_by_rule = {}
 
     @guarded
     def save(self) -> None:
@@ -1011,6 +1057,29 @@ class NamingRules:
             self._patterns_keyed = {rule["id"]: pattern for rule, pattern in self._pattern_rules()}
         return self._patterns_keyed
 
+    def _filled(self, rule: Mapping[str, Any], name: str, language: str, match: "re.Match[str]") -> Optional[str]:
+        """The target with this name's numbers in it, worked out once per name.
+
+        Every pattern rule is tried against every supplied name, and the one
+        that wins is then asked to render the same name again - a home with
+        forty pattern rules filled the target twice for each of them. Kept for
+        the name being asked about and no longer: a resolution asks about one
+        name at a time, and the next name drops what was worked out for this
+        one.
+        """
+        for_name = (name, language)
+        if self._filled_for != for_name:
+            self._filled_for = for_name
+            self._filled_by_rule = {}
+        rule_id = rule.get("id") or ""
+        if not rule_id:
+            # A rule being tried out and not stored yet has no id to be told
+            # apart by, and two of them would have read each other's target.
+            return fill_placeholders(rule["targets"][language], match)
+        if rule_id not in self._filled_by_rule:
+            self._filled_by_rule[rule_id] = fill_placeholders(rule["targets"][language], match)
+        return self._filled_by_rule[rule_id]
+
     def _find_pattern(
         self,
         name: str,
@@ -1038,7 +1107,7 @@ class NamingRules:
             # Matching is not enough: a placeholder the name has nothing for
             # leaves the target with a hole in it, and the rule then renamed
             # the entity to its own template, "{1}" and all.
-            if not match or fill_placeholders(rule["targets"][language], match) is None:
+            if not match or self._filled(rule, name, language, match) is None:
                 continue
             found.append((filter_rank(one), rule))
         if not found:
@@ -1079,7 +1148,9 @@ class NamingRules:
         match = pattern.fullmatch(name or "")
         if not match:
             return unfilled
-        filled = fill_placeholders(target, match)
+        # Out of what the lookup already worked out for this name, where it was
+        # the lookup that got here.
+        filled = self._filled(rule, name or "", language, match) if rule["targets"].get(language) else None
         # Nothing rather than the template: the target with its placeholders
         # still in it is not a name, and it was written to Home Assistant as
         # one.
