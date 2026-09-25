@@ -2637,16 +2637,16 @@
                                             <span class="scope-label" x-text="t('entity.scope_label', {name: typeOriginal(entity)})"></span>
                                             <div class="scope-group" role="group">
                                                 <button type="button" class="scope-option"
-                                                        :class="entity._ruleScope === 'all' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'all'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'all' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'all'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_all_hint', {count: entity.type_count || 1})">
                                                     <span x-text="t('entity.scope_everywhere')"></span>
                                                     <span class="scope-count" x-text="entity.type_count || 1"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.platform && entity.type_integration_count"
-                                                        :class="entity._ruleScope === 'integration' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'integration'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'integration' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'integration'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_integration_hint', {integration: entity.platform, count: entity.type_integration_count || 0})">
                                                     <span x-text="entity.platform"></span>
                                                     <span class="scope-count" x-text="entity.type_integration_count || 0"></span>
@@ -2672,8 +2672,8 @@
                                                 </button>
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.device_model && entity.type_model_count"
-                                                        :class="entity._ruleScope === 'model' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'model'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'model' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'model'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_model_hint', {model: entity.device_model, count: entity.type_model_count || 0})">
                                                     <span class="scope-model" x-text="entity.device_model"></span>
                                                     <span class="scope-count" x-text="entity.type_model_count || 0"></span>
@@ -2682,18 +2682,49 @@
                                                      and what it sets; the domain is what tells them apart. -->
                                                 <button type="button" class="scope-option"
                                                         x-show="entity.device_model && entity.type_model_domain_count"
-                                                        :class="entity._ruleScope === 'domain' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'domain'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'domain' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'domain'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_domain_hint', {domain: entityDomain(entity), model: entity.device_model, integration: entity.platform, count: entity.type_model_domain_count || 0})">
                                                     <span x-text="entityDomain(entity)"></span>
                                                     <span class="scope-model" x-text="entity.device_model"></span>
                                                     <span class="scope-count" x-text="entity.type_model_domain_count || 0"></span>
                                                 </button>
                                                 <button type="button" class="scope-option"
-                                                        :class="entity._ruleScope === 'here' ? 'is-active' : ''"
-                                                        @click="entity._ruleScope = 'here'"
+                                                        :class="!entity._ruleAnchor && entity._ruleScope === 'here' ? 'is-active' : ''"
+                                                        @click="entity._ruleScope = 'here'; entity._ruleAnchor = null"
                                                         :title="t('entity.scope_here_hint')">
                                                     <span x-text="t('entity.scope_here')"></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <!-- The other axis: not where the rule
+                                             applies but what it recognises an
+                                             entity by. UniFi names every device
+                                             tracker after the client it found,
+                                             so no two share a name, a key or a
+                                             class - only the domain. The count
+                                             says how far that reaches, which is
+                                             what makes it safe to offer. -->
+                                        <div class="scope-bar"
+                                             x-show="typeEdited(entity)
+                                                     && (entity.domain_count > 1 || entity._ruleAnchor === 'domain')">
+                                            <span class="scope-label"
+                                                  x-text="t('entity.anchor_label', {domain: entityDomain(entity)})"></span>
+                                            <div class="scope-group" role="group">
+                                                <button type="button" class="scope-option"
+                                                        :class="entity._ruleAnchor === 'domain' && entity._ruleScope === 'all' ? 'is-active' : ''"
+                                                        @click="entity._ruleAnchor = 'domain'; entity._ruleScope = 'all'"
+                                                        :title="t('entity.anchor_domain_all_hint', {domain: entityDomain(entity), count: entity.domain_count || 0})">
+                                                    <span x-text="t('entity.scope_everywhere')"></span>
+                                                    <span class="scope-count" x-text="entity.domain_count || 0"></span>
+                                                </button>
+                                                <button type="button" class="scope-option"
+                                                        x-show="entity.platform && entity.domain_integration_count"
+                                                        :class="entity._ruleAnchor === 'domain' && entity._ruleScope === 'integration' ? 'is-active' : ''"
+                                                        @click="entity._ruleAnchor = 'domain'; entity._ruleScope = 'integration'"
+                                                        :title="t('entity.anchor_domain_integration_hint', {domain: entityDomain(entity), integration: entity.platform, count: entity.domain_integration_count || 0})">
+                                                    <span x-text="entity.platform"></span>
+                                                    <span class="scope-count" x-text="entity.domain_integration_count || 0"></span>
                                                 </button>
                                             </div>
                                         </div>
@@ -4657,8 +4688,8 @@
                 // A read must leave these alone.
                 THEIRS_NOT_OURS: [
                     'selected', '_editing', '_remember', '_applying', '_expanded',
-                    '_currentSuffix', '_ruleScope', '_justRenamed', '_previewName',
-                    '_previewId',
+                    '_currentSuffix', '_ruleScope', '_ruleAnchor', '_justRenamed',
+                    '_previewName', '_previewId',
                 ],
 
                 // Write onto `mine` only the fields that actually differ, and say
@@ -6340,14 +6371,59 @@
 
                 // How far the rule that names this entity reaches, as one of the
                 // scope buttons - or null where no rule of the user's does.
-                scopeThatApplied(entity) {
+                // Which anchor the rule in force is written on, where that is
+                // not the usual one. A rule keyed on the domain is offered by
+                // its own row of buttons, and a form that opened without this
+                // sent no anchor at all: the correction then made a name rule
+                // for this one entity instead of changing the domain rule that
+                // named it.
+                anchorThatApplied(entity) {
+                    const applies = this.ruleInForce(entity);
+                    return applies && (applies.matched_on || {}).kind === 'domain' ? 'domain' : null;
+                },
+
+                // The rule of the user's that applies to this entity, whether or
+                // not the name came from it: one whose word is already the shown
+                // spelling has no effect on the name and still applies. Read off
+                // the source alone, the form opened as though no rule were in
+                // force and the correction made a second one beside it.
+                ruleInForce(entity) {
                     const resolution = entity?.resolution;
-                    if (!resolution || resolution.won_by !== 'rule:user' || !resolution.rule_id) return null;
-                    const match = resolution.matched_on;
+                    if (!resolution) return null;
+                    // One shape either way: handing back the whole resolution in
+                    // the one case and two of its fields in the other had a
+                    // reader of any other field answered with nothing, and only
+                    // sometimes.
+                    if (resolution.won_by === 'rule:user' && resolution.rule_id) {
+                        return {rule_id: resolution.rule_id, matched_on: resolution.matched_on};
+                    }
+                    const applies = resolution.applies;
+                    return applies && applies.rule_id
+                        ? {rule_id: applies.rule_id, matched_on: applies.matched_on}
+                        : null;
+                },
+
+                scopeThatApplied(entity) {
+                    const applies = this.ruleInForce(entity);
+                    if (!applies) return null;
+                    const match = applies.matched_on;
                     if (!match) return null;
-                    const named = (match.filters || []).some(one => one.registry_id === entity.registry_id);
+                    // What caught this entity, not everything the rule holds: a
+                    // rule naming one entity and one integration caught another
+                    // entity through the integration, and the form then offered
+                    // "this entity only" for a rule reaching every entity of that
+                    // integration. Caught by a filter of any kind, it was not
+                    // caught by name.
+                    const caught = !!(match.integration || match.model || match.domain);
+                    const named = !caught
+                        && (match.filters || []).some(one => one.registry_id === entity.registry_id);
                     if (named) return 'here';
                     if (match.kind === 'pattern') return 'pattern';
+                    // The narrowest reach first: a rule of the domain scope
+                    // carries the model as well, so read model-first the row lit
+                    // the model button beside a rule that has the domain in it -
+                    // and saving from there wrote a model-only rule over it.
+                    if (match.domain) return 'domain';
                     if (match.model) return 'model';
                     if (match.integration) return 'integration';
                     return 'all';
@@ -6356,7 +6432,32 @@
                 // Toggle entity expand state
                 toggleEntityExpand(entity) {
                     entity._expanded = !entity._expanded;
-                    if (entity._expanded && entity._ruleScope === undefined) {
+                    if (entity._expanded) {
+                        // Read again every time the row opens, and both of them
+                        // together: the rule in force may have been deleted or
+                        // rewritten since the row was last open, and the anchor
+                        // kept from then had the save write a second rule of the
+                        // kind that had just been removed.
+                        //
+                        // The anchor alone was not enough. Read again while the
+                        // reach was kept, the row came back saying "domain" with
+                        // a reach only a narrower rule can have: no button was
+                        // lit, and the save was refused for a combination the
+                        // buttons cannot make. A row reopened starts where the
+                        // rules are.
+                        entity._ruleScope = undefined;
+                        // The anchor with it: kept while the reach was read
+                        // again, a row whose domain rule had been deleted came
+                        // back with the domain button lit beside a reach worked
+                        // out for a rule that is not there, and the save wrote
+                        // a new domain rule nobody had asked for. It is set
+                        // below, out of whatever rule is in force now.
+                        entity._ruleAnchor = null;
+                    }
+                    // Not "where nothing is set": the reset above has just
+                    // unset it, so asking again could only get the answer written
+                    // two lines up. A row reopened starts where the rules are.
+                    if (entity._expanded) {
                         // Where a rule already names this entity, its own reach is the
                         // answer: changing the word is a change to that rule, and
                         // offering a wider reach than the one in force would quietly
@@ -6364,6 +6465,10 @@
                         const already = this.scopeThatApplied(entity);
                         if (already) {
                             entity._ruleScope = already;
+                            // And on what the rule is keyed, or the correction
+                            // would be sent without it and make a rule of
+                            // another kind beside the one already in force.
+                            entity._ruleAnchor = this.anchorThatApplied(entity);
                         } else {
                             // A type that several integrations supply means different things
                             // per integration ("Tür" is a contact sensor here, a fridge there),
@@ -6649,12 +6754,18 @@
                             // names the server computed for them: those are
                             // about the area the device has left.
                             //
-                            // The same value the device holds: an empty pick is
-                            // no area, and "" beside the device's null read as
-                            // two different answers to the same question.
+                            // The names only: an entity's own area is not the
+                            // device's to write. An entity that follows its device
+                            // carries none - that is what following is - and the
+                            // names below read the device's where it does, so the
+                            // rows move with it either way. Written through, an
+                            // entity pinned to another area was shown in the one
+                            // the device went to and named for it, while Home
+                            // Assistant had left it where it was; and every
+                            // follower was given an area of its own, which read
+                            // as an entity that had stopped following.
                             const mine = indexed(this).byDevice.get(deviceId) || none;
                             mine.forEach(e => {
-                                e.area_id = areaId || null;
                                 e.suggested_name = null;
                                 e.suggested_entity_id = null;
                             });
@@ -7449,7 +7560,11 @@
                             body: JSON.stringify({
                                 entity_id: entity.id,
                                 value: typed,
-                                scope: entity._ruleScope || 'global'
+                                scope: entity._ruleScope || 'global',
+                                // What the rule recognises an entity by, where
+                                // that is not the name, key or class it would
+                                // take by itself.
+                                ...(entity._ruleAnchor ? {anchor: entity._ruleAnchor} : {})
                             })
                         });
                         const learned = await learn.json();

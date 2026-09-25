@@ -9,7 +9,7 @@ than an HTTP request.
 import asyncio
 import logging
 import random
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Tuple
 
 from flask import Blueprint, jsonify, request
 
@@ -430,7 +430,45 @@ def type_key_model_domain_counts(restructurer) -> dict:
     return counts
 
 
-def _rule_key_for(entity: dict) -> tuple:
+def domain_reach(restructurer) -> Tuple[dict, dict]:
+    """Entities per domain, and per domain and integration, out of one walk.
+
+    Both are asked for together on every load, and each of them walked the whole
+    entity list for itself.
+
+    A rule anchored on the domain says nothing about what an entity measures,
+    so its reach is every entity of that kind. The count is what makes that
+    visible before it is saved.
+
+    Every entity of the domain, including those no integration declares. Those
+    have no integration to narrow a rule to, so this count is larger than the
+    integration counts below add up to - the difference is what only a rule
+    reaching the whole domain can name.
+
+    Entities a narrower rule already names are counted too: the number says how
+    far the domain reaches, which is what makes the offer safe to judge, and not
+    how many names would change. Asking that for every entity of every domain
+    means resolving every name a second time on every load, which is the cost
+    this add-on has spent two releases getting rid of.
+
+    An entity whose integration Home Assistant does not report is in the first
+    count and in none of the second: there is no integration to narrow a rule
+    to, which is why the two do not add up.
+    """
+    by_domain: dict = {}
+    by_integration: dict = {}
+    for entity_id, entity_data in restructurer.entities.items():
+        domain = entity_id.partition(".")[0]
+        if not domain:
+            continue
+        by_domain[domain] = by_domain.get(domain, 0) + 1
+        integration = entity_data.get("platform")
+        if integration:
+            by_integration[(domain, integration)] = by_integration.get((domain, integration), 0) + 1
+    return by_domain, by_integration
+
+
+def _rule_key_for(entity: dict, entity_id: str = "", anchor: str = "") -> tuple:
     """What a rule learned from this entity should match on.
 
     An integration that declares a translation key is the surest anchor. Where
@@ -438,7 +476,16 @@ def _rule_key_for(entity: dict) -> tuple:
     alone: integrations without native entity names write the device into it,
     as in "Tomate air humidity", and no two of those names are alike. Their
     device class says what the entity measures and holds for all of them.
+
+    ``anchor="domain"`` asks for the last resort instead of any of those: the
+    domain itself. It is for entities whose supplied name is not a type at all
+    and which carry neither a key nor a class - UniFi's device trackers are
+    named after the clients they found, so fourteen of them share nothing but
+    being device trackers. It is never chosen on its own, because it reaches
+    everything of that domain rather than one type within it.
     """
+    if anchor == "domain":
+        return "domain", entity_id.partition(".")[0]
     if entity.get("translation_key"):
         return "translation_key", entity["translation_key"]
     device_class = entity.get("device_class") or entity.get("original_device_class")
@@ -532,13 +579,34 @@ def _rule_affected_counts(restructurer, rules):
     return counts
 
 
+def _not_a_word(rule: Mapping[str, Any]) -> bool:
+    """Whether what this rule matches on is something the system's table cannot answer for.
+
+    An expression is not a word: held against that table it answers nothing
+    today, and would answer wrongly the moment a key there happened to read like
+    one. A domain is not a type either - asked about "device_tracker", the lookup
+    can answer with an entity type of that name from some integration, and the
+    rule was then reported as saying no more than a built-in and listed among the
+    unused ones while it was renaming entities.
+
+    Asked in one place, because two readings of it drifted: one of them counted
+    domain rules as used and the other looked their wording up anyway.
+    """
+    return rule["match"]["kind"] in VERBATIM_KINDS or rule["match"]["kind"] == "domain"
+
+
 def _rule_builtins(rules) -> dict:
     """The built-in name each rule competes with, by rule id."""
     mappings = renamer_state["type_mappings"]
     language = rules.language
     builtins = {}
     for rule in rules.rules:
-        if rule["match"]["kind"] in VERBATIM_KINDS:
+        # A domain is not a type either: asked about "device_tracker", the
+        # lookup can answer with an entity type of that name from some
+        # integration, and the rule was then reported as saying no more than a
+        # built-in and listed among the unused ones while it was renaming
+        # entities.
+        if _not_a_word(rule):
             # An expression is not a word: held against the system's table it
             # answers nothing today, and would answer wrongly the moment a key
             # there happened to read like one.
@@ -568,7 +636,8 @@ def _rule_payload(rule: dict, affected: dict, entity_ids: Optional[dict] = None)
     mappings = renamer_state["type_mappings"]
     language = rules.language
     builtin = None
-    if rule["match"]["kind"] not in VERBATIM_KINDS:
+    # An expression and a domain are not words; see _rule_builtins.
+    if not _not_a_word(rule):
         builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
     return {
         **rule,
@@ -948,7 +1017,19 @@ def naming_learn():
         return jsonify({"error": "unknown entity"}), 404
     if not value:
         return jsonify({"error": "value required"}), 400
-    kind, key = _rule_key_for(entity)
+    anchor = sanitize_string(data.get("anchor") or "")
+    if anchor and anchor != "domain":
+        return jsonify({"error": "unknown anchor"}), 400
+    # A domain rule is about a kind of entity, not about one model of device, so
+    # the scopes it can be given are everywhere and one integration. Accepted,
+    # the rule came back to a form that could not show it: neither row of
+    # buttons had one to light up, and the next save wrote the same state again.
+    if anchor == "domain" and scope not in ("global", "all", "integration"):
+        # Including the pattern scope, which writes an anchor of its own below:
+        # accepted, the call came back with a pattern rule while the caller had
+        # asked for a domain rule, and nothing said the anchor was dropped.
+        return jsonify({"error": "A domain rule applies everywhere or within one integration"}), 400
+    kind, key = _rule_key_for(entity, entity_id, anchor)
     platform = entity.get("platform") or ""
     if scope == "pattern":
         # The supplied name with its numbers left open, and the typed name
@@ -964,6 +1045,12 @@ def naming_learn():
         value = target_of(value, learned[1])
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
+    # Home Assistant does not say which integration supplies this entity, so
+    # there is nothing to narrow the rule to. Said here: passed on, it came back
+    # as "a filter that says nothing is the rule without filters", which is
+    # about the plumbing and not about what was asked for.
+    if scope == "integration" and not entity.get("platform"):
+        return jsonify({"error": "This entity reports no integration to narrow the rule to"}), 400
     # Where the correction should apply, as the one filter it is. "Everywhere"
     # is no filter at all, and each step below it narrows the one above:
     # this integration, this model, this model's entities of one domain - an

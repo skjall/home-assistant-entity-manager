@@ -43,11 +43,13 @@ one filter.
 from copy import deepcopy
 from datetime import datetime, timezone
 from functools import lru_cache
+from itertools import count
 import json
 import logging
 from pathlib import Path
 import re
 import shutil
+import threading
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 import uuid
 
@@ -57,11 +59,23 @@ from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
 
 logger = logging.getLogger(__name__)
 
+# "Nothing was worked out for this" - told apart from "it came out as nothing",
+# which is an answer and a cached one.
+_UNASKED = object()
+
 SCHEMA_VERSION = 2
-KINDS = ("translation_key", "name", "pattern", "device_class")
+KINDS = ("translation_key", "name", "pattern", "device_class", "domain")
 # Lookup order: the most specific identity first. A pattern is less specific
 # than the exact name it would also match, so a rule for that name wins.
-KIND_PRIORITY = {"translation_key": 0, "name": 1, "pattern": 2, "device_class": 3}
+#
+# The domain is the last of them, and the only one that says nothing about what
+# an entity measures - just what kind of thing it is. It is there for entities
+# whose supplied name is not a type at all: UniFi names each of its device
+# trackers after the client it found, so fourteen of them carry fourteen
+# different names, no translation key and no device class. There is no anchor
+# they share except being device trackers, and without this there is no rule
+# that can reach more than one of them.
+KIND_PRIORITY = {"translation_key": 0, "name": 1, "pattern": 2, "device_class": 3, "domain": 4}
 
 # Kinds whose value is kept as written rather than in canonical form: a
 # translation key is an identifier, and a pattern is matched against the name
@@ -121,11 +135,13 @@ def rule_key(kind: str, value: str) -> str:
     return value if kind in VERBATIM_KINDS else canon(value)
 
 
-def pattern_of(example: str) -> Optional[Tuple[str, List[str]]]:
-    """The pattern a supplied name makes with its numbers left open, and the numbers.
+@lru_cache(maxsize=4096)
+def _pattern_and_numbers(example: str) -> Optional[Tuple[str, Tuple[str, ...]]]:
+    """The work of ``pattern_of``, kept for a name already read.
 
-    None where the name carries no number: without one there is nothing to
-    leave open, and the exact rule already says everything.
+    Two counts ask about the same name on one load - how far a pattern scope
+    would reach, and what it would be called - and each of them escaped and
+    scanned it for itself.
     """
     numbers = _NUMBER.findall(example or "")
     if not numbers:
@@ -135,7 +151,19 @@ def pattern_of(example: str) -> Optional[Tuple[str, List[str]]]:
         re.escape(part) + (rf"(?P<n{index + 1}>\d+)" if index < len(numbers) else "")
         for index, part in enumerate(parts)
     )
-    return regex, numbers
+    return regex, tuple(numbers)
+
+
+def pattern_of(example: str) -> Optional[Tuple[str, List[str]]]:
+    """The pattern a supplied name makes with its numbers left open, and the numbers.
+
+    None where the name carries no number: without one there is nothing to
+    leave open, and the exact rule already says everything.
+    """
+    # A list of its own for every caller: what is kept above is shared, and a
+    # caller that wrote into it would have handed the next one its own numbers.
+    read = _pattern_and_numbers(example or "")
+    return None if read is None else (read[0], list(read[1]))
 
 
 def readable_pattern(regex: str) -> str:
@@ -185,7 +213,20 @@ def target_of(typed: str, numbers: List[str]) -> str:
 
 # The syntax that opens a group: a plain "(", or one of the extensions whose
 # question mark says what kind of group it is rather than repeating anything.
-_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|P=\w+|<[=!]|[:=!>#])")
+# "(?i:...)" and its kin open a group too: the letters are flags for what is
+# inside it. Read as a plain group, the question mark after the bracket was taken
+# for a quantifier and the group was refused one of its own.
+_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|<[=!]|[aiLmsux]*(?:-[aiLmsux]+)?[:=!>])")
+
+# What looks like a group and is not one: a backreference to a group named
+# earlier, and a comment. Read as openers, they put a depth on the stack that
+# their own ")" then took off again, and the quantifier after that ")" was
+# weighed against the wrong group: "((?P=n1)+)+" was refused for repeating
+# something that repeats, while the group that repeats is the outer one.
+# A comment ends at the first ")" for Python too - "(?#a (b))" is an
+# unbalanced parenthesis to it, not a comment holding one - so reading it that
+# way here is reading it as the expression will be read.
+_GROUP_LOOKALIKE = re.compile(r"\(\?(?:P=\w+|#[^)]*)\)")
 
 # A counted quantifier: "{4}", "{1,3}", or the open-ended "{2,}".
 _COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
@@ -232,6 +273,15 @@ def _refuse_runaway(regex: str) -> None:
     digits it left open and nothing else.
     """
     quantifiers = {"*", "+", "?", "{"}
+    # Which group at each depth is a lookaround: "(?=", "(?!", "(?<=", "(?<!".
+    # Those match no text at all, so what repeats inside one cannot be walked
+    # again by a quantifier on the group around it - read as an ordinary group,
+    # "((?=\\d+)\\w)+" was refused for a repetition that costs nothing.
+    zero_width = [False]
+    # Whether the group at each depth reads any text at all. One that reads none -
+    # "((?=\\d+))+", or a group with nothing in it - is nothing to repeat, and
+    # repeating it is a question nobody meant to ask.
+    reads_text = [False]
     repeats = [False]  # whether the group at each depth already repeats
     choices = [False]  # whether the group at each depth holds a choice
     # How many ways the group at each depth can read one stretch of text. One
@@ -244,7 +294,31 @@ def _refuse_runaway(regex: str) -> None:
     while at < len(regex):
         char = regex[at]
         if char == "\\":
+            # An escaped character is a character: "\\d" reads a digit.
+            reads_text[-1] = True
             at += 2
+            continue
+        lookalike = _GROUP_LOOKALIKE.match(regex, at)
+        if lookalike and not in_class:
+            # A backreference is one thing, like a character: a quantifier after
+            # it repeats it, which is weighed at the depth it sits in. A
+            # backreference to a group that caught nothing can be repeated for
+            # ever, and that is the group's doing - "(?P<n1>\\d*)" is refused
+            # where the target needs what it caught.
+            # Stepped over, and what follows it left to the walk below: a
+            # quantifier after a backreference is a quantifier like any other,
+            # and that walk already reads all four of them the same way -
+            # "((?P=n1){2})+" repeats the backreference twice and finishes, an
+            # open end repeats without one, and a brace that counts nothing is
+            # the literal it looks like. Weighed here as well, every one of them
+            # was read twice and the second reading only happened to agree.
+            #
+            # A backreference reads text - whatever the group caught - which a
+            # comment does not: read as reading none, a group holding one was
+            # refused a quantifier for standing still.
+            if lookalike.group(0).startswith("(?P="):
+                reads_text[-1] = True
+            at = lookalike.end()
             continue
         opening = _GROUP_OPEN.match(regex, at)
         if opening and not in_class:
@@ -253,6 +327,8 @@ def _refuse_runaway(regex: str) -> None:
             repeats.append(False)
             choices.append(False)
             ways.append(1)
+            reads_text.append(False)
+            zero_width.append(opening.group(0)[:3] in {"(?=", "(?!", "(?<"})
             at = opening.end()
             continue
         if in_class:
@@ -263,10 +339,13 @@ def _refuse_runaway(regex: str) -> None:
             continue
         if char == "[":
             in_class = True
+            reads_text[-1] = True
         elif char == "(":
             repeats.append(False)
             choices.append(False)
             ways.append(1)
+            reads_text.append(False)
+            zero_width.append(False)
         elif char == "|":
             choices[-1] = True
             # Counted, not noted: three alternatives counted four times read 81
@@ -277,6 +356,12 @@ def _refuse_runaway(regex: str) -> None:
             inside = repeats.pop() if len(repeats) > 1 else False
             branched = choices.pop() if len(choices) > 1 else False
             reads = ways.pop() if len(ways) > 1 else 1
+            nothing_wide = zero_width.pop() if len(zero_width) > 1 else False
+            read_text = reads_text.pop() if len(reads_text) > 1 else True
+            # A lookaround reads no text however much is written in it, and what
+            # it reads is not read by the group around it either.
+            if not nothing_wide:
+                reads_text[-1] = reads_text[-1] or read_text
             after = regex[at + 1 : at + 2]
             # A bounded count is no more a runaway than what it counts, as
             # long as what it counts finishes: "(\\d{4}){2,3}" reads eight to
@@ -286,12 +371,14 @@ def _refuse_runaway(regex: str) -> None:
             # bounded one on a group that repeats without bound inside:
             # "([\\w ]+){2,5}" can split a hundred characters across five
             # groups every way there is, and tries all of them on a name that
-            # nearly matches.
+            # nearly matches. "(\\d+){2,3}" is the same shape over fewer
+            # characters and is refused with it, rather than judged per
+            # expression about which polynomial is small enough.
             #
             # A choice is counted too, and how far: the ways to read one grow
             # with the count, so "(on|one){1,50}" tries a number of splits no
             # bound on the text can hold down, while "(open|closed){1,2}" is
-            # four. Up to MAX_CHOICE_REPEATS the whole set is small enough to
+            # four. Up to MAX_CHOICE_WAYS the whole set is small enough to
             # walk; past that it is refused like the rest.
             if after == "{":
                 counted = _COUNT.match(regex, at + 1)
@@ -311,6 +398,12 @@ def _refuse_runaway(regex: str) -> None:
                     reads = min(reads**times, MAX_CHOICE_WAYS + 1)
                     if not branched or reads <= MAX_CHOICE_WAYS:
                         after = ""
+            # A group that reads no text is nothing to repeat: "((?=\\d+))+" and
+            # "()+" ask for a group that stands still to be walked again, which
+            # Python stops after one turn and nobody meant to write. Refused
+            # rather than let through, so an expression says what it does.
+            if (nothing_wide or not read_text) and after in quantifiers and after != "?":
+                raise NamingRuleError("A pattern may not repeat what reads no text: there would be nothing to repeat")
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
             # A choice inside a repeated group is the other shape that runs
@@ -326,7 +419,10 @@ def _refuse_runaway(regex: str) -> None:
             #
             # "?" and "*" as well: "((ab)?)+" repeats a group that can match
             # nothing, and the inner group alone said nothing about that.
-            if inside or after in {"*", "+", "{", "?"}:
+            # A lookaround repeats no text, so it hands nothing up: what is
+            # inside it is walked once for a position rather than again for every
+            # way of cutting the text up.
+            if (inside and not nothing_wide) or after in {"*", "+", "{", "?"}:
                 repeats[-1] = True
             # A group holding a choice is one to the group around it, so
             # "((a|aa))+" is refused where "(a|aa)+" is - and it reads as far as
@@ -347,13 +443,17 @@ def _refuse_runaway(regex: str) -> None:
                 continue
             # And a brace that counts nothing is the literal it looks like, here
             # as above: marked as a repetition, the group it sits in was refused a
-            # quantifier it could have had.
+            # quantifier it could have had. A literal reads text.
+            reads_text[-1] = True
         elif char in {"*", "+", "?"}:
             # A question mark counts: "(Sensor ?)+" repeats a group that can
             # match nothing, which backtracks just as badly as "(a+)+". A
             # question mark on a group of its own is read at the ")" above and
             # is fine - "(ab)?c" finishes in time.
             repeats[-1] = True
+        else:
+            # Anything else is a character to read: a letter, a dot, a space.
+            reads_text[-1] = True
         at += 1
 
 
@@ -398,14 +498,40 @@ def fill_placeholders(target: str, match: "re.Match[str]") -> Optional[str]:
     "Zone (?P<n1>\\d*)" matches "Zone" with no number at all, and the target
     then came out as the text around a hole. The rule does not apply to such a
     name rather than renaming it to half of what it says.
+
+    Which of the two happened is said in the log. Both came out as the same
+    silence - the rule simply never applied - and the two are not the same
+    mistake: a placeholder naming a group the expression does not have is a
+    rule that can never apply to anything, an empty capture is one that does
+    not apply to this name.
     """
     missing = False
 
     def value(found: "re.Match[str]") -> str:
         nonlocal missing
-        got = _group(match, found.group(1))
+        key = found.group(1)
+        got = _group(match, key)
+        # A group the expression does not have at all, as against one that has
+        # it and caught nothing: "Zone (?P<n1>\\d+)?" against "Zone" answers None
+        # for a group it does have, and reading that as a missing group said the
+        # rule could never apply to anything.
+        if got is None and not _known_placeholder(match.re, key):
+            missing = True
+            logger.warning(
+                "Target %r asks for {%s}, which the expression %r does not have; the rule cannot apply",
+                target,
+                key,
+                match.re.pattern,
+            )
+            return ""
         if not got:
             missing = True
+            logger.info(
+                "Expression %r caught nothing for {%s} in %r; the rule does not apply to this name",
+                match.re.pattern,
+                key,
+                match.string,
+            )
             return ""
         return got
 
@@ -542,6 +668,13 @@ class NamingRules:
         self._by_entity = None
         self._patterns: Optional[List[Tuple[Dict[str, Any], "re.Pattern[str]"]]] = None
         self._patterns_keyed: Optional[Dict[str, "re.Pattern[str]"]] = None
+        # The name the filled targets belong to, and those targets by rule -
+        # per thread, because that is who asks. Two requests resolving at once
+        # took turns throwing each other's answers away, and did more work
+        # between them than either would have done alone.
+        self._filling = threading.local()
+        self._filling_generations = count(1)
+        self._filling_generation = next(self._filling_generations)
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -611,6 +744,19 @@ class NamingRules:
         self._by_entity = None
         self._patterns = None
         self._patterns_keyed = None
+        # A rewritten target is filled again rather than answered from here.
+        # Every thread's, which is what the generation is for: a thread that is
+        # in the middle of a name reads a rule that has just changed and works the
+        # target out again rather than answering from what it had. Counted rather
+        # than added to, so two changes at once move it on twice - read and
+        # written back, one of the two increments was lost and a thread went on
+        # answering from what it had.
+        #
+        # Two of these cannot cross: every way into this method holds the store's
+        # lock, the same one that keeps a rule from being rewritten while another
+        # write reads it. Without it the count would still hand out two numbers
+        # and the second write could leave the lower one standing.
+        self._filling_generation = next(self._filling_generations)
 
     @guarded
     def save(self) -> None:
@@ -843,6 +989,14 @@ class NamingRules:
             return False
         if builtin is not None and target == builtin:
             return True
+        # Only where the anchor is the word the entity supplies: there, a target
+        # that is that word as the display spells it changes nothing, which is
+        # what redundant means. A domain is not a name - "device_tracker" is what
+        # the entities are, not what they are called - so a domain rule reading
+        # "Device tracker" renames every one of them, and read as redundant here
+        # it was offered for deletion as a rule that does nothing.
+        if rule["match"]["kind"] == "domain":
+            return False
         key = rule["match"]["value"]
         return canon(target) == key and target == normalize_display(key.replace("_", " "), self.display_case)
 
@@ -1136,17 +1290,22 @@ class NamingRules:
 
     def _pattern_rules(self) -> List[Tuple[Dict[str, Any], "re.Pattern[str]"]]:
         """Pattern rules with their compiled expressions; one that no longer compiles is left out."""
-        if self._patterns is None:
-            compiled = []
-            for rule in self.rules:
-                if rule["match"]["kind"] != "pattern":
-                    continue
-                try:
-                    compiled.append((rule, compile_pattern(rule["match"]["value"])))
-                except NamingRuleError as error:
-                    logger.warning("Pattern rule %s is skipped: %s", rule["id"], error)
-            self._patterns = compiled
-        return self._patterns
+        # Under the lock that drops them: read, built and written back without
+        # it, a build begun before a rule changed could land after the build that
+        # followed it, leaving the expression of a rule that has been rewritten
+        # standing until something else forgets it.
+        with self._lock:
+            if self._patterns is None:
+                compiled = []
+                for rule in self.rules:
+                    if rule["match"]["kind"] != "pattern":
+                        continue
+                    try:
+                        compiled.append((rule, compile_pattern(rule["match"]["value"])))
+                    except NamingRuleError as error:
+                        logger.warning("Pattern rule %s is skipped: %s", rule["id"], error)
+                self._patterns = compiled
+            return self._patterns
 
     def _patterns_by_id(self) -> Dict[str, "re.Pattern[str]"]:
         """The same compiled expressions, by rule id.
@@ -1155,9 +1314,56 @@ class NamingRules:
         so a rewritten expression is compiled again rather than answered from
         here.
         """
-        if self._patterns_keyed is None:
-            self._patterns_keyed = {rule["id"]: pattern for rule, pattern in self._pattern_rules()}
-        return self._patterns_keyed
+        # Under the lock that drops it, for the reason ``_pattern_rules`` gives.
+        with self._lock:
+            if self._patterns_keyed is None:
+                self._patterns_keyed = {rule["id"]: pattern for rule, pattern in self._pattern_rules()}
+            return self._patterns_keyed
+
+    def _filled(self, rule: Mapping[str, Any], name: str, language: str, match: "re.Match[str]") -> Optional[str]:
+        """The target with this name's numbers in it, worked out once per name.
+
+        Every pattern rule is tried against every supplied name, and the one
+        that wins is then asked to render the same name again - a home with
+        forty pattern rules filled the target twice for each of them. Kept for
+        the name being asked about and no longer: a resolution asks about one
+        name at a time, and the next name drops what was worked out for this
+        one.
+        """
+        # The generation is read and not held: it is one attribute read, and a
+        # reading that comes from either side of a change can only say "this was
+        # worked out under another generation", which is answered by working it
+        # out again. Held here, every fill would wait on the lock that writes
+        # rules, and the answer would be the same.
+        for_name = (name, language, self._filling_generation)
+        if getattr(self._filling, "For", None) != for_name:
+            self._filling.For = for_name
+            self._filling.by_rule = {}
+        by_rule = self._filling.by_rule
+        rule_id = rule.get("id") or ""
+        if not rule_id:
+            # A rule being tried out and not stored yet has no id to be told
+            # apart by, and two of them would have read each other's target.
+            return fill_placeholders(rule["targets"][language], match)
+        if rule_id not in by_rule:
+            by_rule[rule_id] = fill_placeholders(rule["targets"][language], match)
+        return by_rule[rule_id]
+
+    def _filled_already(self, rule: Mapping[str, Any], name: str, language: str) -> Any:
+        """What ``_filled`` worked out for this rule and name, or ``_UNASKED``.
+
+        A peek and nothing more: it neither fills a target nor starts a new
+        generation, so a caller that only wants to avoid matching twice cannot
+        change what the next one is told.
+        """
+        if getattr(self._filling, "For", None) != (name, language, self._filling_generation):
+            return _UNASKED
+        rule_id = rule.get("id") or ""
+        if not rule_id:
+            # As ``_filled`` says: a rule not stored yet has no id to be told
+            # apart by, so nothing was kept for it.
+            return _UNASKED
+        return getattr(self._filling, "by_rule", {}).get(rule_id, _UNASKED)
 
     def _find_pattern(
         self,
@@ -1180,13 +1386,25 @@ class NamingRules:
             if not rule["targets"].get(language):
                 continue
             one = self.matching_filter(rule, integration, model, domain)
-            if not one:
+            # Empty says two things: a rule with no filters at all, which covers
+            # everything, and a rule whose filters do not cover this entity. Read
+            # as the second, a pattern rule written before an integration was
+            # asked for applied to nothing at all and said nothing about it.
+            # A filter with nothing in it is no filter: "[{}]" out of a backup or
+            # a file edited by hand says the same as "[]", and read as a filter
+            # that does not cover this entity the rule matched nothing at all.
+            # One such filter is enough, whatever stands beside it: a rule that
+            # says "everywhere" in one of its places says it for every entity,
+            # and weighed by the others it was skipped for the entities they do
+            # not name.
+            narrowing = rule.get("filters") or []
+            if not one and narrowing and all(narrowing):
                 continue
             match = pattern.fullmatch(name)
             # Matching is not enough: a placeholder the name has nothing for
             # leaves the target with a hole in it, and the rule then renamed
             # the entity to its own template, "{1}" and all.
-            if not match or fill_placeholders(rule["targets"][language], match) is None:
+            if not match or self._filled(rule, name, language, match) is None:
                 continue
             found.append((filter_rank(one), rule))
         if not found:
@@ -1220,21 +1438,33 @@ class NamingRules:
         # Nothing rather than the target: a target that still holds "{1}" is
         # not a name, and it was written to Home Assistant as one wherever the
         # expression could not be read or did not match.
+        # Out of what the lookup already worked out for this name, where it was
+        # the lookup that got here: the winning rule was matched once to find it
+        # and once more only to hand the match in, and the second answer was
+        # thrown away - two full matches per entity for every pattern rule that
+        # wins one. Nothing is stale here: a rule rewritten moves the generation
+        # on, and the answer kept under the old one is not found again.
+        already = self._filled_already(rule, name or "", language)
+        if already is not _UNASKED:
+            return already.strip() if already is not None else ""
+        # Below the answer that may make it unnecessary: this is asked once per
+        # entity per pattern rule, and on a cache hit the search was paid for and
+        # never read.
         unfilled = "" if _PLACEHOLDER.search(target) else target
         pattern = self._compiled_pattern(rule)
         if pattern is None:
             return unfilled
         match = pattern.fullmatch(name or "")
         if not match:
-            # Nothing, whatever the target says: a rule whose expression does not
-            # match this name says nothing about it. A target with no placeholder
-            # in it was handed back as a name, so a rule rewritten while a name was
-            # being worked out renamed the entity although it had stopped applying.
-            # Nothing and the target are told apart by every caller the same way -
-            # a name is what is truthy - so this says "no name" where it used to
-            # say the wrong one.
+            # Nothing, whatever the target says: an expression rewritten while
+            # this name was being worked out does not match it any more, and a
+            # rule that does not match says nothing about the name. A target with
+            # no placeholder in it was handed back as one, so the entity was
+            # renamed by a rule that had stopped applying to it. Nothing and a
+            # target are told apart by every caller the same way - a name is what
+            # is truthy - so this says "no name" where it used to say a wrong one.
             return ""
-        filled = fill_placeholders(target, match)
+        filled = self._filled(rule, name or "", language, match) if rule["targets"].get(language) else None
         # Nothing rather than the template: the target with its placeholders
         # still in it is not a name, and it was written to Home Assistant as
         # one.
