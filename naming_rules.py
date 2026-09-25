@@ -206,6 +206,9 @@ _GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|<[=!]|[:=!>])")
 # their own ")" then took off again, and the quantifier after that ")" was
 # weighed against the wrong group: "((?P=n1)+)+" was refused for repeating
 # something that repeats, while the group that repeats is the outer one.
+# A comment ends at the first ")" for Python too - "(?#a (b))" is an
+# unbalanced parenthesis to it, not a comment holding one - so reading it that
+# way here is reading it as the expression will be read.
 _GROUP_LOOKALIKE = re.compile(r"\(\?(?:P=\w+|#[^)]*)\)")
 
 # A counted quantifier: "{4}", "{1,3}", or the open-ended "{2,}".
@@ -243,28 +246,14 @@ def _refuse_runaway(regex: str) -> None:
             # backreference to a group that caught nothing can be repeated for
             # ever, and that is the group's doing - "(?P<n1>\\d*)" is refused
             # where the target needs what it caught.
+            # Stepped over, and what follows it left to the walk below: a
+            # quantifier after a backreference is a quantifier like any other,
+            # and that walk already reads all four of them the same way -
+            # "((?P=n1){2})+" repeats the backreference twice and finishes, an
+            # open end repeats without one, and a brace that counts nothing is
+            # the literal it looks like. Weighed here as well, every one of them
+            # was read twice and the second reading only happened to agree.
             at = lookalike.end()
-            after = regex[at : at + 1]
-            if after == "{":
-                # Bounded here as anywhere: "((?P=n1){2})+" repeats the
-                # backreference twice and finishes, and reading the count as an
-                # open repetition refused it. Read once either way: walked past
-                # here, the main loop matched the same count again.
-                counted = _COUNT.match(regex, at)
-                if counted:
-                    if not counted.group("open"):
-                        after = ""
-                    at = counted.end()
-                    if after:
-                        repeats[-1] = True
-                    continue
-                # A brace that is not a count is a brace: left to the walk that
-                # follows, which reads it as the literal it is. Marked as a
-                # repetition here, the group around it was refused a quantifier
-                # it could have had.
-                continue
-            if after in {"*", "+", "?"}:
-                repeats[-1] = True
             continue
         opening = _GROUP_OPEN.match(regex, at)
         if opening and not in_class:
@@ -630,6 +619,11 @@ class NamingRules:
         # than added to, so two changes at once move it on twice - read and
         # written back, one of the two increments was lost and a thread went on
         # answering from what it had.
+        #
+        # Two of these cannot cross: every way into this method holds the store's
+        # lock, the same one that keeps a rule from being rewritten while another
+        # write reads it. Without it the count would still hand out two numbers
+        # and the second write could leave the lower one standing.
         self._filling_generation = next(self._filling_generations)
 
     @guarded
@@ -1287,15 +1281,19 @@ class NamingRules:
         # Nothing rather than the target: a target that still holds "{1}" is
         # not a name, and it was written to Home Assistant as one wherever the
         # expression could not be read or did not match.
-        unfilled = "" if _PLACEHOLDER.search(target) else target
         # Out of what the lookup already worked out for this name, where it was
         # the lookup that got here: the winning rule was matched once to find it
         # and once more only to hand the match in, and the second answer was
         # thrown away - two full matches per entity for every pattern rule that
-        # wins one.
+        # wins one. Nothing is stale here: a rule rewritten moves the generation
+        # on, and the answer kept under the old one is not found again.
         already = self._filled_already(rule, name or "", language)
         if already is not _UNASKED:
             return already.strip() if already is not None else ""
+        # Below the answer that may make it unnecessary: this is asked once per
+        # entity per pattern rule, and on a cache hit the search was paid for and
+        # never read.
+        unfilled = "" if _PLACEHOLDER.search(target) else target
         pattern = self._compiled_pattern(rule)
         if pattern is None:
             return unfilled

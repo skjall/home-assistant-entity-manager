@@ -9,7 +9,7 @@ than an HTTP request.
 import asyncio
 import logging
 import random
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Tuple
 
 from flask import Blueprint, jsonify, request
 
@@ -430,8 +430,11 @@ def type_key_model_domain_counts(restructurer) -> dict:
     return counts
 
 
-def domain_counts(restructurer) -> dict:
-    """Entities per domain, for the anchor that reaches a whole domain.
+def domain_reach(restructurer) -> Tuple[dict, dict]:
+    """Entities per domain, and per domain and integration, out of one walk.
+
+    Both are asked for together on every load, and each of them walked the whole
+    entity list for itself.
 
     A rule anchored on the domain says nothing about what an entity measures,
     so its reach is every entity of that kind. The count is what makes that
@@ -447,29 +450,22 @@ def domain_counts(restructurer) -> dict:
     how many names would change. Asking that for every entity of every domain
     means resolving every name a second time on every load, which is the cost
     this add-on has spent two releases getting rid of.
+
+    An entity whose integration Home Assistant does not report is in the first
+    count and in none of the second: there is no integration to narrow a rule
+    to, which is why the two do not add up.
     """
-    counts: dict = {}
-    for entity_id in restructurer.entities:
-        domain = entity_id.partition(".")[0]
-        if domain:
-            counts[domain] = counts.get(domain, 0) + 1
-    return counts
-
-
-def domain_integration_counts(restructurer) -> dict:
-    """Entities per domain and integration: every device tracker UniFi supplies.
-
-    An entity whose integration Home Assistant does not report is in none of
-    these counts: there is no integration to narrow a rule to. It is in
-    ``domain_counts``, which is why the two do not add up.
-    """
-    counts: dict = {}
+    by_domain: dict = {}
+    by_integration: dict = {}
     for entity_id, entity_data in restructurer.entities.items():
         domain = entity_id.partition(".")[0]
+        if not domain:
+            continue
+        by_domain[domain] = by_domain.get(domain, 0) + 1
         integration = entity_data.get("platform")
-        if domain and integration:
-            counts[(domain, integration)] = counts.get((domain, integration), 0) + 1
-    return counts
+        if integration:
+            by_integration[(domain, integration)] = by_integration.get((domain, integration), 0) + 1
+    return by_domain, by_integration
 
 
 def _rule_key_for(entity: dict, entity_id: str = "", anchor: str = "") -> tuple:

@@ -6160,7 +6160,10 @@
                         // below, out of whatever rule is in force now.
                         entity._ruleAnchor = null;
                     }
-                    if (entity._expanded && entity._ruleScope === undefined) {
+                    // Not "where nothing is set": the reset above has just
+                    // unset it, so asking again could only get the answer written
+                    // two lines up. A row reopened starts where the rules are.
+                    if (entity._expanded) {
                         // Where a rule already names this entity, its own reach is the
                         // answer: changing the word is a change to that rule, and
                         // offering a wider reach than the one in force would quietly

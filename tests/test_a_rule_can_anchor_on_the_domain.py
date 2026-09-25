@@ -277,8 +277,12 @@ def test_the_counts_say_how_far_it_would_reach(home):
     """Nothing else warns: a domain rule on `sensor` would catch hundreds."""
     _, restructurer, _ = home
 
-    assert routes_naming.domain_counts(restructurer) == {"device_tracker": 5, "sensor": 1}
-    assert routes_naming.domain_integration_counts(restructurer) == {
+    # Both out of one walk: asked for together on every load, each of them
+    # walked the whole entity list for itself.
+    by_domain, by_integration = routes_naming.domain_reach(restructurer)
+
+    assert by_domain == {"device_tracker": 5, "sensor": 1}
+    assert by_integration == {
         ("device_tracker", "unifi"): 4,
         ("device_tracker", "mobile_app"): 1,
         ("sensor", "unifi"): 1,
@@ -620,3 +624,45 @@ def test_a_rule_of_the_domain_scope_lights_the_domain_button():
 
     assert body.index("if (match.domain) return 'domain';") < body.index("if (match.model) return 'model';")
     assert body.index("if (match.model) return 'model';") < body.index("if (match.integration) return 'integration';")
+
+
+def test_a_rule_is_answered_for_with_one_value_either_way(home):
+    """Read out of what the naming worked out, a rule came back spelled as the rule
+    holds it; read out of the walk below, spelled as the entity supplied it. The
+    same rule, asked the two ways, answered with two values."""
+    client, restructurer, rules = home
+    entity_id = "device_tracker.unifi_default_de_91_e5_f7_12_73"
+    registry = restructurer.entities[entity_id]
+    # One rule, and it changes the name - so the naming reports it as the source
+    # and the reading out of the resolution is the one that answers.
+    rule = rules.add_filter("name", "iPhone", "de", "Telefon", None)
+
+    from_the_naming = restructurer.rule_behind(entity_id, registry)
+
+    # And again where the naming named no rule at all - a resolution that says
+    # what went in and nothing about who answered - which is the walk below.
+    original = restructurer.build_naming_context
+
+    def says_nothing(*args, **kwargs):
+        restructurer.last_resolutions[entity_id] = {"input": "iPhone", "rule_id": None, "applies": None}
+
+    restructurer.build_naming_context = says_nothing
+    try:
+        from_the_walk = restructurer.rule_behind(entity_id, registry)
+    finally:
+        restructurer.build_naming_context = original
+
+    assert from_the_naming["value"] == rule["match"]["value"]
+    assert from_the_walk["value"] == rule["match"]["value"]
+
+
+def test_a_row_reopened_does_not_ask_what_it_has_just_unset():
+    """The reset above it has just unset the reach, so asking again could only get
+    the answer written two lines up - and the check read as a guard against a reach
+    that was already there."""
+    markup = (Path(__file__).parent.parent / "templates" / "index.html").read_text()
+    at = markup.index("toggleEntityExpand(entity) {")
+    body = markup[at : markup.index("updateEntityPreview(entity, suffix) {", at)]
+
+    assert "if (entity._expanded && entity._ruleScope === undefined) {" not in body
+    assert "entity._ruleScope = undefined;" in body

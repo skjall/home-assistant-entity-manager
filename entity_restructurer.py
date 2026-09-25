@@ -709,6 +709,9 @@ class EntityRestructurer:
                         continue
                     candidates.append(
                         {
+                            # Read straight out: a rule is only answered for where
+                            # it has a target in this language, which is what the
+                            # lookup goes by.
                             "value": (
                                 rules.render(rule, name, language) if kind == "pattern" else rule["targets"][language]
                             ),
@@ -900,11 +903,12 @@ class EntityRestructurer:
                 name, entity_id, device_class, rule["targets"].get(self.language, "")
             ):
                 continue
-            # A pattern rule is matched on its expression; the name is only
-            # what was held against it, and reading it back as the value said
-            # the rule was written for this one entity.
-            matched = rule["match"]["value"] if kind == "pattern" else asked[kind]
-            return {"rule_id": rule["id"], "kind": kind, "value": matched}
+            # What the rule matches on, not what was held against it: a pattern
+            # rule read back by the name it caught said it was written for this
+            # one entity, and for every other kind the rule's own spelling is
+            # what the reading above this one gives - asked the two ways, the
+            # same rule came back with two values.
+            return {"rule_id": rule["id"], "kind": kind, "value": rule["match"]["value"]}
         return None
 
     @staticmethod

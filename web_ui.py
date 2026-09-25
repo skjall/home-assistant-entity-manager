@@ -40,8 +40,7 @@ from registry import sync_ha_language
 from routes_entities import entities as entity_routes
 from routes_naming import (
     SETTINGS_SECTIONS,
-    domain_counts,
-    domain_integration_counts,
+    domain_reach,
     entity_model,
     entity_type_key,
     naming as naming_routes,
@@ -2119,8 +2118,7 @@ async def _get_hierarchy_async():
         # Pattern scopes are offered only where the user switched them on.
         pattern_counts = type_pattern_counts(restructurer) if renamer_state["naming_rules"].pattern_rules else None
         # For the anchor that reaches a whole domain: how far it would reach.
-        by_domain = domain_counts(restructurer)
-        by_domain_integration = domain_integration_counts(restructurer)
+        by_domain, by_domain_integration = domain_reach(restructurer)
 
         # One mark for the templates as they are now; every entity compares its
         # stored one against it.

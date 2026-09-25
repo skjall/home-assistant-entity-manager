@@ -1170,3 +1170,44 @@ def test_the_generation_is_read_rather_than_asked_for():
 
     assert 'getattr(self, "_filling_generation"' not in source
     assert "for_name = (name, language, self._filling_generation)" in source
+
+
+def test_a_quantifier_after_a_backreference_is_weighed_once(rules):
+    """Read in the branch that steps over the backreference and again by the walk
+    below, every quantifier after one was weighed twice - and the two readings only
+    happened to agree."""
+    with open(naming_rules.__file__, encoding="utf-8") as reading:
+        source = reading.read()
+    at = source.index("if lookalike and not in_class:")
+    branch = source[at : source.index("opening = _GROUP_OPEN.match(regex, at)", at)]
+
+    assert "at = lookalike.end()" in branch
+    # Nothing else: the walk below reads counts and the three single characters.
+    assert "_COUNT.match" not in branch
+    assert "repeats[-1]" not in branch
+
+    # And it still answers the same way about all four of them.
+    assert compile_pattern(r"(?P<n1>\d+)(?P=n1){2,3}") is not None
+    assert compile_pattern(r"(?P<n1>\d+)((?P=n1){2})+") is not None
+    assert compile_pattern(r"(?P<n1>\d)((?P=n1){x})+") is not None
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"((?P<n1>\d*)(?P=n1)*)+")
+
+
+def test_a_comment_holding_a_parenthesis_is_no_expression(rules):
+    """A comment ends at the first ")" for Python too, so "(?#a (b))" is an
+    unbalanced parenthesis to it rather than a comment holding one. The walk reads
+    it the way the expression will be read."""
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"(?#the (group))(?P<n1>\d+)")
+
+
+def test_the_search_for_a_placeholder_waits_for_the_answer(rules):
+    """Asked once per entity per pattern rule, and on a cache hit it was paid for
+    and never read."""
+    with open(naming_rules.__file__, encoding="utf-8") as reading:
+        source = reading.read()
+    at = source.index("    def render(self")
+    body = source[at : source.index("    def _compiled_pattern(self", at)]
+
+    assert body.index("already = self._filled_already(") < body.index("unfilled = ")
