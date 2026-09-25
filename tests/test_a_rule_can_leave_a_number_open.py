@@ -575,3 +575,34 @@ def test_a_rewritten_target_is_not_answered_from_what_was_filled(rules):
     assert rules.render(rules.find("pattern", "Heizung 12345678", INTEGRATION, "de"), "Heizung 12345678", "de") == (
         "Heizkosten 12345678"
     )
+
+
+def test_a_pattern_rule_without_filters_still_applies(rules):
+    """An empty filter says two things: a rule with no filters, which covers
+    everything, and one whose filters do not cover this entity. Read as the
+    second, such a rule applied to nothing at all and said nothing about it.
+
+    A pattern rule names its integration on the way in, so this is one from
+    before that was asked for - a hand-edited file, or a rule out of a backup.
+    """
+    rule = _pattern_rule(rules)
+    rule["filters"] = []
+
+    found = rules.find("pattern", "Heizung 12345678", INTEGRATION, "de")
+
+    assert found is not None
+    assert found["id"] == rule["id"]
+    assert rules.render(found, "Heizung 12345678", "de") == "Heizkostenverteiler 12345678"
+
+
+def test_the_generation_moves_on_once_per_change(rules):
+    """Read and written back, one of two changes at once was lost and a thread
+    went on answering from what it had."""
+    rule = _pattern_rule(rules)
+    seen = {rules._filling_generation}
+
+    for target in ("Heizkosten {1}", "Heizung {1}", "Zähler {1}"):
+        rules.update(rule["id"], targets={"de": target})
+        seen.add(rules._filling_generation)
+
+    assert len(seen) == 4

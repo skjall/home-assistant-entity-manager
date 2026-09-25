@@ -42,6 +42,7 @@ one filter.
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from itertools import count
 import json
 import logging
 from pathlib import Path
@@ -221,9 +222,15 @@ def _refuse_runaway(regex: str) -> None:
                 # open repetition refused it. Read once: walked past here, the
                 # main loop matched the same count again.
                 counted = _COUNT.match(regex, at)
-                if counted and not counted.group("open"):
-                    after = ""
+                if counted:
+                    # Either way the count is read once: walked past here, the
+                    # main loop matched the same one again.
+                    if not counted.group("open"):
+                        after = ""
                     at = counted.end()
+                    if after:
+                        repeats[-1] = True
+                    continue
             if after in {"*", "+", "?", "{"}:
                 repeats[-1] = True
             continue
@@ -484,6 +491,8 @@ class NamingRules:
         # took turns throwing each other's answers away, and did more work
         # between them than either would have done alone.
         self._filling = threading.local()
+        self._filling_generations = count(1)
+        self._filling_generation = next(self._filling_generations)
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -554,10 +563,13 @@ class NamingRules:
         self._patterns = None
         self._patterns_keyed = None
         # A rewritten target is filled again rather than answered from here.
-        # Every thread's, which is what the generation below is for: a thread
-        # that is in the middle of a name reads a rule that has just changed and
-        # works the target out again rather than answering from what it had.
-        self._filling_generation = getattr(self, "_filling_generation", 0) + 1
+        # Every thread's, which is what the generation is for: a thread that is
+        # in the middle of a name reads a rule that has just changed and works the
+        # target out again rather than answering from what it had. Counted rather
+        # than added to, so two changes at once move it on twice - read and
+        # written back, one of the two increments was lost and a thread went on
+        # answering from what it had.
+        self._filling_generation = next(self._filling_generations)
 
     @guarded
     def save(self) -> None:
@@ -1126,7 +1138,11 @@ class NamingRules:
             if not rule["targets"].get(language):
                 continue
             one = self.matching_filter(rule, integration, model, domain)
-            if not one:
+            # Empty says two things: a rule with no filters at all, which covers
+            # everything, and a rule whose filters do not cover this entity. Read
+            # as the second, a pattern rule written before an integration was
+            # asked for applied to nothing at all and said nothing about it.
+            if not one and (rule.get("filters") or []):
                 continue
             match = pattern.fullmatch(name)
             # Matching is not enough: a placeholder the name has nothing for

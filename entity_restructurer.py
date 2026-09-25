@@ -716,6 +716,11 @@ class EntityRestructurer:
         # and the form that corrects the name has to open on it. Sent without it,
         # a correction made a second rule of another kind beside the one in
         # force, and both then named the entity.
+        # Exactly the shown name, and not "the same word differently spelled":
+        # a target that differs from it at all - in case, in spacing - is a name
+        # the rule changes, so that rule wins the name and is reported as its
+        # source, and the form opens on it from there. This is for the rule that
+        # changes nothing, which is the one the report would otherwise lose.
         in_force = next(
             (
                 one

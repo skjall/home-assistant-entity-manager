@@ -474,3 +474,41 @@ def test_a_row_reopened_holds_no_anchor_of_its_own():
 
     assert "entity._ruleScope = undefined;" in body
     assert "entity._ruleAnchor = null;" in body
+
+
+def test_a_rule_that_changes_the_spelling_is_reported_as_the_source(home):
+    """A target that differs from the shown name at all - in case, in spacing -
+    is a name the rule changes, so the rule wins it and is reported as its
+    source. The form opens on it from there, and "applies" is for the rule that
+    changes nothing."""
+    client, restructurer, rules = home
+    rule = rules.add_filter("domain", "device_tracker", "de", "standort", {"integration": "unifi"})
+    entity_id = "device_tracker.unifi_default_de_91_e5_f7_12_73"
+
+    restructurer.build_naming_context(entity_id, restructurer.entities[entity_id])
+    resolution = restructurer.last_resolutions[entity_id]
+
+    assert resolution["rule_id"] == rule["id"]
+    assert restructurer.rule_behind(entity_id, restructurer.entities[entity_id])["rule_id"] == rule["id"]
+
+
+def test_an_integration_scope_needs_an_integration(home):
+    """There is nothing to narrow the rule to, and a rule stored without that
+    filter applies everywhere - which is not what was asked for. Said out loud
+    rather than written that way."""
+    client, restructurer, _ = home
+    restructurer.entities["sensor.by_hand"] = {
+        "id": "reg-by-hand",
+        "entity_id": "sensor.by_hand",
+        "device_id": "ap",
+        "original_name": "Zähler",
+        "has_entity_name": False,
+    }
+
+    answer = client.post(
+        "/api/naming/learn",
+        json={"entity_id": "sensor.by_hand", "value": "Messwert", "scope": "integration"},
+    )
+
+    assert answer.status_code == 400
+    assert "integration" in answer.get_json()["error"]
