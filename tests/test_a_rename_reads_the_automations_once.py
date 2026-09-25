@@ -485,3 +485,65 @@ def test_a_write_is_kept_where_the_job_could_read_nothing() -> None:
 
     assert written, "the automation naming the old id is written"
     assert config == {"id": "0", "action": [{"entity_id": "sensor.new"}]}
+
+
+def test_reading_one_automation_does_not_stand_in_for_the_job_reading_them_all() -> None:
+    """The individual read used to be written where the job's reading goes.
+
+    load_automation_configs then saw a reading already there and left every
+    other automation unread, and each of those came back as "there is none" and
+    was skipped without a word.
+    """
+    reads: List[str] = []
+    updater = _updater(reads)
+
+    async def run() -> None:
+        # web_ui repairs one reference before any job has read anything.
+        await updater.get_automation_config("0")
+        await updater.load_automation_configs(_states(3))
+        assert await updater.get_automation_config("2") is not None
+
+    asyncio.run(run())
+
+    # The one asked for first, then all three for the job - and the third
+    # answered out of that reading rather than asked for again.
+    assert sorted(reads) == ["0", "0", "1", "2"]
+
+
+def test_a_write_is_not_overwritten_by_a_reading_that_was_already_out() -> None:
+    """A read that started before the write stored what Home Assistant had then."""
+    reads: List[str] = []
+    updater = _updater(reads)
+    written: List[Dict[str, Any]] = []
+    let_it_finish = asyncio.Event()
+
+    async def fetch(numeric_id: str, session: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+        reads.append(numeric_id)
+        if not written:
+            # The reading the slow request comes back with: taken before the
+            # write, it still names the old id.
+            await let_it_finish.wait()
+            return {"id": numeric_id, "action": [{"entity_id": "sensor.old"}]}
+        return {"id": numeric_id, "action": [{"entity_id": "sensor.new"}]}
+
+    async def write(numeric_id: str, config: Dict[str, Any], session: Optional[Any] = None) -> bool:
+        written.append(config)
+        return True
+
+    updater.fetch_automation_config = fetch  # type: ignore[assignment]
+    updater.update_automation_config = write  # type: ignore[assignment]
+
+    async def run() -> Optional[Dict[str, Any]]:
+        slow = asyncio.ensure_future(updater.read_automation_config("0"))
+        await asyncio.sleep(0)
+        await updater.update_automation_entities(
+            "automation.number_0", "0", "sensor.old", "sensor.new", {"action": [{"entity_id": "sensor.old"}]}
+        )
+        let_it_finish.set()
+        await slow
+        return await updater.read_automation_config("0")
+
+    config = asyncio.run(run())
+
+    assert written, "the automation naming the old id is written"
+    assert config == {"id": "0", "action": [{"entity_id": "sensor.new"}]}

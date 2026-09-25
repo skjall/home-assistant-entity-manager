@@ -40,6 +40,14 @@ class DependencyUpdater:
         # installation with a hundred automations spent three seconds per
         # entity on nothing but these reads.
         self._automation_configs: Optional[Dict[str, Optional[Dict]]] = None
+        # What was read or written one automation at a time, which is not the
+        # job's reading: writing it there said the batch had happened, and
+        # _load_automation_configs then left every other automation unread - each
+        # of those came back as "there is none" and was silently skipped.
+        #
+        # Asked before the batch's reading, because a write proves what Home
+        # Assistant holds now and the batch says what it held before.
+        self._automation_asked: Dict[str, Optional[Dict]] = {}
         self._configs_lock = asyncio.Lock()
 
     async def get_states(self) -> List[Dict]:
@@ -251,14 +259,17 @@ class DependencyUpdater:
         every entity of the job, a handful of unreadable automations cost a
         request per rename each, which is the whole point of reading them once.
         """
-        if self._automation_configs is not None and automation_numeric_id in self._automation_configs:
-            return self._automation_configs[automation_numeric_id]
+        async with self._configs_lock:
+            if automation_numeric_id in self._automation_asked:
+                return self._automation_asked[automation_numeric_id]
+            if self._automation_configs is not None and automation_numeric_id in self._automation_configs:
+                return self._automation_configs[automation_numeric_id]
         config = await self.fetch_automation_config(automation_numeric_id)
         async with self._configs_lock:
-            if self._automation_configs is None:
-                self._automation_configs = {}
-            self._automation_configs[automation_numeric_id] = config
-        return config
+            # Only where nothing has been put there since: a write that went
+            # through while this read was out holds the version Home Assistant
+            # has now, and this reading is older than it.
+            return self._automation_asked.setdefault(automation_numeric_id, config)
 
     async def get_automation_config(self, automation_numeric_id: str) -> Optional[Dict]:
         """The automation's configuration, out of what this job has read.
@@ -332,10 +343,14 @@ class DependencyUpdater:
             config = await self.get_automation_config(automation_numeric_id)
         else:
             config = copy.deepcopy(config)
-        if not config:
+        if config is None:
             # Said apart: a configuration that could not be read at all, and one
             # that was handed over empty. The second looked like a failed read
             # and had the reader looking for a connection that was working.
+            #
+            # An empty configuration is one of those, not neither: read as
+            # nothing at all, an automation whose configuration had just been
+            # cleared was reported as a failure instead of as nothing to do.
             if supplied:
                 logger.error(f"Automation {automation_id} was handed over with an empty configuration")
             else:
@@ -356,6 +371,7 @@ class DependencyUpdater:
                     # goes rather than answering the rest of the job with a
                     # version from before a write that may have taken.
                     async with self._configs_lock:
+                        self._automation_asked.pop(automation_numeric_id, None)
                         if self._automation_configs is not None:
                             self._automation_configs.pop(automation_numeric_id, None)
                     return False
@@ -372,6 +388,7 @@ class DependencyUpdater:
             # than answered with nothing for the rest of the job.
             if written is None:
                 async with self._configs_lock:
+                    self._automation_asked.pop(automation_numeric_id, None)
                     if self._automation_configs is not None:
                         self._automation_configs.pop(automation_numeric_id, None)
                 logger.error(f"Could not read automation {automation_id} back after writing it")
@@ -382,18 +399,17 @@ class DependencyUpdater:
                 # have the rest of the job build on a version Home Assistant
                 # may never have held.
                 async with self._configs_lock:
+                    self._automation_asked.pop(automation_numeric_id, None)
                     if self._automation_configs is not None:
                         self._automation_configs.pop(automation_numeric_id, None)
                 logger.error(f"Automation {automation_id} still names {old_entity_id} after the write")
                 return False
             async with self._configs_lock:
-                # Kept even where the batch read nothing at all: this reading was
+                # Kept whether or not the batch read anything: this reading was
                 # taken after the write and proved out against it, so it is the
                 # one version Home Assistant is known to hold, and the next
                 # entity of the job read the automation again without it.
-                if self._automation_configs is None:
-                    self._automation_configs = {}
-                self._automation_configs[automation_numeric_id] = written
+                self._automation_asked[automation_numeric_id] = written
             logger.info(f"Automation {automation_id} now names {new_entity_id}")
             return True
         else:

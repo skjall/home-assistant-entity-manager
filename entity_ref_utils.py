@@ -56,6 +56,11 @@ def refers_to_entity_in_string(value: str, entity_id: str) -> bool:
     if value == entity_id:
         return True
 
+    # Not there at all, which is most strings: asked as a substring first, so
+    # the pattern is only run where there is something for it to find.
+    if entity_id not in value:
+        return False
+
     # A template can name the entity inside an expression. Word boundaries, so
     # that `sensor.temp` does not match `sensor.temperature`.
     return _is_template(value) and re.search(_word_bounded(entity_id), value) is not None
@@ -94,7 +99,7 @@ def replace_entity_ref_in_string(value: str, old_entity_id: str, new_entity_id: 
     # pattern that would find the reference is the pattern that replaces it, and
     # asking first and replacing afterwards ran it twice over every template a
     # rename touches. A new id equal to the old one is no change to make.
-    if not _is_template(value):
+    if old_entity_id not in value or not _is_template(value):
         return value, False
     new_value, hits = re.subn(_word_bounded(old_entity_id), new_entity_id, value)
     if not hits or new_value == value:
