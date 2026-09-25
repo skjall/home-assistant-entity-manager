@@ -190,6 +190,7 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         new_name = f"{new_name} {suffix}"
 
     resolution = restructurer.last_resolutions.get(entity_id) or {}
+    noted = _noted_type_part(resolution)
     return {
         "entity_id": entity_id,
         "current_name": entry.get("name") or entry.get("original_name") or "",
@@ -197,11 +198,11 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         "proposed_name": new_name,
         "name_comes_from": resolution.get("won_by"),
         "rule_id": resolution.get("rule_id"),
-        # Out of the same reading as base_entity below: both are what went into
-        # the name, and asking twice let them answer differently - a reader
-        # comparing the two to decide whether to rename would then be told the
-        # entity supplied a word that nothing supplied.
-        "supplied_name": _noted_type_part(resolution),
+        # Both out of one reading: they are the same fact - what went into the
+        # name - and asking twice let them answer differently, which a reader
+        # comparing the two to decide whether to rename would read as the entity
+        # supplying a word that nothing supplied.
+        "supplied_name": noted,
         # The type part as it went in, kept with the name once it is written so
         # a later read gets it back without taking the rendered name apart.
         # What went in, not what came out: a rule the user edits afterwards has
@@ -216,7 +217,7 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         # Asked for as "is there a string", not "is there something truthy": a
         # resolution that says the type part is empty says "" , and reading that
         # as nothing put the question back that it had just answered.
-        "base_entity": _noted_type_part(resolution),
+        "base_entity": noted,
     }
 
 
@@ -251,6 +252,9 @@ def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
     """
     restructurer = renamer_state.get("restructurer")
     resolution = (getattr(restructurer, "last_resolutions", None) or {}).get(entity_id)
+    # An empty one says as little as none at all: every field of the note is read
+    # out of it, so what it would hold is "nothing" in each of them - which is
+    # what no note says too, and without claiming a naming that nothing recorded.
     if not resolution:
         return None
     return {

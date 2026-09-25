@@ -787,8 +787,12 @@ def test_only_one_place_asks_whether_the_area_is_still_there():
     assert "return this.areaMoveStaged(this.devicePreviewAreaId, this.selectedDeviceData);" in markup
     assert "const areaStaged = this.areaMoveStaged(this.devicePreviewAreaId, device);" in markup
     assert "const areaStaged = this.areaMoveStaged(picked, device);" in markup
-    # And the guard is in that one place: asked for once, by name.
-    assert markup.count("this.hierarchy.areas.some(a => a.id === picked)") == 1
+    # And the guard is in that one place: asked for once, by name. The ids come
+    # out of one walk per registry change - asked by the field, by the button and
+    # by the run, every repaint walked the areas once for each of them.
+    assert markup.count("if (picked && !this.knownAreaId(picked)) return false;") == 1
+    assert "areaIds.ids = new Set(this.hierarchy.areas.map(area => area.id));" in markup
+    assert markup.count("this.hierarchy.areas.some(a => a.id === picked)") == 0
 
 
 def test_a_pick_forgets_where_the_list_stood():
@@ -838,11 +842,18 @@ def test_the_field_stands_on_a_pick_only_while_it_is_a_move():
     not a move any more: the field said "No area" with no border to say it was
     staged, the apply button ignored it, and nothing could clear it."""
     markup = _panel_source()
-    at = markup.index("panelAreaId() {")
+    at = markup.index("panelAreaId(staged = this.deviceChangeStagedArea()) {")
     body = markup[at : markup.index("panelAreaName() {", at)]
 
     assert "this.devicePreviewAreaId === ''" not in body
-    assert "if (this.deviceChangeStagedArea()) {" in body
+    assert "if (staged) {" in body
+    # Asked once by the caller that needs the answer twice: reading the field
+    # walked the areas twice for the same question on every repaint.
+    name = markup[markup.index("panelAreaName() {") :]
+    name = name[: name.index("matchingAreas() {")]
+    assert "const staged = this.deviceChangeStagedArea();" in name
+    assert "const id = this.panelAreaId(staged);" in name
+    assert name.count("this.deviceChangeStagedArea()") == 1
 
 
 def test_the_arrow_keys_start_where_the_highlight_is():
@@ -890,13 +901,18 @@ def test_the_list_opens_on_the_area_the_device_is_in():
     alphabetically - with nothing the user did saying to move the device."""
     markup = _panel_source()
     at = markup.index('x-model="areaSearch"')
-    handler = markup[at : at + 400]
+    handler = markup[at : at + 700]
 
-    assert "areaComboAt = areaComboStart()" in handler
-    assert "areaComboAt = 0" not in handler.split("@input=")[0], "not the top of the list"
+    assert "@focus=\"areaSearch = ''; openAreaCombo()\"" in handler
+    # And an arrow key on the closed list opens it there too: stepped into, its
+    # first line could not be reached at all - the step went from the top to the
+    # line below it.
+    assert "if (!areaComboOpen) openAreaCombo();" in handler
+    assert handler.count("if (!areaComboOpen) openAreaCombo();") == 2
 
-    at = markup.index("areaComboStart() {")
+    at = markup.index("openAreaCombo() {")
     body = markup[at : markup.index("takeArea() {", at)]
+    assert "this.areaComboAt = this.areaComboStart();" in body
     assert "const holds = this.panelAreaId();" in body
     assert "this.areaOptions.findIndex(area => (area.id || '') === holds)" in body
 
@@ -913,7 +929,10 @@ def test_a_device_in_no_area_can_take_back_a_pick():
     # area included, which has to stay in the list to be seen as chosen. Asked
     # for the area it names, that pick took itself out of the list, the highlight
     # had nowhere to stand and Enter took the first area there was.
-    assert "const somethingToLeave = !!this.selectedDeviceData?.area_id || this.devicePreviewAreaId !== null;" in body
+    # A move that can be made, not a pick that is merely held: an area deleted in
+    # Home Assistant leaves the pick standing with nothing staged, and the entry
+    # was offered where there was no move to take back.
+    assert "const somethingToLeave = this.deviceChangeStagedArea() || !!this.selectedDeviceData?.area_id;" in body
     assert "if (somethingToLeave &&" in body
 
 
@@ -984,5 +1003,10 @@ def test_what_went_in_is_read_once_for_the_whole_proposal() -> None:
     word that nothing supplied."""
     source = Path(naming_service.__file__).read_text(encoding="utf-8")
 
-    assert '"supplied_name": _noted_type_part(resolution),' in source
+    assert "    noted = _noted_type_part(resolution)\n" in source
+    assert '"supplied_name": noted,' in source
+    assert '"base_entity": noted,' in source
     assert '"supplied_name": resolution.get("input")' not in source
+    # In this proposal, once. provenance_for reads it for its own note.
+    proposal = source[source.index("async def proposed_naming(") : source.index("def _noted_type_part(")]
+    assert proposal.count("_noted_type_part(resolution)") == 1
