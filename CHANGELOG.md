@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.6.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.5.0...v1.6.0) (2026-09-25)
+
+
+### Features
+
+* a device changes its area where it is renamed ([#177](https://github.com/skjall/home-assistant-entity-manager/issues/177)) ([29f4774](https://github.com/skjall/home-assistant-entity-manager/commit/29f47749d6d9fac6305440b5e4e4f8917542a5b9))
+* a pattern rule's expression is edited where the rule is ([#186](https://github.com/skjall/home-assistant-entity-manager/issues/186)) ([a99d2d3](https://github.com/skjall/home-assistant-entity-manager/commit/a99d2d3907a7db9a1c67473ca37826e6f6cae9fd))
+* a rule can leave the number in a supplied name open ([#185](https://github.com/skjall/home-assistant-entity-manager/issues/185)) ([0905dfc](https://github.com/skjall/home-assistant-entity-manager/commit/0905dfcc8f59914281977bc37c5f6bbc17e26b2d))
+* give the add-on an icon of its own ([#160](https://github.com/skjall/home-assistant-entity-manager/issues/160)) ([ffd4790](https://github.com/skjall/home-assistant-entity-manager/commit/ffd47904fc82afe0248a5f346d6112f228d29ec9))
+* the area is typed into, not scrolled through ([#184](https://github.com/skjall/home-assistant-entity-manager/issues/184)) ([fe34e7f](https://github.com/skjall/home-assistant-entity-manager/commit/fe34e7f73a0c9577bd0e8c60630f79b3c5a45f04))
+
+
+### Bug Fixes
+
+* "No area" was dropped by the changes filter ([#176](https://github.com/skjall/home-assistant-entity-manager/issues/176)) ([58070e9](https://github.com/skjall/home-assistant-entity-manager/commit/58070e9be94996ca7558fb8ce6d770f4021eff9e))
+* a button left alone in a group keeps its corners ([#180](https://github.com/skjall/home-assistant-entity-manager/issues/180)) ([5ad31b5](https://github.com/skjall/home-assistant-entity-manager/commit/5ad31b56e47065dc92e090d05f9f86cddbcc0c32))
+* a denied tool call must not be invisible ([#168](https://github.com/skjall/home-assistant-entity-manager/issues/168)) ([85df4bf](https://github.com/skjall/home-assistant-entity-manager/commit/85df4bfda0fd405a8166a7607c7476fcf7210b0b))
+* a device rename renders what the rules answered ([#178](https://github.com/skjall/home-assistant-entity-manager/issues/178)) ([00ca717](https://github.com/skjall/home-assistant-entity-manager/commit/00ca7172623dccf18f6db51b2116a8408e3d6e3d))
+* a name with no type part says so ([#174](https://github.com/skjall/home-assistant-entity-manager/issues/174)) ([dd9cb06](https://github.com/skjall/home-assistant-entity-manager/commit/dd9cb06379376b30ec1486da6bd9b3b8ba778d36))
+* a parameter that never arrived is not an order to clear the area ([#157](https://github.com/skjall/home-assistant-entity-manager/issues/157)) ([e24358e](https://github.com/skjall/home-assistant-entity-manager/commit/e24358e7b4d1687128490430fc5fc32e6007860a))
+* a required check has to report on every pull request ([#164](https://github.com/skjall/home-assistant-entity-manager/issues/164)) ([3d806a2](https://github.com/skjall/home-assistant-entity-manager/commit/3d806a2ec43c0acd6c818c296a880dfda30cdb5a))
+* a review that finds something can finally say so, and hold the door ([#163](https://github.com/skjall/home-assistant-entity-manager/issues/163)) ([edc0c6c](https://github.com/skjall/home-assistant-entity-manager/commit/edc0c6ccfdb113bb6f082fffebf7861bee905fbc))
+* a switched-off row is work to do, so "only changes" keeps it ([#162](https://github.com/skjall/home-assistant-entity-manager/issues/162)) ([6c599d3](https://github.com/skjall/home-assistant-entity-manager/commit/6c599d3d65d48023650bd6cee34e725cd40063cb))
+* an empty type part is an answer, not a failed match ([#171](https://github.com/skjall/home-assistant-entity-manager/issues/171)) ([2f05cae](https://github.com/skjall/home-assistant-entity-manager/commit/2f05caeba68a7d334b7e12549c09efddebdda467))
+* an entity is not a special case for having no area ([#179](https://github.com/skjall/home-assistant-entity-manager/issues/179)) ([d321755](https://github.com/skjall/home-assistant-entity-manager/commit/d321755c7a694fb71cedcba1859864204910cd3f))
+* the Import / Export heading had no icon ([#167](https://github.com/skjall/home-assistant-entity-manager/issues/167)) ([398cccb](https://github.com/skjall/home-assistant-entity-manager/commit/398cccb16bdca0cbd9534fccb3ea7fd07687d1f9))
+* the job panel said the same thing twice ([#165](https://github.com/skjall/home-assistant-entity-manager/issues/165)) ([7addfe2](https://github.com/skjall/home-assistant-entity-manager/commit/7addfe266caf2ef879f061e0ac78a05abf292255))
+* the line says what the rule actually keys on ([#175](https://github.com/skjall/home-assistant-entity-manager/issues/175)) ([c6f7e0d](https://github.com/skjall/home-assistant-entity-manager/commit/c6f7e0d2ef9674e565f55415622eb491c6cb222f))
+* the preview answers from the form, not only from the registry ([#188](https://github.com/skjall/home-assistant-entity-manager/issues/188)) ([61418c9](https://github.com/skjall/home-assistant-entity-manager/commit/61418c9c2ae66a5ae8913c3896fb0a3f03a0dba4))
+* the refresh icon never actually span ([#166](https://github.com/skjall/home-assistant-entity-manager/issues/166)) ([bc14048](https://github.com/skjall/home-assistant-entity-manager/commit/bc140484c731fc58d484c4dd3e980b58e7ae41f8))
+* the settings page had no width but a desktop's ([#173](https://github.com/skjall/home-assistant-entity-manager/issues/173)) ([ff8123b](https://github.com/skjall/home-assistant-entity-manager/commit/ff8123b98a3aa05cb27a60063d48792ed5e93959))
+* the workflow posts what the review found ([#169](https://github.com/skjall/home-assistant-entity-manager/issues/169)) ([cc708b6](https://github.com/skjall/home-assistant-entity-manager/commit/cc708b663740a79010bcaed88d4308420fa871b9))
+
+
+### Performance Improvements
+
+* a rename reads the automations once, not once per entity ([#183](https://github.com/skjall/home-assistant-entity-manager/issues/183)) ([1c92e02](https://github.com/skjall/home-assistant-entity-manager/commit/1c92e0237298a072be635f4f0e870f7846b90e07))
+
 ## [1.5.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.4.0...v1.5.0) (2026-09-20)
 
 
