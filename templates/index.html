@@ -5761,9 +5761,17 @@
                 ruleInForce(entity) {
                     const resolution = entity?.resolution;
                     if (!resolution) return null;
-                    if (resolution.won_by === 'rule:user' && resolution.rule_id) return resolution;
+                    // One shape either way: handing back the whole resolution in
+                    // the one case and two of its fields in the other had a
+                    // reader of any other field answered with nothing, and only
+                    // sometimes.
+                    if (resolution.won_by === 'rule:user' && resolution.rule_id) {
+                        return {rule_id: resolution.rule_id, matched_on: resolution.matched_on};
+                    }
                     const applies = resolution.applies;
-                    return applies && applies.rule_id ? applies : null;
+                    return applies && applies.rule_id
+                        ? {rule_id: applies.rule_id, matched_on: applies.matched_on}
+                        : null;
                 },
 
                 scopeThatApplied(entity) {

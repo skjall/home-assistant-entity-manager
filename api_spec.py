@@ -312,6 +312,13 @@ OPERATIONS: List[Operation] = [
             "value": text("The name it should have."),
             "scope": text("How far the rule reaches: entity, integration, model or global."),
             "domain": flag("Whether the rule is about this entity's domain alone."),
+            "anchor": text(
+                "What the rule recognises an entity by. Left out, the server picks the surest of "
+                "the usual ones: a translation key, the name it supplies, its device class. "
+                '"domain" asks for the last resort instead, for entities that share none of those '
+                "- every device tracker UniFi supplies carries the name of the client it found. "
+                "It applies everywhere or within one integration; a model is not a place it can go."
+            ),
         },
         required=("entity_id", "value"),
         tag="Naming",
