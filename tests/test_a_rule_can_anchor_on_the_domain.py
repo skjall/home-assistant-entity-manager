@@ -702,3 +702,22 @@ def test_a_device_moved_does_not_write_its_entities_own_areas():
     assert "e.suggested_entity_id = null;" in body
     # The device's own area is the device's to write.
     assert "device.area_id = areaId || null;" in body
+
+
+def test_a_target_is_read_with_the_spaces_taken_off(home):
+    """A pattern's target is read that way, and a stored target written with a space
+    around it - a backup, a file edited by hand - was compared against the shown name
+    with them. A rule saying exactly what the name says was then reported as changing
+    it, and the form opened on the wrong side of it."""
+    client, restructurer, rules = home
+    entity_id = "device_tracker.unifi_default_de_91_e5_f7_12_73"
+    registry = restructurer.entities[entity_id]
+    rule = rules.add_filter("name", "iPhone", "de", "iPhone", None)
+    rule["targets"]["de"] = " iPhone "
+
+    restructurer.build_naming_context(entity_id, registry)
+    resolution = restructurer.last_resolutions[entity_id]
+
+    # It says what the name says, so it changes nothing and applies.
+    assert resolution["rule_id"] is None
+    assert resolution["applies"]["rule_id"] == rule["id"]

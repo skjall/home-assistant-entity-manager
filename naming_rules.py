@@ -252,6 +252,10 @@ def _refuse_runaway(regex: str) -> None:
     # again by a quantifier on the group around it - read as an ordinary group,
     # "((?=\\d+)\\w)+" was refused for a repetition that costs nothing.
     zero_width = [False]
+    # Whether the group at each depth reads any text at all. One that reads none -
+    # "((?=\\d+))+", or a group with nothing in it - is nothing to repeat, and
+    # repeating it is a question nobody meant to ask.
+    reads_text = [False]
     repeats = [False]  # whether the group at each depth already repeats
     choices = [False]  # whether the group at each depth holds a choice
     at = 0
@@ -259,6 +263,8 @@ def _refuse_runaway(regex: str) -> None:
     while at < len(regex):
         char = regex[at]
         if char == "\\":
+            # An escaped character is a character: "\\d" reads a digit.
+            reads_text[-1] = True
             at += 2
             continue
         lookalike = _GROUP_LOOKALIKE.match(regex, at)
@@ -275,6 +281,12 @@ def _refuse_runaway(regex: str) -> None:
             # open end repeats without one, and a brace that counts nothing is
             # the literal it looks like. Weighed here as well, every one of them
             # was read twice and the second reading only happened to agree.
+            #
+            # A backreference reads text - whatever the group caught - which a
+            # comment does not: read as reading none, a group holding one was
+            # refused a quantifier for standing still.
+            if lookalike.group(0).startswith("(?P="):
+                reads_text[-1] = True
             at = lookalike.end()
             continue
         opening = _GROUP_OPEN.match(regex, at)
@@ -283,6 +295,7 @@ def _refuse_runaway(regex: str) -> None:
             # not a quantifier and must not be read as one.
             repeats.append(False)
             choices.append(False)
+            reads_text.append(False)
             zero_width.append(opening.group(0)[:3] in {"(?=", "(?!", "(?<"})
             at = opening.end()
             continue
@@ -294,9 +307,11 @@ def _refuse_runaway(regex: str) -> None:
             continue
         if char == "[":
             in_class = True
+            reads_text[-1] = True
         elif char == "(":
             repeats.append(False)
             choices.append(False)
+            reads_text.append(False)
             zero_width.append(False)
         elif char == "|":
             choices[-1] = True
@@ -304,6 +319,11 @@ def _refuse_runaway(regex: str) -> None:
             inside = repeats.pop() if len(repeats) > 1 else False
             branched = choices.pop() if len(choices) > 1 else False
             nothing_wide = zero_width.pop() if len(zero_width) > 1 else False
+            read_text = reads_text.pop() if len(reads_text) > 1 else True
+            # A lookaround reads no text however much is written in it, and what
+            # it reads is not read by the group around it either.
+            if not nothing_wide:
+                reads_text[-1] = reads_text[-1] or read_text
             after = regex[at + 1 : at + 2]
             # A bounded count after a group that holds nothing repeating is no
             # more a runaway than the group itself: "(\\d{4}){2,3}" reads eight
@@ -321,6 +341,12 @@ def _refuse_runaway(regex: str) -> None:
                 counted = _COUNT.match(regex, at + 1)
                 if counted and not counted.group("open") and not (inside or branched):
                     after = ""
+            # A group that reads no text is nothing to repeat: "((?=\\d+))+" and
+            # "()+" ask for a group that stands still to be walked again, which
+            # Python stops after one turn and nobody meant to write. Refused
+            # rather than let through, so an expression says what it does.
+            if (nothing_wide or not read_text) and after in quantifiers and after != "?":
+                raise NamingRuleError("A pattern may not repeat what reads no text: there would be nothing to repeat")
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
             # A choice inside a repeated group is the other shape that runs
@@ -355,12 +381,18 @@ def _refuse_runaway(regex: str) -> None:
                     repeats[-1] = True
                 at = counted.end()
                 continue
+            # A brace that counts nothing is the literal it looks like, and a
+            # literal reads text.
+            reads_text[-1] = True
         elif char in {"*", "+", "?"}:
             # A question mark counts: "(Sensor ?)+" repeats a group that can
             # match nothing, which backtracks just as badly as "(a+)+". A
             # question mark on a group of its own is read at the ")" above and
             # is fine - "(ab)?c" finishes in time.
             repeats[-1] = True
+        else:
+            # Anything else is a character to read: a letter, a dot, a space.
+            reads_text[-1] = True
         at += 1
 
 
@@ -1237,6 +1269,11 @@ class NamingRules:
         name at a time, and the next name drops what was worked out for this
         one.
         """
+        # The generation is read and not held: it is one attribute read, and a
+        # reading that comes from either side of a change can only say "this was
+        # worked out under another generation", which is answered by working it
+        # out again. Held here, every fill would wait on the lock that writes
+        # rules, and the answer would be the same.
         for_name = (name, language, self._filling_generation)
         if getattr(self._filling, "For", None) != for_name:
             self._filling.For = for_name
@@ -1295,7 +1332,12 @@ class NamingRules:
             # A filter with nothing in it is no filter: "[{}]" out of a backup or
             # a file edited by hand says the same as "[]", and read as a filter
             # that does not cover this entity the rule matched nothing at all.
-            if not one and any(rule.get("filters") or []):
+            # One such filter is enough, whatever stands beside it: a rule that
+            # says "everywhere" in one of its places says it for every entity,
+            # and weighed by the others it was skipped for the entities they do
+            # not name.
+            narrowing = rule.get("filters") or []
+            if not one and narrowing and all(narrowing):
                 continue
             match = pattern.fullmatch(name)
             # Matching is not enough: a placeholder the name has nothing for

@@ -1322,3 +1322,33 @@ def test_the_compiled_patterns_are_built_under_the_lock(rules):
     assert body.count("with self._lock:") == 2
     assert "if self._patterns is None:" in body
     assert body.index("with self._lock:") < body.index("if self._patterns is None:")
+
+
+def test_a_group_that_reads_no_text_is_nothing_to_repeat(rules):
+    """ "((?=\\d+))+" and "()+" ask for a group that stands still to be walked again.
+    Python stops after one turn and nobody meant to write it, so the expression is
+    refused rather than let through saying something else."""
+    for expression in [r"((?=\d+))+", r"()+", r"(?:)*", r"((?#a comment))+"]:
+        with pytest.raises(NamingRuleError, match="reads no text"):
+            compile_pattern(expression)
+
+    # What reads text is repeated as before, a backreference among it: it reads
+    # whatever the group caught.
+    assert compile_pattern(r"((?=\d+)\w)+") is not None
+    assert compile_pattern(r"(?P<n1>\d)((?P=n1))+") is not None
+    assert compile_pattern(r"(\d{4}){2,3}") is not None
+    assert compile_pattern(r"(?i:abc)+") is not None
+
+
+def test_a_filter_with_nothing_in_it_holds_for_every_entity(rules):
+    """One such filter is enough, whatever stands beside it: a rule that says
+    "everywhere" in one of its places says it for every entity, and weighed by the
+    others it was skipped for the entities they do not name."""
+    regex, _ = pattern_of("Heizung 12345678")
+    rule = rules.add_filter("pattern", regex, "de", "Heizkostenverteiler {1}", {"integration": INTEGRATION})
+    rule["filters"] = [{"integration": INTEGRATION}, {}]
+
+    found = rules.find("pattern", "Heizung 12345678", "somewhere_else", "de", None, None)
+
+    assert found is not None
+    assert found["id"] == rule["id"]

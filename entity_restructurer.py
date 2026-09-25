@@ -700,6 +700,13 @@ class EntityRestructurer:
                     # where the entity's own name says more than its class does -
                     # a domain rule says less still, so letting it answer there
                     # would put that name back exactly where it was kept.
+                    #
+                    # The entity is then named by neither, and nothing is reported
+                    # as in force, which is the truth: the class rule does not
+                    # name this entity - that is what holding it back means - and
+                    # the domain rule is not allowed to. The class rule is still
+                    # the user's and still shown, on its own row and in its own
+                    # entity list, where it says what it does reach.
                     narrower = narrower or kind != "domain"
                     # Unlike the others, a device-class rule is held back where
                     # the name says more than the class does.
@@ -716,7 +723,16 @@ class EntityRestructurer:
                     # answer stood first among the candidates - nothing else in
                     # the walk takes it out, since it is not the shown name
                     # either - and the entity was renamed to nothing at all.
-                    offered = rules.render(rule, name, language) if kind == "pattern" else rule["targets"][language]
+                    # Read as the rules read a pattern's target, spaces and all:
+                    # a stored target written with one around it - a backup, a
+                    # file edited by hand - was compared against the shown name
+                    # with them, so a rule that says exactly what the name says
+                    # was reported as changing it.
+                    offered = (
+                        rules.render(rule, name, language)
+                        if kind == "pattern"
+                        else (rule["targets"][language] or "").strip()
+                    )
                     if not offered:
                         continue
                     candidates.append(
