@@ -443,7 +443,10 @@ class EntityRestructurer:
         }
         # Before anything is written into the context: read afterwards, with the
         # typed name already standing in it, this answered about the name being
-        # asked about rather than the one the device has.
+        # asked about rather than the one the device has. Asked for every entity
+        # rather than only where no name was typed, which is what it cost before:
+        # the extraction keeps nothing between calls, so asking it twice about one
+        # name cannot answer differently the second time.
         stored_device_name = self._base_device_name(raw_device_name, partial_context)
         if pending_device_name is not None:
             # What was typed is already a base name - it is the field the

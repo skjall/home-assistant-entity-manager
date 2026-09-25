@@ -269,7 +269,10 @@ def _refuse_runaway(regex: str) -> None:
             ways.append(1)
         elif char == "|":
             choices[-1] = True
-            ways[-1] = max(ways[-1], 2)
+            # Counted, not noted: three alternatives counted four times read 81
+            # ways where two read sixteen, and read as two whatever the group
+            # holds, "(a|aa|aaa){4}" passed the bound five times over.
+            ways[-1] = ways[-1] + 1
         elif char == ")":
             inside = repeats.pop() if len(repeats) > 1 else False
             branched = choices.pop() if len(choices) > 1 else False
@@ -1227,6 +1230,9 @@ class NamingRules:
             # match this name says nothing about it. A target with no placeholder
             # in it was handed back as a name, so a rule rewritten while a name was
             # being worked out renamed the entity although it had stopped applying.
+            # Nothing and the target are told apart by every caller the same way -
+            # a name is what is truthy - so this says "no name" where it used to
+            # say the wrong one.
             return ""
         filled = fill_placeholders(target, match)
         # Nothing rather than the template: the target with its placeholders

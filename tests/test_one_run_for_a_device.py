@@ -618,8 +618,12 @@ def test_the_staged_rows_show_the_names_the_run_will_write() -> None:
     at = markup.index("previewDeviceWide() {")
     body = markup[at : markup.index("invalidateEntityPreviews() {", at)]
 
-    assert "const named = answer.names && answer.names[i];" in body
-    assert "if (named && entity._currentSuffix === undefined) entity._previewName = named;" in body
+    assert "if (answer.names && answer.names[i] != null) entity._previewName = answer.names[i];" in body
+    # Every row it answered for, the one being typed in included: the name that
+    # went to the server was rendered from what is being typed, so the answer is
+    # that name numbered. Held back, the row showed a name of its own beside the
+    # id the run will write.
+    assert "_currentSuffix === undefined) entity._previewName" not in body
 
 
 def test_a_name_that_comes_out_empty_is_not_asked_about_again() -> None:

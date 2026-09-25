@@ -983,3 +983,19 @@ def test_a_rule_that_stopped_matching_says_nothing_about_the_name(rules):
 
     assert rules.render(rule, "Heizung 12345678", "de") == "Heizkessel"
     assert rules.render(rule, "Waschmaschine", "de") == ""
+
+
+def test_the_alternatives_of_a_choice_are_counted(rules):
+    """Three alternatives counted four times read 81 ways where two read sixteen.
+    Read as two whatever the group holds, "(a|aa|aaa){4}" passed the bound five times
+    over."""
+    for expression in [r"(a|aa|aaa){4}", r"(a|b|c){3}"]:
+        with pytest.raises(NamingRuleError, match="repeat a choice"):
+            compile_pattern(expression)
+
+    # Two alternatives counted as far as the bound allows are still read.
+    assert compile_pattern(r"(a|aa){2,3}") is not None
+    assert compile_pattern(r"(open|closed){1,2}") is not None
+    assert compile_pattern(r"(?:a|aa){4}") is not None
+    # And a choice nothing counts is no runaway however many ways it reads.
+    assert compile_pattern(r"(?:Heizung|Kuehlung|Lueftung) (?P<n1>\d+)") is not None

@@ -5522,8 +5522,15 @@
                             // names beside them did not - the list offered two
                             // rows called the same thing and the run wrote
                             // something else.
-                            const named = answer.names && answer.names[i];
-                            if (named && entity._currentSuffix === undefined) entity._previewName = named;
+                            // Every row it answered for, the one being typed in
+                            // included: the name that went to the server was
+                            // rendered from what is being typed, so the answer is
+                            // that name numbered - not the stored one coming back
+                            // over it. Held back, the row showed a name of its own
+                            // beside the id the run will write. Empty is an answer
+                            // - area and device with no type part - and only
+                            // nothing at all is not.
+                            if (answer.names && answer.names[i] != null) entity._previewName = answer.names[i];
                             entity._previewId = (answer.ids && answer.ids[i])
                                 || this.composeEntityId(entity, (answer.normalized || [])[i]);
                         });
