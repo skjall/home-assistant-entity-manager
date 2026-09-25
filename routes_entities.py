@@ -756,6 +756,12 @@ async def rename_device_handler(job, ctx):
         # The area goes first: the device name and every entity name below is
         # built out of it, so a device that moves is named where it moved to.
         if set_area:
+            # Where it is now, read before the write: the step below says the
+            # device is somewhere it was not, and a move Home Assistant had
+            # already made itself - by a user, by another client - is not that.
+            # Said all the same, the interface told the user about a move that
+            # nothing made.
+            was_in = (renamer_state["restructurer"].devices.get(device_id) or {}).get("area_id")
             # Said before it is done: a write that raises left the log with no
             # step at all, so nothing said which operation the job failed on.
             # The log is the job's account of what it set out to do, not a
@@ -769,7 +775,8 @@ async def rename_device_handler(job, ctx):
             # the move got through, and a rename failing after it leaves the
             # device somewhere it was not before - which the interface has to
             # be able to tell the user.
-            ctx.log("MOVED", f"{device_id} is in {area_id or 'no area'}")
+            if (area_id or None) != (was_in or None):
+                ctx.log("MOVED", f"{device_id} is in {area_id or 'no area'}")
 
         z2m_sync: dict[str, Any] = {}
         if new_name is not None:

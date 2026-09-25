@@ -2263,7 +2263,7 @@
                                                                  else comboStep(1, areaOptions.length, $el)"
                                    @keydown.arrow-up.prevent="if (!areaComboOpen) openAreaCombo($el);
                                                               else comboStep(-1, areaOptions.length, $el)"
-                                   @keydown.enter.prevent="if (areaComboOpen) takeArea()">
+                                   @keydown.enter="if (areaComboOpen) { $event.preventDefault(); takeArea(); }">
                         </div>
                         <div class="combo-list" x-show="areaComboOpen" x-cloak>
                             <template x-for="(area, at) in areaOptions" :key="area.id || '__none__'">
@@ -5691,7 +5691,11 @@
                         // reads it through panelAreaId, which decides whether the
                         // "no area" entry is in the list at all.
                         this.devicePreviewAreaId === null ? '\u0003' : this.devicePreviewAreaId,
-                        this.translationsReady
+                        // The wording itself, not only the flag that says the
+                        // translations are in: loaded without that flag turning
+                        // over, the entry that takes a device out of its area kept
+                        // the name it had in the language before.
+                        this.t('area.no_area')
                     ].join('\u0000');
                     if (areaList.key !== key) {
                         areaList.key = key;
@@ -5738,7 +5742,12 @@
 
                 pickArea(area) {
                     this.pickPreviewArea(area.id);
-                    this.areaSearch = area.name;
+                    // What the field says is written by the effect on it, which
+                    // reads whether the list is open and runs again as this closes
+                    // it. Said here too, the name from the list was written over by
+                    // the one the registry holds now - the same name, unless the
+                    // area was renamed in Home Assistant since the list was built,
+                    // and then the older of the two was the one shown for a moment.
                     this.areaComboOpen = false;
                     // Where the list stood is forgotten with it, as when it is
                     // closed any other way: the field keeps the focus after a
@@ -5785,8 +5794,12 @@
                 // staged a move to whatever area comes first alphabetically,
                 // with nothing the user did saying to move the device at all.
                 areaComboStart() {
-                    const at = this.areaOptions.findIndex(area => area.current);
-                    return at < 0 ? 0 : at;
+                    // Nothing lit up where the panel stands on nothing the list
+                    // holds - an area deleted in Home Assistant before the page
+                    // read the registry again. At the top of the list instead,
+                    // Enter staged a move to the first area there was, which is
+                    // the very thing opening on the current area prevents.
+                    return this.areaOptions.findIndex(area => area.current);
                 },
 
                 takeArea() {
@@ -5795,6 +5808,11 @@
                     // reaching past its end took nothing at all.
                     const listed = this.areaOptions;
                     if (!listed.length) return;
+                    // Nothing is lit up, so Enter takes nothing: the list opens
+                    // that way where the area the device is in has gone from Home
+                    // Assistant, and reading it as the top line would have staged
+                    // a move nobody asked for.
+                    if (this.areaComboAt < 0) return;
                     this.areaComboAt = Math.min(this.areaComboAt, listed.length - 1);
                     this.pickArea(listed[this.areaComboAt]);
                 },

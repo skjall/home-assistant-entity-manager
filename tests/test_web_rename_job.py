@@ -406,6 +406,43 @@ def test_a_name_that_says_nothing_is_still_a_rename_in_the_message() -> None:
     assert "elif new_name is not None:" in body
 
 
+def test_nothing_says_moved_where_the_device_was_already_there(tmp_path, monkeypatch) -> None:
+    """Home Assistant may have made the move itself - a user, another client - and
+    writing the same area again moves nothing. Logged all the same, the interface
+    told the user about a move that nothing made."""
+
+    class Registry:
+        asked_for = "unset"
+
+        async def assign_area(self, device_id: str, area_id: str) -> None:
+            Registry.asked_for = area_id
+
+        async def rename_device(self, device_id: str, new_name: str) -> dict:
+            raise RuntimeError("Failed to rename device: refused")
+
+    class AlreadyThere(_NoRestructurer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.devices = {"dev1": {"id": "dev1", "area_id": "bad"}}
+
+    _a_handler_that_cannot_rename(monkeypatch, Registry(), AlreadyThere())
+    steps = _run(
+        tmp_path,
+        {
+            "job_id": "j4",
+            "type": "rename_device",
+            "state": "running",
+            "payload": {"device_id": "dev1", "new_name": "Bad Lampe", "area_id": "bad", "set_area": True},
+        },
+    )
+
+    # The write is still made: what the job was asked for is what it writes, and
+    # the registry is the one that says whether anything changed.
+    assert Registry.asked_for == "bad"
+    assert "AREA" in steps
+    assert "MOVED" not in steps, "nothing moved"
+
+
 def test_the_note_does_not_carry_the_type_part() -> None:
     """The type part is what the name is built from, not what a rule matches on.
 
