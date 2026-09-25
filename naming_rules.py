@@ -165,6 +165,21 @@ _GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|P=\w+|<[=!]|[:=!>#])")
 # A counted quantifier: "{4}", "{1,3}", or the open-ended "{2,}".
 _COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
 
+# How often a group holding a choice may be counted. Every repetition doubles the
+# ways a near-miss can be cut up, so four of them is sixteen tries, and fifty is a
+# number with no end in sight.
+MAX_CHOICE_REPEATS = 4
+
+
+def _at_most(count: str) -> int:
+    """The largest number of repetitions a counted quantifier allows.
+
+    ``count`` is the quantifier as it is written - "{4}", "{1,3}" - and the answer
+    is the last number in it.
+    """
+    numbers = [int(part) for part in re.findall(r"\d+", count)]
+    return max(numbers) if numbers else 0
+
 
 def _refuse_runaway(regex: str) -> None:
     """Refuse a quantifier that is applied to something that already repeats.
@@ -224,10 +239,17 @@ def _refuse_runaway(regex: str) -> None:
             # "([\\w ]+){2,5}" can split a hundred characters across five
             # groups every way there is, and tries all of them on a name that
             # nearly matches.
+            #
+            # A choice is counted too, and how far: the ways to read one grow
+            # with the count, so "(on|one){1,50}" tries a number of splits no
+            # bound on the text can hold down, while "(open|closed){1,2}" is
+            # four. Up to MAX_CHOICE_REPEATS the whole set is small enough to
+            # walk; past that it is refused like the rest.
             if after == "{":
                 counted = _COUNT.match(regex, at + 1)
                 if counted and not counted.group("open") and not inside:
-                    after = ""
+                    if not branched or _at_most(counted.group(0)) <= MAX_CHOICE_REPEATS:
+                        after = ""
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
             # A choice inside a repeated group is the other shape that runs

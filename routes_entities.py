@@ -698,6 +698,11 @@ async def rename_device_handler(job, ctx):
     payload = job["payload"]
     device_id = payload["device_id"]
     new_name = payload.get("new_name")
+    # Asked for and empty is not the same as not asked for: a job carrying "" -
+    # a call straight to the API, or a job store somebody edited - had the rename
+    # skipped and the run reported as done.
+    if new_name is not None and not str(new_name).strip():
+        raise RuntimeError("A rename needs a name")
     set_area = bool(payload.get("set_area"))
     area_id = payload.get("area_id")
 

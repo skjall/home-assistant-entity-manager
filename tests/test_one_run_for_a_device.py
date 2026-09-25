@@ -179,8 +179,18 @@ def test_the_area_is_written_before_the_name(monkeypatch) -> None:
 
 
 def test_a_move_without_a_new_name_renames_nothing(monkeypatch) -> None:
-    written = _run_handler(monkeypatch, {"device_id": "dev1", "new_name": None, "area_id": "kitchen", "set_area": True})
+    """As the route writes it: no "new_name" key at all. Passed as None, this
+    covered a state nothing produces."""
+    written = _run_handler(monkeypatch, {"device_id": "dev1", "area_id": "kitchen", "set_area": True})
     assert written == ["area:kitchen"]
+
+
+def test_a_rename_asked_for_with_an_empty_name_is_refused(monkeypatch) -> None:
+    """Asked for and empty is not the same as not asked for: a job carrying "" -
+    a call straight to the API, or a job store somebody edited - had the rename
+    skipped and the run reported as done."""
+    with pytest.raises(RuntimeError, match="needs a name"):
+        _run_handler(monkeypatch, {"device_id": "dev1", "new_name": "   "})
 
 
 def test_a_rename_without_an_area_leaves_the_area_alone(monkeypatch) -> None:
@@ -203,10 +213,7 @@ def test_a_rename_alone_says_so(monkeypatch) -> None:
 
 
 def test_a_move_alone_says_so(monkeypatch) -> None:
-    _, result = _run(
-        monkeypatch,
-        {"device_id": "dev1", "new_name": None, "area_id": "kitchen", "set_area": True},
-    )
+    _, result = _run(monkeypatch, {"device_id": "dev1", "area_id": "kitchen", "set_area": True})
     assert result["message"] == "Device moved"
 
 
@@ -369,7 +376,49 @@ def test_the_lookups_on_the_hot_paths_ask_the_index():
 
 def test_the_background_refresh_asks_through_the_wait():
     """It runs on every poll of the list, and asking from there was a slug
-    request per poll beside the ones the typing asks for."""
+    request per poll beside the ones the typing asks for - and where one was
+    already on its way, asking again called it off and left every staged row
+    without an id until the second answer arrived."""
     markup = _panel_source()
 
-    assert "if (stagedUnanswered) this.stageDeviceWideChange();" in markup
+    assert "if (stagedUnanswered && !this._stagedAsking) this.stageDeviceWideChange();" in markup
+    at = markup.index("previewDeviceWide() {")
+    body = markup[at : markup.index("entitiesOfDevice(", at)]
+    assert "this._stagedAsking = true;" in body
+    assert "if (run === this._stagedRun) this._stagedAsking = false;" in body
+
+
+def test_a_typed_name_with_nowhere_to_go_is_said_out_loud_over_a_move():
+    """The move was written, the run reported success, and the name the user had
+    typed was dropped without a word - the device-name template has no {device} in
+    it, so there was nowhere for it to go."""
+    markup = _panel_source()
+    at = markup.index("const payload = { device_id: deviceId };")
+    body = markup[at : at + 1600]
+
+    assert "if (payload.new_name === undefined && nameStaged && areaStaged) {" in body
+    assert body.count("messages.name_has_no_place") == 2
+
+
+def test_apply_all_goes_on_where_no_job_was_started():
+    """A job renames the device and every entity under it, so there is nothing left
+    for the batch. Where none was started - a name with nowhere to go, a refused
+    start - returning left the rest of the list unapplied."""
+    markup = _panel_source()
+
+    assert "if (await this.applyDeviceWideChange(others)) return;" in markup
+    at = markup.index("async applyDeviceWideChange(")
+    body = markup[at : at + 1400]
+    assert "if (running) return true;" in body
+    assert "return false;" in body
+
+
+def test_the_index_belongs_to_the_component_that_asked():
+    """Two components mounted at once each count their own versions, and the second
+    was handed the first one's devices wherever the two numbers agreed."""
+    markup = _panel_source()
+    at = markup.index("function indexed(state)")
+    body = markup[at : at + 700]
+
+    assert "index.owner === state" in body
+    assert "index.owner = state;" in body

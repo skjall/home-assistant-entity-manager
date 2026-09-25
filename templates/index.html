@@ -3247,6 +3247,7 @@
             // must not set another repaint off. `hierarchyVersion` says when
             // the registry moved on and the pass has to run again.
             const index = {
+                owner: null,
                 version: -1,
                 devicesById: new Map(),
                 areasById: new Map(),
@@ -3266,7 +3267,12 @@
             // pass that costs one walk of lists the page has just been handed
             // anyway, and only when something changed.
             function indexed(state) {
-                if (index.version === state.hierarchyVersion) return index;
+                // The version and whose it is: two components mounted at once -
+                // a test harness, a reload that leaves the first standing - each
+                // count their own versions, and the second was handed the first
+                // one's devices wherever the two numbers happened to agree.
+                if (index.owner === state && index.version === state.hierarchyVersion) return index;
+                index.owner = state;
                 index.devicesById = new Map();
                 index.areasById = new Map();
                 index.entitiesById = new Map();
@@ -5323,7 +5329,12 @@
                     // Through the wait, not straight away: this runs on every
                     // background refresh of the list, and asking from here was a
                     // slug request per poll beside the ones the typing asks for.
-                    if (stagedUnanswered) this.stageDeviceWideChange();
+                    //
+                    // And not while one is on its way: asking again moved the run
+                    // number on, which called the answer already coming off, and
+                    // every staged row was left without an id until the new answer
+                    // arrived - twice the wait for nothing.
+                    if (stagedUnanswered && !this._stagedAsking) this.stageDeviceWideChange();
                     if (!pending.length) return;
 
                     // Which computation asked about each row. A second one
@@ -5478,6 +5489,7 @@
                     // left to reject, it was an unhandled rejection with no
                     // message, no fallback, and in some browsers nothing on the
                     // page answering afterwards.
+                    this._stagedAsking = true;
                     const settling = this.fetchNormalizedFor(
                         entities.map(e => e._previewName),
                         entities.map(e => e.id)
@@ -5491,6 +5503,7 @@
                     }).catch(error => {
                         console.error('Error computing staged previews:', error);
                     }).finally(() => {
+                        if (run === this._stagedRun) this._stagedAsking = false;
                         this._previewsInFlight.delete(settling);
                     });
                     this._previewsInFlight.add(settling);
@@ -7174,11 +7187,12 @@
                         // one is, the button stays shut until it reports back -
                         // a second click would enqueue the same rename twice.
                         const running = await this.applyDeviceWideRun(device, deviceId, driftDevices);
-                        if (running) return;
+                        if (running) return true;
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     }
                     this.renamingDevice = false;
+                    return false;
                 },
 
                 async applyDeviceWideRun(device, deviceId, driftDevices) {
@@ -7246,6 +7260,13 @@
                     const payload = { device_id: deviceId };
                     if (newFullName && newFullName !== device.name) payload.new_name = newFullName;
                     if (areaStaged) payload.area_id = picked || null;
+                    // A name was typed and there is nowhere in the template for it
+                    // to go. Said even where the move goes ahead: the move was
+                    // written, the run reported success, and the name the user had
+                    // typed was dropped without a word about it.
+                    if (payload.new_name === undefined && nameStaged && areaStaged) {
+                        this.showMessage(this.t('messages.name_has_no_place'), 'info', true);
+                    }
                     if (payload.new_name === undefined && !areaStaged) {
                         // A name was typed and the device is still called what
                         // it was: the device-name template has no {device} in
@@ -7454,8 +7475,13 @@
                         const others = this.filteredDevices
                             .filter(d => d.z2m_drift && (d.id !== this.selectedDevice || !renaming))
                             .map(d => d.id);
-                        await this.applyDeviceWideChange(others);
-                        return;
+                        // Only where a job is now under way: that job renames the
+                        // device and every entity under it, so there is nothing
+                        // left for the batch below. Where none was started -
+                        // a name with nowhere to go, a refused start - returning
+                        // here left the rest of the list unapplied, and the click
+                        // had done nothing at all.
+                        if (await this.applyDeviceWideChange(others)) return;
                     }
 
                     // Find all entities that need renaming
