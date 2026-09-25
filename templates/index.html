@@ -2267,9 +2267,10 @@
                         <div class="combo-list" x-show="areaComboOpen" x-cloak>
                             <template x-for="(area, at) in areaOptions" :key="area.id || '__none__'">
                                 <button type="button" class="combo-item"
-                                        :class="(area.id === panelAreaId() ? 'current ' : '')
+                                        :class="(area.current ? 'current ' : '')
                                                 + (at === Math.min(areaComboAt, areaOptions.length - 1) ? 'at' : '')"
                                         @mousemove="areaComboAt = at"
+                                        @mousedown.prevent
                                         @click="pickArea(area)">
                                     <span x-text="area.name"></span>
                                     <span class="tally" x-show="area.id"
@@ -5672,7 +5673,10 @@
                 // the arrow keys all ask for it, and the filter ran for each.
                 get areaOptions() {
                     const key = [
-                        this.areaSearch || '',
+                        // As the filter reads it: typed with another capital or a
+                        // space at the end, the same question missed the answer
+                        // already worked out for it.
+                        (this.areaSearch || '').trim().toLowerCase(),
                         // When the registry last moved, not the areas written
                         // out: the list is read by the combo's x-show, by every
                         // item's class and by the empty line, so writing them
@@ -5697,7 +5701,14 @@
 
                 matchingAreas() {
                     const typed = (this.areaSearch || '').trim().toLowerCase();
-                    const areas = this.hierarchy.areas.filter(a => !typed || a.name.toLowerCase().includes(typed));
+                    // Which one the panel stands on, said once as the list is
+                    // built rather than asked for by every line of it: the class
+                    // on each item asked, so a list of fifty areas asked fifty
+                    // times per repaint what the panel holds.
+                    const holds = this.panelAreaId();
+                    const areas = this.hierarchy.areas
+                        .filter(a => !typed || a.name.toLowerCase().includes(typed))
+                        .map(area => ({...area, current: area.id === holds}));
                     // Offered wherever there is an area to leave or a pick to
                     // take back: the device's own area, or whatever pick the panel
                     // holds. Read off the device alone, a device in no area that
@@ -5708,7 +5719,7 @@
                     // pick of no area is one: taken out of the list once it was
                     // chosen, the highlight had nowhere to stand and Enter took
                     // the first area in the list instead.
-                    const none = { id: '', name: this.t('area.no_area') };
+                    const none = { id: '', name: this.t('area.no_area'), current: !holds };
                     // A move that can be made, not merely a pick that is held:
                     // an area deleted in Home Assistant leaves the pick standing
                     // with nothing staged, and the entry that takes a move back
@@ -5747,8 +5758,7 @@
                 // staged a move to whatever area comes first alphabetically,
                 // with nothing the user did saying to move the device at all.
                 areaComboStart() {
-                    const holds = this.panelAreaId();
-                    const at = this.areaOptions.findIndex(area => (area.id || '') === holds);
+                    const at = this.areaOptions.findIndex(area => area.current);
                     return at < 0 ? 0 : at;
                 },
 
@@ -5770,8 +5780,10 @@
                     // appeared in the middle of the list rather than at its top.
                     this.areaComboAt = 0;
                     // Typing and then looking elsewhere picks nothing: the field
-                    // goes back to the area the panel stands on.
-                    this.areaSearch = this.panelAreaName();
+                    // goes back to the area the panel stands on. Written by the
+                    // effect on the field, which reads whether the list is open
+                    // and runs again as this closes it - said here as well, the
+                    // same answer was worked out twice on every close.
                 },
 
                 // Walk the open list with the arrow keys, keeping the one that
@@ -7684,7 +7696,14 @@
                         const renamed = steps.includes('RENAMED');
                         const askedForARename = !!(job.payload || {}).new_name;
                         const key = !renamed && askedForARename ? 'device.moved_not_renamed' : 'device.moved_job_failed';
-                        this.showMessage(this.t(key, {error: job.error || ''}), 'error');
+                        // Which device, by name: the job runs on whichever device
+                        // it was started for, and the panel may have turned to
+                        // another one since. Told "the device", the user had no
+                        // way of knowing which one is somewhere it was not, and
+                        // the one in front of them was the obvious guess.
+                        const about = deviceId ? indexed(this).devicesById.get(deviceId) : null;
+                        const named = (about?.name || (job.payload || {}).new_name || '').trim();
+                        this.showMessage(this.t(key, {device: named, error: job.error || ''}), 'error');
                     }
                     // The job aligns the Z2M name of the device it renamed; any
                     // other device the view showed as drifted is left to here.

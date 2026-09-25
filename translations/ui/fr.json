@@ -257,8 +257,8 @@
     "id_conflict": "Ce nom prendrait un identifiant d'entité déjà attribué : {id}",
     "name_already_correct": "L'appareil porte déjà ce nom",
     "gone": "Cet appareil n'est plus dans Home Assistant",
-    "moved_not_renamed": "L’appareil a été déplacé, mais pas renommé : {error}",
-    "moved_job_failed": "L’appareil a été déplacé ; la tâche a ensuite échoué : {error}"
+    "moved_not_renamed": "{device} a été déplacé, mais pas renommé : {error}",
+    "moved_job_failed": "{device} a été déplacé ; la tâche a ensuite échoué : {error}"
   },
   "units": {
     "entities": "Entités",

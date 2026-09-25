@@ -890,6 +890,11 @@ def test_a_rename_that_went_through_is_not_reported_as_one_that_did_not():
     body = markup[at : at + 900]
 
     assert "const renamed = steps.includes('RENAMED');" in body
+    # And which device it is about: the job runs on the device it was started for,
+    # and the panel may have turned to another one since - told "the device", the
+    # user had no way of knowing which one is somewhere it was not.
+    assert "const about = deviceId ? indexed(this).devicesById.get(deviceId) : null;" in markup
+    assert "this.t(key, {device: named, error: job.error || ''})" in markup
     # A move with no rename beside it is not a rename that failed either.
     assert "const askedForARename = !!(job.payload || {}).new_name;" in body
     assert "!renamed && askedForARename ? 'device.moved_not_renamed' : 'device.moved_job_failed'" in body
@@ -903,18 +908,17 @@ def test_the_list_opens_on_the_area_the_device_is_in():
     at = markup.index('x-model="areaSearch"')
     handler = markup[at : at + 700]
 
-    assert "@focus=\"areaSearch = ''; openAreaCombo()\"" in handler
-    # And an arrow key on the closed list opens it there too: stepped into, its
-    # first line could not be reached at all - the step went from the top to the
-    # line below it.
-    assert "if (!areaComboOpen) openAreaCombo();" in handler
+    # Every way into the list opens it there: the field taking the focus, and an
+    # arrow key on the closed list - stepped into, its first line could not be
+    # reached at all, because the step went from the top to the line below it.
+    assert "openAreaCombo()" in handler
     assert handler.count("if (!areaComboOpen) openAreaCombo();") == 2
 
     at = markup.index("openAreaCombo() {")
     body = markup[at : markup.index("takeArea() {", at)]
     assert "this.areaComboAt = this.areaComboStart();" in body
-    assert "const holds = this.panelAreaId();" in body
-    assert "this.areaOptions.findIndex(area => (area.id || '') === holds)" in body
+    # Which line that is comes off the line itself, marked as the list is built.
+    assert "this.areaOptions.findIndex(area => area.current)" in body
 
 
 def test_a_device_in_no_area_can_take_back_a_pick():
@@ -948,6 +952,55 @@ def test_the_area_the_device_is_in_is_not_a_pick():
     assert "const own = this.selectedDeviceData?.area_id || '';" in body
     assert "const picked = (areaId || '') === own ? null : areaId;" in body
     assert "this.devicePreviewAreaId = picked;" in body
+
+
+def test_the_list_says_which_line_the_panel_stands_on():
+    """The class on each item asked the panel, so a list of fifty areas asked
+    fifty times per repaint what one answer would have said."""
+    markup = _panel_source()
+
+    assert "\"(area.current ? 'current ' : '')" in markup
+    assert "area.id === panelAreaId()" not in markup
+    at = markup.index("matchingAreas() {")
+    body = markup[at : markup.index("pickArea(area) {", at)]
+    assert "const holds = this.panelAreaId();" in body
+    assert ".map(area => ({...area, current: area.id === holds}));" in body
+    assert "current: !holds };" in body
+
+
+def test_a_pick_is_not_lost_to_the_list_closing_under_it():
+    """Clicking an item takes the focus off the field in some browsers, and the
+    field closes the list when it loses it - with the list hidden before the click
+    lands, the pick was never made. The item does not take the focus."""
+    markup = _panel_source()
+    at = markup.index('x-for="(area, at) in areaOptions"')
+    body = markup[at : at + 800]
+
+    assert "@mousedown.prevent" in body
+    assert '@click="pickArea(area)"' in body
+
+
+def test_what_the_field_says_on_closing_has_one_owner():
+    """The effect on the field reads whether the list is open, so it writes the
+    field again as it closes. Said in both places, the same answer - which walks
+    what is staged - was worked out twice on every close."""
+    markup = _panel_source()
+    at = markup.index("closeAreaCombo() {")
+    body = markup[at : markup.index("comboStep(by, total, field) {", at)]
+
+    assert "this.areaSearch = this.panelAreaName();" not in body
+    # And the effect that owns it says what it writes.
+    assert "if (!areaComboOpen) areaSearch = shown" in markup
+
+
+def test_the_list_is_keyed_on_the_question_the_filter_asks():
+    """Typed with another capital or a space at the end, the same question missed
+    the answer already worked out for it."""
+    markup = _panel_source()
+    at = markup.index("get areaOptions() {")
+    body = markup[at : markup.index("matchingAreas() {", at)]
+
+    assert "(this.areaSearch || '').trim().toLowerCase()," in body
 
 
 def test_the_area_list_is_keyed_on_when_the_registry_moved():
