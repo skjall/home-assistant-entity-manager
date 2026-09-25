@@ -238,7 +238,10 @@ class _NoDependencies:
 
 
 class _NoRestructurer:
-    entities: dict = {}
+    def __init__(self) -> None:
+        # Its own, not the class's: written to, one test's entities would have
+        # been every later test's.
+        self.entities: dict = {}
 
     async def load_structure(self, ws: Any) -> None:
         return None

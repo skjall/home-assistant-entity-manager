@@ -2249,8 +2249,9 @@
                         <div class="combo-field">
                             <i class="ri-search-line"></i>
                             <input type="text" class="edit-input combo-input" autocomplete="off"
-                                   x-effect="areaOptions; devicePreviewAreaId; selectedDeviceData;
-                                             if (!areaComboOpen) areaSearch = panelAreaName()"
+                                   x-effect="devicePreviewAreaId; selectedDeviceData;
+                                             const shown = panelAreaName();
+                                             if (!areaComboOpen) areaSearch = shown"
                                    :class="deviceChangeStagedArea() ? 'chosen' : ''"
                                    :placeholder="t('area.select_area')"
                                    x-model="areaSearch"
@@ -5442,8 +5443,7 @@
                 get deviceChangeStaged() {
                     const device = this.selectedDeviceData;
                     if (!device || this.isVirtualDevice(this.selectedDevice)) return false;
-                    const areaStaged = this.devicePreviewAreaId !== null
-                        && (this.devicePreviewAreaId || null) !== (device.area_id || null);
+                    const areaStaged = this.areaMoveStaged(this.devicePreviewAreaId, device);
                     const typed = this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim();
                     const nameStaged = !!typed && typed !== (device.base_name || '').trim();
                     return areaStaged || nameStaged;
@@ -5455,15 +5455,30 @@
                 // area the device is in picked again: the field was marked as
                 // holding a change while the apply button stayed shut.
                 deviceChangeStagedArea() {
-                    if (this.devicePreviewAreaId === null) return false;
-                    // An area deleted in Home Assistant while it stood staged
-                    // here is nothing to move into, so there is nothing
-                    // staged: the field went blank and the button stayed open
-                    // on a move that could not be made.
-                    if (this.devicePreviewAreaId && !this.hierarchy.areas.some(a => a.id === this.devicePreviewAreaId)) {
-                        return false;
-                    }
-                    return (this.devicePreviewAreaId || null) !== (this.selectedDeviceData?.area_id || null);
+                    return this.areaMoveStaged(this.devicePreviewAreaId, this.selectedDeviceData);
+                },
+
+                // Whether a picked area is a move this device can be made to.
+                // Asked by the field that marks itself as holding a change, by
+                // the apply button that counts what is staged, and by the run
+                // that writes it - each of those had worked it out for itself,
+                // and they disagreed: an area deleted in Home Assistant while
+                // it stood staged here left the field blank and the button
+                // open on a move that could not be made, and clicking it said
+                // "nothing to apply" with no way to clear the staging but to
+                // turn to another device.
+                //
+                // The pick is passed in rather than read here, because the run
+                // reads it before it waits and must not read it again after.
+                areaMoveStaged(picked, device) {
+                    // Nothing picked at all. Picking no area is a move, and
+                    // that pick is the empty string.
+                    if (picked === null || picked === undefined) return false;
+                    // An area that has gone from Home Assistant is nothing to
+                    // move into: asking for it wrote a device into an area that
+                    // is not there.
+                    if (picked && !this.hierarchy.areas.some(a => a.id === picked)) return false;
+                    return (picked || null) !== (device?.area_id || null);
                 },
 
                 panelAreaId() {
@@ -5532,6 +5547,11 @@
                     this.pickPreviewArea(area.id);
                     this.areaSearch = area.name;
                     this.areaComboOpen = false;
+                    // Where the list stood is forgotten with it, as when it is
+                    // closed any other way: the field keeps the focus after a
+                    // pick, and an arrow key pressed straight afterwards went
+                    // on from the item just chosen rather than to the top.
+                    this.areaComboAt = 0;
                 },
 
                 takeArea() {
@@ -7303,11 +7323,7 @@
                         this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
                         return;
                     }
-                    // An area that has gone from Home Assistant is nothing to
-                    // move into: asking for it wrote a device into an area that
-                    // is not there.
-                    const stillThere = !picked || this.hierarchy.areas.some(a => a.id === picked);
-                    const areaStaged = picked !== null && stillThere && (picked || null) !== (device.area_id || null);
+                    const areaStaged = this.areaMoveStaged(picked, device);
                     // Rendered with the staged area, so a device that moves is
                     // named where it moved to rather than where it was.
                     const newFullName = this.renderDeviceName(device, base);

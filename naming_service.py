@@ -203,7 +203,12 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         # What went in, not what came out: a rule the user edits afterwards has
         # to reach this entity again, and it only does if the note hands it the
         # word the rule matches on.
-        "base_entity": resolution.get("input") or resolution.get("value") or "",
+        #
+        # None where the resolution says neither: "" is the note for a name that
+        # has no type part at all, and writing it for "nothing to say about the
+        # type part" had the next run strip the type part off a name that has
+        # one. provenance_for below says the same thing.
+        "base_entity": resolution.get("input") or resolution.get("value") or None,
     }
 
 
@@ -222,7 +227,12 @@ def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
         # What went into the name, not what came out of it: a rule the user
         # edits afterwards only reaches this entity again if the note hands it
         # back the word the rule matches on.
-        "base_entity": resolution.get("input") or resolution.get("value") or "",
+        #
+        # And None where it says neither, as the proposal above does: "" is the
+        # note for a name that has no type part at all, so the entity renamed
+        # one at a time was noted as having none and the next run proposed
+        # stripping the type part off a name that has one.
+        "base_entity": resolution.get("input") or resolution.get("value") or None,
         "won_by": resolution.get("won_by") or "",
         "rule_id": resolution.get("rule_id"),
         "template_hash": renamer_state["naming_templates"].fingerprint(),

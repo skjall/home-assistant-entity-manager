@@ -6,13 +6,17 @@ and every entity name below it are built out of the area.
 """
 
 import asyncio
+import os
 from typing import Any
 
 import pytest
 
 from jobs import TERMINAL_STATES, JobStore, JobWorker
+import naming_service
 import routes_entities
 import web_ui
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 @pytest.fixture
@@ -214,3 +218,73 @@ def test_the_area_step_is_logged_before_it_is_written(monkeypatch) -> None:
         ctx,
     )
     assert ("AREA", "dev1 -> kitchen") in ctx.lines
+
+
+# --- One answer to "is an area move staged" --------------------------------
+#
+# The field that marks itself as holding a change, the apply button that counts
+# what is staged and the run that writes it each worked it out for themselves,
+# and they disagreed: an area deleted in Home Assistant while it stood staged
+# here left the field blank and the button open on a move that could not be
+# made. Clicking it said "nothing to apply", and there was no way to clear the
+# staging but to turn to another device.
+
+
+def _panel_source():
+    with open(os.path.join(HERE, "templates", "index.html"), encoding="utf-8") as handle:
+        return handle.read()
+
+
+def test_only_one_place_asks_whether_the_area_is_still_there():
+    """The guard against a deleted area lives in areaMoveStaged and nowhere else."""
+    markup = _panel_source()
+
+    assert "areaMoveStaged(picked, device)" in markup
+    # The three that used to work it out now ask it.
+    assert "return this.areaMoveStaged(this.devicePreviewAreaId, this.selectedDeviceData);" in markup
+    assert "const areaStaged = this.areaMoveStaged(this.devicePreviewAreaId, device);" in markup
+    assert "const areaStaged = this.areaMoveStaged(picked, device);" in markup
+    # And the copy the run kept is gone.
+    assert "const stillThere" not in markup
+
+
+def test_a_pick_forgets_where_the_list_stood():
+    """The field keeps the focus after Enter, and an arrow key pressed straight
+    afterwards went on from the item just chosen rather than to the top."""
+    markup = _panel_source()
+    at = markup.index("pickArea(area) {")
+    body = markup[at : markup.index("takeArea() {", at)]
+
+    assert "this.areaComboAt = 0;" in body
+
+
+def test_the_field_follows_the_areas_without_reading_what_it_writes():
+    """areaOptions reads areaSearch, and the effect writes it: listed as a
+    dependency, every pick and every panel change paid for a second run of the
+    effect, and anything written there conditionally would have looped."""
+    markup = _panel_source()
+    at = markup.index('x-effect="devicePreviewAreaId')
+    effect = markup[at : markup.index('"', at + 10)]
+
+    assert "areaOptions" not in effect
+    assert "panelAreaName()" in effect
+
+
+def test_a_single_rename_notes_nothing_where_the_resolution_says_nothing() -> None:
+    """ "" is the note for a name that has no type part at all. Written for "the
+    resolution said neither an input nor a value", the next run read it as that
+    answer and proposed stripping the type part off a name that has one.
+
+    The whole-run path says None here; this is the entity renamed by itself.
+    """
+
+    class _Resolutions:
+        last_resolutions = {"sensor.x": {"won_by": "ha", "input": None, "value": None}}
+
+    web_ui.renamer_state["restructurer"] = _Resolutions()
+    try:
+        note = naming_service.provenance_for("sensor.x")
+    finally:
+        web_ui.renamer_state.pop("restructurer", None)
+
+    assert note["base_entity"] is None
