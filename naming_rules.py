@@ -42,6 +42,7 @@ one filter.
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from functools import lru_cache
 import json
 import logging
 from pathlib import Path
@@ -270,6 +271,25 @@ def _refuse_runaway(regex: str) -> None:
         at += 1
 
 
+@lru_cache(maxsize=512)
+def _read_pattern(regex: str) -> "re.Pattern[str]":
+    """The work of compile_pattern, kept for an expression already read.
+
+    An expression is read where it arrives, to answer about it, and again where
+    the rules judge what the targets ask of it - the runaway walk and the
+    compilation twice for one write. Expressions are few and short: there is one
+    per pattern rule, and every entity of the integration is matched against it.
+
+    Only the expressions that can be read are kept; a refusal is worked out
+    again, which is what a refusal costs.
+    """
+    _refuse_runaway(regex)
+    try:
+        return re.compile(regex)
+    except re.error as error:
+        raise NamingRuleError(f"Not a valid pattern: {error}") from error
+
+
 def compile_pattern(regex: str) -> "re.Pattern[str]":
     """A pattern's expression, compiled, or a NamingRuleError saying why not."""
     # Said apart, because the two are different mistakes: a writer who sent
@@ -278,11 +298,7 @@ def compile_pattern(regex: str) -> "re.Pattern[str]":
         raise NamingRuleError("A pattern needs an expression")
     if len(regex) > MAX_PATTERN_LENGTH:
         raise NamingRuleError(f"A pattern's expression is at most {MAX_PATTERN_LENGTH} characters")
-    _refuse_runaway(regex)
-    try:
-        return re.compile(regex)
-    except re.error as error:
-        raise NamingRuleError(f"Not a valid pattern: {error}") from error
+    return _read_pattern(regex)
 
 
 def fill_placeholders(target: str, match: "re.Match[str]") -> Optional[str]:
@@ -856,17 +872,25 @@ class NamingRules:
         return None
 
     @staticmethod
-    def check_targets(match: Mapping[str, Any], targets: Mapping[str, str]) -> None:
+    def check_targets(
+        match: Mapping[str, Any],
+        targets: Mapping[str, str],
+        compiled: Optional["re.Pattern[str]"] = None,
+    ) -> None:
         """Refuse a target whose placeholders the expression does not capture.
 
         These targets, not every target the rule holds: an edit says what one
         language is to read and nothing about the others, and a rule whose other
         language had been left carrying a placeholder the expression has no group
         for could then not be edited at all - not even to mend it.
+
+        ``compiled`` is the expression where the caller has already read it, so
+        an edit that has to say whose expression could not be read does not have
+        to compile it twice to find out.
         """
         if match["kind"] != "pattern":
             return
-        pattern = compile_pattern(match["value"])
+        pattern = compiled if compiled is not None else compile_pattern(match["value"])
         for target in targets.values():
             for key in _PLACEHOLDER.findall(target):
                 if not _known_placeholder(pattern, key):
@@ -1417,11 +1441,10 @@ class NamingRules:
         # before this call: one restored without its filters answered a request
         # that changed nothing with "a pattern rule applies within an
         # integration".
-        if (
-            wanted["targets"] == rule["targets"]
-            and wanted["match"] == rule["match"]
-            and wanted["filters"] == rule["filters"]
-        ):
+        # Read with get: a rule out of a backup, or one built in a test, may be
+        # missing a field this never wrote, and an edit to its target answered
+        # with a KeyError rather than with a rule.
+        if all(wanted.get(key) == rule.get(key) for key in ("targets", "match", "filters")):
             return rule
 
         # What the call changes decides what is judged. An expression or a
@@ -1446,10 +1469,7 @@ class NamingRules:
                 compiled = compile_pattern(wanted["match"]["value"])
             except NamingRuleError as error:
                 raise NamingRuleError(f"This rule's own expression cannot be read: {error}") from error
-            for target in clean.values():
-                for key in _PLACEHOLDER.findall(target):
-                    if not _known_placeholder(compiled, key):
-                        raise NamingRuleError(f"The pattern captures nothing for {{{key}}}")
+            self.check_targets(wanted["match"], clean, compiled)
 
         # Put back if it cannot be written: the rule in memory answers every
         # later read, and a disk that refused the write would have left it
@@ -1461,11 +1481,12 @@ class NamingRules:
         #
         # Nothing can come between the reading above and the writing here: every
         # method that writes runs under the store's lock, this one included.
-        changed = [key for key in ("targets", "match", "filters") if wanted[key] != rule[key]]
+        changed = [key for key in ("targets", "match", "filters") if wanted.get(key) != rule.get(key)]
         held = {key: rule[key] for key in changed + ["updated_at"] if key in rule}
         added = [key for key in ("updated_at",) if key not in rule]
         for key in changed:
-            rule[key] = wanted[key]
+            if key in wanted:
+                rule[key] = wanted[key]
         rule["updated_at"] = _now()
         try:
             self.save()

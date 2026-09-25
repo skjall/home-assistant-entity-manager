@@ -755,3 +755,54 @@ def test_an_empty_expression_is_answered_in_the_row():
     assert "alert(this.t('settings.pattern_needs_an_expression'))" not in body
     assert "this.editError = this.t('settings.pattern_needs_an_expression');" in body
     assert 'x-text="editError"' in markup
+
+
+def test_an_expression_is_read_once_for_one_write(rules, monkeypatch):
+    """It is read where it arrives, to answer about it, and again where the rules
+    judge what the targets ask of it: the runaway walk and the compilation twice
+    for one write."""
+    import naming_rules
+
+    naming_rules._read_pattern.cache_clear()
+    walked = []
+    original = naming_rules._refuse_runaway
+    monkeypatch.setattr(naming_rules, "_refuse_runaway", lambda regex: walked.append(regex) or original(regex))
+
+    expression = r"Heizung\ (?P<n1>\d+)"
+    assert naming_rules.compile_pattern(expression) is naming_rules.compile_pattern(expression)
+    assert walked == [expression]
+
+
+def test_an_expression_that_cannot_be_read_is_refused_every_time(rules):
+    """Only what can be read is kept; a refusal is worked out again, which is
+    what a refusal costs."""
+    import naming_rules
+
+    for _ in range(2):
+        with pytest.raises(NamingRuleError):
+            naming_rules.compile_pattern(r"Heizung (")
+
+
+def test_a_rule_missing_a_field_is_answered_with_a_rule(rules):
+    """One out of a backup, or built in a test, may be missing a field this
+    never wrote - and an edit to its target came back as a KeyError."""
+    rule = _pattern_rule(rules)
+    rule.pop("filters")
+
+    updated = rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+    assert updated["targets"]["de"] == "Heizkosten {1}"
+
+
+def test_a_save_that_went_through_closes_the_row():
+    """The reading back afterwards is a second request: letting it fall into the
+    same catch left the row open saying "not saved" about a rule that was."""
+    import os
+
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(here, "templates", "settings.html"), encoding="utf-8") as handle:
+        markup = handle.read()
+
+    at = markup.index("async saveEdit(row) {")
+    body = markup[at : markup.index("async addMapping()", at)]
+    assert body.index("this.cancelEdit();") < body.index("await this.loadMappings();")

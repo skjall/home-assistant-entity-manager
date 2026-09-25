@@ -4322,8 +4322,14 @@
                         this.brokenRefsCached = true;
 
                         // Load suggestions for each broken reference (in parallel)
+                        // Settled, not all: one id the server cannot answer for
+                        // threw the whole list away, and the page then showed no
+                        // suggestions at all for the references it could answer.
+                        // The other two Promise.all calls on this page ask for
+                        // halves of one answer, where either half missing means
+                        // there is nothing to show.
                         const uniqueMissingIds = [...new Set(this.brokenReferences.map(r => r.missing_entity_id))];
-                        await Promise.all(uniqueMissingIds.map(id => this.loadSuggestionsFor(id)));
+                        await Promise.allSettled(uniqueMissingIds.map(id => this.loadSuggestionsFor(id)));
                     } catch (error) {
                         console.error('Error loading broken references:', error);
                         this.showMessage(this.t('messages.error') + ': ' + error.message, 'error');

@@ -3571,7 +3571,13 @@
                         return;
                     }
                     this.editError = '';
-                    if (!value && !(patternChanged && row.isRule)) {
+                    // Nothing typed anywhere is not an edit. An expression on
+                    // its own is - whether or not this row is a rule already:
+                    // read as "only a rule can be edited by its expression", a
+                    // row that is not one closed on the expression without a
+                    // word about it, and the server is the one that can say
+                    // whether it can be written.
+                    if (!value && !patternChanged) {
                         this.cancelEdit();
                         return;
                     }
@@ -3620,8 +3626,12 @@
                               });
 
                         if (response.ok) {
-                            await this.loadMappings();
+                            // Closed because the save went through: the reading
+                            // back is a second request, and letting it fall into
+                            // the catch below left the row open saying "not
+                            // saved" about a rule that had been saved.
                             this.cancelEdit();
+                            await this.loadMappings();
                             return;
                         }
                         // Refused, and what was typed stays where it was typed:
