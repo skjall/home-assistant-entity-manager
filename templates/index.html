@@ -2667,7 +2667,9 @@
                                              class - only the domain. The count
                                              says how far that reaches, which is
                                              what makes it safe to offer. -->
-                                        <div class="scope-bar" x-show="typeEdited(entity) && entity.domain_count > 1">
+                                        <div class="scope-bar"
+                                             x-show="typeEdited(entity)
+                                                     && (entity.domain_count > 1 || entity._ruleAnchor === 'domain')">
                                             <span class="scope-label"
                                                   x-text="t('entity.anchor_label', {domain: entityDomain(entity)})"></span>
                                             <div class="scope-group" role="group">
@@ -5779,6 +5781,13 @@
                 // Toggle entity expand state
                 toggleEntityExpand(entity) {
                     entity._expanded = !entity._expanded;
+                    if (entity._expanded) {
+                        // Read again every time the row opens: the rule in force
+                        // may have been deleted or rewritten since it was last
+                        // open, and the anchor kept from then had the save write
+                        // a second rule of the kind that had just been removed.
+                        entity._ruleAnchor = this.anchorThatApplied(entity);
+                    }
                     if (entity._expanded && entity._ruleScope === undefined) {
                         // Where a rule already names this entity, its own reach is the
                         // answer: changing the word is a change to that rule, and

@@ -546,7 +546,11 @@ def _rule_builtins(rules) -> dict:
     language = rules.language
     builtins = {}
     for rule in rules.rules:
-        if rule["match"]["kind"] == "translation_key":
+        # A domain is not a type: asked about "device_tracker", the lookup can
+        # answer with an entity type of that name from some integration, and the
+        # rule was then reported as saying no more than a built-in and listed
+        # among the unused ones while it was renaming entities.
+        if rule["match"]["kind"] in ("translation_key", "domain"):
             continue
         builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
         if builtin is not None:
@@ -573,7 +577,8 @@ def _rule_payload(rule: dict, affected: dict, entity_ids: Optional[dict] = None)
     mappings = renamer_state["type_mappings"]
     language = rules.language
     builtin = None
-    if rule["match"]["kind"] != "translation_key":
+    # A domain is not a type; see _rule_builtins.
+    if rule["match"]["kind"] not in ("translation_key", "domain"):
         builtin = mappings.find_system_translation(rule["match"]["value"], language, rules.sole_integration(rule))
     return {
         **rule,
@@ -887,6 +892,12 @@ def naming_learn():
     kind, key = _rule_key_for(entity, entity_id, anchor)
     if not key:
         return jsonify({"error": "entity has no name to derive a rule from"}), 400
+    # Home Assistant does not say which integration supplies this entity, so
+    # there is nothing to narrow the rule to. Said here: passed on, it came back
+    # as "a filter that says nothing is the rule without filters", which is
+    # about the plumbing and not about what was asked for.
+    if scope == "integration" and not entity.get("platform"):
+        return jsonify({"error": "This entity reports no integration to narrow the rule to"}), 400
     # Where the correction should apply, as the one filter it is. "Everywhere"
     # is no filter at all, and each step below it narrows the one above:
     # this integration, this model, this model's entities of one domain - an
