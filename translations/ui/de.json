@@ -257,7 +257,8 @@
     "id_conflict": "Dieser Name nähme eine Entitäts-ID, die schon vergeben ist: {id}",
     "name_already_correct": "Das Gerät heißt bereits so",
     "gone": "Dieses Gerät gibt es in Home Assistant nicht mehr",
-    "moved_not_renamed": "Das Gerät wurde verschoben, aber nicht umbenannt: {error}"
+    "moved_not_renamed": "Das Gerät wurde verschoben, aber nicht umbenannt: {error}",
+    "moved_job_failed": "Das Gerät wurde verschoben; der Auftrag ist danach fehlgeschlagen: {error}"
   },
   "units": {
     "entities": "Entitäten",

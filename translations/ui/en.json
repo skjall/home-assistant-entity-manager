@@ -257,7 +257,8 @@
     "id_conflict": "This name would take an entity id that is already held: {id}",
     "name_already_correct": "The device is already called that",
     "gone": "This device is no longer in Home Assistant",
-    "moved_not_renamed": "The device was moved, but not renamed: {error}"
+    "moved_not_renamed": "The device was moved, but not renamed: {error}",
+    "moved_job_failed": "The device was moved; the job failed afterwards: {error}"
   },
   "units": {
     "entities": "Entities",

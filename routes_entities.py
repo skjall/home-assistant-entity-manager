@@ -780,6 +780,14 @@ async def rename_device_handler(job, ctx):
             # writing it back is a second write that can fail in its own turn and
             # would take the device out of the area the user had just put it in.
             await device_registry.rename_device(device_id, new_name)
+            # Said once it is written, as MOVED is: everything after this can
+            # fail in its own turn, and without a step of its own the interface
+            # could only tell "the rename never happened" from "it happened and
+            # the entities did not" by the absence of entity steps - which a
+            # device with no entities has as well. It then told the user the
+            # rename had not happened while Home Assistant already carried the
+            # new name, and the retry renamed a device that was named already.
+            ctx.log("RENAMED", f"{device_id} is called {new_name}")
 
             # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
             z2m_sync = await sync_z2m_name(device_registry, device_id, new_name)

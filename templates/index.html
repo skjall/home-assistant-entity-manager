@@ -7613,7 +7613,17 @@
                     // device somewhere it was not before. The job panel says
                     // what failed; only this says what stands.
                     if (this.jobFailed(job) && (job.log || []).some(line => line.step === 'MOVED')) {
-                        this.showMessage(this.t('device.moved_not_renamed', {error: job.error || ''}), 'error');
+                        // Which of the two it was: the rename logs a step of its
+                        // own once it is through, so a failure after that one -
+                        // reading the registry again, renaming the entities -
+                        // must not be reported as a rename that did not happen.
+                        // Home Assistant carries the new name by then, and the
+                        // user was being sent to rename a device already named.
+                        const steps = (job.log || []).map(line => line.step);
+                        const renamed = steps.includes('RENAMED');
+                        const askedForARename = !!(job.payload || {}).new_name;
+                        const key = !renamed && askedForARename ? 'device.moved_not_renamed' : 'device.moved_job_failed';
+                        this.showMessage(this.t(key, {error: job.error || ''}), 'error');
                     }
                     // The job aligns the Z2M name of the device it renamed; any
                     // other device the view showed as drifted is left to here.

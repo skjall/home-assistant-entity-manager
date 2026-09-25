@@ -868,6 +868,21 @@ def test_the_clash_check_answers_about_the_device_it_was_asked_for():
     assert "if (device && device.id === this.selectedDevice) this.deviceNameClash = [];" in body
 
 
+def test_a_rename_that_went_through_is_not_reported_as_one_that_did_not():
+    """The job logs the rename once it is written, so a failure after it - the
+    registry read again, the entities renamed - is not told to the user as a
+    rename that never happened. Home Assistant carries the new name by then,
+    and the retry renamed a device that was named already."""
+    markup = _panel_source()
+    at = markup.index("line => line.step === 'MOVED'")
+    body = markup[at : at + 900]
+
+    assert "const renamed = steps.includes('RENAMED');" in body
+    # A move with no rename beside it is not a rename that failed either.
+    assert "const askedForARename = !!(job.payload || {}).new_name;" in body
+    assert "!renamed && askedForARename ? 'device.moved_not_renamed' : 'device.moved_job_failed'" in body
+
+
 def test_the_area_list_is_keyed_on_when_the_registry_moved():
     """The list is read by the combo, by every item's class and by the empty
     line, so writing the areas out walked them several times per repaint."""

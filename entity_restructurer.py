@@ -1277,7 +1277,7 @@ class EntityRestructurer:
             # and ends there. Notes from before the type part was kept said the
             # same for every entity, and they no longer reach here - loading the
             # state file turns their empty type part into "nothing recorded"
-            # (see NamingState._forget_empty_type_parts_written_as_nothing), so the
+            # (see NamingState._forget_empty_type_parts_of_version_one), so the
             # note that is empty here is one somebody meant.
             noted = remembered is not None
             written = remembered if noted else unwound

@@ -257,7 +257,8 @@
     "id_conflict": "Este nombre tomaría un id de entidad que ya está en uso: {id}",
     "name_already_correct": "El dispositivo ya se llama así",
     "gone": "Este dispositivo ya no está en Home Assistant",
-    "moved_not_renamed": "El dispositivo se movió, pero no se renombró: {error}"
+    "moved_not_renamed": "El dispositivo se movió, pero no se renombró: {error}",
+    "moved_job_failed": "El dispositivo se movió; la tarea falló después: {error}"
   },
   "units": {
     "entities": "Entidades",
