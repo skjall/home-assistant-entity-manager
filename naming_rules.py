@@ -195,6 +195,12 @@ _COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
 # number with no end in sight.
 MAX_CHOICE_REPEATS = 4
 
+# And the same bound read as what it allows: two words counted four times can be
+# read sixteen ways, and that is as far as a counted choice may reach however it
+# is written. Counted a level at a time, "(?:(?:a|aa){4}){4}" passed four times
+# over and reads 65536 ways.
+MAX_CHOICE_WAYS = 2**MAX_CHOICE_REPEATS
+
 
 def _at_most(count: str) -> int:
     """The number of repetitions a counted quantifier allows at most.
@@ -228,6 +234,11 @@ def _refuse_runaway(regex: str) -> None:
     quantifiers = {"*", "+", "?", "{"}
     repeats = [False]  # whether the group at each depth already repeats
     choices = [False]  # whether the group at each depth holds a choice
+    # How many ways the group at each depth can read one stretch of text. One
+    # is "only the one way"; a choice makes it two, and a count multiplies it
+    # by itself that many times. It is carried up to the group around it, so a
+    # count wrapped around a count is weighed as what the two come to together.
+    ways = [1]
     at = 0
     in_class = False
     while at < len(regex):
@@ -241,6 +252,7 @@ def _refuse_runaway(regex: str) -> None:
             # not a quantifier and must not be read as one.
             repeats.append(False)
             choices.append(False)
+            ways.append(1)
             at = opening.end()
             continue
         if in_class:
@@ -254,11 +266,14 @@ def _refuse_runaway(regex: str) -> None:
         elif char == "(":
             repeats.append(False)
             choices.append(False)
+            ways.append(1)
         elif char == "|":
             choices[-1] = True
+            ways[-1] = max(ways[-1], 2)
         elif char == ")":
             inside = repeats.pop() if len(repeats) > 1 else False
             branched = choices.pop() if len(choices) > 1 else False
+            reads = ways.pop() if len(ways) > 1 else 1
             after = regex[at + 1 : at + 2]
             # A bounded count is no more a runaway than what it counts, as
             # long as what it counts finishes: "(\\d{4}){2,3}" reads eight to
@@ -278,7 +293,14 @@ def _refuse_runaway(regex: str) -> None:
             if after == "{":
                 counted = _COUNT.match(regex, at + 1)
                 if counted and not counted.group("open") and not inside:
-                    if not branched or _at_most(counted.group(0)) <= MAX_CHOICE_REPEATS:
+                    # What the count comes to, not how high it goes: a group that
+                    # reads two ways counted four times reads sixteen, and one
+                    # that already read sixteen reads 65536. Weighed by the count
+                    # alone, each level of "(?:(?:a|aa){4}){4}" passed on its own
+                    # and the whole was a runaway.
+                    times = max(_at_most(counted.group(0)), 1)
+                    reads = min(reads**times, MAX_CHOICE_WAYS + 1)
+                    if not branched or reads <= MAX_CHOICE_WAYS:
                         after = ""
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
@@ -292,9 +314,12 @@ def _refuse_runaway(regex: str) -> None:
             if inside or after in {"*", "+", "{", "?"}:
                 repeats[-1] = True
             # A group holding a choice is one to the group around it, so
-            # "((a|aa))+" is refused where "(a|aa)+" is.
+            # "((a|aa))+" is refused where "(a|aa)+" is - and it reads as far as
+            # this one does, which is what makes a count around a count weigh
+            # what the two come to.
             if branched:
                 choices[-1] = True
+            ways[-1] = min(ways[-1] * reads, MAX_CHOICE_WAYS + 1)
         elif char == "{":
             counted = _COUNT.match(regex, at)
             if counted:

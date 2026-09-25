@@ -894,3 +894,19 @@ def test_the_rules_answer_for_the_expression_themselves(rules):
     assert "compile_pattern(" not in body
     assert "rules.get(rule_id)" not in body
     assert "except NotAPatternRuleError as error:" in body
+
+
+def test_a_count_around_a_count_is_weighed_as_what_the_two_come_to(rules):
+    """Two words counted four times read sixteen ways, which is as far as a counted
+    choice may reach. Weighed a level at a time, each count of
+    "(?:(?:a|aa){4}){4}" passed on its own and the whole read 65536 ways."""
+    for expression in [r"(?:(?:a|aa){4}){4}", r"((a|aa){3}){3}", r"(?:(?:a|aa){2}){3}"]:
+        with pytest.raises(NamingRuleError, match="repeat a choice"):
+            compile_pattern(expression)
+
+    # And what stayed within it is still read: sixteen ways at most, however it
+    # is written.
+    assert compile_pattern(r"(?:a|aa){4}") is not None
+    assert compile_pattern(r"(a|aa){2,3}") is not None
+    assert compile_pattern(r"(open|closed){1,2}") is not None
+    assert compile_pattern(r"(?:Heizung|Kuehlung) (?P<n1>\d+)") is not None

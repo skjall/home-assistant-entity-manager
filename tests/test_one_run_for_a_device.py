@@ -552,3 +552,35 @@ def test_a_job_under_way_is_not_counted_as_a_change_to_apply() -> None:
     body = markup[at : markup.index("get disabledEntitiesCount() {", at)]
 
     assert "this.deviceChangeStaged && !this.renamingDevice ? 1 : 0" in body
+
+
+def test_a_move_asked_for_without_an_area_is_refused(monkeypatch) -> None:
+    """Null is "take it out of every area", which is a thing to ask for. The key
+    missing is nobody asking, and read as null it took the device out of its area on
+    a payload that said nothing about areas at all."""
+    with pytest.raises(RuntimeError, match="needs an area"):
+        _run_handler(monkeypatch, {"device_id": "dev1", "set_area": True})
+
+    # Spelled out as null it is still a move, and the area is cleared.
+    written = _run_handler(monkeypatch, {"device_id": "dev1", "set_area": True, "area_id": None})
+    assert written == ["area:None"]
+
+
+def test_the_name_is_built_for_the_area_this_run_writes() -> None:
+    """Read off the panel again after the wait, a poll that cleared the staged area
+    during the clash check had the name built for the area the device is leaving -
+    while the move went to the one it was given."""
+    markup = _panel_source()
+    at = markup.index("async applyDeviceWideRun(")
+    body = markup[at : markup.index("async syncZ2mName(", at)]
+
+    assert "const newFullName = this.renderDeviceName(" in body
+    assert "device, base, areaStaged ? (picked || null) : (device.area_id || null));" in body
+
+    # And the area is the caller's to spell out, rather than read off the panel
+    # wherever the name is rendered.
+    at = markup.index("deviceNamingContext(device, baseName = null")
+    body = markup[at : markup.index("entityNamingContext(entity, suffix = null", at)]
+    assert "deviceNamingContext(device, baseName = null, areaId = undefined) {" in body
+    assert "const wanted = areaId === undefined ? this.previewAreaFor(device) : areaId;" in body
+    assert "renderDeviceName(device, baseName = null, areaId = undefined) {" in body

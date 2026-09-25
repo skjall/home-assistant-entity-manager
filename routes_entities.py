@@ -707,6 +707,12 @@ async def rename_device_handler(job, ctx):
     if new_name is not None and (not isinstance(new_name, str) or not new_name.strip()):
         raise RuntimeError("A rename needs a name")
     set_area = bool(payload.get("set_area")) or "area_id" in payload
+    # An area asked for is an area spelled out, null included - null is "take it
+    # out of every area", which is a thing to ask for. The key missing is nobody
+    # asking, and read as null it took the device out of its area on a payload
+    # that said nothing about areas at all.
+    if set_area and "area_id" not in payload:
+        raise RuntimeError("A move needs an area, or null to clear it")
     area_id = payload.get("area_id")
 
     base_url = os.getenv("HA_URL")

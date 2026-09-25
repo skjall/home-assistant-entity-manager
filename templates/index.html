@@ -5581,19 +5581,24 @@
                     return device?.area_id || null;
                 },
 
-                deviceNamingContext(device, baseName = null) {
+                deviceNamingContext(device, baseName = null, areaId = undefined) {
                     // Out of the index, like every other area lookup: this is
-                    // asked for every device name the page renders.
-                    const area = indexed(this).areasById.get(this.previewAreaFor(device));
+                    // asked for every device name the page renders. The area may
+                    // be spelled out by the caller: a run that read it off the
+                    // panel again built the name for the area the device is
+                    // leaving wherever a poll had cleared the staged one in the
+                    // meantime.
+                    const wanted = areaId === undefined ? this.previewAreaFor(device) : areaId;
+                    const area = indexed(this).areasById.get(wanted);
                     return {
                         ...this.baseNamingContext(area, device),
                         device: baseName !== null ? baseName : (device?.base_name || '')
                     };
                 },
 
-                renderDeviceName(device, baseName = null) {
+                renderDeviceName(device, baseName = null, areaId = undefined) {
                     const template = this.namingConfig?.templates?.device_name || '{area} {device}';
-                    return this.renderNamingTemplate(template, this.deviceNamingContext(device, baseName));
+                    return this.renderNamingTemplate(template, this.deviceNamingContext(device, baseName, areaId));
                 },
 
                 entityNamingContext(entity, suffix = null, baseName = null, forDeviceId = null) {
@@ -5949,7 +5954,9 @@
                     // a poll arriving in between left it holding rows the device
                     // does not have any more, compared against ids that no
                     // longer knew them. A row that has gone is not renamed, so
-                    // it is not asked about either.
+                    // it is not asked about either: it has no wanted id for
+                    // anything to clash with, and working one out for it would
+                    // refuse a rename over an entity that is not there.
                     const registry = indexed(this);
                     const taken = registry.entitiesById;
                     const stillMine = new Set((registry.byDevice.get(device.id) || none).map(e => e.id));
@@ -7290,8 +7297,13 @@
                     }
                     const areaStaged = picked !== null && (picked || null) !== (device.area_id || null);
                     // Rendered with the staged area, so a device that moves is
-                    // named where it moved to rather than where it was.
-                    const newFullName = this.renderDeviceName(device, base);
+                    // named where it moved to rather than where it was - and with
+                    // the one this run writes, read before the wait above. Read
+                    // off the panel again, a poll that cleared the staged area
+                    // during the check had the name built for the area the device
+                    // is leaving while the move went to the one it was given.
+                    const newFullName = this.renderDeviceName(
+                        device, base, areaStaged ? (picked || null) : (device.area_id || null));
 
                     const payload = { device_id: deviceId };
                     if (newFullName && newFullName !== device.name) payload.new_name = newFullName;
