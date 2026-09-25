@@ -543,7 +543,10 @@ def rename_device():
     if not device_id:
         return jsonify({"error": "Invalid device ID"}), 400
 
-    payload: dict[str, Any] = {"device_id": device_id, "new_name": None}
+    # Without a name until one is asked for: written as null, a job carrying
+    # "new_name" that means "no rename" reads to anything that asks whether the
+    # key is there as a rename with nothing to write.
+    payload: dict[str, Any] = {"device_id": device_id}
 
     # The name is optional: a device that only moves to another area is renamed
     # by its template rather than by hand, and may come out called the same.
@@ -565,7 +568,7 @@ def rename_device():
         payload["area_id"] = area_id
         payload["set_area"] = True
 
-    if payload["new_name"] is None and not payload.get("set_area"):
+    if payload.get("new_name") is None and not payload.get("set_area"):
         return jsonify({"error": "Nothing to change: neither a name nor an area"}), 400
 
     # Do not rename the same device twice concurrently.

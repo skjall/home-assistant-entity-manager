@@ -307,12 +307,23 @@ def test_a_counted_repetition_is_not_a_runaway():
 
 def test_a_bounded_count_on_a_group_that_repeats_is_a_runaway():
     """A count bounds how often the group is tried, not how many ways there are
-    to read it: "([\\w ]+){2,5}" can split a hundred characters across five
-    groups every way there is, and tries all of them on a name that nearly
-    matches. The bound was read as making any group safe."""
-    for expression in (r"([\w ]+){2,5}", r"(a+){2,3}", r"(a|aa){2,3}"):
+    to read what is inside it: "([\\w ]+){2,5}" can split a hundred characters
+    across five groups every way there is, and tries all of them on a name that
+    nearly matches. The bound was read as making any group safe."""
+    for expression in (r"([\w ]+){2,5}", r"(a+){2,3}"):
         with pytest.raises(NamingRuleError):
             compile_pattern(expression)
+
+
+def test_a_bounded_count_over_a_choice_is_bounded():
+    """A choice counted a fixed number of times can be read a fixed number of
+    ways, overlapping alternatives and all: "(open|closed){1,2}" is a name with
+    one of two words in it twice, and refusing it said it would never finish."""
+    assert compile_pattern(r"(open|closed){1,2}") is not None
+    assert compile_pattern(r"(a|aa){2,3}") is not None
+    # Unbounded is the one that does not finish.
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"(a|aa)+")
 
 
 def test_a_placeholder_with_nothing_in_it_leaves_the_name_alone(rules):

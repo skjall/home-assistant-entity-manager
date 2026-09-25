@@ -2199,7 +2199,7 @@
                                @input="devicePreviewBaseName = $event.target.value;
                                         stageDeviceWideChange();
                                         clearTimeout(_deviceNameTimer);
-                                        _deviceNameTimer = setTimeout(() => { checkDeviceNameClash(); stageDeviceWideChange(); }, 300)"
+                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(), 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
                                :placeholder="selectedDeviceData?.base_name"
                                :disabled="renamingDevice || applyingEntityId || executing">
@@ -5327,7 +5327,10 @@
                     // staging itself asks for them, and asking again on every
                     // background refresh was one slug request per poll for
                     // rows that already held their answer.
-                    if (stagedUnanswered) this.previewDeviceWide();
+                    // Through the wait, not straight away: this runs on every
+                    // background refresh of the list, and asking from here was a
+                    // slug request per poll beside the ones the typing asks for.
+                    if (stagedUnanswered) this.stageDeviceWideChange();
                     if (!pending.length) return;
 
                     // Which computation asked about each row. A second one
@@ -5549,7 +5552,9 @@
                 },
 
                 deviceNamingContext(device, baseName = null) {
-                    const area = this.hierarchy.areas.find(a => a.id === this.previewAreaFor(device));
+                    // Out of the index, like every other area lookup: this is
+                    // asked for every device name the page renders.
+                    const area = indexed(this).areasById.get(this.previewAreaFor(device));
                     return {
                         ...this.baseNamingContext(area, device),
                         device: baseName !== null ? baseName : (device?.base_name || '')
@@ -6103,6 +6108,18 @@
                     // not in, and the next read proposed the old name straight
                     // back - for ever, since nothing had moved.
                     if (entity.device_id && entity.device_id === this.selectedDevice) {
+                        // But a device name sitting in the field is not written
+                        // from here: the row is named out of it, so applying the
+                        // row alone gave the entity a name saying a device name
+                        // Home Assistant has never seen - and it stayed that way
+                        // if the rename was never applied. The device's own
+                        // button writes the name and every row under it.
+                        const typed = this.devicePreviewBaseName === null ? '' : this.devicePreviewBaseName.trim();
+                        const device = indexed(this).devicesById.get(entity.device_id);
+                        if (typed && typed !== (device?.base_name || '').trim()) {
+                            this.showMessage(this.t('messages.device_name_first'), 'info', true);
+                            return;
+                        }
                         if (!await this.commitStagedArea()) return;
                     }
                     await this.previewsSettled();

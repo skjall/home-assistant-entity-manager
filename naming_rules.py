@@ -215,16 +215,18 @@ def _refuse_runaway(regex: str) -> None:
             inside = repeats.pop() if len(repeats) > 1 else False
             branched = choices.pop() if len(choices) > 1 else False
             after = regex[at + 1 : at + 2]
-            # A bounded count after a group that holds nothing repeating is no
-            # more a runaway than the group itself: "(\\d{4}){2,3}" reads eight
-            # to twelve digits and there is only one way to cut them up. An
-            # open-ended count is a runaway, and so is a bounded one on a group
-            # that repeats or holds a choice: "([\\w ]+){2,5}" can split a
-            # hundred characters across five groups every way there is, and
-            # tries all of them on a name that nearly matches.
+            # A bounded count is no more a runaway than what it counts, as
+            # long as what it counts finishes: "(\\d{4}){2,3}" reads eight to
+            # twelve digits, and "(open|closed){1,2}" one of two words twice -
+            # a choice counted a fixed number of times can be read a fixed
+            # number of ways. An open-ended count is a runaway, and so is a
+            # bounded one on a group that repeats without bound inside:
+            # "([\\w ]+){2,5}" can split a hundred characters across five
+            # groups every way there is, and tries all of them on a name that
+            # nearly matches.
             if after == "{":
                 counted = _COUNT.match(regex, at + 1)
-                if counted and not counted.group("open") and not (inside or branched):
+                if counted and not counted.group("open") and not inside:
                     after = ""
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")

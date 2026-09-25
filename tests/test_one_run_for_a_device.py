@@ -32,9 +32,11 @@ def test_an_area_alone_is_enough_to_ask_for(client) -> None:
     c, store = client
     resp = c.post("/api/rename_device", json={"device_id": "dev1", "area_id": "kitchen"})
     assert resp.status_code == 202
+    # No "new_name" at all, rather than one that is null: a job carrying the key
+    # reads to anything that asks whether it is there as a rename with nothing to
+    # write.
     assert store.load(resp.get_json()["job_id"])["payload"] == {
         "device_id": "dev1",
-        "new_name": None,
         "area_id": "kitchen",
         "set_area": True,
     }
@@ -289,3 +291,37 @@ def test_the_areas_are_looked_up_rather_than_walked():
     assert "index.areasById.set(area.id, area);" in body
     # And the readings that used to walk the list ask the index.
     assert "indexed(this).areasById.get(areaId)" in markup
+
+
+def test_a_row_is_not_applied_over_a_device_name_that_is_only_typed():
+    """The row is named out of the field, so applying the row alone gave the
+    entity a name saying a device name Home Assistant has never seen - and it
+    stayed that way where the rename was never applied. Both are the device's own
+    button to write, and it writes them in order."""
+    markup = _panel_source()
+    at = markup.index("async quickApplyEntity(entity) {")
+    body = markup[at : markup.index("await this.previewsSettled();", at)]
+
+    assert "this.t('messages.device_name_first')" in body
+    # And the move is still written first, where only the area is staged: the row
+    # is named out of it.
+    assert body.index("device_name_first") < body.index("commitStagedArea")
+
+
+def test_the_field_asks_for_one_answer_per_keystroke():
+    """The staging waits 250ms of its own, so asking again from the clash timer
+    sent a second slug request for every keystroke - the first of them always
+    thrown away."""
+    markup = _panel_source()
+    at = markup.index('x-ref="deviceNameInput"')
+    handler = markup[at : at + 900]
+
+    assert handler.count("stageDeviceWideChange()") == 1
+
+
+def test_the_background_refresh_asks_through_the_wait():
+    """It runs on every poll of the list, and asking from there was a slug
+    request per poll beside the ones the typing asks for."""
+    markup = _panel_source()
+
+    assert "if (stagedUnanswered) this.stageDeviceWideChange();" in markup
