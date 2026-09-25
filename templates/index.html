@@ -5147,12 +5147,16 @@
                             // Only where nothing has asked since: this answer
                             // is about the name the row had when it was asked.
                             if (entity._previewAsk !== asked) return;
-                            entity._previewId = answer.ids
-                                ? answer.ids[i]
-                                : this.composeEntityId(entity, slugs[i]);
+                            // Where the answer has nothing for this row - a
+                            // name that came out empty, so there was no id to
+                            // number - the slug answers as before. Written
+                            // through, the empty answer emptied the row and the
+                            // next computation asked about it again.
+                            entity._previewId = (answer.ids && answer.ids[i])
+                                || this.composeEntityId(entity, slugs[i]);
                             // The name carries the number too, or the row would
                             // read as one thing and be written as another.
-                            if (answer.names) entity._previewName = answer.names[i];
+                            if (answer.names && answer.names[i]) entity._previewName = answer.names[i];
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
@@ -5186,8 +5190,9 @@
                             this.updateEntityPreview(entity, entity._currentSuffix);
                             continue;
                         }
-                        entity._previewName = null;
-                        entity._previewId = null;
+                        // Not emptied here: computePreviewsFor empties every
+                        // row it is given, and doing it twice on every keystroke
+                        // said nothing more than doing it once.
                         mine.push(entity);
                     }
                     // These rows, not every row: computing the whole list on
