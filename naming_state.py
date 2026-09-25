@@ -80,7 +80,12 @@ class NamingState:
         nothing and the name is taken apart once more - the type part it holds
         is then recorded properly, and the question does not come back.
         """
-        if data.get("version") == SCHEMA_VERSION:
+        # Anything from version 2 on has been through this. Asked as "is it the
+        # current version", the next version to be written would have the
+        # migration run over a version-2 file again and turn every "this name
+        # has no type part" back into "nothing recorded" - which is the answer
+        # this migration exists to stop being lost.
+        if data.get("version", 0) >= 2:
             return
         for entry in data.get("entities", {}).values():
             if isinstance(entry, dict) and entry.get("base_entity") == "":
