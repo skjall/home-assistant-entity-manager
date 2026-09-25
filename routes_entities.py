@@ -550,8 +550,9 @@ def rename_device():
 
     # The name is optional: a device that only moves to another area is renamed
     # by its template rather than by hand, and may come out called the same.
-    if data.get("new_name") is not None:
-        new_name = sanitize_name(data.get("new_name"))
+    supplied_name = data.get("new_name")
+    if supplied_name is not None:
+        new_name = sanitize_name(supplied_name)
         if not new_name:
             return jsonify({"error": "Invalid device name"}), 400
         payload["new_name"] = new_name
@@ -700,8 +701,10 @@ async def rename_device_handler(job, ctx):
     new_name = payload.get("new_name")
     # Asked for and empty is not the same as not asked for: a job carrying "" -
     # a call straight to the API, or a job store somebody edited - had the rename
-    # skipped and the run reported as done.
-    if new_name is not None and not str(new_name).strip():
+    # skipped and the run reported as done. A name is a string; anything else,
+    # including 0 and False, is refused here rather than read as "no rename" by
+    # the truth test that writes it.
+    if new_name is not None and (not isinstance(new_name, str) or not new_name.strip()):
         raise RuntimeError("A rename needs a name")
     set_area = bool(payload.get("set_area"))
     area_id = payload.get("area_id")
@@ -741,7 +744,7 @@ async def rename_device_handler(job, ctx):
             await device_registry.assign_area(device_id, area_id)
 
         z2m_sync: dict[str, Any] = {}
-        if new_name:
+        if new_name is not None:
             success = await device_registry.rename_device(device_id, new_name)
 
             if not success:

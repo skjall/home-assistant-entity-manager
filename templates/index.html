@@ -5438,6 +5438,11 @@
                     // which would otherwise write the previous device's ids
                     // when it arrives.
                     this._stagedRun++;
+                    // And the flag that says one is being asked for: the answer
+                    // dropped here leaves its own "finally" to see a run that is
+                    // not current any more and step over the reset, so nothing
+                    // else would ever have asked again.
+                    this._stagedAsking = false;
                     // And the names those rows hold: computed for a move and a
                     // rename that are not staged any more, they sat on the rows
                     // of the device the panel has left until something else
@@ -5909,8 +5914,15 @@
                     // answers had to agree to mean anything. Only where no name
                     // was passed in: a caller that brings its own is asking
                     // about a name the rows know nothing about.
+                    // The name the rows were computed for is the name being
+                    // asked about, whether the caller spelled it out or not: the
+                    // apply always passes one, and reading that as "a name the
+                    // rows know nothing about" asked the server the same
+                    // question a second time on every apply.
+                    const rowsHoldIt = baseName === null
+                        || baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim());
                     let ids = null;
-                    if (baseName === null && device.id === this.selectedDevice && this.deviceChangeStaged) {
+                    if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {
                         await this.previewsSettled();
                         const staged = mine.map(e => e._previewId);
                         if (staged.every(Boolean)) ids = staged;
@@ -5927,10 +5939,19 @@
                             mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id)),
                             mine.map(e => e.id)
                         );
-                    const taken = indexed(this).entitiesById;
+                    // Both sides of the comparison out of one reading of the
+                    // registry: "mine" was taken before the server answered, and
+                    // a poll arriving in between left it holding rows the device
+                    // does not have any more, compared against ids that no
+                    // longer knew them. A row that has gone is not renamed, so
+                    // it is not asked about either.
+                    const registry = indexed(this);
+                    const taken = registry.entitiesById;
+                    const stillMine = new Set((registry.byDevice.get(device.id) || none).map(e => e.id));
 
                     const clashes = [];
                     mine.forEach((entity, index) => {
+                        if (!stillMine.has(entity.id)) return;
                         const wantedId = (answer.ids && answer.ids[index])
                             || this.composeEntityId(entity, answer.normalized[index]);
                         const holder = taken.get(wantedId);
@@ -7182,23 +7203,27 @@
                 async applyDeviceWideChange(driftDevices = []) {
                     const device = this.selectedDeviceData;
                     const deviceId = this.selectedDevice;
-                    if (!device || this.isVirtualDevice(deviceId) || this.renamingDevice) return;
+                    if (!device || this.isVirtualDevice(deviceId) || this.renamingDevice) return 'refused';
 
                     // Shut from here on, not from the request onwards: the
                     // clash check is awaited first, and a second click during
                     // it started a second run of the same job.
                     this.renamingDevice = true;
                     try {
-                        // The run gives back whether a job is now under way. If
-                        // one is, the button stays shut until it reports back -
-                        // a second click would enqueue the same rename twice.
-                        const running = await this.applyDeviceWideRun(device, deviceId, driftDevices);
-                        if (running) return true;
+                        // The run says what it did: "running" if a job is now
+                        // under way - the button then stays shut until it reports
+                        // back, since a second click would enqueue the same
+                        // rename twice - "refused" if it would not start, and
+                        // "nothing" if there was nothing for it to write.
+                        const outcome = await this.applyDeviceWideRun(device, deviceId, driftDevices);
+                        if (outcome === 'running') return outcome;
+                        this.renamingDevice = false;
+                        return outcome;
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     }
                     this.renamingDevice = false;
-                    return false;
+                    return 'refused';
                 },
 
                 async applyDeviceWideRun(device, deviceId, driftDevices) {
@@ -7212,7 +7237,7 @@
                     const live = indexed(this).devicesById.get(deviceId);
                     if (!live) {
                         this.showMessage(this.t('device.gone'), 'error');
-                        return;
+                        return 'refused';
                     }
                     device = live;
 
@@ -7256,7 +7281,7 @@
                         const taken = clashes[0].id;
                         if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
                         this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
-                        return;
+                        return 'refused';
                     }
                     const areaStaged = picked !== null && (picked || null) !== (device.area_id || null);
                     // Rendered with the staged area, so a device that moves is
@@ -7285,7 +7310,7 @@
                         this.showMessage(nameStaged
                             ? this.t('messages.name_has_no_place')
                             : this.t('messages.nothing_to_apply'), 'info', true);
-                        return;
+                        return 'nothing';
                     }
 
                     try {
@@ -7300,7 +7325,7 @@
                             // move, the name and the entity names together, so
                             // a refused start leaves the device as it was.
                             this.showMessage(job.error || 'A rename for this device is already in progress', 'error');
-                            return;
+                            return 'refused';
                         }
                         if (!response.ok || !job.job_id) {
                             throw new Error(job.error || 'Failed to start apply');
@@ -7310,10 +7335,11 @@
                             titleKey: 'jobs.applying',
                             onDone: (finished) => this.onRenameDeviceDone(finished, deviceId, driftDevices)
                         });
-                        return true;
+                        return 'running';
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
                     }
+                    return 'refused';
                 },
 
                 // Z2M-friendly_name an den HA-Namen angleichen (nur Z2M-Geräte)
@@ -7481,13 +7507,16 @@
                         const others = this.filteredDevices
                             .filter(d => d.z2m_drift && (d.id !== this.selectedDevice || !renaming))
                             .map(d => d.id);
-                        // Only where a job is now under way: that job renames the
-                        // device and every entity under it, so there is nothing
-                        // left for the batch below. Where none was started -
-                        // a name with nowhere to go, a refused start - returning
-                        // here left the rest of the list unapplied, and the click
-                        // had done nothing at all.
-                        if (await this.applyDeviceWideChange(others)) return;
+                        // Only where there was nothing for that job to write - a
+                        // name with nowhere to go - does the batch below go on:
+                        // returning there left the rest of the list unapplied and
+                        // the click had done nothing at all. A job under way
+                        // renames the device and every entity under it, and a
+                        // start that was refused - a clash, a run already going -
+                        // means this device is not to be written at all: falling
+                        // through wrote the move and the names one by one, which
+                        // is what the refusal was about.
+                        if ((await this.applyDeviceWideChange(others)) !== 'nothing') return;
                     }
 
                     // Find all entities that need renaming

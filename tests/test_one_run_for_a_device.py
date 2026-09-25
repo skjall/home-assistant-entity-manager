@@ -193,6 +193,15 @@ def test_a_rename_asked_for_with_an_empty_name_is_refused(monkeypatch) -> None:
         _run_handler(monkeypatch, {"device_id": "dev1", "new_name": "   "})
 
 
+def test_a_name_that_is_not_a_string_is_refused_rather_than_skipped(monkeypatch) -> None:
+    """0 and False are names nobody typed. Read by the truth test that writes the
+    rename they were "no rename", so the job skipped it and reported success -
+    while the key being there says a rename was asked for."""
+    for name in (0, False):
+        with pytest.raises(RuntimeError, match="needs a name"):
+            _run_handler(monkeypatch, {"device_id": "dev1", "new_name": name})
+
+
 def test_a_rename_without_an_area_leaves_the_area_alone(monkeypatch) -> None:
     written = _run_handler(monkeypatch, {"device_id": "dev1", "new_name": "Kitchen Plug"})
     assert written == ["name:Kitchen Plug"]
@@ -328,7 +337,7 @@ def test_the_field_asks_for_one_answer_per_keystroke():
     assert "checkDeviceNameClash();" in handler
 
     at = markup.index("async checkDeviceNameClash(")
-    body = markup[at : markup.index("const taken = indexed(this).entitiesById;", at)]
+    body = markup[at : markup.index("const registry = indexed(this);", at)]
     assert "await this.previewsSettled();" in body
     assert "if (staged.every(Boolean)) ids = staged;" in body
 
@@ -400,17 +409,38 @@ def test_a_typed_name_with_nowhere_to_go_is_said_out_loud_over_a_move():
     assert body.count("messages.name_has_no_place") == 2
 
 
-def test_apply_all_goes_on_where_no_job_was_started():
+def test_apply_all_goes_on_where_there_was_nothing_to_write():
     """A job renames the device and every entity under it, so there is nothing left
-    for the batch. Where none was started - a name with nowhere to go, a refused
-    start - returning left the rest of the list unapplied."""
+    for the batch. Where there was nothing for it to write - a name with nowhere to
+    go - returning left the rest of the list unapplied."""
     markup = _panel_source()
 
-    assert "if (await this.applyDeviceWideChange(others)) return;" in markup
+    assert "if ((await this.applyDeviceWideChange(others)) !== 'nothing') return;" in markup
     at = markup.index("async applyDeviceWideChange(")
-    body = markup[at : at + 1400]
-    assert "if (running) return true;" in body
-    assert "return false;" in body
+    body = markup[at : at + 1600]
+    assert "if (outcome === 'running') return outcome;" in body
+
+
+def test_a_start_that_was_refused_does_not_fall_through_to_the_batch():
+    """A clash, or a run already going, says this device is not to be written. Read
+    as "no job started", the batch below wrote the move and the names one by one -
+    which is what the refusal was about."""
+    markup = _panel_source()
+    at = markup.index("async applyDeviceWideRun(")
+    body = markup[at : markup.index("async syncZ2mName(", at)]
+
+    # The device gone, a clash, a rename already under way, and the request that
+    # threw: none of them is an answer the batch may go on from.
+    assert body.count("return 'refused';") == 4
+    assert body.count("return 'nothing';") == 1
+    assert body.count("return 'running';") == 1
+    # And nothing left over that reads as "no job started" to a caller.
+    assert "\n                        return;\n" not in body
+
+    at = markup.index("async applyDeviceWideChange(")
+    body = markup[at : markup.index("async applyDeviceWideRun(", at)]
+    assert "|| this.renamingDevice) return 'refused';" in body
+    assert body.rstrip().endswith("return 'refused';\n                },")
 
 
 def test_the_index_belongs_to_the_component_that_asked():
@@ -422,3 +452,46 @@ def test_the_index_belongs_to_the_component_that_asked():
 
     assert "index.owner === state" in body
     assert "index.owner = state;" in body
+
+
+def test_a_dropped_staged_answer_lets_the_next_one_be_asked_for(monkeypatch) -> None:
+    """The answer dropped here leaves its own "finally" seeing a run that is not
+    current any more, so it steps over the reset. Left standing, the flag said an
+    answer was on its way for ever and nothing asked again: a row the poll
+    delivered afterwards showed no id at all."""
+    markup = _panel_source()
+    at = markup.index("dropStagedPreview(deviceId = null) {")
+    body = markup[at : markup.index("previewDeviceWide() {", at)]
+
+    assert "this._stagedRun++;" in body
+    assert "this._stagedAsking = false;" in body
+
+
+def test_the_clash_check_reads_one_registry_for_both_sides(monkeypatch) -> None:
+    """The rows were taken before the server answered. A poll arriving in between
+    left the list holding rows the device does not have any more, compared against
+    ids that no longer knew them."""
+    markup = _panel_source()
+    at = markup.index("async checkDeviceNameClash(")
+    body = markup[at : markup.index("deviceNeedsRename(device)", at)]
+
+    assert "const registry = indexed(this);" in body
+    assert "const taken = registry.entitiesById;" in body
+    assert "const stillMine = new Set((registry.byDevice.get(device.id) || none).map(e => e.id));" in body
+    # A row that has gone is not renamed, so it is not asked about either.
+    assert "if (!stillMine.has(entity.id)) return;" in body
+    # One reading, not two: the second was the drift.
+    assert body.count("indexed(this)") == 2
+
+
+def test_the_apply_reads_what_the_rows_were_told(monkeypatch) -> None:
+    """The apply always spells the name out, and reading that as "a name the rows
+    know nothing about" asked the server the same question a second time on every
+    apply - about the ids the rows already held."""
+    markup = _panel_source()
+    at = markup.index("async checkDeviceNameClash(")
+    body = markup[at : markup.index("const registry = indexed(this);", at)]
+
+    assert "const rowsHoldIt = baseName === null" in body
+    assert "|| baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim());" in body
+    assert "if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {" in body
