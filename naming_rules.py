@@ -59,6 +59,10 @@ from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
 
 logger = logging.getLogger(__name__)
 
+# "Nothing was worked out for this" - told apart from "it came out as nothing",
+# which is an answer and a cached one.
+_UNASKED = object()
+
 SCHEMA_VERSION = 2
 KINDS = ("translation_key", "name", "pattern", "device_class", "domain")
 # Lookup order: the most specific identity first. A pattern is less specific
@@ -1185,7 +1189,7 @@ class NamingRules:
         name at a time, and the next name drops what was worked out for this
         one.
         """
-        for_name = (name, language, getattr(self, "_filling_generation", 0))
+        for_name = (name, language, self._filling_generation)
         if getattr(self._filling, "For", None) != for_name:
             self._filling.For = for_name
             self._filling.by_rule = {}
@@ -1198,6 +1202,22 @@ class NamingRules:
         if rule_id not in by_rule:
             by_rule[rule_id] = fill_placeholders(rule["targets"][language], match)
         return by_rule[rule_id]
+
+    def _filled_already(self, rule: Mapping[str, Any], name: str, language: str) -> Any:
+        """What ``_filled`` worked out for this rule and name, or ``_UNASKED``.
+
+        A peek and nothing more: it neither fills a target nor starts a new
+        generation, so a caller that only wants to avoid matching twice cannot
+        change what the next one is told.
+        """
+        if getattr(self._filling, "For", None) != (name, language, self._filling_generation):
+            return _UNASKED
+        rule_id = rule.get("id") or ""
+        if not rule_id:
+            # As ``_filled`` says: a rule not stored yet has no id to be told
+            # apart by, so nothing was kept for it.
+            return _UNASKED
+        return getattr(self._filling, "by_rule", {}).get(rule_id, _UNASKED)
 
     def _find_pattern(
         self,
@@ -1224,7 +1244,10 @@ class NamingRules:
             # everything, and a rule whose filters do not cover this entity. Read
             # as the second, a pattern rule written before an integration was
             # asked for applied to nothing at all and said nothing about it.
-            if not one and (rule.get("filters") or []):
+            # A filter with nothing in it is no filter: "[{}]" out of a backup or
+            # a file edited by hand says the same as "[]", and read as a filter
+            # that does not cover this entity the rule matched nothing at all.
+            if not one and any(rule.get("filters") or []):
                 continue
             match = pattern.fullmatch(name)
             # Matching is not enough: a placeholder the name has nothing for
@@ -1265,14 +1288,20 @@ class NamingRules:
         # not a name, and it was written to Home Assistant as one wherever the
         # expression could not be read or did not match.
         unfilled = "" if _PLACEHOLDER.search(target) else target
+        # Out of what the lookup already worked out for this name, where it was
+        # the lookup that got here: the winning rule was matched once to find it
+        # and once more only to hand the match in, and the second answer was
+        # thrown away - two full matches per entity for every pattern rule that
+        # wins one.
+        already = self._filled_already(rule, name or "", language)
+        if already is not _UNASKED:
+            return already.strip() if already is not None else ""
         pattern = self._compiled_pattern(rule)
         if pattern is None:
             return unfilled
         match = pattern.fullmatch(name or "")
         if not match:
             return unfilled
-        # Out of what the lookup already worked out for this name, where it was
-        # the lookup that got here.
         filled = self._filled(rule, name or "", language, match) if rule["targets"].get(language) else None
         # Nothing rather than the template: the target with its placeholders
         # still in it is not a name, and it was written to Home Assistant as

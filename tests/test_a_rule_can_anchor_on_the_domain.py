@@ -559,3 +559,64 @@ def test_one_place_says_which_kinds_the_table_cannot_answer_for():
     assert source.count("def _not_a_word(") == 1
     # Both readings ask it, rather than each naming the kind for itself.
     assert source.count("_not_a_word(rule)") == 2
+
+
+def test_the_domain_stands_back_where_a_held_back_rule_speaks(home):
+    """A device-class rule is held back where the entity's own name says more than
+    its class does. A domain rule says less still, so letting it answer there would
+    put back exactly the name that was kept - the user said something narrower
+    about this entity, and the widest anchor does not step in over it."""
+    client, restructurer, rules = home
+    rules.add_filter("domain", "device_tracker", "de", "Standort", {"integration": "unifi"})
+    entity_id = "device_tracker.unifi_default_de_91_e5_f7_12_73"
+    registry = restructurer.entities[entity_id]
+    registry["device_class"] = "connectivity"
+    # A class rule the naming holds back: the name "iPhone" says more than
+    # "connectivity" does.
+    rules.add_filter("device_class", "connectivity", "de", "Verbindung", None)
+
+    behind = restructurer.rule_behind(entity_id, registry)
+    resolution = restructurer.last_resolutions[entity_id]
+
+    assert behind is None
+    assert resolution["rule_id"] is None
+    assert "Standort" not in [one["value"] for one in resolution["candidates"]]
+
+
+def test_the_domain_is_read_once_where_it_cannot_win():
+    """Nothing between the two readings touches what they read, so the second could
+    never fire - and it said it guarded against something."""
+    source = Path(entity_restructurer.__file__).read_text()
+
+    at = source.index("def rule_behind(")
+    assert source.count('if kind == "domain" and narrower:', at) == 1
+
+
+def test_the_narrower_of_two_rules_saying_one_word_is_the_one_in_force(home):
+    """Two rules of the user's saying the same word about one entity: the narrower
+    one is in force, so that is the one the form opens on. Read the other way, a
+    correction went to the rule the naming does not ask first."""
+    client, restructurer, rules = home
+    entity_id = "device_tracker.unifi_default_de_91_e5_f7_12_73"
+    registry = restructurer.entities[entity_id]
+    registry["translation_key"] = "client"
+    # Both say what the entity is called already, so neither wins the name.
+    key = rules.add_filter("translation_key", "client", "de", "iPhone", None)
+    rules.add_filter("name", "iPhone", "de", "iPhone", None)
+
+    behind = restructurer.rule_behind(entity_id, registry)
+
+    assert behind["rule_id"] == key["id"]
+    assert behind["kind"] == "translation_key"
+
+
+def test_a_rule_of_the_domain_scope_lights_the_domain_button():
+    """A rule of that scope carries the model as well - "this model's entities of
+    one domain". Read model-first, the row lit the model button beside it, and
+    saving from there wrote a model-only rule over the rule that had the domain."""
+    markup = (Path(__file__).parent.parent / "templates" / "index.html").read_text()
+    at = markup.index("scopeThatApplied(entity) {")
+    body = markup[at : markup.index("toggleEntityExpand(entity) {", at)]
+
+    assert body.index("if (match.domain) return 'domain';") < body.index("if (match.model) return 'model';")
+    assert body.index("if (match.model) return 'model';") < body.index("if (match.integration) return 'integration';")

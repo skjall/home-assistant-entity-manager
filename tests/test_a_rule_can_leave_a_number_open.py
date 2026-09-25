@@ -1101,3 +1101,72 @@ def test_the_rules_answer_for_the_expression_themselves(rules):
     assert "compile_pattern(" not in body
     assert "rules.get(rule_id)" not in body
     assert "except NotAPatternRuleError as error:" in body
+
+
+class _Counting:
+    """A compiled expression that says how often it was held against a name."""
+
+    def __init__(self, pattern, seen):
+        self._pattern = pattern
+        self._seen = seen
+
+    def fullmatch(self, name):
+        self._seen.append(name)
+        return self._pattern.fullmatch(name)
+
+
+def test_the_winning_rule_is_matched_once_for_one_name(rules):
+    """The lookup matches every pattern rule to find the winner, and the render then
+    matched the winner again only to hand the match in - two full matches per entity
+    for every rule that wins one, and the second answer thrown away."""
+    regex, _ = pattern_of("Heizung 12345678")
+    rule = rules.add_filter("pattern", regex, "de", "Heizkostenverteiler {1}", {"integration": INTEGRATION})
+
+    matched = []
+    real = rules._compiled_pattern
+    rules._compiled_pattern = lambda one: _Counting(real(one), matched)
+    try:
+        found = rules.find("pattern", "Heizung 12345678", INTEGRATION, "de", None, None)
+        assert found["id"] == rule["id"]
+        held = len(matched)
+        assert rules.render(rule, "Heizung 12345678", "de") == "Heizkostenverteiler 12345678"
+        # Out of what the lookup worked out: the render held nothing against the
+        # name a second time.
+        assert len(matched) == held
+    finally:
+        rules._compiled_pattern = real
+
+
+def test_a_name_the_lookup_never_asked_about_is_still_rendered(rules):
+    """The render is also asked about names no lookup got to first - a rule being
+    tried out, a preview. Nothing was worked out for those, and reading the empty
+    answer as "it came out as nothing" left them without a name."""
+    regex, _ = pattern_of("Heizung 12345678")
+    rule = rules.add_filter("pattern", regex, "de", "Heizkostenverteiler {1}", {"integration": INTEGRATION})
+
+    assert rules.render(rule, "Heizung 99999999", "de") == "Heizkostenverteiler 99999999"
+
+
+def test_a_filter_with_nothing_in_it_is_no_filter(rules):
+    """ "[{}]" out of a backup or a file edited by hand says what "[]" says: this rule
+    covers everything. Read as a filter that does not cover this entity, the rule
+    matched nothing at all and said nothing about it."""
+    regex, _ = pattern_of("Heizung 12345678")
+    rule = rules.add_filter("pattern", regex, "de", "Heizkostenverteiler {1}", {"integration": "somewhere_else"})
+    rule["filters"] = [{}]
+
+    found = rules.find("pattern", "Heizung 12345678", "shelly", "de", None, None)
+
+    assert found is not None
+    assert found["id"] == rule["id"]
+
+
+def test_the_generation_is_read_rather_than_asked_for():
+    """The attribute is written in __init__, so the fallback was never returned - and
+    left standing it would have served one stale generation's targets to every thread
+    had the attribute ever moved."""
+    with open(naming_rules.__file__, encoding="utf-8") as reading:
+        source = reading.read()
+
+    assert 'getattr(self, "_filling_generation"' not in source
+    assert "for_name = (name, language, self._filling_generation)" in source

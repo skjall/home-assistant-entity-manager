@@ -693,8 +693,13 @@ class EntityRestructurer:
                     )
                     if rule is None:
                         continue
-                    # Held back or not: the user said something narrower about
-                    # this entity than "every entity of this kind".
+                    # Before the hold-back below, and meant that way: held back
+                    # or not, the user said something narrower about this entity
+                    # than "every entity of this kind", and the widest anchor
+                    # does not step in over it. A device-class rule is held back
+                    # where the entity's own name says more than its class does -
+                    # a domain rule says less still, so letting it answer there
+                    # would put that name back exactly where it was kept.
                     narrower = narrower or kind != "domain"
                     # Unlike the others, a device-class rule is held back where
                     # the name says more than the class does.
@@ -774,6 +779,9 @@ class EntityRestructurer:
         # the rule changes, so that rule wins the name and is reported as its
         # source, and the form opens on it from there. This is for the rule that
         # changes nothing, which is the one the report would otherwise lose.
+        # The first of them, in the order the naming asked them in: where two
+        # rules of the user's say the same word about one entity, the narrower
+        # one is the one in force, and that is the one the form has to open on.
         in_force = next(
             (
                 one
@@ -873,6 +881,11 @@ class EntityRestructurer:
             # Asked about at all only where it could win, as the naming asks it:
             # the lookup ran for every entity that has a narrower rule in force
             # and its answer was thrown away two lines further down.
+            #
+            # Nothing is returned rather than the narrower rule: where that one
+            # is a device-class rule the naming holds back, it does not name this
+            # entity either, and saying it did would put the entity in a list
+            # whose rule leaves it alone.
             if kind == "domain" and narrower:
                 return None
             # Not narrowed to a domain where the domain is what it matches on;
@@ -882,14 +895,6 @@ class EntityRestructurer:
             )
             if rule is None:
                 continue
-            if kind == "domain" and narrower:
-                # The same stepping back the naming does, or the count over a
-                # domain rule would include entities it never names. Nothing is
-                # returned rather than the narrower rule: where that one is a
-                # device-class rule the naming holds back, it does not name this
-                # entity either, and saying it did would put the entity in a
-                # list whose rule leaves it alone.
-                return None
             narrower = narrower or kind != "domain"
             if kind == "device_class" and not self._names_the_class(
                 name, entity_id, device_class, rule["targets"].get(self.language, "")
