@@ -5110,7 +5110,12 @@
                 // write the name and leave the id as it was.
                 async previewsSettled() {
                     while (this._previewsInFlight.size) {
-                        await Promise.all([...this._previewsInFlight]);
+                        // Settled, not resolved: a computation that failed says
+                        // nothing about the ids it did not answer for, and those
+                        // rows read as unchanged. Left to reject, it threw out of
+                        // here and the run the user had asked for gave up without
+                        // a word about why.
+                        await Promise.allSettled([...this._previewsInFlight]);
                     }
                 },
 

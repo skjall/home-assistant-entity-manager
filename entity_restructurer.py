@@ -1081,8 +1081,13 @@ class EntityRestructurer:
         # off it works only until the device is renamed; afterwards the old one
         # sits in the middle of every proposal. The note does not go stale that
         # way, and rules still have their say on what it holds.
-        remembered = self._remembered_type(registry)
-        if self._our_note(registry) is not None:
+        # Read once, and the type part taken out of it: asked twice, every
+        # entity with a note paid for two lookups on the path a rename of a
+        # hundred entities walks a hundred times.
+        note = self._our_note(registry)
+        remembered = note.get("base_entity") if note else None
+        remembered = remembered if isinstance(remembered, str) else None
+        if note is not None:
             # A note from before the type part was kept holds nothing to go by,
             # but a name of ours was rendered by our own templates, so unwinding
             # it gives that part back.
