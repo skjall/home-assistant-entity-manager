@@ -5056,8 +5056,13 @@
                 // rename would write, not the one the entity carries now.
                 getEntityFriendlyNameLive(entity, baseName = null, forDeviceId = null) {
                     const template = this.namingConfig?.templates?.entity_name || '{area} {device} {entity}';
-                    const typed = entity._editValue
-                        || (entity._currentSuffix !== undefined ? entity._currentSuffix : null);
+                    // A field emptied is an answer, not an absent one: the name
+                    // then has no type part, which is what clearing it asks for.
+                    // Read as nothing supplied, the check went back to the stored
+                    // word and worked out ids for a name nobody was writing.
+                    const typed = entity._editValue !== undefined
+                        ? entity._editValue
+                        : (entity._currentSuffix !== undefined ? entity._currentSuffix : null);
                     const mine = !!entity.device_id && entity.device_id === (forDeviceId || this.selectedDevice);
                     return this.renderNamingTemplate(
                         template,
@@ -5984,7 +5989,14 @@
                     // rows know nothing about" asked the server the same
                     // question a second time on every apply.
                     const rowsHoldIt = baseName === null
-                        || baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim());
+                        || baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim())
+                        // Nothing typed at all: the rows were computed with the
+                        // device's own name, which is the name being asked about.
+                        // Read as a name they know nothing about, a move with no
+                        // rename beside it asked the server a second time for the
+                        // ids they already held - and the two answers were about
+                        // two readings of the list.
+                        || (this.devicePreviewBaseName === null && baseName === (device.base_name || '').trim());
                     let ids = null;
                     if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {
                         await this.previewsSettled();
@@ -7313,24 +7325,32 @@
                         if (z.failed > 0) this.showMessage(`${z.failed} Z2M failed`, 'error', true);
                         else if (z.synced > 0) this.showMessage(`${z.synced} Z2M synced`, 'success', true);
                     }
-                    await this.loadHierarchy();
-                    // The device the panel stands on, which a job reconnected
-                    // after a reload need not be about: pointing the panel at
-                    // the renamed device left it showing that device's name and
-                    // area while the selection was another one, and the button
-                    // beside them then renamed the selected device to what was
-                    // shown for the other.
-                    const id = this.selectedDevice;
-                    if (id) {
-                        const updated = this.hierarchy.devices.find(d => d.id === id);
-                        if (updated) this.selectedDeviceData = updated;
-                    }
                     // The button opens once the panel holds the device as it is
                     // now. Opened before the list was read again, a second click
                     // compared the name being typed against the name from before
-                    // the rename - and either said it was already right or
-                    // queued the same rename a second time.
-                    this.renamingDevice = false;
+                    // the rename - and either said it was already right or queued
+                    // the same rename a second time.
+                    //
+                    // And it opens even where reading the list back throws - Home
+                    // Assistant is restarting, the connection dropped. Left shut,
+                    // every device in the panel answered "a rename is running"
+                    // until the page was loaded again, and nothing was running.
+                    try {
+                        await this.loadHierarchy();
+                        // The device the panel stands on, which a job reconnected
+                        // after a reload need not be about: pointing the panel at
+                        // the renamed device left it showing that device's name
+                        // and area while the selection was another one, and the
+                        // button beside them then renamed the selected device to
+                        // what was shown for the other.
+                        const id = this.selectedDevice;
+                        if (id) {
+                            const updated = this.hierarchy.devices.find(d => d.id === id);
+                            if (updated) this.selectedDeviceData = updated;
+                        }
+                    } finally {
+                        this.renamingDevice = false;
+                    }
                 },
 
                 // The tick beside the name field asks for the same thing the

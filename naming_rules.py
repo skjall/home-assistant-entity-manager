@@ -394,8 +394,13 @@ def _refuse_runaway(regex: str) -> None:
                     # that already read sixteen reads 65536. Weighed by the count
                     # alone, each level of "(?:(?:a|aa){4}){4}" passed on its own
                     # and the whole was a runaway.
-                    times = max(_at_most(counted.group(0)), 1)
-                    reads = min(reads**times, MAX_CHOICE_WAYS + 1)
+                    # "{0}" is never: what it counts is not walked at all, so
+                    # the group around it reads one way however many ways the
+                    # group inside it would have read. Counted as one turn, it
+                    # carried that number up and refused expressions that cannot
+                    # run away.
+                    times = _at_most(counted.group(0))
+                    reads = 1 if times == 0 else min(reads**times, MAX_CHOICE_WAYS + 1)
                     if not branched or reads <= MAX_CHOICE_WAYS:
                         after = ""
             # A group that reads no text is nothing to repeat: "((?=\\d+))+" and

@@ -572,6 +572,13 @@ def rename_device():
     if payload.get("new_name") is None and not payload.get("set_area"):
         return jsonify({"error": "Nothing to change: neither a name nor an area"}), 400
 
+    # A move needs an area named, null included - null is "take it out of every
+    # area", which is a thing to ask for. Read through, a call asking to move a
+    # device without saying where enqueued a job that could only fail, and the
+    # caller was told 202.
+    if payload.get("set_area") and "area_id" not in payload:
+        return jsonify({"error": "A move needs an area, or null to clear it"}), 400
+
     # Do not rename the same device twice concurrently.
     for existing in renamer_state["job_store"].list_unfinished():
         if existing.get("type") == "rename_device" and existing.get("payload", {}).get("device_id") == device_id:
@@ -751,15 +758,13 @@ async def rename_device_handler(job, ctx):
 
         z2m_sync: dict[str, Any] = {}
         if new_name is not None:
-            success = await device_registry.rename_device(device_id, new_name)
-
-            if not success:
-                # The area is left where it was moved to. Writing it back is a
-                # second write that can fail in its own turn, and it would take
-                # the device out of the area the user had just put it in - the
-                # move is not the step that failed. What did is reported here,
-                # and the log above says which steps had run.
-                raise RuntimeError("Failed to rename device in Home Assistant")
+            # It answers with what it wrote or raises; there is no third answer
+            # for a truth test to catch, and the test read as though there were.
+            # What it raises is what fails the job, and the log above says which
+            # steps had run - the area is left where it was moved to, since
+            # writing it back is a second write that can fail in its own turn and
+            # would take the device out of the area the user had just put it in.
+            await device_registry.rename_device(device_id, new_name)
 
             # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
             z2m_sync = await sync_z2m_name(device_registry, device_id, new_name)

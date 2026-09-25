@@ -1429,3 +1429,12 @@ def test_a_filter_with_nothing_in_it_holds_for_every_entity(rules):
 
     assert found is not None
     assert found["id"] == rule["id"]
+
+
+def test_a_count_of_zero_carries_nothing_up(rules):
+    """ "{0}" is never: what it counts is not walked at all, so the group around it
+    reads one way however many ways the group inside it would have read. Counted as
+    one turn, it carried that number up and refused expressions that cannot run
+    away."""
+    assert compile_pattern(r"(?:(?:a|aa){0}){4}") is not None
+    assert compile_pattern(r"(?:a|aa){0}") is not None

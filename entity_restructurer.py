@@ -444,16 +444,17 @@ class EntityRestructurer:
         }
         # Before anything is written into the context: read afterwards, with the
         # typed name already standing in it, this answered about the name being
-        # asked about rather than the one the device has. Asked for every entity
-        # rather than only where no name was typed, which is what it cost before:
-        # the extraction keeps nothing between calls, so asking it twice about one
-        # name cannot answer differently the second time.
-        stored_device_name = self._base_device_name(raw_device_name, partial_context)
+        # asked about rather than the one the device has. Once either way, which
+        # is what it cost before the reading was needed at all: the branch that
+        # does not ask about a typed name is the one the list is built with, and
+        # it reads the stored name because that is the name it uses.
         if pending_device_name is not None:
+            stored_device_name = self._base_device_name(raw_device_name, partial_context)
             # What was typed is already a base name - it is the field the
             # interface strips the area prefix out of - so it goes in as it is.
             device_name = pending_device_name
         else:
+            stored_device_name = self._base_device_name(raw_device_name, partial_context)
             device_name = stored_device_name
         partial_context["device"] = device_name
         # A hypothetical answer must not replace the real one that the entity

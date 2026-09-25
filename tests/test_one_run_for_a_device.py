@@ -497,7 +497,10 @@ def test_the_apply_reads_what_the_rows_were_told(monkeypatch) -> None:
     body = markup[at : markup.index("const registry = indexed(this);", at)]
 
     assert "const rowsHoldIt = baseName === null" in body
-    assert "|| baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim());" in body
+    assert "|| baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim())" in body
+    # And where nothing was typed at all: the rows were computed with the device's
+    # own name, which is the name a move asks about.
+    assert "|| (this.devicePreviewBaseName === null && baseName === (device.base_name || '').trim());" in body
     assert "if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {" in body
 
 
@@ -606,7 +609,10 @@ def test_a_name_typed_back_as_it_was_is_not_a_question() -> None:
     assert body.index("stored_device_name = self._base_device_name(") < body.index(
         'partial_context["device"] = device_name'
     )
-    assert body.count("self._base_device_name(raw_device_name, partial_context)") == 1
+    # Once either way, and before the typed name goes into the context: the
+    # branch that does not ask about one reads the stored name because that is the
+    # name it uses.
+    assert body.count("self._base_device_name(raw_device_name, partial_context)") == 2
 
 
 def test_the_staged_rows_show_the_names_the_run_will_write() -> None:
@@ -636,3 +642,49 @@ def test_a_name_that_comes_out_empty_is_not_asked_about_again() -> None:
 
     assert "if (!entity._previewName) stagedUnanswered = true;" not in body
     assert "if (entity._previewName === null || entity._previewName === undefined) {" in body
+
+
+def test_a_move_without_an_area_is_answered_by_the_route(client) -> None:
+    """Read through, a call asking to move a device without saying where enqueued a
+    job that could only fail - and the caller was told 202."""
+    c, store = client
+    answer = c.post("/api/rename_device", json={"device_id": "dev1", "set_area": True})
+
+    assert answer.status_code == 400
+    assert "area" in answer.get_json()["error"]
+    assert store.list_unfinished() == []
+
+
+def test_the_panel_opens_again_where_reading_the_list_back_fails() -> None:
+    """Home Assistant is restarting, the connection dropped. Left shut, every device
+    in the panel answered "a rename is running" until the page was loaded again, and
+    nothing was running."""
+    markup = _panel_source()
+    at = markup.index("async onRenameDeviceDone(")
+    body = markup[at : markup.index("async renameDeviceInHA(", at)]
+
+    assert "try {" in body
+    assert body.index("await this.loadHierarchy();") < body.index("} finally {")
+    assert body.index("} finally {") < body.index("this.renamingDevice = false;")
+
+
+def test_a_field_emptied_is_an_answer() -> None:
+    """The name then has no type part, which is what clearing it asks for. Read as
+    nothing supplied, the check went back to the stored word and worked out ids for a
+    name nobody was writing."""
+    markup = _panel_source()
+    at = markup.index("getEntityFriendlyNameLive(entity, baseName = null, forDeviceId = null) {")
+    body = markup[at : markup.index("getNewEntityIdLive(entity) {", at)]
+
+    assert "const typed = entity._editValue !== undefined" in body
+    assert "const typed = entity._editValue\n" not in body
+
+
+def test_a_rename_that_failed_is_raised_rather_than_read(monkeypatch) -> None:
+    """The registry answers with what it wrote or raises. The truth test read as
+    though there were a third answer, and there is none for it to catch."""
+    with open(os.path.join(HERE, "routes_entities.py"), encoding="utf-8") as reading:
+        source = reading.read()
+
+    assert "await device_registry.rename_device(device_id, new_name)" in source
+    assert "Failed to rename device in Home Assistant" not in source
