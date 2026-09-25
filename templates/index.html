@@ -2199,7 +2199,7 @@
                                @input="devicePreviewBaseName = $event.target.value;
                                         stageDeviceWideChange();
                                         clearTimeout(_deviceNameTimer);
-                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(), 300)"
+                                        _deviceNameTimer = setTimeout(() => { checkDeviceNameClash(); stageDeviceWideChange(); }, 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
                                :placeholder="selectedDeviceData?.base_name"
                                :disabled="renamingDevice || applyingEntityId || executing">
@@ -4952,37 +4952,6 @@
                     this.computePreviewsFor(moved);
                 },
 
-                // A move is being shown for this device: an area was picked in
-                // the panel and not yet written. Untouched is null; an empty
-                // pick is a move to no area at all, which is a move like any
-                // other and not the absence of one.
-                deviceIsMoving(device) {
-                    return !!device
-                        && device.id === this.selectedDevice
-                        && !this.isVirtualDevice(device.id)
-                        && this.devicePreviewAreaId !== null
-                        // The area it is in, picked again, is not a move: every
-                        // row was computed afresh for it and the fast answer
-                        // thrown away for nothing.
-                        && (this.devicePreviewAreaId || null) !== (device.area_id || null);
-                },
-
-                // The area every name below is built out of: the picked one
-                // while a move is being shown, the device's own otherwise -
-                // never the area the sidebar happens to stand in.
-                areaForDevice(device) {
-                    const areaId = this.previewAreaFor(device);
-                    if (!areaId) return null;
-                    return this.hierarchy.areas.find(a => a.id === areaId) || null;
-                },
-
-                // What the entities of the device being moved would be called.
-                // Their names are cached, and a move changes all of them.
-                pickPreviewArea(areaId) {
-                    this.devicePreviewAreaId = areaId;
-                    this.computePreviewsFor(this.entitiesOfDevice(this.selectedDevice));
-                },
-
                 // Get device display name (full name with area prefix)
                 getDeviceDisplayName(device) {
                     if (!device) return '';
@@ -5041,21 +5010,36 @@
                 // The backend (normalize_name / slugify) is the single source of truth for
                 // the naming convention -- the frontend must NOT reimplement the slug rules,
                 // otherwise the two drift apart (e.g. accented characters get stripped here).
-                async fetchNormalized(names) {
-                    if (!names.length) return [];
+                // The slugs for these names. With ``forEntities`` the answer
+                // also carries the ids and names a rename of them would write,
+                // numbering and all; ``normalizedFor`` is the older caller that
+                // wants the slugs alone.
+                async fetchNormalizedFor(names, forEntities = null) {
+                    const empty = {normalized: names.map(() => '')};
+                    if (!names.length) return {normalized: []};
                     try {
                         const resp = await fetch('api/normalize', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ names })
+                            body: JSON.stringify(forEntities ? { names, for: forEntities } : { names })
                         });
                         if (!resp.ok) throw new Error('normalize HTTP ' + resp.status);
                         const data = await resp.json();
-                        return Array.isArray(data.normalized) ? data.normalized : names.map(() => '');
+                        if (!Array.isArray(data.normalized)) return empty;
+                        const numbered = Array.isArray(data.ids) && Array.isArray(data.names)
+                            && data.ids.length === names.length && data.names.length === names.length;
+                        return numbered
+                            ? {normalized: data.normalized, ids: data.ids, names: data.names}
+                            : {normalized: data.normalized};
                     } catch (e) {
                         console.error('normalize failed', e);
-                        return names.map(() => '');
+                        return empty;
                     }
+                },
+
+                async fetchNormalized(names, forEntities = null) {
+                    const answer = await this.fetchNormalizedFor(names, forEntities);
+                    return forEntities ? answer : answer.normalized;
                 },
 
                 // Build the entity ID from a domain and a backend-provided slug.
@@ -5160,28 +5144,32 @@
 
                 // Get friendly name using entity's own device/area (not selected)
                 getEntityFriendlyNameForEntity(entity) {
+                    // Asked once: this runs for every row of a device on every
+                    // keystroke, and each question walked the device list.
+                    const panel = this.pendingDeviceContext(entity);
+                    if (entity.suggested_name && entity._currentSuffix === undefined
+                            && Object.keys(panel).length === 0) {
+                        return entity.suggested_name;
+                    }
+                    const parts = [];
+
                     // Find entity's device
                     const device = entity.device_id
                         ? indexed(this).devicesById.get(entity.device_id)
                         : null;
 
-                    // What the server precomputed is about the area the device
-                    // is in. A device the panel is moving is not there any
-                    // more, so the rows would have gone on showing the old
-                    // area while the panel said otherwise.
-                    const moving = this.deviceIsMoving(device);
-                    if (entity.suggested_name && entity._currentSuffix === undefined && !moving) {
-                        return entity.suggested_name;
-                    }
-                    const parts = [];
-
-                    // Find area (from device or entity), following a move the
-                    // panel is showing: this is what the cached preview holds,
-                    // and a name computed from the old area would sit there
-                    // unchanged while the panel says otherwise.
-                    const areaId = moving
-                        ? this.previewAreaFor(device)
-                        : (device?.area_id || entity.area_id);
+                    // The area the panel holds where it holds one and the
+                    // entity follows the device into it: the name the server
+                    // computed is about the area the registry has, and the row
+                    // would have read the old one while the form said otherwise.
+                    // "" is an area picked away. An entity with an area of its
+                    // own keeps it - the move is written onto the device, and
+                    // the rename leaves that entity where it is - and that area
+                    // comes first here as it does at the server.
+                    const follows = !entity.area_id;
+                    const areaId = (panel.area_id !== undefined && follows)
+                        ? panel.area_id
+                        : (entity.area_id || device?.area_id);
                     const area = areaId
                         ? this.hierarchy.areas.find(a => a.id === areaId)
                         : null;
@@ -5191,19 +5179,55 @@
                         parts.push(area.name);
                     }
 
-                    // Device base name, as the panel holds it: a name typed
-                    // there and not written yet is what the row would be
-                    // renamed to, and the row showed the stored one instead -
-                    // which is then what a run would have written.
+                    // Device base name - the one being typed, where there is one.
                     if (device) {
-                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
-                        parts.push(typed !== null ? typed : device.base_name);
+                        parts.push(panel.device_name !== undefined ? panel.device_name : device.base_name);
                     }
 
-                    // Entity suffix (uses shared logic)
-                    parts.push(this.getEntitySuffix(entity));
+                    // The entity's own part, with the name being typed taken
+                    // back out of it: an integration that writes the device name
+                    // into every entity name - a Bluetooth proxy called after
+                    // its MAC, whose entities are "Bluetooth Proxy Location" -
+                    // leaves it sitting in front, and the row said it twice.
+                    // The server does the same thing with the name it is given.
+                    // An integration writes the area into the name just as
+                    // readily as the device - "Bad Temperature" - so an area
+                    // sitting in front of the entity's own part comes out of it
+                    // too. Both areas: the entity's part was read under the one
+                    // the device is in, and it is being shown under the one the
+                    // panel holds.
+                    let own = this.withoutLeading(this.getEntitySuffix(entity), panel.device_name);
+                    if (panel.area_id !== undefined && follows) {
+                        // The area the entity's own part was read under, which
+                        // is the entity's own where it has one: taken as the
+                        // device's, the row showed the area twice.
+                        const underId = entity.area_id || device?.area_id;
+                        const here = underId
+                            ? this.hierarchy.areas.find(one => one.id === underId)
+                            : null;
+                        own = this.withoutLeading(this.withoutLeading(own, area?.name), here?.name);
+                    }
+                    parts.push(own);
 
                     return parts.filter(p => p).join(' ');
+                },
+
+                // ``text`` without ``prefix`` in front of it, whole word and
+                // case aside. Nothing to take off means the text as it is.
+                withoutLeading(text, prefix) {
+                    if (!text || !prefix) return text || '';
+                    const head = prefix.toLowerCase();
+                    if (text.toLowerCase() === head) return '';
+                    // Compared over as many characters as are cut off, not over
+                    // the lower-cased text: "İ" lower-cases into two characters,
+                    // so a name starting with it was cut one short and kept a
+                    // stray combining dot in front.
+                    if (text.length > prefix.length
+                        && text.slice(0, prefix.length).toLowerCase() === head
+                        && text[prefix.length] === ' ') {
+                        return text.slice(prefix.length).trim();
+                    }
+                    return text;
                 },
 
                 // Get new entity ID using entity's own context
@@ -5269,16 +5293,14 @@
                         if (entity._previewName || entity._justRenamed) continue;
 
                         // Friendly-name composition stays client-side; only the slug comes
-                        // from the backend (source of truth). What the server
-                        // precomputed is about the area the device is in, so a
-                        // device on its way to another one is left to the
-                        // client, which knows where it is going.
-                        const moving = this.deviceIsMoving(
-                            entity.device_id ? devicesById.get(entity.device_id) || null : null
-                        );
-                        entity._previewName = (!moving && entity.suggested_name)
+                        // from the backend (source of truth).
+                        // The hierarchy's own answer, except where a device base
+                        // name has been typed since: it was worked out from the
+                        // registry and does not know about it.
+                        const stale = this.snapshotIsStale(entity);
+                        entity._previewName = (!stale && entity.suggested_name)
                             || this.getEntityFriendlyNameForEntity(entity);
-                        if (!moving && entity.suggested_entity_id) {
+                        if (entity.suggested_entity_id && !stale) {
                             entity._previewId = entity.suggested_entity_id;
                             continue;
                         }
@@ -5304,12 +5326,34 @@
                     // Every computation under way, so a run that needs the ids
                     // waits for all of them rather than for whichever one
                     // started last.
-                    const settling = this.fetchNormalized(pending.map(e => e._previewName)).then(slugs => {
+                    // Asked about these entities, so the answer carries the
+                    // ids and names a rename of them would write: two rows can
+                    // come out of one name, and which of them keeps the plain id
+                    // is the rename's own reckoning. Worked out here instead, the
+                    // preview and the write disagreed about it.
+                    const settling = this.fetchNormalized(
+                        pending.map(e => e._previewName),
+                        pending.map(e => e.id)
+                    ).then(answer => {
+                        const slugs = answer.normalized;
                         pending.forEach((entity, i) => {
                             // Only where nothing has asked since: this answer
                             // is about the name the row had when it was asked.
                             if (entity._previewAsk !== asked) return;
-                            entity._previewId = this.composeEntityId(entity, slugs[i]);
+                            // Where the answer has nothing for this row - a
+                            // name that came out empty, so there was no id to
+                            // number - the slug answers as before. Written
+                            // through, the empty answer emptied the row and the
+                            // next computation asked about it again.
+                            entity._previewId = (answer.ids && answer.ids[i])
+                                || this.composeEntityId(entity, slugs[i]);
+                            // The name carries the number too, or the row would
+                            // read as one thing and be written as another.
+                            // Empty is an answer - a name of area and device
+                            // with no type part - and only "nothing at all" is
+                            // not. Skipped as falsy, the row kept the old name
+                            // beside the new id.
+                            if (answer.names && answer.names[i] != null) entity._previewName = answer.names[i];
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;
@@ -5398,10 +5442,14 @@
                     }
                     this.previewVersion++;
                     const run = ++this._stagedRun;
-                    this.fetchNormalized(entities.map(e => e._previewName)).then(slugs => {
+                    this.fetchNormalizedFor(
+                        entities.map(e => e._previewName),
+                        entities.map(e => e.id)
+                    ).then(answer => {
                         if (run !== this._stagedRun) return;
                         entities.forEach((entity, i) => {
-                            entity._previewId = this.composeEntityId(entity, slugs[i]);
+                            entity._previewId = (answer.ids && answer.ids[i])
+                                || this.composeEntityId(entity, answer.normalized[i]);
                         });
                         this.previewVersion++;
                     });
@@ -5509,11 +5557,56 @@
                     };
                 },
 
+                // The device base name as the form holds it, where that is not
+                // what the registry holds. An area is written through the moment
+                // it is chosen, but a base name waits for its button, and until
+                // then the registry still has the name the integration supplied -
+                // for a UniFi access point its MAC address. The server builds its
+                // answer from the registry unless it is told otherwise, and that
+                // answer is what a confirmed rename writes.
+                // Whether the hierarchy's own answer for this entity still holds.
+                // It was worked out from the registry, so a device base name
+                // typed since is not in it - and seeding a preview from it puts
+                // the old name back, which is what expanding a row did.
+                snapshotIsStale(entity) {
+                    return Object.keys(this.pendingDeviceContext(entity)).length > 0;
+                },
+
+                pendingDeviceContext(entity) {
+                    // Asked for every row of the list on every keystroke, so
+                    // what can be answered without looking anything up is
+                    // answered first: nothing staged means nothing pending, and
+                    // an entity of another device is not this panel's business.
+                    if (this.devicePreviewBaseName === null && this.devicePreviewAreaId === null) {
+                        return {};
+                    }
+                    if (!entity?.device_id || entity.device_id !== this.selectedDevice) return {};
+                    if (this.isVirtualDevice(this.selectedDevice)) return {};
+                    const device = this.hierarchy.devices.find(d => d.id === entity.device_id);
+                    if (!device) return {};
+                    const pending = {};
+                    if (this.devicePreviewBaseName !== null && this.devicePreviewBaseName !== device.base_name) {
+                        pending.device_name = this.devicePreviewBaseName;
+                    }
+                    // An area picked in the panel is written when the change
+                    // is applied, not when it is picked. Empty means picked
+                    // away, which is not the same as nothing picked.
+                    if (this.devicePreviewAreaId !== null
+                            && (this.devicePreviewAreaId || null) !== (device.area_id || null)) {
+                        pending.area_id = this.devicePreviewAreaId || '';
+                    }
+                    return pending;
+                },
+
                 async previewEntityNaming(entity, suffix = null) {
                     const response = await fetch('api/naming/preview', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ entity_id: entity.id, type_value: suffix })
+                        body: JSON.stringify({
+                            entity_id: entity.id,
+                            type_value: suffix,
+                            ...this.pendingDeviceContext(entity)
+                        })
                     });
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'Failed to preview naming');
@@ -5746,14 +5839,21 @@
                     if (!mine.length) return [];
 
                     // The slug rules live in the backend; see fetchNormalized.
-                    const slugs = await this.fetchNormalized(
-                        mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id))
+                    // Asked with the entities, so the ids come back as a rename
+                    // would write them. Worked out from the slugs alone, two of
+                    // the device's own entities landing on one slug read as one
+                    // taken id, and the panel refused a rename that nothing was
+                    // in the way of - the rename writes _1 and _2.
+                    const answer = await this.fetchNormalizedFor(
+                        mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id)),
+                        mine.map(e => e.id)
                     );
                     const taken = indexed(this).entitiesById;
 
                     const clashes = [];
-                    mine.forEach((entity, position) => {
-                        const wantedId = this.composeEntityId(entity, slugs[position]);
+                    mine.forEach((entity, index) => {
+                        const wantedId = (answer.ids && answer.ids[index])
+                            || this.composeEntityId(entity, answer.normalized[index]);
                         const holder = taken.get(wantedId);
                         if (holder && holder.device_id !== device.id) {
                             clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
@@ -6139,10 +6239,13 @@
                     }
                     if (entity._expanded && entity._currentSuffix === undefined) {
                         const initialSuffix = this.getEntitySuffix(entity);
-                        if (entity.suggested_entity_id) {
+                        if (entity.suggested_entity_id && !this.snapshotIsStale(entity)) {
                             // Seed from what the hierarchy already resolved. Rendering the
                             // template here instead would miss the collision numbering the
-                            // backend applies and flag a rename that is not needed.
+                            // backend applies and flag a rename that is not needed. Only
+                            // where nothing has been typed since: otherwise it seeds the
+                            // name the device no longer has, and expanding a row would
+                            // undo what the field above it says.
                             entity._currentSuffix = initialSuffix;
                             entity._previewName = entity.suggested_name;
                             entity._previewId = entity.suggested_entity_id;

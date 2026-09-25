@@ -168,3 +168,121 @@ def test_three_of_a_kind_count_one_two_three(restructurer):
         "event.schlafzimmer_button_taste_3",
     ]
     assert [name for _, _, name in result] == ["Taste 1", "Taste 2", "Taste 3"]
+
+
+def test_the_endpoint_answers_with_the_ids_a_rename_would_write(restructurer, monkeypatch):
+    """The interface used to work the numbering out a second time.
+
+    Two rows out of one name: which of them keeps the plain id, and from which
+    number the others count, is the rename's own reckoning. Asked for here, so a
+    preview and the write it leads to cannot disagree - and what the numbering
+    tells the user about stays the rename they asked for, not this question.
+    """
+    import web_ui
+
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    restructurer.last_numbering = {"sensor.untouched": {"wanted": "x", "holder": "y"}}
+    web_ui.app.config["TESTING"] = True
+    client = web_ui.app.test_client()
+
+    answer = client.post(
+        "/api/normalize",
+        json={
+            "names": ["Wohnzimmer Steckdose Energie", "Wohnzimmer Steckdose Energie"],
+            "for": ["sensor.plug_energy", "sensor.plug_energy_2"],
+        },
+    ).get_json()
+
+    assert answer["normalized"] == ["wohnzimmer_steckdose_energie"] * 2
+    assert answer["ids"] == ["sensor.wohnzimmer_steckdose_energie_1", "sensor.wohnzimmer_steckdose_energie_2"]
+    assert answer["names"] == ["Wohnzimmer Steckdose Energie 1", "Wohnzimmer Steckdose Energie 2"]
+    assert restructurer.last_numbering == {"sensor.untouched": {"wanted": "x", "holder": "y"}}
+
+
+def test_the_endpoint_still_answers_names_alone(restructurer, monkeypatch):
+    """Without "for" it says what it always said."""
+    import web_ui
+
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    web_ui.app.config["TESTING"] = True
+    client = web_ui.app.test_client()
+
+    answer = client.post("/api/normalize", json={"names": ["Küche Lampe"]}).get_json()
+
+    assert answer == {"normalized": ["kuche_lampe"]}
+
+
+def test_a_name_that_came_out_empty_does_not_cost_the_batch_its_numbers(restructurer, monkeypatch):
+    """One row with nothing to slugify used to leave every other row unnumbered.
+
+    The two that share a name then showed the same plain id while the rename
+    would have written _1 and _2.
+    """
+    import web_ui
+
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    web_ui.app.config["TESTING"] = True
+    client = web_ui.app.test_client()
+
+    answer = client.post(
+        "/api/normalize",
+        json={
+            "names": ["", "Wohnzimmer Steckdose Energie", "Wohnzimmer Steckdose Energie"],
+            "for": ["sensor.nameless", "sensor.plug_energy", "sensor.plug_energy_2"],
+        },
+    ).get_json()
+
+    assert answer["normalized"][0] == ""
+    # Nothing to say about the one with no name, and the two that have one
+    # numbered as the rename would number them.
+    assert answer["ids"] == [
+        None,
+        "sensor.wohnzimmer_steckdose_energie_1",
+        "sensor.wohnzimmer_steckdose_energie_2",
+    ]
+    assert answer["names"][0] is None
+
+
+def test_the_slugs_are_answered_even_where_the_numbering_cannot_be(restructurer, monkeypatch):
+    """The numbering is what a rename would make of the slugs, not the answer.
+
+    Left to raise, the request came back 500 and every row in the interface
+    showed "sensor." for an id until the page was loaded again.
+    """
+    import web_ui
+
+    def refuse(proposals):
+        raise RuntimeError("no")
+
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    monkeypatch.setattr(restructurer, "deduplicate_entity_ids", refuse)
+    web_ui.app.config["TESTING"] = True
+    client = web_ui.app.test_client()
+
+    response = client.post(
+        "/api/normalize",
+        json={"names": ["Küche Lampe"], "for": ["light.kitchen"]},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"normalized": ["kuche_lampe"]}
+
+
+def test_the_domain_comes_from_the_registry_not_from_what_was_sent(restructurer, monkeypatch):
+    """An id that is not the entity's had the answer name another domain."""
+    import web_ui
+
+    monkeypatch.setitem(web_ui.renamer_state, "restructurer", restructurer)
+    web_ui.app.config["TESTING"] = True
+    client = web_ui.app.test_client()
+
+    # The registry holds this one under a key that is not its entity id, which
+    # is what the caller sends back: the domain has to come from the entry.
+    restructurer.entities["light.stale_key"] = {"id": "r9", "entity_id": "sensor.moved_on"}
+
+    answer = client.post(
+        "/api/normalize",
+        json={"names": ["Küche Lampe"], "for": ["light.stale_key"]},
+    ).get_json()
+
+    assert answer["ids"] == ["sensor.kuche_lampe"]
