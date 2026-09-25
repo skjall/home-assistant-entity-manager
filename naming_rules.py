@@ -231,6 +231,32 @@ _GROUP_LOOKALIKE = re.compile(r"\(\?(?:P=\w+|#[^)]*)\)")
 # A counted quantifier: "{4}", "{1,3}", or the open-ended "{2,}".
 _COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
 
+# How often a group holding a choice may be counted. Every repetition doubles the
+# ways a near-miss can be cut up, so four of them is sixteen tries, and fifty is a
+# number with no end in sight.
+MAX_CHOICE_REPEATS = 4
+
+# And the same bound read as what it allows: two words counted four times can be
+# read sixteen ways, and that is as far as a counted choice may reach however it
+# is written. Counted a level at a time, "(?:(?:a|aa){4}){4}" passed four times
+# over and reads 65536 ways.
+MAX_CHOICE_WAYS = 2**MAX_CHOICE_REPEATS
+
+
+def _at_most(quantifier: str) -> int:
+    """The number of repetitions a counted quantifier allows at most.
+
+    ``quantifier`` is the count as it is written - "{4}", "{1,3}" - and the answer
+    is the last number in it.
+    """
+    numbers = [int(part) for part in re.findall(r"\d+", quantifier)]
+    # The last of them rather than the largest: a reversed range -
+    # "{3,1}" - is not a quantifier Python compiles, so the two differ
+    # only for an expression that was refused before this was asked,
+    # and the largest would be the wrong bound to test if that ever
+    # stopped being true.
+    return numbers[-1] if numbers else 0
+
 
 def _refuse_runaway(regex: str) -> None:
     """Refuse a quantifier that is applied to something that already repeats.
@@ -258,6 +284,11 @@ def _refuse_runaway(regex: str) -> None:
     reads_text = [False]
     repeats = [False]  # whether the group at each depth already repeats
     choices = [False]  # whether the group at each depth holds a choice
+    # How many ways the group at each depth can read one stretch of text. One
+    # is "only the one way"; a choice makes it two, and a count multiplies it
+    # by itself that many times. It is carried up to the group around it, so a
+    # count wrapped around a count is weighed as what the two come to together.
+    ways = [1]
     at = 0
     in_class = False
     while at < len(regex):
@@ -295,6 +326,7 @@ def _refuse_runaway(regex: str) -> None:
             # not a quantifier and must not be read as one.
             repeats.append(False)
             choices.append(False)
+            ways.append(1)
             reads_text.append(False)
             zero_width.append(opening.group(0)[:3] in {"(?=", "(?!", "(?<"})
             at = opening.end()
@@ -311,13 +343,19 @@ def _refuse_runaway(regex: str) -> None:
         elif char == "(":
             repeats.append(False)
             choices.append(False)
+            ways.append(1)
             reads_text.append(False)
             zero_width.append(False)
         elif char == "|":
             choices[-1] = True
+            # Counted, not noted: three alternatives counted four times read 81
+            # ways where two read sixteen, and read as two whatever the group
+            # holds, "(a|aa|aaa){4}" passed the bound five times over.
+            ways[-1] = ways[-1] + 1
         elif char == ")":
             inside = repeats.pop() if len(repeats) > 1 else False
             branched = choices.pop() if len(choices) > 1 else False
+            reads = ways.pop() if len(ways) > 1 else 1
             nothing_wide = zero_width.pop() if len(zero_width) > 1 else False
             read_text = reads_text.pop() if len(reads_text) > 1 else True
             # A lookaround reads no text however much is written in it, and what
@@ -325,22 +363,62 @@ def _refuse_runaway(regex: str) -> None:
             if not nothing_wide:
                 reads_text[-1] = reads_text[-1] or read_text
             after = regex[at + 1 : at + 2]
-            # A bounded count after a group that holds nothing repeating is no
-            # more a runaway than the group itself: "(\\d{4}){2,3}" reads eight
-            # to twelve digits and there is only one way to cut them up. An
-            # open-ended count is a runaway, and so is a bounded one on a group
-            # that repeats or holds a choice: "([\\w ]+){2,5}" can split a
-            # hundred characters across five groups every way there is, and
-            # tries all of them on a name that nearly matches. "(\\d+){2,3}" is
-            # the same shape over fewer characters, and the answer is the same
-            # for both rather than a judgement per expression about which
-            # polynomial is small enough - nothing this add-on writes has that
-            # shape, a learned pattern counts the digits it left open and
-            # quantifies nothing else.
+            # A bounded count is no more a runaway than what it counts, as
+            # long as what it counts finishes: "(\\d{4}){2,3}" reads eight to
+            # twelve digits, and "(open|closed){1,2}" one of two words twice -
+            # a choice counted a fixed number of times can be read a fixed
+            # number of ways. An open-ended count is a runaway, and so is a
+            # bounded one on a group that repeats without bound inside:
+            # "([\\w ]+){2,5}" can split a hundred characters across five
+            # groups every way there is, and tries all of them on a name that
+            # nearly matches. "(\\d+){2,3}" is the same shape over fewer
+            # characters and is refused with it, rather than judged per
+            # expression about which polynomial is small enough.
+            #
+            # A choice is counted too, and how far: the ways to read one grow
+            # with the count, so "(on|one){1,50}" tries a number of splits no
+            # bound on the text can hold down, while "(open|closed){1,2}" is
+            # four. Up to MAX_CHOICE_WAYS the whole set is small enough to
+            # walk; past that it is refused like the rest.
             if after == "{":
                 counted = _COUNT.match(regex, at + 1)
-                if counted and not counted.group("open") and not (inside or branched):
+                if not counted:
+                    # A brace that opens no count is a literal - "(a|b){serial}"
+                    # is a group followed by a word in braces - and read as a
+                    # quantifier it refused the group for repeating something it
+                    # does not repeat.
                     after = ""
+                elif not counted.group("open") and not inside:
+                    # What the count comes to, not how high it goes: a group that
+                    # reads two ways counted four times reads sixteen, and one
+                    # that already read sixteen reads 65536. Weighed by the count
+                    # alone, each level of "(?:(?:a|aa){4}){4}" passed on its own
+                    # and the whole was a runaway.
+                    # "{0}" is never: what it counts is not walked at all, so
+                    # the group around it reads one way however many ways the
+                    # group inside it would have read. Counted as one turn, it
+                    # carried that number up and refused expressions that cannot
+                    # run away.
+                    times = _at_most(counted.group(0))
+                    if times == 0:
+                        reads = 1
+                    elif reads > MAX_CHOICE_WAYS:
+                        # Already past the bound, and a count cannot bring it back
+                        # under: kept as it is rather than raised to a power of the
+                        # number that says "past it", which is not a count of
+                        # anything and would answer for the bound rather than for
+                        # the expression.
+                        reads = MAX_CHOICE_WAYS + 1
+                    else:
+                        # The count is held down before it is used as a power, not
+                        # after: "(a|b){9999999999}" is 22 characters and asked
+                        # Python for a number with three billion digits in it,
+                        # which is a gigabyte of memory to work out and throw away.
+                        # One turn past the bound answers the same, since two ways
+                        # taken that many times is already past it.
+                        reads = min(reads ** min(times, MAX_CHOICE_REPEATS + 1), MAX_CHOICE_WAYS + 1)
+                    if not branched or reads <= MAX_CHOICE_WAYS:
+                        after = ""
             # A group that reads no text is nothing to repeat: "((?=\\d+))+" and
             # "()+" ask for a group that stands still to be walked again, which
             # Python stops after one turn and nobody meant to write. Refused
@@ -355,9 +433,9 @@ def _refuse_runaway(regex: str) -> None:
             if branched and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat a choice: it would never finish")
             # A question mark is let through where the others are refused, and
-            # "(a+)?+" is what that lets through: from Python 3.11 on the second
-            # quantifier there is possessive, so the group is matched once and
-            # never gone back into - the opposite of the shape this walk is
+            # "([a-z ]+)?+" is what that lets through: from Python 3.11 on the
+            # second quantifier there is possessive, so the group is matched once
+            # and never gone back into - the opposite of the shape this walk is
             # about, and a near miss answers at once.
             #
             # "?" and "*" as well: "((ab)?)+" repeats a group that can match
@@ -368,9 +446,17 @@ def _refuse_runaway(regex: str) -> None:
             if (inside and not nothing_wide) or after in {"*", "+", "{", "?"}:
                 repeats[-1] = True
             # A group holding a choice is one to the group around it, so
-            # "((a|aa))+" is refused where "(a|aa)+" is.
+            # "((a|aa))+" is refused where "(a|aa)+" is - and it reads as far as
+            # this one does, which is what makes a count around a count weigh
+            # what the two come to.
             if branched:
                 choices[-1] = True
+            # And how far it reads is handed up with the rest of it, or not at
+            # all: a choice inside a lookaround is read once for a position, so
+            # counting it among the ways the group around it can be cut up
+            # refused "((?=a|b)\\w|[A-Z]){4}" where "(\\w|[A-Z]){4}" is read.
+            if not nothing_wide:
+                ways[-1] = min(ways[-1] * reads, MAX_CHOICE_WAYS + 1)
         elif char == "{":
             counted = _COUNT.match(regex, at)
             if counted:
@@ -381,8 +467,9 @@ def _refuse_runaway(regex: str) -> None:
                     repeats[-1] = True
                 at = counted.end()
                 continue
-            # A brace that counts nothing is the literal it looks like, and a
-            # literal reads text.
+            # And a brace that counts nothing is the literal it looks like, here
+            # as above: marked as a repetition, the group it sits in was refused a
+            # quantifier it could have had. A literal reads text.
             reads_text[-1] = True
         elif char in {"*", "+", "?"}:
             # A question mark counts: "(Sensor ?)+" repeats a group that can
@@ -1399,7 +1486,9 @@ class NamingRules:
             # this name was being worked out does not match it any more, and a
             # rule that does not match says nothing about the name. A target with
             # no placeholder in it was handed back as one, so the entity was
-            # renamed by a rule that had stopped applying to it.
+            # renamed by a rule that had stopped applying to it. Nothing and a
+            # target are told apart by every caller the same way - a name is what
+            # is truthy - so this says "no name" where it used to say a wrong one.
             return ""
         filled = self._filled(rule, name or "", language, match) if rule["targets"].get(language) else None
         # Nothing rather than the template: the target with its placeholders

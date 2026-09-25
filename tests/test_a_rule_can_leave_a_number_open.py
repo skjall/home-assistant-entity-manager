@@ -477,8 +477,30 @@ def test_a_counted_repetition_is_not_a_runaway():
     """ "(\\d{4})+" bounds what it repeats, so it finishes; "(\\d{2,})+" does not."""
     assert compile_pattern(r"(\d{4})+") is not None
     assert compile_pattern(r"(?:ab{1,3})+c") is not None
+    assert compile_pattern(r"(\d{4}){2,3}") is not None
     with pytest.raises(NamingRuleError):
         compile_pattern(r"(\d{2,})+")
+
+
+def test_a_bounded_count_on_a_group_that_repeats_is_a_runaway():
+    """A count bounds how often the group is tried, not how many ways there are
+    to read what is inside it: "([\\w ]+){2,5}" can split a hundred characters
+    across five groups every way there is, and tries all of them on a name that
+    nearly matches. The bound was read as making any group safe."""
+    for expression in (r"([\w ]+){2,5}", r"(a+){2,3}"):
+        with pytest.raises(NamingRuleError):
+            compile_pattern(expression)
+
+
+def test_a_bounded_count_over_a_choice_is_bounded():
+    """A choice counted a fixed number of times can be read a fixed number of
+    ways, overlapping alternatives and all: "(open|closed){1,2}" is a name with
+    one of two words in it twice, and refusing it said it would never finish."""
+    assert compile_pattern(r"(open|closed){1,2}") is not None
+    assert compile_pattern(r"(a|aa){2,3}") is not None
+    # Unbounded is the one that does not finish.
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"(a|aa)+")
 
 
 def test_a_placeholder_with_nothing_in_it_leaves_the_name_alone(rules):
@@ -701,16 +723,6 @@ def test_a_bounded_count_after_a_backreference_is_bounded(rules):
     assert compile_pattern(r"(?P<n1>\d+)((?P=n1){2})+") is not None
     with pytest.raises(NamingRuleError):
         compile_pattern(r"(?P<n1>\d+)((?P=n1)+)+")
-
-
-def test_a_bounded_count_on_a_group_that_repeats_is_a_runaway(rules):
-    """A count bounds how often a group is tried, not how many ways there are to
-    read it: "([\\w ]+){2,5}" can split a hundred characters across five groups
-    every way there is, and tries all of them on a name that nearly matches."""
-    assert compile_pattern(r"(\d{4}){2,3}") is not None
-    for expression in (r"([\w ]+){2,5}", r"(a+){2,3}", r"(a|aa){2,3}"):
-        with pytest.raises(NamingRuleError):
-            compile_pattern(expression)
 
 
 def test_a_group_that_caught_nothing_is_not_a_group_that_is_missing(rules, caplog):
@@ -1103,6 +1115,22 @@ def test_the_rules_answer_for_the_expression_themselves(rules):
     assert "except NotAPatternRuleError as error:" in body
 
 
+def test_a_count_around_a_count_is_weighed_as_what_the_two_come_to(rules):
+    """Two words counted four times read sixteen ways, which is as far as a counted
+    choice may reach. Weighed a level at a time, each count of
+    "(?:(?:a|aa){4}){4}" passed on its own and the whole read 65536 ways."""
+    for expression in [r"(?:(?:a|aa){4}){4}", r"((a|aa){3}){3}", r"(?:(?:a|aa){2}){3}"]:
+        with pytest.raises(NamingRuleError, match="repeat a choice"):
+            compile_pattern(expression)
+
+    # And what stayed within it is still read: sixteen ways at most, however it
+    # is written.
+    assert compile_pattern(r"(?:a|aa){4}") is not None
+    assert compile_pattern(r"(a|aa){2,3}") is not None
+    assert compile_pattern(r"(open|closed){1,2}") is not None
+    assert compile_pattern(r"(?:Heizung|Kuehlung) (?P<n1>\d+)") is not None
+
+
 class _Counting:
     """A compiled expression that says how often it was held against a name."""
 
@@ -1239,6 +1267,40 @@ def test_a_target_that_cannot_be_filled_is_no_name(client):
 def test_a_possessive_quantifier_is_not_the_shape_this_refuses(rules):
     """From Python 3.11 on "?+" is possessive: the group is matched once and never
     gone back into, which is the opposite of what runs away."""
+    compiled = compile_pattern(r"([a-z ]+)?+")
+
+    assert compiled is not None
+    # A near miss answers rather than hanging, which is what possessive means.
+    assert compiled.fullmatch("a" * 40 + "1") is None
+
+
+def test_an_expression_is_stored_as_it_was_sent(client):
+    """Cut to length and stripped of control characters, a 501-character expression
+    came back as its first 500 with a 200 - a pattern the writer never sent. The
+    route that rewrites one already reads it as sent; this one refuses it."""
+    answer = client.post(
+        "/api/naming/rules",
+        json={
+            "match": {"kind": "pattern", "value": "a" * 501, "integration": INTEGRATION},
+            "targets": {"de": "Heizung"},
+        },
+    )
+
+    assert answer.status_code == 400
+
+
+def test_a_brace_that_counts_nothing_is_a_literal_after_a_group(rules):
+    """ "(a|b){serial}" is a group followed by a word in braces. Read as a quantifier,
+    the group was refused for repeating something it does not repeat."""
+    assert compile_pattern(r"(a|b){serial}") is not None
+    assert compile_pattern(r"(a+){serial}") is not None
+    assert compile_pattern(r"(HeatCost|Heating) {serial} (?P<n1>\d+)") is not None
+
+    # And a count is still a count.
+    with pytest.raises(NamingRuleError, match="repeat a choice"):
+        compile_pattern(r"(a|aa){1,50}")
+    with pytest.raises(NamingRuleError, match="repeat what already repeats"):
+        compile_pattern(r"(a+){2,}")
     compiled = compile_pattern(r"(a+)?+")
 
     assert compiled is not None
@@ -1276,8 +1338,23 @@ def test_a_rule_that_stopped_matching_says_nothing_about_the_name(rules):
     rule = rules.add_filter("pattern", regex, "de", "Heizkessel", {"integration": INTEGRATION})
 
     assert rules.render(rule, "Heizung 12345678", "de") == "Heizkessel"
-    # The same rule held against a name its expression says nothing about.
     assert rules.render(rule, "Waschmaschine", "de") == ""
+
+
+def test_the_alternatives_of_a_choice_are_counted(rules):
+    """Three alternatives counted four times read 81 ways where two read sixteen.
+    Read as two whatever the group holds, "(a|aa|aaa){4}" passed the bound five times
+    over."""
+    for expression in [r"(a|aa|aaa){4}", r"(a|b|c){3}"]:
+        with pytest.raises(NamingRuleError, match="repeat a choice"):
+            compile_pattern(expression)
+
+    # Two alternatives counted as far as the bound allows are still read.
+    assert compile_pattern(r"(a|aa){2,3}") is not None
+    assert compile_pattern(r"(open|closed){1,2}") is not None
+    assert compile_pattern(r"(?:a|aa){4}") is not None
+    # And a choice nothing counts is no runaway however many ways it reads.
+    assert compile_pattern(r"(?:Heizung|Kuehlung|Lueftung) (?P<n1>\d+)") is not None
 
 
 def test_a_lookaround_hands_nothing_up(rules):
@@ -1352,3 +1429,52 @@ def test_a_filter_with_nothing_in_it_holds_for_every_entity(rules):
 
     assert found is not None
     assert found["id"] == rule["id"]
+
+
+def test_a_count_of_zero_carries_nothing_up(rules):
+    """ "{0}" is never: what it counts is not walked at all, so the group around it
+    reads one way however many ways the group inside it would have read. Counted as
+    one turn, it carried that number up and refused expressions that cannot run
+    away."""
+    assert compile_pattern(r"(?:(?:a|aa){0}){4}") is not None
+    assert compile_pattern(r"(?:a|aa){0}") is not None
+
+
+def test_a_choice_inside_a_lookaround_is_not_counted_among_the_ways(rules):
+    """A lookaround is read once for a position, so how far it reads is handed up
+    with the rest of it - which is not at all. Counted among the ways the group
+    around it can be cut up, it refused what the same expression without the
+    lookaround is read as."""
+    assert compile_pattern(r"((?=a|b)\w|[A-Z]){4}") is not None
+    assert compile_pattern(r"(\w|[A-Z]){4}") is not None
+
+    # And a choice that does read text is counted as before.
+    with pytest.raises(NamingRuleError, match="repeat a choice"):
+        compile_pattern(r"(a|aa|aaa){4}")
+
+
+def test_the_quantifier_is_not_the_counter():
+    """ "count" is the itertools one, and the generation the filled targets are kept
+    under is drawn from it. Shadowed by a parameter, a call to it inside that
+    function would ask a string to count."""
+    with open(naming_rules.__file__, encoding="utf-8") as reading:
+        source = reading.read()
+
+    assert "def _at_most(quantifier: str) -> int:" in source
+    assert "def _at_most(count:" not in source
+
+
+def test_a_count_is_held_down_before_it_is_used_as_a_power(rules):
+    """ "(a|b){9999999999}" is 22 characters and asked Python for a number with three
+    billion digits in it - a gigabyte to work out and throw away, for an answer that
+    was going to be "past the bound" either way."""
+    import time
+
+    started = time.monotonic()
+    with pytest.raises(NamingRuleError, match="repeat a choice"):
+        compile_pattern(r"(a|b){9999999999}")
+    assert time.monotonic() - started < 1
+
+    # And the answers within the bound are unchanged.
+    assert compile_pattern(r"(?:a|aa){4}") is not None
+    assert compile_pattern(r"(a|aa){2,3}") is not None

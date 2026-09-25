@@ -442,12 +442,14 @@ class EntityRestructurer:
             "model": device.get("model", ""),
             "integration": integration,
         }
-        if pending_device_name is not None:
-            # What was typed is already a base name - it is the field the
-            # interface strips the area prefix out of - so it goes in as it is.
-            device_name = pending_device_name
-        else:
-            device_name = self._base_device_name(raw_device_name, partial_context)
+        # Once, and before anything is written into the context: read afterwards,
+        # with the typed name already standing in it, this answered about the name
+        # being asked about rather than the one the device has. One call either
+        # way, which is what the list has always paid for the name it uses.
+        stored_device_name = self._base_device_name(raw_device_name, partial_context)
+        # What was typed is already a base name - it is the field the interface
+        # strips the area prefix out of - so it goes in as it is.
+        device_name = pending_device_name if pending_device_name is not None else stored_device_name
         partial_context["device"] = device_name
         # A hypothetical answer must not replace the real one that the entity
         # list reads back out of last_resolutions. A name asked about for a
@@ -459,7 +461,17 @@ class EntityRestructurer:
         # Asked of what came out, not of how it was chosen: the two were
         # worked out from the same question in two places, and a change to one
         # of them would have had hypothetical answers kept as real ones.
-        asking_only = ignore_exception or pending_device_name is not None or area_id != stored_area
+        # A name asked about that is the name the device has is not
+        # hypothetical: the field holds what the registry holds, which is what
+        # typing a name and typing it back leaves. Read as a question either way,
+        # the real answer this call worked out was thrown away and the list went
+        # on showing the one before it. Worked out only where a name was passed
+        # in, which is the form asking and not the list being built.
+        asked_for_another_name = pending_device_name is not None and pending_device_name != stored_device_name
+        # Both sides of that comparison come out of the same reading above, where
+        # "no area" is "" on either side, so a device without one does not read as
+        # a question about an area it might be moved to.
+        asking_only = ignore_exception or asked_for_another_name or area_id != stored_area
         previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(
             entity_id,

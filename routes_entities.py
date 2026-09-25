@@ -535,18 +535,47 @@ def rename_device():
     runs in the background worker and the frontend polls the returned job.
     """
     data = request.json
-    is_valid, error = validate_json_input(data, ["device_id", "new_name"])
+    is_valid, error = validate_json_input(data, ["device_id"])
     if not is_valid:
         return jsonify({"error": error}), 400
 
     device_id = sanitize_registry_id(data.get("device_id"))
-    new_name = sanitize_name(data.get("new_name"))
-
     if not device_id:
         return jsonify({"error": "Invalid device ID"}), 400
 
-    if not new_name:
-        return jsonify({"error": "Invalid device name"}), 400
+    # Without a name until one is asked for: written as null, a job carrying
+    # "new_name" that means "no rename" reads to anything that asks whether the
+    # key is there as a rename with nothing to write.
+    payload: dict[str, Any] = {"device_id": device_id}
+
+    # The name is optional: a device that only moves to another area is renamed
+    # by its template rather than by hand, and may come out called the same.
+    supplied_name = data.get("new_name")
+    if supplied_name is not None:
+        new_name = sanitize_name(supplied_name)
+        if not new_name:
+            return jsonify({"error": "Invalid device name"}), 400
+        payload["new_name"] = new_name
+
+    # A key that never arrived is a caller who meant something else, so only an
+    # area_id spelled out asks for the area to be written - null to clear it.
+    if "area_id" in data:
+        supplied_area = data["area_id"]
+        area_id = None
+        if supplied_area is not None:
+            area_id = sanitize_registry_id(supplied_area)
+            if not area_id:
+                return jsonify({"error": "Invalid area ID"}), 400
+        payload["area_id"] = area_id
+        payload["set_area"] = True
+
+    if payload.get("new_name") is None and not payload.get("set_area"):
+        return jsonify({"error": "Nothing to change: neither a name nor an area"}), 400
+
+    # Nothing here asks whether an area was named: this route writes "set_area"
+    # only where it writes "area_id" beside it, so the one cannot arrive without
+    # the other. A payload that carries the flag alone was written somewhere else,
+    # and the worker answers for it where it reads it.
 
     # Do not rename the same device twice concurrently.
     for existing in renamer_state["job_store"].list_unfinished():
@@ -556,7 +585,7 @@ def rename_device():
                 409,
             )
 
-    job = new_job("rename_device", {"device_id": device_id, "new_name": new_name}, job_id=uuid.uuid4().hex)
+    job = new_job("rename_device", payload, job_id=uuid.uuid4().hex)
     renamer_state["job_store"].save(job)
     renamer_state["worker"].enqueue(job)
     return jsonify(job), 202
@@ -662,16 +691,45 @@ def _plan_device_entity_changes(
 
 
 async def rename_device_handler(job, ctx):
-    """Rename a device and cascade the rename to all of its entities.
+    """Move a device, rename it, and cascade both to all of its entities.
 
-    Renames the device, aligns the Z2M friendly name, then for every entity of
-    the device rebuilds its friendly name and entity id and rewrites references
-    in automations/scenes/scripts. Progress is reported per entity so the UI can
-    show a live bar. Runs inside the worker (serial, off the request path).
+    Writes the area first, because the device name is built out of it, then the
+    device name, aligns the Z2M friendly name, and for every entity of the
+    device rebuilds its friendly name and entity id and rewrites references in
+    automations/scenes/scripts. Area and name are each optional, so one run
+    applies whichever of them the user staged. Progress is reported per entity
+    so the UI can show a live bar. Runs inside the worker (serial, off the
+    request path).
     """
     payload = job["payload"]
     device_id = payload["device_id"]
-    new_name = payload["new_name"]
+    new_name = payload.get("new_name")
+    # Asked for and empty is not the same as not asked for: a job carrying "" -
+    # a call straight to the API, or a job store somebody edited - had the rename
+    # skipped and the run reported as done. A name is a string; anything else,
+    # including 0 and False, is refused here rather than read as "no rename" by
+    # the truth test that writes it.
+    if new_name is not None and (not isinstance(new_name, str) or not new_name.strip()):
+        raise RuntimeError("A rename needs a name")
+    # And the key carrying null is the same kind of payload: this route omits the
+    # key where no rename is asked for, so a null was written by something else -
+    # read as "no rename", the job skipped it and reported success. The check above
+    # steps over null, which is why this one is here rather than folded into it;
+    # tests/test_one_run_for_a_device.py holds both down.
+    if "new_name" in payload and payload["new_name"] is None:
+        raise RuntimeError("A rename needs a name")
+    # The flag where it is spelled out, and the key standing alone where it is
+    # not: a caller that says "set_area": false and names an area beside it is
+    # saying not to move the device, and reading the key through that had it
+    # moved against what the payload said.
+    set_area = bool(payload.get("set_area")) if "set_area" in payload else ("area_id" in payload)
+    # An area asked for is an area spelled out, null included - null is "take it
+    # out of every area", which is a thing to ask for. The key missing is nobody
+    # asking, and read as null it took the device out of its area on a payload
+    # that said nothing about areas at all.
+    if set_area and "area_id" not in payload:
+        raise RuntimeError("A move needs an area, or null to clear it")
+    area_id = payload.get("area_id")
 
     base_url = os.getenv("HA_URL")
     token = os.getenv("HA_TOKEN")
@@ -694,13 +752,31 @@ async def rename_device_handler(job, ctx):
         )
 
         device_registry = DeviceRegistry(ws)
-        success = await device_registry.rename_device(device_id, new_name)
 
-        if not success:
-            raise RuntimeError("Failed to rename device in Home Assistant")
+        # The area goes first: the device name and every entity name below is
+        # built out of it, so a device that moves is named where it moved to.
+        if set_area:
+            # Said before it is done: a write that raises left the log with no
+            # step at all, so nothing said which operation the job failed on.
+            # The log is the job's account of what it set out to do, not a
+            # receipt that it succeeded - the failure is reported by the
+            # exception, and tests/test_web_rename_job.py holds this order
+            # down for both steps.
+            ctx.log("AREA", f"{device_id} -> {area_id or 'no area'}")
+            await device_registry.assign_area(device_id, area_id)
 
-        # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
-        z2m_sync = await sync_z2m_name(device_registry, device_id, new_name)
+        z2m_sync: dict[str, Any] = {}
+        if new_name is not None:
+            # It answers with what it wrote or raises; there is no third answer
+            # for a truth test to catch, and the test read as though there were.
+            # What it raises is what fails the job, and the log above says which
+            # steps had run - the area is left where it was moved to, since
+            # writing it back is a second write that can fail in its own turn and
+            # would take the device out of the area the user had just put it in.
+            await device_registry.rename_device(device_id, new_name)
+
+            # Align the Z2M friendly name with the new name (Z2M devices only, non-fatal)
+            z2m_sync = await sync_z2m_name(device_registry, device_id, new_name)
 
         # The shared generator needs the updated device registry entry to render
         # the active entity ID and entity-name templates correctly.
@@ -797,7 +873,14 @@ async def rename_device_handler(job, ctx):
             f"Skipped: {entities_skipped}, Dependencies: {dependencies_updated}"
         )
 
-        message = f"Device renamed to: {new_name}"
+        # One of the two was asked for: the route refuses a payload that asks
+        # for neither.
+        if new_name is not None and set_area:
+            message = f"Device moved and renamed to: {new_name}"
+        elif new_name is not None:
+            message = f"Device renamed to: {new_name}"
+        else:
+            message = "Device moved"
         if entities_updated > 0:
             message += f" ({entities_updated} entities"
             if dependencies_updated > 0:

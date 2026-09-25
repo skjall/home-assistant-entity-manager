@@ -208,6 +208,8 @@
     "core_starting": "Home Assistant is starting up. This continues as soon as it answers.",
     "rules_saved": "Rules saved",
     "nothing_to_apply": "Nothing to apply",
+    "name_has_no_place": "The device-name template has no place for a name of its own, so the typed name cannot be written",
+    "rename_running": "A rename is running - please wait",
     "device_name_first": "Apply the device name first - the entities follow it",
     "area_move_failed": "The device did not move, so nothing was renamed"
   },
@@ -609,6 +611,7 @@
     "count_done": "{count} renamed",
     "count_failed": "{count} failed",
     "count_enabled": "{count} enabled",
-    "step_unverified": "Unconfirmed"
+    "step_unverified": "Unconfirmed",
+    "step_area": "Moved"
   }
 }

@@ -208,6 +208,8 @@
     "core_starting": "Home Assistant est en train de démarrer. Cela reprendra dès qu’il répondra.",
     "rules_saved": "Règles enregistrées",
     "nothing_to_apply": "Rien à appliquer",
+    "name_has_no_place": "Le modèle du nom d’appareil n’a pas de place pour un nom propre, le nom saisi ne peut donc pas être écrit",
+    "rename_running": "Un renommage est en cours - veuillez patienter",
     "device_name_first": "Appliquez d'abord le nom de l'appareil - les entités le suivent",
     "area_move_failed": "L’appareil n’a pas été déplacé, donc rien n’a été renommé"
   },
@@ -609,6 +611,7 @@
     "count_done": "{count} renommées",
     "count_failed": "{count} en échec",
     "count_enabled": "{count} activées",
-    "step_unverified": "Non confirmé"
+    "step_unverified": "Non confirmé",
+    "step_area": "Déplacé"
   }
 }

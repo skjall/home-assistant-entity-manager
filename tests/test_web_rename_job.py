@@ -33,7 +33,8 @@ def test_rename_device_enqueues_job(client):
     assert store.load(body["job_id"])["payload"] == {"device_id": "dev1", "new_name": "Kitchen Light"}
 
 
-def test_rename_device_missing_field_is_400(client):
+def test_rename_device_without_a_name_or_an_area_is_400(client):
+    """A device id on its own asks for nothing: neither a name nor a move."""
     c, _ = client
     resp = c.post("/api/rename_device", json={"device_id": "dev1"})
     assert resp.status_code == 400

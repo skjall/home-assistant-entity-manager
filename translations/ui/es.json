@@ -208,6 +208,8 @@
     "core_starting": "Home Assistant se está iniciando. Continuará en cuanto responda.",
     "rules_saved": "Reglas guardadas",
     "nothing_to_apply": "Nada que aplicar",
+    "name_has_no_place": "La plantilla del nombre del dispositivo no tiene lugar para un nombre propio, así que el nombre escrito no se puede guardar",
+    "rename_running": "Hay un renombrado en curso: espera un momento",
     "device_name_first": "Aplica primero el nombre del dispositivo: las entidades lo siguen",
     "area_move_failed": "El dispositivo no se movió, así que no se renombró nada"
   },
@@ -609,6 +611,7 @@
     "count_done": "{count} renombradas",
     "count_failed": "{count} fallidas",
     "count_enabled": "{count} activadas",
-    "step_unverified": "Sin confirmar"
+    "step_unverified": "Sin confirmar",
+    "step_area": "Movido"
   }
 }

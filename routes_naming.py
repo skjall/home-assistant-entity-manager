@@ -693,10 +693,24 @@ def naming_rules_collection():
         if not target:
             return jsonify({"error": f"target for language {language} required"}), 400
         kind = sanitize_string(match.get("kind", "name"), max_length=32)
+        supplied = match.get("value", "")
+        if kind == "pattern":
+            # Not put through sanitize_string, as the route that rewrites one does
+            # not either: that one cuts a string to length and drops control
+            # characters, which for an expression means storing a pattern the
+            # writer did not send - a 501-character regex came back as its first
+            # 500 with a 200, and a literal \x0b was quietly dropped. An
+            # expression is read as it was sent, or refused for its length by the
+            # check that judges it.
+            if not isinstance(supplied, str):
+                return jsonify({"error": "match.value has to be text"}), 400
+            matching = supplied.strip()
+        else:
+            matching = sanitize_string(supplied, max_length=128)
         try:
             rule = rules.upsert(
                 kind,
-                sanitize_string(match.get("value", ""), max_length=MAX_PATTERN_LENGTH if kind == "pattern" else 128),
+                matching,
                 sanitize_string(match.get("integration") or "", max_length=64) or None,
                 language,
                 sanitize_string(target),
@@ -1016,11 +1030,16 @@ def naming_learn():
         # asked for a domain rule, and nothing said the anchor was dropped.
         return jsonify({"error": "A domain rule applies everywhere or within one integration"}), 400
     kind, key = _rule_key_for(entity, entity_id, anchor)
+    platform = entity.get("platform") or ""
     if scope == "pattern":
         # The supplied name with its numbers left open, and the typed name
         # carrying each number on where it repeats it.
         learned = pattern_of(entity.get("original_name") or "")
-        if not learned or not entity.get("platform"):
+        # The integration read once, and the same reading that answers here is
+        # the one written into the filter below: asked twice, a refusal could pass
+        # the check and then be raised from the rules as though the add-on had
+        # gone wrong rather than the request.
+        if not learned or not platform:
             return jsonify({"error": "a pattern needs a supplied name with a number, from an integration"}), 400
         kind, key = "pattern", learned[0]
         value = target_of(value, learned[1])
@@ -1041,7 +1060,7 @@ def naming_learn():
     if scope == "entity":
         one = {"registry_id": entity.get("id") or ""}
     elif scope in ("integration", "model", "domain", "pattern"):
-        one = {"integration": entity.get("platform") or ""}
+        one = {"integration": platform}
         if scope in ("model", "domain"):
             one["model"] = entity_model(restructurer, entity) or ""
         if scope == "domain":

@@ -694,7 +694,7 @@ def test_a_device_moved_does_not_write_its_entities_own_areas():
     at = markup.index("async assignDeviceArea(deviceId, areaId) {")
     body = markup[at : markup.index("async syncZ2mDrift(", at)]
 
-    moved = body[body.index("const mine = this.hierarchy.entities.filter(") :]
+    moved = body[body.index("const mine = indexed(this).byDevice.get(deviceId)") :]
     assert "area_id" not in moved[: moved.index("});")]
     # The names the server computed are still dropped: those are about the area
     # the device has left.
