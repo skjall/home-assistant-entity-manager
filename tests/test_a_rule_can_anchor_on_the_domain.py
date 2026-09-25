@@ -11,8 +11,11 @@ The domain is that anchor, and it is the last of them: anything that says what
 an entity measures decides before it does.
 """
 
+from pathlib import Path
+
 import pytest
 
+import entity_restructurer
 from entity_restructurer import EntityRestructurer
 from naming_overrides import NamingOverrides
 from naming_rules import KIND_PRIORITY, NamingRules
@@ -429,3 +432,33 @@ def test_a_domain_anchor_is_refused_where_the_scope_writes_its_own(home):
 
     assert answer.status_code == 400
     assert "domain rule" in answer.get_json()["error"]
+
+
+def test_the_anchors_are_walked_out_of_the_one_place_that_orders_them():
+    """rule_behind and the naming both walk KIND_PRIORITY now. Written out by
+    hand, the naming missed a kind that rule_behind had - and a domain rule then
+    named entities the narrower kind was holding it back from."""
+    source = Path(entity_restructurer.__file__).read_text()
+
+    assert source.count("for kind in sorted(asked, key=lambda one: KIND_PRIORITY[one]):") == 2
+    # And neither of them asks about a kind by name.
+    assert 'rules.find("translation_key"' not in source
+    assert 'rules.find("domain"' not in source
+
+
+def test_the_rule_in_force_is_read_rather_than_looked_up_again(home):
+    """The naming has just said which rule applies where one applies and changes
+    nothing; asking again looked every anchor up a second time."""
+    client, restructurer, rules = home
+    rules.add_filter("domain", "device_tracker", "de", "Standort", {"integration": "unifi"})
+    entity_id = "device_tracker.unifi_default_de_91_e5_f7_12_73"
+    registry = restructurer.entities[entity_id]
+    # A name rule that says what the entity is called already: it wins nothing
+    # and it holds the domain rule back.
+    rules.add_filter("name", "iPhone", "de", "iPhone", None)
+
+    behind = restructurer.rule_behind(entity_id, registry)
+    resolution = restructurer.last_resolutions[entity_id]
+
+    assert resolution["applies"] is not None
+    assert behind["rule_id"] == resolution["applies"]["rule_id"]

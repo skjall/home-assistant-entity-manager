@@ -595,78 +595,65 @@ class EntityRestructurer:
                 # stands back where one of them speaks - including one the
                 # naming holds back, because the user said something narrower
                 # about this entity than "every entity of this kind".
-                narrower = False
-                rule = rules.find("translation_key", translation_key, integration, language, model, domain)
-                if rule:
-                    narrower = True
-                    candidates.append(
-                        {
-                            "value": rule["targets"][language],
-                            "won_by": "rule:user",
-                            "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model, domain),
-                        }
-                    )
-                rule = rules.find("name", name, integration, language, model, domain)
-                if rule:
-                    narrower = True
-                    candidates.append(
-                        {
-                            "value": rule["targets"][language],
-                            "won_by": "rule:user",
-                            "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model, domain),
-                        }
-                    )
-                # A name with a serial number in it is one of as many names as
-                # there are devices; a pattern answers for all of them.
-                rule = rules.find("pattern", name, integration, language, model, domain)
-                if rule:
-                    # Narrower, like every anchor but the domain: a pattern the
-                    # user wrote about these names says which entities this one
-                    # is about, and the domain rule stands back where it does -
-                    # including where the pattern renames the entity to what it
-                    # is already called and the value is dropped below.
-                    narrower = True
-                    candidates.append(
-                        {
-                            "value": rules.render(rule, name, language),
-                            "won_by": "rule:user",
-                            "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model, domain),
-                        }
-                    )
-                # The device class is the widest anchor: it says what a value
-                # measures where neither a key nor a name matched.
+                # The device class is the widest anchor that says what a
+                # value measures; the domain is the last of them and says only
+                # what kind of thing the entity is. It is for entities whose
+                # supplied name is not a type: UniFi names every device tracker
+                # after the client it found, so no two of them share anything
+                # but their domain.
                 device_class = registry.get("device_class") or registry.get("original_device_class")
-                rule = rules.find("device_class", device_class, integration, language, model, domain)
-                if rule:
-                    narrower = True
-                if rule and self._names_the_class(name, entity_id, device_class, rule["targets"].get(language, "")):
-                    candidates.append(
-                        {
-                            "value": rule["targets"][language],
-                            "won_by": "rule:user",
-                            "rule_id": rule["id"],
-                            "matched_on": rules.why(rule, integration, model, domain),
-                        }
+                asked = {
+                    "translation_key": translation_key,
+                    "name": name,
+                    # A name with a serial number in it is one of as many names
+                    # as there are devices; a pattern answers for all of them,
+                    # and is tried against the same name.
+                    "pattern": name,
+                    "device_class": device_class,
+                    "domain": domain,
+                }
+                # In the order the naming asks them in, out of the one place
+                # that says what that order is - the same walk rule_behind
+                # makes, so the two cannot drift and a kind added to
+                # KIND_PRIORITY is asked about in both.
+                narrower = False
+                for kind in sorted(asked, key=lambda one: KIND_PRIORITY[one]):
+                    # The domain stands back where a narrower rule of the
+                    # user's speaks about this entity, even where that rule
+                    # changes nothing: a rule that says what the entity already
+                    # says is still the user saying which entities this one is
+                    # about, and the widest anchor must not overrule it. Asked
+                    # about at all only where it could win.
+                    if kind == "domain" and narrower:
+                        continue
+                    rule = rules.find(
+                        kind,
+                        asked[kind],
+                        integration,
+                        language,
+                        model,
+                        # A domain rule is not narrowed to a domain - the API
+                        # does not let it be - so asking as though it might be
+                        # looked the rule up under scopes nothing can be stored
+                        # under, for every entity of the home.
+                        None if kind == "domain" else domain,
                     )
-                # Last of the anchors, and the only one that says nothing about
-                # what an entity measures. It is for entities whose supplied
-                # name is not a type: UniFi names every device tracker after
-                # the client it found, so no two of them share anything but
-                # their domain. Unlike a device-class rule this is not held
-                # back where the name says more - a name that is not a type
-                # cannot say more than one. It does stand back where a narrower
-                # rule of the user's speaks about this entity, even where that
-                # rule changes nothing: a name rule that says what the entity
-                # already says is still the user saying which entities this one
-                # is about, and the widest anchor must not overrule it.
-                rule = rules.find("domain", domain, integration, language, model, domain)
-                if rule and not narrower:
+                    if rule is None:
+                        continue
+                    # Held back or not: the user said something narrower about
+                    # this entity than "every entity of this kind".
+                    narrower = narrower or kind != "domain"
+                    # Unlike the others, a device-class rule is held back where
+                    # the name says more than the class does.
+                    if kind == "device_class" and not self._names_the_class(
+                        name, entity_id, device_class, rule["targets"].get(language, "")
+                    ):
+                        continue
                     candidates.append(
                         {
-                            "value": rule["targets"][language],
+                            "value": (
+                                rules.render(rule, name, language) if kind == "pattern" else rule["targets"][language]
+                            ),
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
                             "matched_on": rules.why(rule, integration, model, domain),
@@ -797,6 +784,18 @@ class EntityRestructurer:
                 "kind": caught.get("kind") or "",
                 "value": caught.get("value") or "",
             }
+        # A rule that only repeats what the entity already says wins nothing and
+        # still applies, and the naming has just said which one that was. Asked
+        # again from here, every anchor was looked up a second time for every
+        # such entity - and the two answers had to agree to be worth anything.
+        applies = resolution.get("applies") or None
+        if applies and applies.get("rule_id"):
+            caught = applies.get("matched_on") or {}
+            return {
+                "rule_id": applies["rule_id"],
+                "kind": caught.get("kind") or "",
+                "value": caught.get("value") or "",
+            }
         name = resolution.get("input") or ""
         integration = registry.get("platform") or None
         model = (self.devices.get(registry.get("device_id") or "", {}) or {}).get("model") or None
@@ -813,7 +812,11 @@ class EntityRestructurer:
         # what that order is. Written out here a second time, the two drifted.
         narrower = False
         for kind in sorted(asked, key=lambda one: KIND_PRIORITY[one]):
-            rule = rules.find(kind, asked[kind], integration, self.language, model, domain)
+            # Not narrowed to a domain where the domain is what it matches on;
+            # see build_naming_context.
+            rule = rules.find(
+                kind, asked[kind], integration, self.language, model, None if kind == "domain" else domain
+            )
             if rule is None:
                 continue
             if kind == "domain" and narrower:

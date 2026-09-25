@@ -499,3 +499,21 @@ def test_a_rewritten_target_is_filled_again(rules):
     assert rules.render(rules.find("pattern", "Heizung 12345678", INTEGRATION, "de"), "Heizung 12345678", "de") == (
         "Heizkosten 12345678"
     )
+
+
+def test_a_bounded_count_after_a_backreference_is_bounded(rules):
+    """ "((?P=n1){2})+" repeats the backreference twice and finishes; read as an
+    open repetition it was refused."""
+    assert compile_pattern(r"(?P<n1>\d+)((?P=n1){2})+") is not None
+    with pytest.raises(NamingRuleError):
+        compile_pattern(r"(?P<n1>\d+)((?P=n1)+)+")
+
+
+def test_a_bounded_count_on_a_group_that_repeats_is_a_runaway(rules):
+    """A count bounds how often a group is tried, not how many ways there are to
+    read it: "([\\w ]+){2,5}" can split a hundred characters across five groups
+    every way there is, and tries all of them on a name that nearly matches."""
+    assert compile_pattern(r"(\d{4}){2,3}") is not None
+    for expression in (r"([\w ]+){2,5}", r"(a+){2,3}", r"(a|aa){2,3}"):
+        with pytest.raises(NamingRuleError):
+            compile_pattern(expression)

@@ -5962,11 +5962,19 @@
                 toggleEntityExpand(entity) {
                     entity._expanded = !entity._expanded;
                     if (entity._expanded) {
-                        // Read again every time the row opens: the rule in force
-                        // may have been deleted or rewritten since it was last
-                        // open, and the anchor kept from then had the save write
-                        // a second rule of the kind that had just been removed.
-                        entity._ruleAnchor = this.anchorThatApplied(entity);
+                        // Read again every time the row opens, and both of them
+                        // together: the rule in force may have been deleted or
+                        // rewritten since the row was last open, and the anchor
+                        // kept from then had the save write a second rule of the
+                        // kind that had just been removed.
+                        //
+                        // The anchor alone was not enough. Read again while the
+                        // reach was kept, the row came back saying "domain" with
+                        // a reach only a narrower rule can have: no button was
+                        // lit, and the save was refused for a combination the
+                        // buttons cannot make. A row reopened starts where the
+                        // rules are.
+                        entity._ruleScope = undefined;
                     }
                     if (entity._expanded && entity._ruleScope === undefined) {
                         // Where a rule already names this entity, its own reach is the

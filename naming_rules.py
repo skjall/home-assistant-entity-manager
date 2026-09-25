@@ -213,7 +213,15 @@ def _refuse_runaway(regex: str) -> None:
             # ever, and that is the group's doing - "(?P<n1>\\d*)" is refused
             # where the target needs what it caught.
             at = lookalike.end()
-            if regex[at : at + 1] in {"*", "+", "?", "{"}:
+            after = regex[at : at + 1]
+            if after == "{":
+                # Bounded here as anywhere: "((?P=n1){2})+" repeats the
+                # backreference twice and finishes, and reading the count as an
+                # open repetition refused it.
+                counted = _COUNT.match(regex, at)
+                if counted and not counted.group("open"):
+                    after = ""
+            if after in {"*", "+", "?", "{"}:
                 repeats[-1] = True
             continue
         opening = _GROUP_OPEN.match(regex, at)
@@ -241,11 +249,16 @@ def _refuse_runaway(regex: str) -> None:
             inside = repeats.pop() if len(repeats) > 1 else False
             branched = choices.pop() if len(choices) > 1 else False
             after = regex[at + 1 : at + 2]
-            # A bounded count after the group is no more a runaway than the
-            # group itself; an open-ended one is.
+            # A bounded count after a group that holds nothing repeating is no
+            # more a runaway than the group itself: "(\\d{4}){2,3}" reads eight
+            # to twelve digits and there is only one way to cut them up. An
+            # open-ended count is a runaway, and so is a bounded one on a group
+            # that repeats or holds a choice: "([\\w ]+){2,5}" can split a
+            # hundred characters across five groups every way there is, and
+            # tries all of them on a name that nearly matches.
             if after == "{":
                 counted = _COUNT.match(regex, at + 1)
-                if counted and not counted.group("open"):
+                if counted and not counted.group("open") and not (inside or branched):
                     after = ""
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
