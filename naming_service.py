@@ -280,6 +280,11 @@ def provenance_of(proposed: Dict[str, Any]) -> Dict[str, Any]:
     nothing about it. "" is a statement - the name is area and device and ends
     there - and writing it where nothing was worked out had the next run
     propose stripping the type part off a name that has one.
+
+    Which is why None here takes nothing away from an entity that genuinely has
+    no type part: that entity says so with "", a string, and a string is kept as
+    it is. None is only for a proposal whose type part is not a string at all -
+    absent, or null - and there is nothing to keep in that.
     """
     kept = proposed.get("base_entity")
     return {

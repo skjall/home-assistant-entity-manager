@@ -2256,11 +2256,12 @@
                                    :placeholder="t('area.select_area')"
                                    x-model="areaSearch"
                                    :disabled="renamingDevice || applyingEntityId || executing"
-                                   @focus="areaSearch = ''; openAreaCombo()"
+                                   @focus="openAreaCombo($el)"
+                                   @click="if (!areaComboOpen) openAreaCombo($el)"
                                    @input="areaComboOpen = true; areaComboAt = 0"
-                                   @keydown.arrow-down.prevent="if (!areaComboOpen) openAreaCombo();
+                                   @keydown.arrow-down.prevent="if (!areaComboOpen) openAreaCombo($el);
                                                                  else comboStep(1, areaOptions.length, $el)"
-                                   @keydown.arrow-up.prevent="if (!areaComboOpen) openAreaCombo();
+                                   @keydown.arrow-up.prevent="if (!areaComboOpen) openAreaCombo($el);
                                                               else comboStep(-1, areaOptions.length, $el)"
                                    @keydown.enter.prevent="if (areaComboOpen) takeArea()">
                         </div>
@@ -5705,7 +5706,11 @@
                     // built rather than asked for by every line of it: the class
                     // on each item asked, so a list of fifty areas asked fifty
                     // times per repaint what the panel holds.
-                    const holds = this.panelAreaId();
+                    // Asked once and handed to both readers below: the answer
+                    // walks what is staged, and this is the list every repaint of
+                    // the combo is built from.
+                    const staged = this.deviceChangeStagedArea();
+                    const holds = this.panelAreaId(staged);
                     const areas = this.hierarchy.areas
                         .filter(a => !typed || a.name.toLowerCase().includes(typed))
                         .map(area => ({...area, current: area.id === holds}));
@@ -5724,7 +5729,7 @@
                     // an area deleted in Home Assistant leaves the pick standing
                     // with nothing staged, and the entry that takes a move back
                     // was then offered where there was no move to take back.
-                    const somethingToLeave = this.deviceChangeStagedArea() || !!this.selectedDeviceData?.area_id;
+                    const somethingToLeave = staged || !!this.selectedDeviceData?.area_id;
                     if (somethingToLeave && (!typed || none.name.toLowerCase().includes(typed))) {
                         return [...areas, none];
                     }
@@ -5747,9 +5752,31 @@
                 // from the closed list, the first line could not be reached at
                 // all: the step went from where the highlight stood - the top -
                 // to the line below it.
-                openAreaCombo() {
+                openAreaCombo(field = null) {
                     this.areaComboOpen = true;
+                    // The whole list, whatever the field holds: closed with
+                    // Escape, the field goes back to the name of the area the
+                    // panel stands on, and reopening read that name as something
+                    // the user had typed to narrow the list with - there was no
+                    // way to reach any other area without clearing it by hand.
+                    this.areaSearch = '';
                     this.areaComboAt = this.areaComboStart();
+                    // And where the highlight is, in view: on a device in the
+                    // eighth area the list opened showing the first seven, with
+                    // nothing lit up in it, and Enter took a line that could not
+                    // be seen.
+                    this.showComboLine(field);
+                },
+
+                // The highlighted line of this field's list, scrolled to.
+                showComboLine(field) {
+                    this.$nextTick(() => {
+                        // The list belonging to this field, not the first one
+                        // on the page: a second combo would scroll instead.
+                        const combo = field?.closest('.combo');
+                        const at = combo?.querySelector('.combo-list .combo-item.at');
+                        if (at) at.scrollIntoView({block: 'nearest'});
+                    });
                 },
 
                 // Where the highlight stands when the list opens: on the area
@@ -5796,13 +5823,7 @@
                     // end then landed one item off what was lit up.
                     const from = Math.min(this.areaComboAt, total - 1);
                     this.areaComboAt = (from + by + total) % total;
-                    this.$nextTick(() => {
-                        // The list belonging to this field, not the first one
-                        // on the page: a second combo would scroll instead.
-                        const combo = field?.closest('.combo');
-                        const at = combo?.querySelector('.combo-list .combo-item.at');
-                        if (at) at.scrollIntoView({block: 'nearest'});
-                    });
+                    this.showComboLine(field);
                 },
 
                 // The entity rows follow the panel while it is still only typed
@@ -7702,7 +7723,11 @@
                         // way of knowing which one is somewhere it was not, and
                         // the one in front of them was the obvious guess.
                         const about = deviceId ? indexed(this).devicesById.get(deviceId) : null;
-                        const named = (about?.name || (job.payload || {}).new_name || '').trim();
+                        // Its id where nothing else names it: a device deleted in
+                        // Home Assistant while the job ran is in no list to be
+                        // read out of, and the message then named nothing at all -
+                        // " was moved; the job failed afterwards".
+                        const named = (about?.name || (job.payload || {}).new_name || deviceId || '').trim();
                         this.showMessage(this.t(key, {device: named, error: job.error || ''}), 'error');
                     }
                     // The job aligns the Z2M name of the device it renamed; any

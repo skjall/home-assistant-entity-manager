@@ -823,6 +823,10 @@ def test_a_single_rename_notes_nothing_where_the_resolution_says_nothing() -> No
     answer and proposed stripping the type part off a name that has one.
 
     The whole-run path says None here; this is the entity renamed by itself.
+
+    The note carries the fingerprint of the templates in renamer_state, which the
+    add-on sets up as it starts (app_state). Without it this raises rather than
+    answering, so the assertion below cannot pass on a note that was never built.
     """
 
     class _Resolutions:
@@ -894,6 +898,9 @@ def test_a_rename_that_went_through_is_not_reported_as_one_that_did_not():
     # and the panel may have turned to another one since - told "the device", the
     # user had no way of knowing which one is somewhere it was not.
     assert "const about = deviceId ? indexed(this).devicesById.get(deviceId) : null;" in markup
+    # Its id where nothing else names it: a device deleted in Home Assistant while
+    # the job ran is in no list to be read out of, and the message named nothing.
+    assert "(about?.name || (job.payload || {}).new_name || deviceId || '').trim();" in markup
     assert "this.t(key, {device: named, error: job.error || ''})" in markup
     # A move with no rename beside it is not a rename that failed either.
     assert "const askedForARename = !!(job.payload || {}).new_name;" in body
@@ -908,17 +915,31 @@ def test_the_list_opens_on_the_area_the_device_is_in():
     at = markup.index('x-model="areaSearch"')
     handler = markup[at : at + 700]
 
-    # Every way into the list opens it there: the field taking the focus, and an
-    # arrow key on the closed list - stepped into, its first line could not be
+    # Every way into the list opens it there: the field taking the focus, a click
+    # on a field that already has it - after Escape there is no focus left to take,
+    # and the list could only be reopened by tabbing away and back - and an arrow
+    # key on the closed list, stepped into which its first line could not be
     # reached at all, because the step went from the top to the line below it.
-    assert "openAreaCombo()" in handler
-    assert handler.count("if (!areaComboOpen) openAreaCombo();") == 2
+    assert '@focus="openAreaCombo($el)"' in handler
+    assert handler.count("if (!areaComboOpen) openAreaCombo($el)") == 3
 
-    at = markup.index("openAreaCombo() {")
-    body = markup[at : markup.index("takeArea() {", at)]
+    at = markup.index("openAreaCombo(field = null) {")
+    body = markup[at : markup.index("showComboLine(field) {", at)]
     assert "this.areaComboAt = this.areaComboStart();" in body
+    # The whole list, whatever the field holds: closed with Escape it holds the
+    # name of the area the panel stands on, and that read as a filter the user had
+    # typed - no other area could be reached without clearing it by hand.
+    assert "this.areaSearch = '';" in body
+    # And the highlighted line in view: on a device in the eighth area, the list
+    # opened showing the first seven with nothing lit up in it.
+    assert "this.showComboLine(field);" in body
+
+    at = markup.index("areaComboStart() {")
+    start = markup[at : markup.index("takeArea() {", at)]
     # Which line that is comes off the line itself, marked as the list is built.
-    assert "this.areaOptions.findIndex(area => area.current)" in body
+    assert "this.areaOptions.findIndex(area => area.current)" in start
+    # One place scrolls, for the list opening and for a step through it.
+    assert markup.count("at.scrollIntoView({block: 'nearest'});") == 1
 
 
 def test_a_device_in_no_area_can_take_back_a_pick():
@@ -936,7 +957,7 @@ def test_a_device_in_no_area_can_take_back_a_pick():
     # A move that can be made, not a pick that is merely held: an area deleted in
     # Home Assistant leaves the pick standing with nothing staged, and the entry
     # was offered where there was no move to take back.
-    assert "const somethingToLeave = this.deviceChangeStagedArea() || !!this.selectedDeviceData?.area_id;" in body
+    assert "const somethingToLeave = staged || !!this.selectedDeviceData?.area_id;" in body
     assert "if (somethingToLeave &&" in body
 
 
@@ -963,7 +984,11 @@ def test_the_list_says_which_line_the_panel_stands_on():
     assert "area.id === panelAreaId()" not in markup
     at = markup.index("matchingAreas() {")
     body = markup[at : markup.index("pickArea(area) {", at)]
-    assert "const holds = this.panelAreaId();" in body
+    # Asked once and handed to both readers: the answer walks what is staged, and
+    # this list is built again on every repaint the combo needs.
+    assert "const staged = this.deviceChangeStagedArea();" in body
+    assert "const holds = this.panelAreaId(staged);" in body
+    assert body.count("this.deviceChangeStagedArea()") == 1
     assert ".map(area => ({...area, current: area.id === holds}));" in body
     assert "current: !holds };" in body
 
