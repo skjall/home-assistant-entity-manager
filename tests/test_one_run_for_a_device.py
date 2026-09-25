@@ -868,10 +868,15 @@ def test_the_arrow_keys_start_where_the_highlight_is():
     and stepping from a position past its end landed one item off what was lit."""
     markup = _panel_source()
     at = markup.index("comboStep(by, total, field) {")
-    body = markup[at : at + 900]
+    body = markup[at : at + 1400]
 
     assert "const from = Math.min(this.areaComboAt, total - 1);" in body
     assert "this.areaComboAt = (from + by + total) % total;" in body
+    # Nothing lit up is not a position to step from: the step comes in from the
+    # end it is pressed towards. Counted as one, -1 stepped up into the line above
+    # the last and skipped the last one altogether.
+    assert "if (this.areaComboAt < 0) {" in body
+    assert "this.areaComboAt = by > 0 ? 0 : total - 1;" in body
 
 
 def test_the_clash_check_answers_about_the_device_it_was_asked_for():
@@ -1025,7 +1030,10 @@ def test_what_the_field_says_on_closing_has_one_owner():
 
     assert "this.areaSearch = this.panelAreaName();" not in body
     # And the effect that owns it says what it writes.
-    assert "if (!areaComboOpen) areaSearch = shown" in markup
+    assert "if (!areaComboOpen) areaSearch = panelAreaName()" in markup
+    # And worked out where it is written: read on every repaint while the list is
+    # open, the answer - which walks what is staged - was thrown away again.
+    assert "const shown = panelAreaName();" not in markup
     # A pick does not write it either: the name off the list was written over by
     # the one the registry holds now - the same name, unless the area was renamed
     # in Home Assistant since the list was built.
@@ -1041,6 +1049,12 @@ def test_the_list_is_keyed_on_the_question_the_filter_asks():
     body = markup[at : markup.index("matchingAreas() {", at)]
 
     assert "(this.areaSearch || '').trim().toLowerCase()," in body
+    # Said as what each part is rather than glued into one string with a character
+    # nobody types between them: an id carrying that character read as nothing
+    # picked, and the list it had been built for was handed out again.
+    assert "const key = JSON.stringify([" in body
+    assert "this.devicePreviewAreaId," in body
+    assert "\\u0003" not in body
     # And on the wording of the entry it writes, not only on the flag that says the
     # translations are in: loaded without that flag turning over, the entry that
     # takes a device out of its area kept the name it had in the language before.

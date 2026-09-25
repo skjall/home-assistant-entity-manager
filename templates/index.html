@@ -2250,8 +2250,7 @@
                             <i class="ri-search-line"></i>
                             <input type="text" class="edit-input combo-input" autocomplete="off"
                                    x-effect="devicePreviewAreaId; selectedDeviceData;
-                                             const shown = panelAreaName();
-                                             if (!areaComboOpen) areaSearch = shown"
+                                             if (!areaComboOpen) areaSearch = panelAreaName()"
                                    :class="deviceChangeStagedArea() ? 'chosen' : ''"
                                    :placeholder="t('area.select_area')"
                                    x-model="areaSearch"
@@ -5673,7 +5672,10 @@
                 // Worked out once for a repaint: the list, the empty line and
                 // the arrow keys all ask for it, and the filter ran for each.
                 get areaOptions() {
-                    const key = [
+                    // Said as what each part is rather than glued into one
+                    // string: no separator has to be a character an area id
+                    // cannot hold.
+                    const key = JSON.stringify([
                         // As the filter reads it: typed with another capital or a
                         // space at the end, the same question missed the answer
                         // already worked out for it.
@@ -5689,14 +5691,17 @@
                         this.selectedDeviceData?.area_id || '',
                         // And the area picked and not yet written: matchingAreas
                         // reads it through panelAreaId, which decides whether the
-                        // "no area" entry is in the list at all.
-                        this.devicePreviewAreaId === null ? '\u0003' : this.devicePreviewAreaId,
+                        // "no area" entry is in the list at all. Nothing picked is
+                        // null and stays null here - written into one string with a
+                        // character nobody types, an id carrying that character
+                        // would have read as nothing picked.
+                        this.devicePreviewAreaId,
                         // The wording itself, not only the flag that says the
                         // translations are in: loaded without that flag turning
                         // over, the entry that takes a device out of its area kept
                         // the name it had in the language before.
                         this.t('area.no_area')
-                    ].join('\u0000');
+                    ]);
                     if (areaList.key !== key) {
                         areaList.key = key;
                         areaList.listed = this.matchingAreas();
@@ -5835,12 +5840,20 @@
                 // Enter would take in view.
                 comboStep(by, total, field) {
                     if (!total) return;
-                    // From where the highlight is, which is where the list shows
-                    // it: an area deleted in Home Assistant shortened the list
-                    // without a keystroke, and stepping from a position past its
-                    // end then landed one item off what was lit up.
-                    const from = Math.min(this.areaComboAt, total - 1);
-                    this.areaComboAt = (from + by + total) % total;
+                    // Nothing lit up, so the step comes in from the end it is
+                    // pressed towards: down takes the first line, up the last.
+                    // Counted as a position, -1 stepped up into the line above
+                    // the last one and skipped the last one altogether.
+                    if (this.areaComboAt < 0) {
+                        this.areaComboAt = by > 0 ? 0 : total - 1;
+                    } else {
+                        // From where the highlight is, which is where the list
+                        // shows it: an area deleted in Home Assistant shortened
+                        // the list without a keystroke, and stepping from a
+                        // position past its end landed one item off what was lit.
+                        const from = Math.min(this.areaComboAt, total - 1);
+                        this.areaComboAt = (from + by + total) % total;
+                    }
                     this.showComboLine(field);
                 },
 

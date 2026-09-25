@@ -221,6 +221,17 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
     }
 
 
+def _as_type_part(value: Any) -> Optional[str]:
+    """``value`` where it is a type part at all, None where it is not.
+
+    A string is one, "" included - that is the statement that the name is area
+    and device and ends there. Anything else says nothing about the type part,
+    and saying nothing is what None is for. Both readings of a type part go
+    through here so they cannot come to differ.
+    """
+    return value if isinstance(value, str) else None
+
+
 def _noted_type_part(resolution: Mapping[str, Any]) -> Optional[str]:
     """What the resolution says the type part was, or None where it says nothing.
 
@@ -239,8 +250,7 @@ def _noted_type_part(resolution: Mapping[str, Any]) -> Optional[str]:
     for a resolution that does not say what went in - the next read works it out
     from the name and records it (NamingState.resupply).
     """
-    noted = resolution.get("input")
-    return noted if isinstance(noted, str) else None
+    return _as_type_part(resolution.get("input"))
 
 
 def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
@@ -286,9 +296,8 @@ def provenance_of(proposed: Dict[str, Any]) -> Dict[str, Any]:
     it is. None is only for a proposal whose type part is not a string at all -
     absent, or null - and there is nothing to keep in that.
     """
-    kept = proposed.get("base_entity")
     return {
-        "base_entity": kept if isinstance(kept, str) else None,
+        "base_entity": _as_type_part(proposed.get("base_entity")),
         "won_by": proposed.get("name_comes_from") or "",
         "rule_id": proposed.get("rule_id"),
         "template_hash": renamer_state["naming_templates"].fingerprint(),
