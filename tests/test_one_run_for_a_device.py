@@ -309,14 +309,62 @@ def test_a_row_is_not_applied_over_a_device_name_that_is_only_typed():
 
 
 def test_the_field_asks_for_one_answer_per_keystroke():
-    """The staging waits 250ms of its own, so asking again from the clash timer
-    sent a second slug request for every keystroke - the first of them always
-    thrown away."""
+    """Two waits meant two requests: the rows asked at 250ms and the button beside
+    them at 300ms, about the same ids, and the two answers had to agree to mean
+    anything. One wait now, and the check reads what the rows were told."""
     markup = _panel_source()
     at = markup.index('x-ref="deviceNameInput"')
     handler = markup[at : at + 900]
 
-    assert handler.count("stageDeviceWideChange()") == 1
+    assert handler.count("setTimeout(") == 1
+    assert "previewDeviceWide();" in handler
+    assert "checkDeviceNameClash();" in handler
+
+    at = markup.index("async checkDeviceNameClash(")
+    body = markup[at : markup.index("const taken = indexed(this).entitiesById;", at)]
+    assert "await this.previewsSettled();" in body
+    assert "if (staged.every(Boolean)) ids = staged;" in body
+
+
+def test_a_staged_preview_that_failed_does_not_go_unanswered():
+    """Left to reject it was an unhandled rejection - no message, no fallback -
+    and the page waited for an answer it had not been told about."""
+    markup = _panel_source()
+    at = markup.index("previewDeviceWide() {")
+    body = markup[at : markup.index("entitiesOfDevice(", at)]
+
+    assert "this._previewsInFlight.add(settling);" in body
+    assert "console.error('Error computing staged previews:', error);" in body
+
+
+def test_the_selected_devices_own_z2m_drift_is_applied_too():
+    """The rename is what carries the Z2M name over, so a run that only moved the
+    device left the drift standing - counted as a pending change, with nothing
+    here able to resolve it."""
+    markup = _panel_source()
+    at = markup.index("const others = this.filteredDevices")
+    body = markup[at - 900 : at + 300]
+
+    assert "const renaming = !!typed" in body
+    assert "(d.id !== this.selectedDevice || !renaming)" in body
+
+
+def test_the_lookups_on_the_hot_paths_ask_the_index():
+    """The two that are asked for every row on every keystroke, and the one the
+    quick-apply of a row goes through. The lookups left walking the list run once
+    after a write, where the list itself is what has to be read.
+    """
+    markup = _panel_source()
+
+    at = markup.index("pendingDeviceContext(entity) {")
+    assert "indexed(this).devicesById.get(entity.device_id)" in markup[at : at + 1500]
+
+    at = markup.index("async commitStagedArea() {")
+    assert "indexed(this).devicesById.get(deviceId)" in markup[at : at + 1200]
+
+    # And the function the rows no longer call is gone rather than left to be
+    # maintained as though it were live.
+    assert "areaForDevice(" not in markup
 
 
 def test_the_background_refresh_asks_through_the_wait():

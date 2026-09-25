@@ -2197,9 +2197,11 @@
                                x-ref="deviceNameInput"
                                :value="devicePreviewBaseName !== null ? devicePreviewBaseName : selectedDeviceData?.base_name"
                                @input="devicePreviewBaseName = $event.target.value;
-                                        stageDeviceWideChange();
                                         clearTimeout(_deviceNameTimer);
-                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(), 300)"
+                                        _deviceNameTimer = setTimeout(() => {
+                                            previewDeviceWide();
+                                            checkDeviceNameClash();
+                                        }, 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
                                :placeholder="selectedDeviceData?.base_name"
                                :disabled="renamingDevice || applyingEntityId || executing">
@@ -4947,15 +4949,6 @@
                         && (this.devicePreviewAreaId || null) !== (device.area_id || null);
                 },
 
-                // The area every name below is built out of: the picked one
-                // while a move is being shown, the device's own otherwise -
-                // never the area the sidebar happens to stand in.
-                areaForDevice(device) {
-                    const areaId = this.previewAreaFor(device);
-                    if (!areaId) return null;
-                    return this.hierarchy.areas.find(a => a.id === areaId) || null;
-                },
-
                 // What the entities of the device being moved would be called.
                 // Their names are cached, and a move changes all of them.
                 pickPreviewArea(areaId) {
@@ -5478,7 +5471,14 @@
                     }
                     this.previewVersion++;
                     const run = ++this._stagedRun;
-                    this.fetchNormalizedFor(
+                    // Counted among the answers the page waits for: a run that
+                    // asked before this one had said it was working wrote the
+                    // names and left the ids as they were. And a failure is
+                    // absorbed here, as it is for every other computation -
+                    // left to reject, it was an unhandled rejection with no
+                    // message, no fallback, and in some browsers nothing on the
+                    // page answering afterwards.
+                    const settling = this.fetchNormalizedFor(
                         entities.map(e => e._previewName),
                         entities.map(e => e.id)
                     ).then(answer => {
@@ -5488,7 +5488,12 @@
                                 || this.composeEntityId(entity, answer.normalized[i]);
                         });
                         this.previewVersion++;
+                    }).catch(error => {
+                        console.error('Error computing staged previews:', error);
+                    }).finally(() => {
+                        this._previewsInFlight.delete(settling);
                     });
+                    this._previewsInFlight.add(settling);
                 },
 
                 // Invalidate cached previews (call after rename to refresh conflict detection)
@@ -5620,7 +5625,9 @@
                     }
                     if (!entity?.device_id || entity.device_id !== this.selectedDevice) return {};
                     if (this.isVirtualDevice(this.selectedDevice)) return {};
-                    const device = this.hierarchy.devices.find(d => d.id === entity.device_id);
+                    // Out of the index: this is asked for every row of the
+                    // list on every keystroke, which is what the index is for.
+                    const device = indexed(this).devicesById.get(entity.device_id);
                     if (!device) return {};
                     const pending = {};
                     if (this.devicePreviewBaseName !== null && this.devicePreviewBaseName !== device.base_name) {
@@ -5876,16 +5883,31 @@
                     const mine = indexed(this).byDevice.get(device.id) || none;
                     if (!mine.length) return [];
 
+                    // What the panel's own preview has just worked out, where it
+                    // has: those are the ids this check is about, so a keystroke
+                    // asked the server the same question twice - once for the
+                    // rows and once for the button beside them - and the two
+                    // answers had to agree to mean anything. Only where no name
+                    // was passed in: a caller that brings its own is asking
+                    // about a name the rows know nothing about.
+                    let ids = null;
+                    if (baseName === null && device.id === this.selectedDevice && this.deviceChangeStaged) {
+                        await this.previewsSettled();
+                        const staged = mine.map(e => e._previewId);
+                        if (staged.every(Boolean)) ids = staged;
+                    }
                     // The slug rules live in the backend; see fetchNormalized.
                     // Asked with the entities, so the ids come back as a rename
                     // would write them. Worked out from the slugs alone, two of
                     // the device's own entities landing on one slug read as one
                     // taken id, and the panel refused a rename that nothing was
                     // in the way of - the rename writes _1 and _2.
-                    const answer = await this.fetchNormalizedFor(
-                        mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id)),
-                        mine.map(e => e.id)
-                    );
+                    const answer = ids
+                        ? {ids}
+                        : await this.fetchNormalizedFor(
+                            mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id)),
+                            mine.map(e => e.id)
+                        );
                     const taken = indexed(this).entitiesById;
 
                     const clashes = [];
@@ -7355,7 +7377,10 @@
                 async commitStagedArea() {
                     const deviceId = this.selectedDevice;
                     if (!deviceId || this.devicePreviewAreaId === null || this.isVirtualDevice(deviceId)) return true;
-                    const device = this.hierarchy.devices.find(one => one.id === deviceId);
+                    // Out of the index, like every other device lookup: it is
+                    // the list as the last read left it, so a row applied after
+                    // a refresh is answered about the device that refresh holds.
+                    const device = indexed(this).devicesById.get(deviceId);
                     if (!device || (this.devicePreviewAreaId || null) === (device.area_id || null)) return true;
                     const picked = this.devicePreviewAreaId;
                     if (!await this.assignDeviceArea(deviceId, picked || null)) {
@@ -7418,8 +7443,16 @@
                     // while it is the selected one, and the list below is that
                     // device's own entities.
                     if (this.deviceChangeStaged) {
+                        // The selected device among them unless the job writes its
+                        // name: the rename is what carries the Z2M name over, so a
+                        // run that only moves the device left the drift standing -
+                        // counted as a pending change, and nothing here could
+                        // resolve it.
+                        const typed = this.devicePreviewBaseName === null ? '' : this.devicePreviewBaseName.trim();
+                        const staged = indexed(this).devicesById.get(this.selectedDevice);
+                        const renaming = !!typed && typed !== (staged?.base_name || '').trim();
                         const others = this.filteredDevices
-                            .filter(d => d.z2m_drift && d.id !== this.selectedDevice)
+                            .filter(d => d.z2m_drift && (d.id !== this.selectedDevice || !renaming))
                             .map(d => d.id);
                         await this.applyDeviceWideChange(others);
                         return;
