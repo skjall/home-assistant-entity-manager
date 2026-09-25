@@ -243,13 +243,13 @@ MAX_CHOICE_REPEATS = 4
 MAX_CHOICE_WAYS = 2**MAX_CHOICE_REPEATS
 
 
-def _at_most(count: str) -> int:
+def _at_most(quantifier: str) -> int:
     """The number of repetitions a counted quantifier allows at most.
 
-    ``count`` is the quantifier as it is written - "{4}", "{1,3}" - and the answer
+    ``quantifier`` is the count as it is written - "{4}", "{1,3}" - and the answer
     is the last number in it.
     """
-    numbers = [int(part) for part in re.findall(r"\d+", count)]
+    numbers = [int(part) for part in re.findall(r"\d+", quantifier)]
     # The last of them rather than the largest: a reversed range -
     # "{3,1}" - is not a quantifier Python compiles, so the two differ
     # only for an expression that was refused before this was asked,
@@ -445,7 +445,12 @@ def _refuse_runaway(regex: str) -> None:
             # what the two come to.
             if branched:
                 choices[-1] = True
-            ways[-1] = min(ways[-1] * reads, MAX_CHOICE_WAYS + 1)
+            # And how far it reads is handed up with the rest of it, or not at
+            # all: a choice inside a lookaround is read once for a position, so
+            # counting it among the ways the group around it can be cut up
+            # refused "((?=a|b)\\w|[A-Z]){4}" where "(\\w|[A-Z]){4}" is read.
+            if not nothing_wide:
+                ways[-1] = min(ways[-1] * reads, MAX_CHOICE_WAYS + 1)
         elif char == "{":
             counted = _COUNT.match(regex, at)
             if counted:

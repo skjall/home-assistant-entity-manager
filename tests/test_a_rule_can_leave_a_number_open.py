@@ -1438,3 +1438,27 @@ def test_a_count_of_zero_carries_nothing_up(rules):
     away."""
     assert compile_pattern(r"(?:(?:a|aa){0}){4}") is not None
     assert compile_pattern(r"(?:a|aa){0}") is not None
+
+
+def test_a_choice_inside_a_lookaround_is_not_counted_among_the_ways(rules):
+    """A lookaround is read once for a position, so how far it reads is handed up
+    with the rest of it - which is not at all. Counted among the ways the group
+    around it can be cut up, it refused what the same expression without the
+    lookaround is read as."""
+    assert compile_pattern(r"((?=a|b)\w|[A-Z]){4}") is not None
+    assert compile_pattern(r"(\w|[A-Z]){4}") is not None
+
+    # And a choice that does read text is counted as before.
+    with pytest.raises(NamingRuleError, match="repeat a choice"):
+        compile_pattern(r"(a|aa|aaa){4}")
+
+
+def test_the_quantifier_is_not_the_counter():
+    """ "count" is the itertools one, and the generation the filled targets are kept
+    under is drawn from it. Shadowed by a parameter, a call to it inside that
+    function would ask a string to count."""
+    with open(naming_rules.__file__, encoding="utf-8") as reading:
+        source = reading.read()
+
+    assert "def _at_most(quantifier: str) -> int:" in source
+    assert "def _at_most(count:" not in source
