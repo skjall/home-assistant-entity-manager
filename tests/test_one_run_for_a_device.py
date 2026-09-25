@@ -593,11 +593,42 @@ def test_a_name_typed_back_as_it_was_is_not_a_question() -> None:
     before it."""
     with open(os.path.join(HERE, "entity_restructurer.py"), encoding="utf-8") as reading:
         source = reading.read()
-    at = source.index("        stored_device_name = None")
+    at = source.index("        stored_device_name = self._base_device_name(")
     body = source[at : source.index('        partial_context["entity"] = self._base_entity_name(', at)]
 
-    assert "asked_for_another_name = pending_device_name is not None and pending_device_name != (" in body
+    assert (
+        "asked_for_another_name = pending_device_name is not None and pending_device_name != stored_device_name" in body
+    )
     assert "asking_only = ignore_exception or asked_for_another_name or area_id != stored_area" in body
-    # Worked out only where a name was passed in, which is the form asking and
-    # not the list being built.
-    assert body.count("self._base_device_name(raw_device_name, partial_context)") == 2
+    # Read before the typed name is written into the context: asked afterwards,
+    # this answered about the name being asked about rather than the one the
+    # device has.
+    assert body.index("stored_device_name = self._base_device_name(") < body.index(
+        'partial_context["device"] = device_name'
+    )
+    assert body.count("self._base_device_name(raw_device_name, partial_context)") == 1
+
+
+def test_the_staged_rows_show_the_names_the_run_will_write() -> None:
+    """Two rows of one device that come to the same name are written as
+    "Temperature" and "Temperature 2". The ids showed that while the names beside
+    them did not: the list offered two rows called the same thing, and the run wrote
+    something else."""
+    markup = _panel_source()
+    at = markup.index("previewDeviceWide() {")
+    body = markup[at : markup.index("invalidateEntityPreviews() {", at)]
+
+    assert "const named = answer.names && answer.names[i];" in body
+    assert "if (named && entity._currentSuffix === undefined) entity._previewName = named;" in body
+
+
+def test_a_name_that_comes_out_empty_is_not_asked_about_again() -> None:
+    """No area, no device name, no type part: the name comes out empty, and read as a
+    row nobody had answered for the panel asked the server about it again on every
+    poll for as long as the staged change stood."""
+    markup = _panel_source()
+    at = markup.index("computePreviewsFor(")
+    body = markup[at : markup.index("previewsSettled() {", at)]
+
+    assert "if (!entity._previewName) stagedUnanswered = true;" not in body
+    assert "if (entity._previewName === null || entity._previewName === undefined) {" in body

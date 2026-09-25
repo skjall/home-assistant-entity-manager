@@ -441,13 +441,15 @@ class EntityRestructurer:
             "model": device.get("model", ""),
             "integration": integration,
         }
-        stored_device_name = None
+        # Before anything is written into the context: read afterwards, with the
+        # typed name already standing in it, this answered about the name being
+        # asked about rather than the one the device has.
+        stored_device_name = self._base_device_name(raw_device_name, partial_context)
         if pending_device_name is not None:
             # What was typed is already a base name - it is the field the
             # interface strips the area prefix out of - so it goes in as it is.
             device_name = pending_device_name
         else:
-            stored_device_name = self._base_device_name(raw_device_name, partial_context)
             device_name = stored_device_name
         partial_context["device"] = device_name
         # A hypothetical answer must not replace the real one that the entity
@@ -466,11 +468,7 @@ class EntityRestructurer:
         # the real answer this call worked out was thrown away and the list went
         # on showing the one before it. Worked out only where a name was passed
         # in, which is the form asking and not the list being built.
-        asked_for_another_name = pending_device_name is not None and pending_device_name != (
-            stored_device_name
-            if stored_device_name is not None
-            else self._base_device_name(raw_device_name, partial_context)
-        )
+        asked_for_another_name = pending_device_name is not None and pending_device_name != stored_device_name
         asking_only = ignore_exception or asked_for_another_name or area_id != stored_area
         previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(

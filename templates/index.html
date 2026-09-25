@@ -5308,8 +5308,15 @@
                         // Skip if already computed (e.g. from user edit) or just renamed
                         if (staged && entity.device_id === staged) {
                             // A row the staged computation has not reached -
-                            // an entity that arrived with this refresh.
-                            if (!entity._previewName) stagedUnanswered = true;
+                            // an entity that arrived with this refresh. Nothing
+                            // rather than anything falsy: a name that comes out
+                            // empty - no area, no device name, no type part - was
+                            // read as a row nobody had answered for, and the panel
+                            // asked the server about it again on every poll for as
+                            // long as the change stood.
+                            if (entity._previewName === null || entity._previewName === undefined) {
+                                stagedUnanswered = true;
+                            }
                             continue;
                         }
                         if (entity._previewName || entity._justRenamed) continue;
@@ -5508,6 +5515,15 @@
                     ).then(answer => {
                         if (run !== this._stagedRun) return;
                         entities.forEach((entity, i) => {
+                            // The name the server worked out, where it worked one
+                            // out: two rows of one device that come to the same
+                            // name are written as "Temperature" and
+                            // "Temperature 2", and the ids showed that while the
+                            // names beside them did not - the list offered two
+                            // rows called the same thing and the run wrote
+                            // something else.
+                            const named = answer.names && answer.names[i];
+                            if (named && entity._currentSuffix === undefined) entity._previewName = named;
                             entity._previewId = (answer.ids && answer.ids[i])
                                 || this.composeEntityId(entity, (answer.normalized || [])[i]);
                         });

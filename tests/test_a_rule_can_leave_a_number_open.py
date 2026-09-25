@@ -958,3 +958,28 @@ def test_an_expression_is_stored_as_it_was_sent(client):
     )
 
     assert answer.status_code == 400
+
+
+def test_a_brace_that_counts_nothing_is_a_literal_after_a_group(rules):
+    """ "(a|b){serial}" is a group followed by a word in braces. Read as a quantifier,
+    the group was refused for repeating something it does not repeat."""
+    assert compile_pattern(r"(a|b){serial}") is not None
+    assert compile_pattern(r"(a+){serial}") is not None
+    assert compile_pattern(r"(HeatCost|Heating) {serial} (?P<n1>\d+)") is not None
+
+    # And a count is still a count.
+    with pytest.raises(NamingRuleError, match="repeat a choice"):
+        compile_pattern(r"(a|aa){1,50}")
+    with pytest.raises(NamingRuleError, match="repeat what already repeats"):
+        compile_pattern(r"(a+){2,}")
+
+
+def test_a_rule_that_stopped_matching_says_nothing_about_the_name(rules):
+    """An expression rewritten while a name was being worked out does not match it
+    any more. A target with no placeholder in it was handed back even so, so the
+    entity was renamed by a rule that had stopped applying to it."""
+    regex, _ = pattern_of("Heizung 12345678")
+    rule = rules.add_filter("pattern", regex, "de", "Heizkessel", {"integration": INTEGRATION})
+
+    assert rules.render(rule, "Heizung 12345678", "de") == "Heizkessel"
+    assert rules.render(rule, "Waschmaschine", "de") == ""

@@ -292,7 +292,13 @@ def _refuse_runaway(regex: str) -> None:
             # walk; past that it is refused like the rest.
             if after == "{":
                 counted = _COUNT.match(regex, at + 1)
-                if counted and not counted.group("open") and not inside:
+                if not counted:
+                    # A brace that opens no count is a literal - "(a|b){serial}"
+                    # is a group followed by a word in braces - and read as a
+                    # quantifier it refused the group for repeating something it
+                    # does not repeat.
+                    after = ""
+                elif not counted.group("open") and not inside:
                     # What the count comes to, not how high it goes: a group that
                     # reads two ways counted four times reads sixteen, and one
                     # that already read sixteen reads 65536. Weighed by the count
@@ -336,7 +342,9 @@ def _refuse_runaway(regex: str) -> None:
                     repeats[-1] = True
                 at = counted.end()
                 continue
-            repeats[-1] = True
+            # And a brace that counts nothing is the literal it looks like, here
+            # as above: marked as a repetition, the group it sits in was refused a
+            # quantifier it could have had.
         elif char in {"*", "+", "?"}:
             # A question mark counts: "(Sensor ?)+" repeats a group that can
             # match nothing, which backtracks just as badly as "(a+)+". A
@@ -1215,7 +1223,11 @@ class NamingRules:
             return unfilled
         match = pattern.fullmatch(name or "")
         if not match:
-            return unfilled
+            # Nothing, whatever the target says: a rule whose expression does not
+            # match this name says nothing about it. A target with no placeholder
+            # in it was handed back as a name, so a rule rewritten while a name was
+            # being worked out renamed the entity although it had stopped applying.
+            return ""
         filled = fill_placeholders(target, match)
         # Nothing rather than the template: the target with its placeholders
         # still in it is not a name, and it was written to Home Assistant as
