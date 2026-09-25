@@ -169,6 +169,11 @@ _COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
 def _refuse_runaway(regex: str) -> None:
     """Refuse a quantifier that is applied to something that already repeats.
 
+    Or to something that can be read in more than one way: "(a|aa)+" matches
+    "aaaa" in several ways, and every one of them is tried on a name that nearly
+    matches. A group with a choice in it is refused a quantifier for the same
+    reason as one that repeats.
+
     "(a+)+" and its kin take exponentially long on a name that nearly matches,
     and every entity of the integration is matched against the pattern on every
     resolution - one such expression would stop the add-on answering at all.
@@ -177,6 +182,7 @@ def _refuse_runaway(regex: str) -> None:
     """
     quantifiers = {"*", "+", "?", "{"}
     repeats = [False]  # whether the group at each depth already repeats
+    choices = [False]  # whether the group at each depth holds a choice
     at = 0
     in_class = False
     while at < len(regex):
@@ -189,6 +195,7 @@ def _refuse_runaway(regex: str) -> None:
             # "(?P<n1>" and its kin open a group; the question mark in them is
             # not a quantifier and must not be read as one.
             repeats.append(False)
+            choices.append(False)
             at = opening.end()
             continue
         if in_class:
@@ -201,8 +208,12 @@ def _refuse_runaway(regex: str) -> None:
             in_class = True
         elif char == "(":
             repeats.append(False)
+            choices.append(False)
+        elif char == "|":
+            choices[-1] = True
         elif char == ")":
             inside = repeats.pop() if len(repeats) > 1 else False
+            branched = choices.pop() if len(choices) > 1 else False
             after = regex[at + 1 : at + 2]
             # A bounded count after the group is no more a runaway than the
             # group itself; an open-ended one is.
@@ -212,10 +223,19 @@ def _refuse_runaway(regex: str) -> None:
                     after = ""
             if inside and after in quantifiers and after != "?":
                 raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
+            # A choice inside a repeated group is the other shape that runs
+            # away: "(a|aa)+" can read one stretch of text in as many ways as
+            # there are ways to cut it up, and it tries all of them.
+            if branched and after in quantifiers and after != "?":
+                raise NamingRuleError("A pattern may not repeat a choice: it would never finish")
             # "?" and "*" as well: "((ab)?)+" repeats a group that can match
             # nothing, and the inner group alone said nothing about that.
             if inside or after in {"*", "+", "{", "?"}:
                 repeats[-1] = True
+            # A group holding a choice is one to the group around it, so
+            # "((a|aa))+" is refused where "(a|aa)+" is.
+            if branched:
+                choices[-1] = True
         elif char == "{":
             counted = _COUNT.match(regex, at)
             if counted:
@@ -394,6 +414,7 @@ class NamingRules:
         self._rule_index = None
         self._by_entity = None
         self._patterns: Optional[List[Tuple[Dict[str, Any], "re.Pattern[str]"]]] = None
+        self._patterns_keyed: Optional[Dict[str, "re.Pattern[str]"]] = None
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -462,6 +483,7 @@ class NamingRules:
         self._rule_index = None
         self._by_entity = None
         self._patterns = None
+        self._patterns_keyed = None
 
     @guarded
     def save(self) -> None:
@@ -974,6 +996,17 @@ class NamingRules:
             self._patterns = compiled
         return self._patterns
 
+    def _patterns_by_id(self) -> Dict[str, "re.Pattern[str]"]:
+        """The same compiled expressions, by rule id.
+
+        Built with them and thrown away with them - ``_forget_index`` drops both,
+        so a rewritten expression is compiled again rather than answered from
+        here.
+        """
+        if self._patterns_keyed is None:
+            self._patterns_keyed = {rule["id"]: pattern for rule, pattern in self._pattern_rules()}
+        return self._patterns_keyed
+
     def _find_pattern(
         self,
         name: str,
@@ -1011,8 +1044,10 @@ class NamingRules:
         while at < len(found):
             reach = found[at][0]
             # All of them, not the first two: a third rule written to settle
-            # the tie between the other two joined it without a word.
-            tied = [rule for rank, rule in found if rank == reach]
+            # the tie between the other two joined it without a word. Counted
+            # from here on, since the list is sorted and what came before
+            # reaches further.
+            tied = [rule for rank, rule in found[at:] if rank == reach]
             if len(tied) == 1:
                 return tied[0]
             logger.warning(
@@ -1048,9 +1083,12 @@ class NamingRules:
 
     def _compiled_pattern(self, rule: Mapping[str, Any]) -> Optional["re.Pattern[str]"]:
         """The compiled expression of a stored pattern rule, or of a passing one."""
-        for kept, pattern in self._pattern_rules():
-            if kept["id"] == rule.get("id"):
-                return pattern
+        # Looked up by id: render is asked once for every entity of the home, and
+        # walking the stored patterns for each of them was a scan per entity per
+        # rule where one lookup does.
+        kept = self._patterns_by_id().get(rule.get("id") or "")
+        if kept is not None:
+            return kept
         try:
             return compile_pattern(rule["match"]["value"])
         except NamingRuleError:
