@@ -40,6 +40,7 @@ from registry import sync_ha_language
 from routes_entities import entities as entity_routes
 from routes_naming import (
     SETTINGS_SECTIONS,
+    domain_reach,
     entity_model,
     entity_type_key,
     naming as naming_routes,
@@ -2116,6 +2117,8 @@ async def _get_hierarchy_async():
         type_model_domain_counts = type_key_model_domain_counts(restructurer)
         # Pattern scopes are offered only where the user switched them on.
         pattern_counts = type_pattern_counts(restructurer) if renamer_state["naming_rules"].pattern_rules else None
+        # For the anchor that reaches a whole domain: how far it would reach.
+        by_domain, by_domain_integration = domain_reach(restructurer)
 
         # One mark for the templates as they are now; every entity compares its
         # stored one against it.
@@ -2124,6 +2127,9 @@ async def _get_hierarchy_async():
         entities = []
         for entity_id, entity_data in restructurer.entities.items():
             registry_id = entity_data.get("id", "")
+            # Once per entity: three of the counts below are keyed on it, and a
+            # home has thousands of entities.
+            entity_domain = entity_id.partition(".")[0]
             override = renamer_state["naming_overrides"].get_entity_override(registry_id)
             type_key = entity_type_key(entity_data)
             device_class = entity_data.get("device_class") or entity_data.get("original_device_class")
@@ -2171,7 +2177,7 @@ async def _get_hierarchy_async():
                     "device_model": entity_model(restructurer, entity_data),
                     "type_model_domain_count": (
                         type_model_domain_counts.get(
-                            (type_key, entity_model(restructurer, entity_data), entity_id.partition(".")[0]), 0
+                            (type_key, entity_model(restructurer, entity_data), entity_domain), 0
                         )
                         if type_key
                         else 0
@@ -2181,6 +2187,13 @@ async def _get_hierarchy_async():
                     ),
                     "type_model_count": (
                         type_model_counts.get((type_key, entity_model(restructurer, entity_data)), 0) if type_key else 0
+                    ),
+                    # A rule can also anchor on the domain, for entities whose
+                    # supplied name is not a type. These say how far that would
+                    # reach, which is the only thing that makes it safe to offer.
+                    "domain_count": by_domain.get(entity_domain, 0),
+                    "domain_integration_count": by_domain_integration.get(
+                        (entity_domain, entity_data.get("platform")), 0
                     ),
                     # Who the name in the registry belongs to right now, and
                     # whether it was changed outside this add-on since.

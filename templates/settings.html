@@ -3144,6 +3144,7 @@
                         device_class:    row => row.kind === 'device_class',
                         translation_key: row => row.kind === 'translation_key',
                         pattern:         row => row.kind === 'pattern',
+                        domain:          row => row.kind === 'domain',
                     },
                 },
 
@@ -3196,9 +3197,9 @@
                               { user: 'ri-user-line', no_effect: 'ri-eye-off-line', system: 'ri-shield-line' }),
                         fixed('reach', ['everywhere', 'narrowed', 'entity'],
                               { everywhere: 'ri-global-line', narrowed: 'ri-filter-line', entity: 'ri-focus-3-line' }),
-                        fixed('kind', ['name', 'device_class', 'translation_key', 'pattern'],
+                        fixed('kind', ['name', 'device_class', 'translation_key', 'pattern', 'domain'],
                               { name: 'ri-text', device_class: 'ri-shapes-line', translation_key: 'ri-translate-2',
-                                pattern: 'ri-hashtag' }),
+                                pattern: 'ri-hashtag', domain: 'ri-stack-line' }),
                         { key: 'integration', label: this.t('settings.filter_integration'), options: seen('integration') },
                         { key: 'model', label: this.t('settings.filter_model'), options: seen('model') },
                     ];

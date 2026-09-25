@@ -133,6 +133,9 @@
     "scope_domain_hint": "Seulement les {count} entités {domain} sur les appareils de type {model}.",
     "keep_current_hint": "Mettre « {name} » dans le champ : son nom actuel",
     "was_already_gone": "L'entité était déjà supprimée — la liste s'est mise à jour.",
+    "anchor_label": "Ou pour chaque entité {domain} :",
+    "anchor_domain_all_hint": "Pour les {count} entités {domain}, quelle que soit l'intégration. Utile seulement lorsque le nom fourni n'est pas un type.",
+    "anchor_domain_integration_hint": "Pour les {count} entités {domain} de {integration}, quel que soit le nom de chacune.",
     "scope_pattern_hint": "Pour les {count} entités de {integration} nommées « {pattern} », quel que soit le numéro.",
     "explain_rule_pattern": "Toutes les entités « {pattern} » de {integration} sont nommées ainsi chez vous – ici « {value} »"
   },
@@ -205,7 +208,8 @@
     "core_starting": "Home Assistant est en train de démarrer. Cela reprendra dès qu’il répondra.",
     "rules_saved": "Règles enregistrées",
     "nothing_to_apply": "Rien à appliquer",
-    "device_name_first": "Appliquez d'abord le nom de l'appareil - les entités le suivent"
+    "device_name_first": "Appliquez d'abord le nom de l'appareil - les entités le suivent",
+    "area_move_failed": "L’appareil n’a pas été déplacé, donc rien n’a été renommé"
   },
   "dependencies": {
     "title": "Dépendances pour",
@@ -534,6 +538,7 @@
     "pick_name": "Nom fourni",
     "pick_device_class": "Classe d'appareil",
     "pick_translation_key": "Clé de traduction",
+    "pick_domain": "Domaine",
     "filter_search_integration": "Rechercher une intégration …",
     "model_count": "{count} modèles",
     "more_matches": "… {count} de plus — affinez la recherche",
@@ -566,6 +571,7 @@
     "caught_translation_key": "clé de traduction",
     "caught_name": "nom fourni",
     "caught_device_class": "classe d'appareil",
+    "caught_domain": "domaine",
     "caught_none": "—",
     "reach_open_device": "Ouvrir « {device} » dans Home Assistant",
     "pattern_section": "Règles à motif",

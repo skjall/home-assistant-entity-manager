@@ -133,6 +133,9 @@
     "scope_domain_hint": "Only the {count} {domain} entities on devices of type {model}.",
     "keep_current_hint": "Put “{name}” in the field – what it is called today",
     "was_already_gone": "The entity was already deleted — the list has caught up.",
+    "anchor_label": "Or for every {domain} entity:",
+    "anchor_domain_all_hint": "For all {count} {domain} entities, whatever the integration. Only worth it where the supplied name is not a type.",
+    "anchor_domain_integration_hint": "For all {count} {domain} entities from {integration}, whatever each one is called.",
     "scope_pattern_hint": "For all {count} entities from {integration} named “{pattern}”, whatever the number.",
     "explain_rule_pattern": "All “{pattern}” entities from {integration} are named this way for you – here “{value}”"
   },
@@ -205,7 +208,8 @@
     "core_starting": "Home Assistant is starting up. This continues as soon as it answers.",
     "rules_saved": "Rules saved",
     "nothing_to_apply": "Nothing to apply",
-    "device_name_first": "Apply the device name first - the entities follow it"
+    "device_name_first": "Apply the device name first - the entities follow it",
+    "area_move_failed": "The device did not move, so nothing was renamed"
   },
   "dependencies": {
     "title": "Dependencies for",
@@ -514,6 +518,7 @@
     "pick_name": "Supplied name",
     "pick_device_class": "Device class",
     "pick_translation_key": "Translation key",
+    "pick_domain": "Domain",
     "filter_search_integration": "Search integrations …",
     "model_count": "{count} models",
     "more_matches": "… {count} more — narrow the search",
@@ -546,6 +551,7 @@
     "caught_translation_key": "translation key",
     "caught_name": "supplied name",
     "caught_device_class": "device class",
+    "caught_domain": "domain",
     "caught_none": "—",
     "reach_open_device": "Open “{device}” in Home Assistant",
     "pattern_section": "Pattern rules",

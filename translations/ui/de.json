@@ -133,6 +133,9 @@
     "scope_domain_hint": "Nur für die {count} {domain}-Entitäten an Geräten vom Typ {model}.",
     "keep_current_hint": "„{name}“ übernehmen – so heißt sie heute",
     "was_already_gone": "Die Entität war schon gelöscht — die Liste ist jetzt gleichauf.",
+    "anchor_label": "Oder für jede {domain}-Entität:",
+    "anchor_domain_all_hint": "Für alle {count} {domain}-Entitäten, egal welche Integration. Nur sinnvoll, wenn der gelieferte Name kein Typ ist.",
+    "anchor_domain_integration_hint": "Für alle {count} {domain}-Entitäten von {integration}, unabhängig davon, wie sie einzeln heißen.",
     "scope_pattern_hint": "Für alle {count} Entitäten von {integration}, deren Name „{pattern}“ lautet – die Nummer darf jede sein.",
     "explain_rule_pattern": "Alle „{pattern}“-Entitäten von {integration} heißen bei dir so – hier „{value}“"
   },
@@ -205,7 +208,8 @@
     "core_starting": "Home Assistant startet gerade. Sobald es antwortet, geht es weiter.",
     "rules_saved": "Regeln gespeichert",
     "nothing_to_apply": "Nichts zu übernehmen",
-    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm"
+    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm",
+    "area_move_failed": "Das Gerät ist nicht umgezogen, also wurde nichts umbenannt"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",
@@ -514,6 +518,7 @@
     "pick_name": "Gelieferter Name",
     "pick_device_class": "Geräteklasse",
     "pick_translation_key": "Übersetzungsschlüssel",
+    "pick_domain": "Domain",
     "filter_search_integration": "Integration suchen …",
     "model_count": "{count} Modelle",
     "more_matches": "… {count} weitere — Suche eingrenzen",
@@ -546,6 +551,7 @@
     "caught_translation_key": "Übersetzungsschlüssel",
     "caught_name": "gelieferter Name",
     "caught_device_class": "Geräteklasse",
+    "caught_domain": "Domain",
     "caught_none": "—",
     "reach_open_device": "„{device}“ in Home Assistant öffnen",
     "pattern_section": "Muster-Regeln",
