@@ -331,7 +331,7 @@ class DependencyUpdater:
         new_entity_id: str,
         config: Optional[Dict] = None,
     ) -> bool:
-        """Aktualisiere Entity in einer Automation
+        """Write a new entity id over an old one in one automation.
 
         ``config`` is the configuration the caller has already read. Reading it
         a second time here meant the decision to write was taken on one

@@ -572,6 +572,10 @@
     "pattern_hint": "Certaines intégrations mettent un numéro de série dans chaque nom, par exemple « Chauffage 12345678 ». Une règle à motif laisse le numéro ouvert et s’applique ainsi à tous les appareils de cette intégration. Les règles à motif existantes restent actives quand ceci est désactivé.",
     "pattern_toggle": "Proposer des règles à motif lors du renommage",
     "pick_pattern": "Motif",
+    "save_failed": "Non enregistré",
+    "list_not_read_again": "La liste n’a pas pu être relue – rechargez la page",
+    "pattern_needs_an_expression": "Une règle de motif a besoin d'une expression. Rien n'a été enregistré.",
+    "pattern_expression": "Expression, p. ex. Chauffage\\ (?P<n1>\\d+)",
     "caught_pattern": "motif"
   },
   "jobs": {
