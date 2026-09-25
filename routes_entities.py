@@ -572,12 +572,10 @@ def rename_device():
     if payload.get("new_name") is None and not payload.get("set_area"):
         return jsonify({"error": "Nothing to change: neither a name nor an area"}), 400
 
-    # A move needs an area named, null included - null is "take it out of every
-    # area", which is a thing to ask for. Read through, a call asking to move a
-    # device without saying where enqueued a job that could only fail, and the
-    # caller was told 202.
-    if payload.get("set_area") and "area_id" not in payload:
-        return jsonify({"error": "A move needs an area, or null to clear it"}), 400
+    # Nothing here asks whether an area was named: this route writes "set_area"
+    # only where it writes "area_id" beside it, so the one cannot arrive without
+    # the other. A payload that carries the flag alone was written somewhere else,
+    # and the worker answers for it where it reads it.
 
     # Do not rename the same device twice concurrently.
     for existing in renamer_state["job_store"].list_unfinished():
@@ -712,6 +710,11 @@ async def rename_device_handler(job, ctx):
     # including 0 and False, is refused here rather than read as "no rename" by
     # the truth test that writes it.
     if new_name is not None and (not isinstance(new_name, str) or not new_name.strip()):
+        raise RuntimeError("A rename needs a name")
+    # And the key carrying null is the same kind of payload: this route omits the
+    # key where no rename is asked for, so a null was written by something else -
+    # read as "no rename", the job skipped it and reported success.
+    if "new_name" in payload and payload["new_name"] is None:
         raise RuntimeError("A rename needs a name")
     set_area = bool(payload.get("set_area")) or "area_id" in payload
     # An area asked for is an area spelled out, null included - null is "take it

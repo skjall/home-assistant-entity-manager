@@ -231,7 +231,7 @@ def test_the_area_step_is_logged_before_it_is_written(monkeypatch) -> None:
     ctx = _Ctx()
     _run(
         monkeypatch,
-        {"device_id": "dev1", "new_name": None, "area_id": "kitchen", "set_area": True},
+        {"device_id": "dev1", "area_id": "kitchen", "set_area": True},
         ctx,
     )
     assert ("AREA", "dev1 -> kitchen") in ctx.lines
@@ -500,7 +500,8 @@ def test_the_apply_reads_what_the_rows_were_told(monkeypatch) -> None:
     assert "|| baseName === (this.devicePreviewBaseName === null ? null : this.devicePreviewBaseName.trim())" in body
     # And where nothing was typed at all: the rows were computed with the device's
     # own name, which is the name a move asks about.
-    assert "|| (this.devicePreviewBaseName === null && baseName === (device.base_name || '').trim());" in body
+    assert "|| (this.devicePreviewBaseName === null" in body
+    assert "&& !!baseName && baseName === (device.base_name || '').trim());" in body
     assert "if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {" in body
 
 
@@ -609,10 +610,8 @@ def test_a_name_typed_back_as_it_was_is_not_a_question() -> None:
     assert body.index("stored_device_name = self._base_device_name(") < body.index(
         'partial_context["device"] = device_name'
     )
-    # Once either way, and before the typed name goes into the context: the
-    # branch that does not ask about one reads the stored name because that is the
-    # name it uses.
-    assert body.count("self._base_device_name(raw_device_name, partial_context)") == 2
+    # Once, and before the typed name goes into the context.
+    assert body.count("self._base_device_name(raw_device_name, partial_context)") == 1
 
 
 def test_the_staged_rows_show_the_names_the_run_will_write() -> None:
@@ -688,3 +687,29 @@ def test_a_rename_that_failed_is_raised_rather_than_read(monkeypatch) -> None:
 
     assert "await device_registry.rename_device(device_id, new_name)" in source
     assert "Failed to rename device in Home Assistant" not in source
+
+
+def test_a_rename_asked_for_as_null_is_refused(monkeypatch) -> None:
+    """The route omits the key where no rename is asked for, so a null was written
+    somewhere else. Read as "no rename", the job skipped it and reported success."""
+    with pytest.raises(RuntimeError, match="needs a name"):
+        _run_handler(monkeypatch, {"device_id": "dev1", "new_name": None, "area_id": "kitchen", "set_area": True})
+
+
+def test_apply_all_is_shut_from_the_click() -> None:
+    """Everything below waits - for the previews, for a rule to be written, for the
+    list to be read again - and every one of those waits let a second click through
+    to start the same work beside the first. The device-wide job shuts its own
+    button, but not before the waits above it."""
+    markup = _panel_source()
+    at = markup.index("async executeAllChanges() {")
+    body = markup[at : markup.index("async runAllChanges() {", at)]
+
+    assert "if (this.applyingAll) return;" in body
+    assert "this.applyingAll = true;" in body
+    assert "return await this.runAllChanges();" in body
+    assert "} finally {" in body
+
+    # And the button says so while it runs.
+    assert "applyingAll: false," in markup
+    assert ':disabled="applyingAll || applyingEntityId || renamingDevice"' in markup

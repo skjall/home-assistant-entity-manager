@@ -2768,9 +2768,9 @@
                     </button>
                     <button @click="executeAllChanges()"
                             x-show="pendingChangesCount > 0"
-                            :disabled="applyingEntityId || renamingDevice"
+                            :disabled="applyingAll || applyingEntityId || renamingDevice"
                             class="btn btn-success"
-                            :class="{'opacity-50 cursor-not-allowed': applyingEntityId || renamingDevice}">
+                            :class="{'opacity-50 cursor-not-allowed': applyingAll || applyingEntityId || renamingDevice}">
                         <i class="ri-check-double-line mr-2"></i>
                         <span x-text="t('action_bar.apply_all')">Apply All Changes</span>
                     </button>
@@ -3397,6 +3397,11 @@
                 _deviceWideTimer: null,  // Debounce for the device-wide entity preview
                 _stagedRun: 0,  // Which computation of the staged device's rows is current
                 _stagedAsking: false,  // Whether an answer for those rows is on its way
+                // Whether "apply all" is under way. Shut from the click rather
+                // than from the first write: the run waits for the previews and
+                // may read the list back before it starts a job, and a second
+                // click during those waits ran everything a second time.
+                applyingAll: false,
                 // The area picked in the panel, before anything is written.
                 // null means nothing picked; a string is an area id.
                 devicePreviewAreaId: null,
@@ -5995,8 +6000,11 @@
                         // Read as a name they know nothing about, a move with no
                         // rename beside it asked the server a second time for the
                         // ids they already held - and the two answers were about
-                        // two readings of the list.
-                        || (this.devicePreviewBaseName === null && baseName === (device.base_name || '').trim());
+                        // two readings of the list. A name is needed for the two
+                        // to be the same name: where the device has none either,
+                        // there is nothing to compare and the server answers.
+                        || (this.devicePreviewBaseName === null
+                            && !!baseName && baseName === (device.base_name || '').trim());
                     let ids = null;
                     if (rowsHoldIt && device.id === this.selectedDevice && this.deviceChangeStaged) {
                         await this.previewsSettled();
@@ -7633,6 +7641,22 @@
                 },
 
                 async executeAllChanges() {
+                    // Shut here, where the click arrives, and not where the first
+                    // write happens: everything below waits - for the previews,
+                    // for a rule to be written, for the list to be read again -
+                    // and every one of those waits let a second click through to
+                    // start the same work beside this one. The device-wide job
+                    // shuts its own button, but not before the waits above it.
+                    if (this.applyingAll) return;
+                    this.applyingAll = true;
+                    try {
+                        return await this.runAllChanges();
+                    } finally {
+                        this.applyingAll = false;
+                    }
+                },
+
+                async runAllChanges() {
                     // A move the panel holds is not written here: the job below
                     // writes it together with the name and the entity names, and
                     // writing it first left that job nothing to move.

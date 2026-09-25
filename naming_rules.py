@@ -400,7 +400,17 @@ def _refuse_runaway(regex: str) -> None:
                     # carried that number up and refused expressions that cannot
                     # run away.
                     times = _at_most(counted.group(0))
-                    reads = 1 if times == 0 else min(reads**times, MAX_CHOICE_WAYS + 1)
+                    if times == 0:
+                        reads = 1
+                    elif reads > MAX_CHOICE_WAYS:
+                        # Already past the bound, and a count cannot bring it back
+                        # under: kept as it is rather than raised to a power of the
+                        # number that says "past it", which is not a count of
+                        # anything and would answer for the bound rather than for
+                        # the expression.
+                        reads = MAX_CHOICE_WAYS + 1
+                    else:
+                        reads = min(reads**times, MAX_CHOICE_WAYS + 1)
                     if not branched or reads <= MAX_CHOICE_WAYS:
                         after = ""
             # A group that reads no text is nothing to repeat: "((?=\\d+))+" and
