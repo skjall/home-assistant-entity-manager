@@ -2830,8 +2830,15 @@
                         this.systemRules = data.system || [];
                         this.migration = (await migrationResponse.json()).report || null;
                         this.filterRules();
+                        return true;
                     } catch (error) {
                         console.error('Error loading rules:', error);
+                        // Said out loud: the list then stands as it was read
+                        // last, and somebody who had just saved a rule opened it
+                        // again, saw the old words and took the save for lost.
+                        this.namingMessage = this.t('settings.save_failed');
+                        this.namingError = true;
+                        return false;
                     } finally {
                         this.loading = false;
                     }

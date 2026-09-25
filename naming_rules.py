@@ -282,6 +282,10 @@ def _read_pattern(regex: str) -> "re.Pattern[str]":
 
     Only the expressions that can be read are kept; a refusal is worked out
     again, which is what a refusal costs.
+
+    Kept under the expression exactly as it was given, because that is what an
+    expression is: a space at the end of one is a space it matches, and two that
+    differ by one are two patterns, not one written twice.
     """
     _refuse_runaway(regex)
     try:
@@ -914,10 +918,14 @@ class NamingRules:
         match = rule["match"]
         if match["kind"] != "pattern":
             return
+        # The expression first: asked about the filters before it was read, a
+        # rule sent with both a broken expression and no integration was answered
+        # about the integration, and the expression only on the next try.
+        compiled = compile_pattern(match["value"])
         filters = rule.get("filters") or []
         if not filters or any(not one.get("integration") or one.get("registry_id") for one in filters):
             raise NamingRuleError("A pattern rule applies within an integration")
-        cls.check_targets(match, rule["targets"])
+        cls.check_targets(match, rule["targets"], compiled)
 
     def _refuse_collision(self, rule: Mapping[str, Any]) -> None:
         self.check_pattern(rule)
@@ -1490,7 +1498,10 @@ class NamingRules:
         # method that writes runs under the store's lock, this one included.
         changed = [key for key in ("targets", "match", "filters") if wanted.get(key) != rule.get(key)]
         held = {key: rule[key] for key in changed + ["updated_at"] if key in rule}
-        added = [key for key in ("updated_at",) if key not in rule]
+        # Whatever this call adds, not only the timestamp: a rule missing a field
+        # - one out of a backup - was given it here, and a write that failed left
+        # the rule in memory carrying a field the file on disk does not have.
+        added = [key for key in changed + ["updated_at"] if key not in rule]
         for key in changed:
             if key in wanted:
                 rule[key] = wanted[key]

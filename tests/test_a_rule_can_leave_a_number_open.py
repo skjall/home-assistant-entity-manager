@@ -806,3 +806,30 @@ def test_a_save_that_went_through_closes_the_row():
     at = markup.index("async saveEdit(row) {")
     body = markup[at : markup.index("async addMapping()", at)]
     assert body.index("this.cancelEdit();") < body.index("await this.loadMappings();")
+
+
+def test_a_broken_expression_is_answered_before_the_filters(rules):
+    """Asked about the filters first, a rule sent with both a broken expression
+    and no integration was answered about the integration, and the expression
+    only on the next try."""
+    with pytest.raises(NamingRuleError) as refused:
+        rules.add_filter("pattern", "Heizung (", "de", "Heizkosten", None)
+
+    assert "valid pattern" in str(refused.value)
+
+
+def test_a_field_this_call_adds_is_taken_off_again_where_the_write_fails(rules, monkeypatch):
+    """A rule missing a field - one out of a backup - was given it here, and a
+    write that failed left the rule in memory carrying what the file does not."""
+    rule = _pattern_rule(rules)
+    rule.pop("filters")
+
+    def refuse(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(rules, "_write", refuse)
+
+    with pytest.raises(OSError):
+        rules.update(rule["id"], filters=[{"integration": INTEGRATION}])
+
+    assert "filters" not in rule
