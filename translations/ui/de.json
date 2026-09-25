@@ -31,6 +31,7 @@
     "assign_area": "Bereich zuweisen",
     "select_area": "Bereich wählen...",
     "area_assigned": "Gerät wurde Bereich zugewiesen",
+    "area_cleared": "Gerät aus seinem Bereich genommen",
     "open_in_ha": "Bereich in Home Assistant öffnen"
   },
   "summary": {
@@ -201,7 +202,8 @@
     "entity_marked_for_acceptance": "Entität zum Akzeptieren markiert",
     "core_starting": "Home Assistant startet gerade. Sobald es antwortet, geht es weiter.",
     "rules_saved": "Regeln gespeichert",
-    "nothing_to_apply": "Nichts zu übernehmen"
+    "nothing_to_apply": "Nichts zu übernehmen",
+    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",
@@ -229,6 +231,7 @@
     "new_name": "Neuer Name",
     "open_details": "Gerätedetails öffnen",
     "base_name_label": "Geräte-Basisname (ohne Bereichs-Präfix)",
+    "area_label": "Bereich",
     "name_conflict": "Ein Gerät mit diesem Namen existiert bereits",
     "z2m_drift_label": "Z2M-Name weicht ab",
     "open_in_ha": "Gerät in Home Assistant öffnen",
@@ -242,7 +245,10 @@
     "enabling": "Wird aktiviert…",
     "enabled": "Gerät aktiviert",
     "enable_it_first": "Das Gerät ist deaktiviert – erst das Gerät aktivieren.",
-    "id_conflict": "Dieser Name nähme eine Entitäts-ID, die schon vergeben ist: {id}"
+    "id_conflict": "Dieser Name nähme eine Entitäts-ID, die schon vergeben ist: {id}",
+    "name_already_correct": "Das Gerät heißt bereits so",
+    "gone": "Dieses Gerät gibt es in Home Assistant nicht mehr",
+    "moved_not_renamed": "Das Gerät wurde verschoben, aber nicht umbenannt: {error}"
   },
   "units": {
     "entities": "Entitäten",

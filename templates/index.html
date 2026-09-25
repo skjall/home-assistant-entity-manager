@@ -191,10 +191,6 @@
             color: var(--color-blue-500);
         }
 
-        .device-area-row {
-            padding-left: 30px;
-        }
-
         .area-select {
             width: 100%;
             font-size: 0.8rem;
@@ -2112,16 +2108,6 @@
                                             <i class="ri-external-link-line"></i>
                                         </a>
                                     </div>
-                                    <!-- Area Assignment row (only for devices without area) -->
-                                    <div x-show="selectedArea === '__no_area__'" class="device-area-row" @click.stop>
-                                        <select @change="assignDeviceArea(device.id, $event.target.value)"
-                                                class="area-select">
-                                            <option value="" x-text="t('area.select_area')">Select area...</option>
-                                            <template x-for="area in hierarchy.areas" :key="area.id">
-                                                <option :value="area.id" x-text="area.name"></option>
-                                            </template>
-                                        </select>
-                                    </div>
                                 </div>
                             </template>
                             <!-- Virtual device groups (entities without physical device) -->
@@ -2174,6 +2160,21 @@
                         <i class="ri-arrow-right-s-line text-gray-400 mx-1"></i>
                         <span class="text-amber-600" x-text="getExpectedDeviceName(selectedDeviceData)"></span>
                     </div>
+                    <label class="text-xs text-gray-500 block mb-1" x-text="t('device.area_label')">Area</label>
+                    <select class="edit-input w-full mb-2"
+                            x-effect="hierarchy.areas.length;
+                                const picked = devicePreviewAreaId !== null
+                                    ? devicePreviewAreaId
+                                    : (selectedDeviceData?.area_id || '');
+                                const about = selectedDevice;
+                                $nextTick(() => { if (about === selectedDevice) $el.value = picked; })"
+                            :disabled="renamingDevice || applyingEntityId || executing"
+                            @change="pickPreviewArea($event.target.value)">
+                        <option value="" x-text="t('area.select_area')">Select area...</option>
+                        <template x-for="area in hierarchy.areas" :key="area.id">
+                            <option :value="area.id" x-text="area.name"></option>
+                        </template>
+                    </select>
                     <label class="text-xs text-gray-500 block mb-1" x-text="t('device.base_name_label')">Device Base Name (without Area prefix)</label>
                     <div class="flex gap-2">
                         <input type="text"
@@ -3241,6 +3242,9 @@
                 selectedDeviceData: null,
                 selectedEntityData: null,
                 devicePreviewBaseName: null,  // Temporary preview while editing device name
+                // The area picked in the panel, before anything is written.
+                // null means nothing picked; a string is an area id.
+                devicePreviewAreaId: null,
                 deviceNameClash: [],  // Ids the name in the field would take from someone else
                 _deviceNameTimer: null,
                 renamingDevice: false,  // Loading state for device rename
@@ -4739,6 +4743,10 @@
                     this.selectedDevice = null;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching areas
+                    // A move is staged for the device it was staged on. Carried
+                    // to the next one, it offered to move that device instead,
+                    // and said so in its name before anybody asked for it.
+                    this.devicePreviewAreaId = null;
                     this.deviceFilter = '';  // Reset device filter
                     this.saveState();
 
@@ -4753,6 +4761,7 @@
                     this.selectedDevice = device.id;
                     this.selectedDeviceData = device;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
+                    this.devicePreviewAreaId = null;  // and the area it was about to move to
                     this.deviceNameClash = [];
                     this.saveState();
 
@@ -4767,6 +4776,7 @@
                     this.selectedDevice = virtualDeviceId;
                     this.selectedDeviceData = null;
                     this.devicePreviewBaseName = null;  // Clear preview when switching devices
+                    this.devicePreviewAreaId = null;  // and the area it was about to move to
                     this.deviceNameClash = [];
                     this.saveState();
 
@@ -4799,18 +4809,50 @@
                     return this.hierarchy.entities.filter(e => e.device_id === deviceId).length;
                 },
 
+                // A move is being shown for this device: an area was picked in
+                // the panel and not yet written. Untouched is null; an empty
+                // pick is a move to no area at all, which is a move like any
+                // other and not the absence of one.
+                deviceIsMoving(device) {
+                    return !!device
+                        && device.id === this.selectedDevice
+                        && !this.isVirtualDevice(device.id)
+                        && this.devicePreviewAreaId !== null
+                        // The area it is in, picked again, is not a move: every
+                        // row was computed afresh for it and the fast answer
+                        // thrown away for nothing.
+                        && (this.devicePreviewAreaId || null) !== (device.area_id || null);
+                },
+
+                // The area every name below is built out of: the picked one
+                // while a move is being shown, the device's own otherwise -
+                // never the area the sidebar happens to stand in.
+                areaForDevice(device) {
+                    const areaId = this.previewAreaFor(device);
+                    if (!areaId) return null;
+                    return this.hierarchy.areas.find(a => a.id === areaId) || null;
+                },
+
+                // What the entities of the device being moved would be called.
+                // Their names are cached, and a move changes all of them.
+                pickPreviewArea(areaId) {
+                    this.devicePreviewAreaId = areaId;
+                    this.computePreviewsFor(this.entitiesOfDevice(this.selectedDevice));
+                },
+
                 // Get device display name (full name with area prefix)
                 getDeviceDisplayName(device) {
                     if (!device) return '';
-                    if (device.suggested_name) return device.suggested_name;
-                    const area = this.selectedAreaData;
-                    const areaName = area?.name || '';
-                    const deviceBaseName = device.base_name;
-
-                    if (areaName) {
-                        return `${areaName} ${deviceBaseName}`;
-                    }
-                    return deviceBaseName;
+                    if (device.suggested_name && !this.deviceIsMoving(device)) return device.suggested_name;
+                    // Through the template, not "area then name": a template
+                    // that puts the area elsewhere had the list and the panel
+                    // saying two different things about the same rename.
+                    //
+                    // And with the name being typed into the panel, where there
+                    // is one: without it the card said the new area beside the
+                    // old name while the rows below it said both new.
+                    const typed = device.id === this.selectedDevice ? (this.devicePreviewBaseName || '').trim() : '';
+                    return this.renderDeviceName(device, typed || device.base_name) || device.base_name;
                 },
 
                 // Get entity display name (short - just the entity suffix)
@@ -4821,20 +4863,36 @@
                 },
 
                 // Live preview versions - use _editValue for real-time updates
-                getEntityFriendlyNameLive(entity) {
+                // ``baseName`` is the name being written for ``forDeviceId``;
+                // an entity of any other device is named as it stands.
+                getEntityFriendlyNameLive(entity, baseName = null, forDeviceId = null) {
                     const parts = [];
 
+                    // The entity's own device, so a name computed while the
+                    // panel turns to another one is still about this entity.
+                    const device = entity.device_id
+                        ? this.hierarchy.devices.find(d => d.id === entity.device_id)
+                        : null;
+
                     // Area
-                    const area = this.selectedAreaData;
+                    const area = device ? this.areaForDevice(device) : this.selectedAreaData;
                     if (area) {
                         parts.push(area.name);
                     }
 
                     // Device base name (use preview if editing)
-                    const device = this.selectedDeviceData;
-                    if (device && !this.isVirtualDevice(this.selectedDevice)) {
-                        const deviceBase = this.devicePreviewBaseName !== null ? this.devicePreviewBaseName : device.base_name;
-                        parts.push(deviceBase);
+                    if (device && !this.isVirtualDevice(device.id)) {
+                        // The name the caller is writing, where it said one and
+                        // where this entity is under the device it is for:
+                        // reading it off the panel had a click on another
+                        // device leave the check asking about the old name, and
+                        // taking it for every entity would put one device's new
+                        // name into another device's rows.
+                        const written = baseName !== null && device.id === (forDeviceId || this.selectedDevice);
+                        const typed = written
+                            ? baseName
+                            : (device.id === this.selectedDevice ? this.devicePreviewBaseName : null);
+                        parts.push(typed !== null ? typed : device.base_name);
                     }
 
                     // Entity: use _editValue for live preview (override_name intentionally ignored)
@@ -4973,18 +5031,28 @@
 
                 // Get friendly name using entity's own device/area (not selected)
                 getEntityFriendlyNameForEntity(entity) {
-                    if (entity.suggested_name && entity._currentSuffix === undefined) {
-                        return entity.suggested_name;
-                    }
-                    const parts = [];
-
                     // Find entity's device
                     const device = entity.device_id
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
 
-                    // Find area (from device or entity)
-                    const areaId = device?.area_id || entity.area_id;
+                    // What the server precomputed is about the area the device
+                    // is in. A device the panel is moving is not there any
+                    // more, so the rows would have gone on showing the old
+                    // area while the panel said otherwise.
+                    const moving = this.deviceIsMoving(device);
+                    if (entity.suggested_name && entity._currentSuffix === undefined && !moving) {
+                        return entity.suggested_name;
+                    }
+                    const parts = [];
+
+                    // Find area (from device or entity), following a move the
+                    // panel is showing: this is what the cached preview holds,
+                    // and a name computed from the old area would sit there
+                    // unchanged while the panel says otherwise.
+                    const areaId = moving
+                        ? this.previewAreaFor(device)
+                        : (device?.area_id || entity.area_id);
                     const area = areaId
                         ? this.hierarchy.areas.find(a => a.id === areaId)
                         : null;
@@ -4994,9 +5062,13 @@
                         parts.push(area.name);
                     }
 
-                    // Device base name
+                    // Device base name, as the panel holds it: a name typed
+                    // there and not written yet is what the row would be
+                    // renamed to, and the row showed the stored one instead -
+                    // which is then what a run would have written.
                     if (device) {
-                        parts.push(device.base_name);
+                        const typed = device.id === this.selectedDevice ? this.devicePreviewBaseName : null;
+                        parts.push(typed !== null ? typed : device.base_name);
                     }
 
                     // Entity suffix (uses shared logic)
@@ -5017,10 +5089,21 @@
                     this.computePreviewsFor(this.hierarchy.entities);
                 },
 
+                // The rows under one device, whether or not the panel stands
+                // on it.
+                entitiesOfDevice(deviceId) {
+                    return (this.hierarchy?.entities || []).filter(entity => entity.device_id === deviceId);
+                },
+
                 // What a set of entities would be called. Their own previews are
                 // dropped first: the answer changed, which is why they are here.
                 computePreviewsFor(entities) {
                     if (!entities?.length) return;
+
+                    // Once for the computation, not once per row: the full
+                    // recomputation walked the device list for every entity in
+                    // the installation.
+                    const byId = new Map((this.hierarchy?.devices || []).map(device => [device.id, device]));
 
                     for (const entity of entities) {
                         if (entity._justRenamed || entity._currentSuffix !== undefined) continue;
@@ -5034,9 +5117,16 @@
                         if (entity._previewName || entity._justRenamed) continue;
 
                         // Friendly-name composition stays client-side; only the slug comes
-                        // from the backend (source of truth).
-                        entity._previewName = entity.suggested_name || this.getEntityFriendlyNameForEntity(entity);
-                        if (entity.suggested_entity_id) {
+                        // from the backend (source of truth). What the server
+                        // precomputed is about the area the device is in, so a
+                        // device on its way to another one is left to the
+                        // client, which knows where it is going.
+                        const moving = this.deviceIsMoving(
+                            entity.device_id ? byId.get(entity.device_id) || null : null
+                        );
+                        entity._previewName = (!moving && entity.suggested_name)
+                            || this.getEntityFriendlyNameForEntity(entity);
+                        if (!moving && entity.suggested_entity_id) {
                             entity._previewId = entity.suggested_entity_id;
                             continue;
                         }
@@ -5130,8 +5220,17 @@
                     };
                 },
 
+                // The area a device would be in: the one picked in the panel
+                // while it is still only picked, the one it has otherwise. Every
+                // name below is built from it, so a move shows its full effect
+                // before it is written.
+                previewAreaFor(device) {
+                    if (this.deviceIsMoving(device)) return this.devicePreviewAreaId || null;
+                    return device?.area_id || null;
+                },
+
                 deviceNamingContext(device, baseName = null) {
-                    const area = this.hierarchy.areas.find(a => a.id === device?.area_id);
+                    const area = this.hierarchy.areas.find(a => a.id === this.previewAreaFor(device));
                     return {
                         ...this.baseNamingContext(area, device),
                         device: baseName !== null ? baseName : (device?.base_name || '')
@@ -5147,7 +5246,9 @@
                     const device = entity?.device_id
                         ? this.hierarchy.devices.find(d => d.id === entity.device_id)
                         : null;
-                    const areaId = entity?.area_id || device?.area_id;
+                    const areaId = this.deviceIsMoving(device)
+                        ? this.previewAreaFor(device)
+                        : (entity?.area_id || device?.area_id);
                     const area = this.hierarchy.areas.find(a => a.id === areaId);
                     const domain = entity?.id?.split('.')[0] || '';
                     return {
@@ -5324,12 +5425,12 @@
                 },
 
                 // Check if device needs rename
-                getExpectedDeviceName(device) {
+                getExpectedDeviceName(device, baseName = null) {
                     if (!device) return '';
-                    const deviceBase = (device.id === this.selectedDevice && this.devicePreviewBaseName !== null)
+                    const typed = (device.id === this.selectedDevice && this.devicePreviewBaseName !== null)
                         ? this.devicePreviewBaseName
                         : device.base_name;
-                    return this.renderDeviceName(device, deviceBase) || device.name;
+                    return this.renderDeviceName(device, baseName !== null ? baseName : typed) || device.name;
                 },
 
                 // Check if device name itself needs to change
@@ -5361,18 +5462,38 @@
                 // Asked while typing, so the answer has to come from the name
                 // in the field rather than from the previews, which are built
                 // from the name that is stored.
-                async checkDeviceNameClash() {
-                    const device = this.selectedDeviceData;
-                    this.deviceNameClash = [];
-                    if (!device || this.isVirtualDevice(this.selectedDevice)) return;
-                    const wanted = this.getExpectedDeviceName(device);
-                    if (!wanted || wanted === device.name) return;
+                // About the device it is given - the panel may have turned to
+                // another one while the slugs were on their way, and the answer
+                // would then be about whichever device it had turned to.
+                // The ids the name would take from somebody else, returned
+                // as well as shown: the selection can move to another device
+                // while the slugs are being fetched, and the answer about the
+                // one that was asked about must not stand against the other's
+                // rename. The caller that is renaming reads what it got back.
+                async checkDeviceNameClash(about = null, baseName = null) {
+                    const device = about || this.selectedDeviceData;
+                    // Only the list this call will answer about: clearing it for
+                    // a device the panel has since left took away the warning
+                    // standing against the device it turned to, and the button
+                    // there opened over a real clash.
+                    if (device && device.id === this.selectedDevice) this.deviceNameClash = [];
+                    if (!device || this.isVirtualDevice(device.id)) return [];
+                    const wanted = this.getExpectedDeviceName(device, baseName);
+                    // The device's own name says nothing about the ids where the
+                    // templates differ: with "{device}" for the device and
+                    // "{area} {device} {entity}" for its entities, a move
+                    // leaves the device called what it was and gives every
+                    // entity a new id. Asked only about the name, the check let
+                    // those through and Home Assistant refused them one by one.
+                    if ((!wanted || wanted === device.name) && !this.deviceIsMoving(device)) return [];
 
                     const mine = this.hierarchy.entities.filter(e => e.device_id === device.id);
-                    if (!mine.length) return;
+                    if (!mine.length) return [];
 
                     // The slug rules live in the backend; see fetchNormalized.
-                    const slugs = await this.fetchNormalized(mine.map(e => this.getEntityFriendlyNameLive(e)));
+                    const slugs = await this.fetchNormalized(
+                        mine.map(e => this.getEntityFriendlyNameLive(e, baseName, device.id))
+                    );
                     const taken = new Map();
                     for (const other of this.hierarchy.entities) {
                         if (other.device_id === device.id) continue;
@@ -5387,7 +5508,10 @@
                             clashes.push({device_id: device.id, id: wantedId, holder: holder.id});
                         }
                     });
-                    this.deviceNameClash = clashes;
+                    // Only where the panel is still on this device; the rows
+                    // read the shown list against the selected device.
+                    if (device.id === this.selectedDevice) this.deviceNameClash = clashes;
+                    return clashes;
                 },
 
                 deviceNeedsRename(device) {
@@ -5591,6 +5715,14 @@
                 // change away.
                 async quickApplyEntity(entity) {
                     if (!entity || this.applyingEntityId) return;
+                    // The row is named out of the area the panel holds, so the
+                    // move goes in before the name that was built from it:
+                    // written without it, the name said an area the device is
+                    // not in, and the next read proposed the old name straight
+                    // back - for ever, since nothing had moved.
+                    if (entity.device_id && entity.device_id === this.selectedDevice) {
+                        if (!await this.commitStagedArea()) return;
+                    }
                     await this.previewsSettled();
 
                     // Trim suffix before saving
@@ -5982,7 +6114,10 @@
                 },
 
                 async assignDeviceArea(deviceId, areaId) {
-                    if (!deviceId || !areaId) return;
+                    // An area of null is the device taken out of every area,
+                    // which the endpoint spells out and accepts. Refusing it
+                    // here left the move and the rename both undone, silently.
+                    if (!deviceId || areaId === undefined) return false;
 
                     try {
                         const response = await fetch('api/assign_device_area', {
@@ -5990,7 +6125,7 @@
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({
                                 device_id: deviceId,
-                                area_id: areaId
+                                area_id: areaId || null
                             })
                         });
 
@@ -5999,21 +6134,43 @@
                             // Update device in hierarchy
                             const device = this.hierarchy.devices.find(d => d.id === deviceId);
                             if (device) {
-                                device.area_id = areaId;
+                                device.area_id = areaId || null;
+                                // What the server computed is about the area the
+                                // device was in. Keeping it had the list saying
+                                // "Kitchen Light" while the panel wrote the
+                                // Bedroom name; without it the name is rendered
+                                // here, out of the area the device is in now.
+                                device.suggested_name = null;
                             }
 
-                            // Also update entities of this device
-                            this.hierarchy.entities
-                                .filter(e => e.device_id === deviceId)
-                                .forEach(e => e.area_id = areaId);
+                            // Also update entities of this device, and the
+                            // names the server computed for them: those are
+                            // about the area the device has left.
+                            const mine = this.hierarchy.entities.filter(e => e.device_id === deviceId);
+                            mine.forEach(e => {
+                                e.area_id = areaId || null;
+                                e.suggested_name = null;
+                                e.suggested_entity_id = null;
+                            });
+                            // Computed again from where the device is now. The
+                            // rows read the cached names, so dropping them
+                            // without this left the list empty where they were.
+                            this.computePreviewsFor(mine);
 
-                            const area = this.hierarchy.areas.find(a => a.id === areaId);
-                            this.showMessage(this.t('area.area_assigned') + ': ' + (area?.name || areaId), 'success');
-                        } else {
-                            throw new Error(data.error || 'Failed to assign area');
+                            // An area added since this page was loaded is not
+                            // in the list yet; it is still the area the device
+                            // was put in, and saying it was taken out of every
+                            // area would be the opposite of what happened.
+                            const area = areaId ? this.hierarchy.areas.find(a => a.id === areaId) : null;
+                            this.showMessage(areaId
+                                ? this.t('area.area_assigned') + ': ' + (area?.name || areaId)
+                                : this.t('area.area_cleared'), 'success');
+                            return true;
                         }
+                        throw new Error(data.error || 'Failed to assign area');
                     } catch (error) {
                         this.showMessage('Error: ' + error.message, 'error');
+                        return false;
                     }
                 },
 
@@ -6085,7 +6242,7 @@
 
                     const newName = this.getExpectedDeviceName(device);
                     if (device.name === newName) {
-                        this.showMessage('Device name already correct', 'info');
+                        this.showMessage(this.t('device.name_already_correct'), 'info');
                         return;
                     }
 
@@ -6492,7 +6649,13 @@
                 // Reconstruct a reconnected job's title + completion handler from its type.
                 jobKindMeta(type) {
                     if (type === 'rename_device') {
-                        return { titleKey: 'jobs.rename_device', onDone: (job) => this.onRenameDeviceDone(job) };
+                        // The device out of the job, not whichever one the panel
+                        // stands on when it reports: a job reconnected after a
+                        // reload cleared the area staged for another device.
+                        return {
+                            titleKey: 'jobs.rename_device',
+                            onDone: (job) => this.onRenameDeviceDone(job, job?.payload?.device_id || null)
+                        };
                     }
                     if (type === 'execute' || type === 'execute_direct') {
                         return { titleKey: 'jobs.applying', onDone: (job) => this.onExecuteDone(job) };
@@ -6504,22 +6667,110 @@
                 },
 
                 async onRenameDeviceDone(job, deviceId = null) {
-                    this.devicePreviewBaseName = null;
+                    // What the panel holds now may have been typed for another
+                    // device while this job ran, and that is not this job's to
+                    // throw away.
+                    if (!deviceId || deviceId === this.selectedDevice) {
+                        this.devicePreviewBaseName = null;
+                        this.devicePreviewAreaId = null;
+                    }
                     await this.loadHierarchy();
-                    const id = deviceId || this.selectedDevice;
+                    // The device the panel stands on, which a job reconnected
+                    // after a reload need not be about: pointing the panel at
+                    // the renamed device left it showing that device's name and
+                    // area while the selection was another one, and the button
+                    // beside them then renamed the selected device to what was
+                    // shown for the other.
+                    const id = this.selectedDevice;
                     if (id) {
                         const updated = this.hierarchy.devices.find(d => d.id === id);
                         if (updated) this.selectedDeviceData = updated;
                     }
+                    // The button opens once the panel holds the device as it is
+                    // now. Opened before the list was read again, a second click
+                    // compared the name being typed against the name from before
+                    // the rename - and either said it was already right or
+                    // queued the same rename a second time.
+                    this.renamingDevice = false;
                 },
 
                 async renameDeviceInHA(newBaseName) {
                     if (!this.selectedDevice || this.isVirtualDevice(this.selectedDevice) || !newBaseName || this.renamingDevice) return;
 
-                    const newFullName = this.renderDeviceName(this.selectedDeviceData, newBaseName);
+                    // The device this run is about, and the button shut from
+                    // here on: the area is written before the name, and a
+                    // second click during that write would move and rename the
+                    // device twice - or, if the selection moved meanwhile,
+                    // rename whichever device the panel had turned to.
+                    const deviceId = this.selectedDevice;
+                    this.renamingDevice = true;
+                    try {
+                        // The run gives back whether a job is now under way. If
+                        // one is, the button stays shut until it reports back -
+                        // a second click would enqueue the same rename twice.
+                        const running = await this.renameDeviceRun(deviceId, newBaseName);
+                        if (running) return;
+                    } catch (error) {
+                        this.showMessage('Error: ' + error.message, 'error');
+                    }
+                    this.renamingDevice = false;
+                },
 
-                    if (this.selectedDeviceData.name === newFullName) {
-                        this.showMessage('Device name already correct', 'info');
+                async renameDeviceRun(deviceId, newBaseName) {
+                    // Out of the list, and no stand-in: falling back to the
+                    // device the panel stands on had the name built out of
+                    // another device's area and base name while the request
+                    // renamed this one.
+                    let device = this.hierarchy.devices.find(d => d.id === deviceId);
+                    // The device went while the page was standing on it. Reading
+                    // its name below threw where a message belongs.
+                    if (!device) {
+                        this.showMessage(this.t('device.gone'), 'error');
+                        return;
+                    }
+                    let moved = false;
+
+                    // The area goes first: the name is built out of it, so a
+                    // device that moves is renamed to where it moved to rather
+                    // than to where it was.
+                    // Picked at all, which includes picking no area: an empty
+                    // pick used to be skipped, and the device was then renamed
+                    // to a name without its area while it was still in one.
+                    const picked = this.devicePreviewAreaId;
+                    if (picked !== null && (picked || null) !== (device.area_id || null)) {
+                        if (!await this.assignDeviceArea(deviceId, picked || null)) {
+                            // Nothing was written, so nothing stays staged: the
+                            // rows went on showing a move that had failed, with
+                            // no way to take it back but to pick the old area.
+                            if (this.selectedDevice === deviceId) this.devicePreviewAreaId = null;
+                            // And the names computed for the area it did not move
+                            // to, whether or not the panel still stands on the
+                            // device: left as they were, a rename run from the
+                            // list would have written every one of them.
+                            this.computePreviewsFor(this.entitiesOfDevice(deviceId));
+                            return;
+                        }
+                        moved = true;
+                        // Onto this object as well: the assignment writes into
+                        // the one the list holds, and where the list no longer
+                        // holds this device the name below would have been built
+                        // out of the area it has left.
+                        device.area_id = picked || null;
+                        if (this.selectedDevice === deviceId) {
+                            this.devicePreviewAreaId = null;
+                            this.selectedDeviceData = device;
+                        }
+                    }
+
+                    const newFullName = this.renderDeviceName(device, newBaseName);
+
+                    if (device.name === newFullName) {
+                        this.showMessage(this.t('device.name_already_correct'), 'info');
+                        // The move stands even though the name needed nothing.
+                        // What the server computed for the names is about the
+                        // area the device has left, so it is read again rather
+                        // than left saying the old one.
+                        if (moved) await this.loadHierarchy();
                         return;
                     }
 
@@ -6527,44 +6778,77 @@
                     // an id. Asked here as well as at the button, because this
                     // is the door the rename actually goes through.
                     const wasPreviewed = this.devicePreviewBaseName;
-                    this.devicePreviewBaseName = newBaseName;
-                    await this.checkDeviceNameClash();
-                    if (this.deviceNameClash.length) {
-                        const taken = this.deviceNameClashId();
-                        this.devicePreviewBaseName = wasPreviewed;
-                        this.showMessage(this.t('device.id_conflict', {id: taken}), 'error');
+                    // Only where the panel still stands on this device: written
+                    // through, a click on another device during the move left
+                    // that device's field holding this device's new name, and
+                    // the button beside it would have written it.
+                    if (this.selectedDevice === deviceId) this.devicePreviewBaseName = newBaseName;
+                    let clashes = [];
+                    try {
+                        clashes = await this.checkDeviceNameClash(device, newBaseName);
+                    } catch (error) {
+                        // The check never got to look. The field goes back to
+                        // what it held, or it sits there showing a rename that
+                        // was not made.
+                        // Onto the panel only where it still stands on this
+                        // device: a click on another one during the check left
+                        // that device's field showing this device's name.
+                        if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
+                        if (moved) {
+                            // The move stands, and this is the one way out that
+                            // said only "Error" about it.
+                            this.showMessage(this.t('device.moved_not_renamed', {error: error.message}), 'error');
+                            await this.loadHierarchy();
+                            return;
+                        }
+                        throw error;
+                    }
+                    if (clashes.length) {
+                        const taken = clashes[0].id;
+                        // Onto the panel only where it still stands on this
+                        // device: a click on another one during the check left
+                        // that device's field showing this device's name.
+                        if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
+                        this.showMessage(moved
+                            ? this.t('device.moved_not_renamed', {error: this.t('device.id_conflict', {id: taken})})
+                            : this.t('device.id_conflict', {id: taken}), 'error');
+                        if (moved) await this.loadHierarchy();
                         return;
                     }
 
-                    this.renamingDevice = true;
                     try {
                         // Enqueue the rename as a background job (returns 202 + job).
                         const response = await fetch('api/rename_device', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({
-                                device_id: this.selectedDevice,
+                                device_id: deviceId,
                                 new_name: newFullName
                             })
                         });
                         const job = await response.json();
                         if (response.status === 409) {
-                            this.showMessage(job.error || 'A rename for this device is already in progress', 'error');
+                            const busy = job.error || 'A rename for this device is already in progress';
+                            this.showMessage(moved
+                                ? this.t('device.moved_not_renamed', {error: busy})
+                                : busy, 'error');
+                            if (moved) await this.loadHierarchy();
                             return;
                         }
                         if (!response.ok || !job.job_id) {
                             throw new Error(job.error || 'Failed to start device rename');
                         }
-                        const deviceId = this.selectedDevice;  // keep before any reload
                         this.startJob('api/jobs/' + job.job_id, job, {
                             kind: 'rename_device',
                             titleKey: 'jobs.rename_device',
                             onDone: (finished) => this.onRenameDeviceDone(finished, deviceId)
                         });
+                        return true;
                     } catch (error) {
-                        this.showMessage('Error: ' + error.message, 'error');
-                    } finally {
-                        this.renamingDevice = false;
+                        this.showMessage(moved
+                            ? this.t('device.moved_not_renamed', {error: error.message})
+                            : 'Error: ' + error.message, 'error');
+                        if (moved) await this.loadHierarchy();
                     }
                 },
 
@@ -6649,7 +6933,49 @@
                 },
 
                 // Execute ALL pending changes with batch processing to avoid timeouts
+                // The area picked in the panel and not written yet, written.
+                // The rows below are named out of it, so a run that skipped this
+                // wrote names saying an area the device is not in - and the next
+                // read proposed the old names straight back.
+                async commitStagedArea() {
+                    const deviceId = this.selectedDevice;
+                    if (!deviceId || this.devicePreviewAreaId === null || this.isVirtualDevice(deviceId)) return true;
+                    const device = this.hierarchy.devices.find(one => one.id === deviceId);
+                    if (!device || (this.devicePreviewAreaId || null) === (device.area_id || null)) return true;
+                    const picked = this.devicePreviewAreaId;
+                    if (!await this.assignDeviceArea(deviceId, picked || null)) {
+                        // Nothing was written, so nothing stays staged, here as
+                        // at the panel's own button.
+                        this.devicePreviewAreaId = null;
+                        this.computePreviewsFor(this.entitiesOfDevice(deviceId));
+                        return false;
+                    }
+                    device.area_id = picked || null;
+                    this.devicePreviewAreaId = null;
+                    // Onto the panel's own object as well, as at the button: the
+                    // assignment writes into the one the list holds, and where
+                    // the list no longer holds this device the names below were
+                    // built out of the area it has left.
+                    if (this.selectedDevice === deviceId) this.selectedDeviceData = device;
+                    return true;
+                },
+
                 async executeAllChanges() {
+                    // A move the panel holds goes in before the names that were
+                    // built out of it.
+                    if (!await this.commitStagedArea()) return;
+
+                    // A name typed into the panel and not applied is what the
+                    // rows below were named out of. Written from here, every
+                    // entity of the device came out carrying a base name no
+                    // device has, because the device itself was never renamed.
+                    // The tick beside the field writes it, entities and all.
+                    const typedBase = (this.devicePreviewBaseName || '').trim();
+                    if (typedBase && typedBase !== (this.selectedDeviceData?.base_name || '').trim()) {
+                        this.showMessage(this.t('messages.device_name_first'), 'info', true);
+                        return;
+                    }
+
                     // The ids come from the server; before they are in, a row
                     // that only needs a new id reads as needing nothing.
                     await this.previewsSettled();

@@ -31,6 +31,7 @@
     "assign_area": "Assign Area",
     "select_area": "Select area...",
     "area_assigned": "Device assigned to area",
+    "area_cleared": "Device taken out of its area",
     "open_in_ha": "Open area in Home Assistant"
   },
   "summary": {
@@ -201,7 +202,8 @@
     "entity_marked_for_acceptance": "Entity marked for acceptance",
     "core_starting": "Home Assistant is starting up. This continues as soon as it answers.",
     "rules_saved": "Rules saved",
-    "nothing_to_apply": "Nothing to apply"
+    "nothing_to_apply": "Nothing to apply",
+    "device_name_first": "Apply the device name first - the entities follow it"
   },
   "dependencies": {
     "title": "Dependencies for",
@@ -229,6 +231,7 @@
     "new_name": "New name",
     "open_details": "Open device details",
     "base_name_label": "Device Base Name (without Area prefix)",
+    "area_label": "Area",
     "name_conflict": "A device with this name already exists",
     "z2m_drift_label": "Z2M name differs",
     "open_in_ha": "Open device in Home Assistant",
@@ -242,7 +245,10 @@
     "enabling": "Enabling…",
     "enabled": "Device enabled",
     "enable_it_first": "The device is disabled – enable the device first.",
-    "id_conflict": "This name would take an entity id that is already held: {id}"
+    "id_conflict": "This name would take an entity id that is already held: {id}",
+    "name_already_correct": "The device is already called that",
+    "gone": "This device is no longer in Home Assistant",
+    "moved_not_renamed": "The device was moved, but not renamed: {error}"
   },
   "units": {
     "entities": "Entities",

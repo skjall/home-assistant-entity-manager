@@ -31,6 +31,7 @@
     "assign_area": "Asignar Área",
     "select_area": "Seleccionar área...",
     "area_assigned": "Dispositivo asignado al área",
+    "area_cleared": "Dispositivo retirado de su área",
     "open_in_ha": "Abrir el área en Home Assistant"
   },
   "summary": {
@@ -201,7 +202,8 @@
     "entity_marked_for_acceptance": "Entidad marcada para aceptación",
     "core_starting": "Home Assistant se está iniciando. Continuará en cuanto responda.",
     "rules_saved": "Reglas guardadas",
-    "nothing_to_apply": "Nada que aplicar"
+    "nothing_to_apply": "Nada que aplicar",
+    "device_name_first": "Aplica primero el nombre del dispositivo: las entidades lo siguen"
   },
   "dependencies": {
     "title": "Dependencias de",
@@ -229,6 +231,7 @@
     "new_name": "Nuevo nombre",
     "open_details": "Abrir detalles del dispositivo",
     "base_name_label": "Nombre base del dispositivo (sin prefijo de área)",
+    "area_label": "Área",
     "name_conflict": "Ya existe un dispositivo con este nombre",
     "z2m_drift_label": "El nombre Z2M difiere",
     "open_in_ha": "Abrir dispositivo en Home Assistant",
@@ -242,7 +245,10 @@
     "enabling": "Activando…",
     "enabled": "Dispositivo activado",
     "enable_it_first": "El dispositivo está desactivado: actívalo primero.",
-    "id_conflict": "Este nombre tomaría un id de entidad que ya está en uso: {id}"
+    "id_conflict": "Este nombre tomaría un id de entidad que ya está en uso: {id}",
+    "name_already_correct": "El dispositivo ya se llama así",
+    "gone": "Este dispositivo ya no está en Home Assistant",
+    "moved_not_renamed": "El dispositivo se movió, pero no se renombró: {error}"
   },
   "units": {
     "entities": "Entidades",

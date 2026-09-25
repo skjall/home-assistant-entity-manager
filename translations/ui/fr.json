@@ -31,6 +31,7 @@
     "assign_area": "Assigner une Zone",
     "select_area": "Sélectionner une zone...",
     "area_assigned": "Appareil assigné à la zone",
+    "area_cleared": "Appareil retiré de sa zone",
     "open_in_ha": "Ouvrir la zone dans Home Assistant"
   },
   "summary": {
@@ -201,7 +202,8 @@
     "entity_marked_for_acceptance": "Entité marquée pour acceptation",
     "core_starting": "Home Assistant est en train de démarrer. Cela reprendra dès qu’il répondra.",
     "rules_saved": "Règles enregistrées",
-    "nothing_to_apply": "Rien à appliquer"
+    "nothing_to_apply": "Rien à appliquer",
+    "device_name_first": "Appliquez d'abord le nom de l'appareil - les entités le suivent"
   },
   "dependencies": {
     "title": "Dépendances pour",
@@ -229,6 +231,7 @@
     "new_name": "Nouveau nom",
     "open_details": "Ouvrir les détails de l'appareil",
     "base_name_label": "Nom de base de l'appareil (sans préfixe de zone)",
+    "area_label": "Zone",
     "name_conflict": "Un appareil portant ce nom existe déjà",
     "z2m_drift_label": "Le nom Z2M diffère",
     "open_in_ha": "Ouvrir l'appareil dans Home Assistant",
@@ -242,7 +245,10 @@
     "enabling": "Activation…",
     "enabled": "Appareil activé",
     "enable_it_first": "L’appareil est désactivé – activez d’abord l’appareil.",
-    "id_conflict": "Ce nom prendrait un identifiant d'entité déjà attribué : {id}"
+    "id_conflict": "Ce nom prendrait un identifiant d'entité déjà attribué : {id}",
+    "name_already_correct": "L'appareil porte déjà ce nom",
+    "gone": "Cet appareil n'est plus dans Home Assistant",
+    "moved_not_renamed": "L’appareil a été déplacé, mais pas renommé : {error}"
   },
   "units": {
     "entities": "Entités",
