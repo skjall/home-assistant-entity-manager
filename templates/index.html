@@ -5975,6 +5975,13 @@
                         // buttons cannot make. A row reopened starts where the
                         // rules are.
                         entity._ruleScope = undefined;
+                        // The anchor with it: kept while the reach was read
+                        // again, a row whose domain rule had been deleted came
+                        // back with the domain button lit beside a reach worked
+                        // out for a rule that is not there, and the save wrote
+                        // a new domain rule nobody had asked for. It is set
+                        // below, out of whatever rule is in force now.
+                        entity._ruleAnchor = null;
                     }
                     if (entity._expanded && entity._ruleScope === undefined) {
                         // Where a rule already names this entity, its own reach is the

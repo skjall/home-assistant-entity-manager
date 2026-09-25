@@ -462,3 +462,15 @@ def test_the_rule_in_force_is_read_rather_than_looked_up_again(home):
 
     assert resolution["applies"] is not None
     assert behind["rule_id"] == resolution["applies"]["rule_id"]
+
+
+def test_a_row_reopened_holds_no_anchor_of_its_own():
+    """Kept while the reach was read again, a row whose domain rule had been
+    deleted came back with the domain button lit beside a reach worked out for a
+    rule that is not there - and the save wrote a new domain rule."""
+    markup = (Path(__file__).parent.parent / "templates" / "index.html").read_text()
+    at = markup.index("toggleEntityExpand(entity) {")
+    body = markup[at : markup.index("updateEntityPreview(entity, suffix) {", at)]
+
+    assert "entity._ruleScope = undefined;" in body
+    assert "entity._ruleAnchor = null;" in body

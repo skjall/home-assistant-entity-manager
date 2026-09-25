@@ -517,3 +517,61 @@ def test_a_bounded_count_on_a_group_that_repeats_is_a_runaway(rules):
     for expression in (r"([\w ]+){2,5}", r"(a+){2,3}", r"(a|aa){2,3}"):
         with pytest.raises(NamingRuleError):
             compile_pattern(expression)
+
+
+def test_a_group_that_caught_nothing_is_not_a_group_that_is_missing(rules, caplog):
+    """ "Zone (?P<n1>\\d+)?" against "Zone" answers None for a group it does have.
+    Read as a missing group, the log said the rule could never apply to
+    anything, when it simply does not apply to this name."""
+    match = re.fullmatch(r"Zone (?P<n1>\d+)?", "Zone ")
+
+    with caplog.at_level(logging.INFO):
+        assert fill_placeholders("Zimmer {1}", match) is None
+
+    assert "does not have" not in caplog.text
+    assert "caught nothing" in caplog.text
+
+
+def test_a_backreference_counted_twice_is_read_once(rules):
+    """The count after it used to be matched here and again by the main walk."""
+    assert compile_pattern(r"(?P<n1>\d+)(?P=n1){2,3}") is not None
+    assert compile_pattern(r"(?P<n1>\d+)((?P=n1){2})+") is not None
+
+
+def test_two_threads_filling_targets_do_not_throw_away_each_others_work(rules):
+    """They took turns resetting one shared answer, and between them did more
+    work than either would have done alone."""
+    import threading
+
+    rule = _pattern_rule(rules)
+    answers = {}
+
+    def fill(name):
+        found = rules.find("pattern", name, INTEGRATION, "de")
+        answers[name] = rules.render(found, name, "de")
+
+    one = threading.Thread(target=fill, args=("Heizung 11111111",))
+    two = threading.Thread(target=fill, args=("Heizung 22222222",))
+    one.start()
+    two.start()
+    one.join()
+    two.join()
+
+    assert answers["Heizung 11111111"] == "Heizkostenverteiler 11111111"
+    assert answers["Heizung 22222222"] == "Heizkostenverteiler 22222222"
+    assert rule["id"]
+
+
+def test_a_rewritten_target_is_not_answered_from_what_was_filled(rules):
+    """What was worked out belongs to the rule as it was then, and the rules
+    moving on has to reach every thread that holds one."""
+    rule = _pattern_rule(rules)
+    assert rules.render(rules.find("pattern", "Heizung 12345678", INTEGRATION, "de"), "Heizung 12345678", "de") == (
+        "Heizkostenverteiler 12345678"
+    )
+
+    rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+    assert rules.render(rules.find("pattern", "Heizung 12345678", INTEGRATION, "de"), "Heizung 12345678", "de") == (
+        "Heizkosten 12345678"
+    )

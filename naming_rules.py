@@ -47,6 +47,7 @@ import logging
 from pathlib import Path
 import re
 import shutil
+import threading
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 import uuid
 
@@ -217,10 +218,12 @@ def _refuse_runaway(regex: str) -> None:
             if after == "{":
                 # Bounded here as anywhere: "((?P=n1){2})+" repeats the
                 # backreference twice and finishes, and reading the count as an
-                # open repetition refused it.
+                # open repetition refused it. Read once: walked past here, the
+                # main loop matched the same count again.
                 counted = _COUNT.match(regex, at)
                 if counted and not counted.group("open"):
                     after = ""
+                    at = counted.end()
             if after in {"*", "+", "?", "{"}:
                 repeats[-1] = True
             continue
@@ -326,7 +329,11 @@ def fill_placeholders(target: str, match: "re.Match[str]") -> Optional[str]:
         nonlocal missing
         key = found.group(1)
         got = _group(match, key)
-        if got is None:
+        # A group the expression does not have at all, as against one that has
+        # it and caught nothing: "Zone (?P<n1>\\d+)?" against "Zone" answers None
+        # for a group it does have, and reading that as a missing group said the
+        # rule could never apply to anything.
+        if got is None and not _known_placeholder(match.re, key):
             missing = True
             logger.warning(
                 "Target %r asks for {%s}, which the expression %r does not have; the rule cannot apply",
@@ -472,9 +479,11 @@ class NamingRules:
         self._by_entity = None
         self._patterns: Optional[List[Tuple[Dict[str, Any], "re.Pattern[str]"]]] = None
         self._patterns_keyed: Optional[Dict[str, "re.Pattern[str]"]] = None
-        # The name the filled targets below belong to, and those targets by rule.
-        self._filled_for: Optional[Tuple[str, str]] = None
-        self._filled_by_rule: Dict[str, Optional[str]] = {}
+        # The name the filled targets belong to, and those targets by rule -
+        # per thread, because that is who asks. Two requests resolving at once
+        # took turns throwing each other's answers away, and did more work
+        # between them than either would have done alone.
+        self._filling = threading.local()
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -545,8 +554,10 @@ class NamingRules:
         self._patterns = None
         self._patterns_keyed = None
         # A rewritten target is filled again rather than answered from here.
-        self._filled_for = None
-        self._filled_by_rule = {}
+        # Every thread's, which is what the generation below is for: a thread
+        # that is in the middle of a name reads a rule that has just changed and
+        # works the target out again rather than answering from what it had.
+        self._filling_generation = getattr(self, "_filling_generation", 0) + 1
 
     @guarded
     def save(self) -> None:
@@ -1080,18 +1091,19 @@ class NamingRules:
         name at a time, and the next name drops what was worked out for this
         one.
         """
-        for_name = (name, language)
-        if self._filled_for != for_name:
-            self._filled_for = for_name
-            self._filled_by_rule = {}
+        for_name = (name, language, getattr(self, "_filling_generation", 0))
+        if getattr(self._filling, "For", None) != for_name:
+            self._filling.For = for_name
+            self._filling.by_rule = {}
+        by_rule = self._filling.by_rule
         rule_id = rule.get("id") or ""
         if not rule_id:
             # A rule being tried out and not stored yet has no id to be told
             # apart by, and two of them would have read each other's target.
             return fill_placeholders(rule["targets"][language], match)
-        if rule_id not in self._filled_by_rule:
-            self._filled_by_rule[rule_id] = fill_placeholders(rule["targets"][language], match)
-        return self._filled_by_rule[rule_id]
+        if rule_id not in by_rule:
+            by_rule[rule_id] = fill_placeholders(rule["targets"][language], match)
+        return by_rule[rule_id]
 
     def _find_pattern(
         self,
