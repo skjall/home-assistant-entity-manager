@@ -883,6 +883,36 @@ def test_a_rename_that_went_through_is_not_reported_as_one_that_did_not():
     assert "!renamed && askedForARename ? 'device.moved_not_renamed' : 'device.moved_job_failed'" in body
 
 
+def test_the_list_opens_on_the_area_the_device_is_in():
+    """Enter is what a keyboard reaches for, and the field takes the focus on the
+    way in. Opened at the top, that staged a move to whatever area comes first
+    alphabetically - with nothing the user did saying to move the device."""
+    markup = _panel_source()
+    at = markup.index('x-model="areaSearch"')
+    handler = markup[at : at + 400]
+
+    assert "areaComboAt = areaComboStart()" in handler
+    assert "areaComboAt = 0" not in handler.split("@input=")[0], "not the top of the list"
+
+    at = markup.index("areaComboStart() {")
+    body = markup[at : markup.index("takeArea() {", at)]
+    assert "const holds = this.panelAreaId();" in body
+    assert "this.areaOptions.findIndex(area => (area.id || '') === holds)" in body
+
+
+def test_a_device_in_no_area_can_take_back_a_pick():
+    """The entry that clears a pick was offered off the device's own area, so a
+    device in no area that was picked into one had no way back: the pick could
+    only be dropped by turning to another device and again to this one."""
+    markup = _panel_source()
+    at = markup.index("matchingAreas() {")
+    body = markup[at : markup.index("pickArea(area) {", at)]
+
+    # What the panel stands on, which is the staged pick while one is staged.
+    assert "if (this.panelAreaId() &&" in body
+    assert "this.selectedDeviceData?.area_id &&" not in body
+
+
 def test_the_area_list_is_keyed_on_when_the_registry_moved():
     """The list is read by the combo, by every item's class and by the empty
     line, so writing the areas out walked them several times per repaint."""
@@ -909,3 +939,21 @@ def test_an_empty_type_part_is_noted_as_one() -> None:
         web_ui.renamer_state.pop("restructurer", None)
 
     assert note["base_entity"] == ""
+
+
+def test_the_word_the_rules_made_of_it_is_not_noted_as_the_input() -> None:
+    """The note is what a rule the user writes afterwards finds the entity by, so
+    it holds what went in. Falling through to the rendered value, a resolution
+    that does not say what went in was noted as having supplied "Bewegung" - and
+    a rule about "Motion" never reached the entity again."""
+
+    class _Resolutions:
+        last_resolutions = {"sensor.x": {"won_by": "rule:user", "input": None, "value": "Bewegung"}}
+
+    web_ui.renamer_state["restructurer"] = _Resolutions()
+    try:
+        note = naming_service.provenance_for("sensor.x")
+    finally:
+        web_ui.renamer_state.pop("restructurer", None)
+
+    assert note["base_entity"] is None

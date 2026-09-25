@@ -2256,7 +2256,8 @@
                                    :placeholder="t('area.select_area')"
                                    x-model="areaSearch"
                                    :disabled="renamingDevice || applyingEntityId || executing"
-                                   @focus="areaComboOpen = true; areaComboAt = 0; areaSearch = ''"
+                                   @focus="areaComboOpen = true; areaSearch = '';
+                                             areaComboAt = areaComboStart()"
                                    @input="areaComboOpen = true; areaComboAt = 0"
                                    @keydown.arrow-down.prevent="areaComboOpen = true; comboStep(1, areaOptions.length, $el)"
                                    @keydown.arrow-up.prevent="areaComboOpen = true; comboStep(-1, areaOptions.length, $el)"
@@ -5654,8 +5655,9 @@
                         // on offering the name it used to have.
                         this.hierarchyVersion,
                         this.selectedDeviceData?.area_id || '',
-                        // And the area picked and not yet written, which is the
-                        // one the list marks as the current one.
+                        // And the area picked and not yet written: matchingAreas
+                        // reads it through panelAreaId, which decides whether the
+                        // "no area" entry is in the list at all.
                         this.devicePreviewAreaId === null ? '\u0003' : this.devicePreviewAreaId,
                         this.translationsReady
                     ].join('\u0000');
@@ -5669,12 +5671,16 @@
                 matchingAreas() {
                     const typed = (this.areaSearch || '').trim().toLowerCase();
                     const areas = this.hierarchy.areas.filter(a => !typed || a.name.toLowerCase().includes(typed));
-                    // Offered as long as the device is in an area, whether or
-                    // not the panel already holds the pick: asking the panel
-                    // took the entry out of the list the moment it was chosen,
-                    // so it could not be seen as chosen or chosen again.
+                    // Offered wherever there is an area to leave, written or
+                    // only staged - which is what the panel stands on. Read off
+                    // the device alone, a device in no area that was picked into
+                    // one had no way back: the entry that clears the pick never
+                    // appeared, and the staging could only be dropped by turning
+                    // to another device and back. The entry stays in the list
+                    // once it is chosen, too: taken out, it could not be seen as
+                    // chosen or chosen again.
                     const none = { id: '', name: this.t('area.no_area') };
-                    if (this.selectedDeviceData?.area_id && (!typed || none.name.toLowerCase().includes(typed))) {
+                    if (this.panelAreaId() && (!typed || none.name.toLowerCase().includes(typed))) {
                         return [...areas, none];
                     }
                     return areas;
@@ -5689,6 +5695,17 @@
                     // pick, and an arrow key pressed straight afterwards went
                     // on from the item just chosen rather than to the top.
                     this.areaComboAt = 0;
+                },
+
+                // Where the highlight stands when the list opens: on the area
+                // the panel holds. At the top, Enter pressed straight after the
+                // field took the focus - which is what a keyboard reaches for -
+                // staged a move to whatever area comes first alphabetically,
+                // with nothing the user did saying to move the device at all.
+                areaComboStart() {
+                    const holds = this.panelAreaId();
+                    const at = this.areaOptions.findIndex(area => (area.id || '') === holds);
+                    return at < 0 ? 0 : at;
                 },
 
                 takeArea() {

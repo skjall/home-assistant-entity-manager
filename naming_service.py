@@ -227,12 +227,15 @@ def _noted_type_part(resolution: Mapping[str, Any]) -> Optional[str]:
     it is kept as one. Asked for with ``or``, it read as no answer at all, and
     the note then said "nothing recorded" about a name whose type part is
     genuinely empty, which put the question back that it had just answered.
+
+    Only the input, never the value: the value is what the rules made of it, and
+    a note holding "Bewegung" where "Motion" went in is a note no rule the user
+    writes about "Motion" can be found by. Nothing recorded is the honest answer
+    for a resolution that does not say what went in - the next read works it out
+    from the name and records it (NamingState.resupply).
     """
-    for key in ("input", "value"):
-        noted = resolution.get(key)
-        if isinstance(noted, str):
-            return noted
-    return None
+    noted = resolution.get("input")
+    return noted if isinstance(noted, str) else None
 
 
 def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:

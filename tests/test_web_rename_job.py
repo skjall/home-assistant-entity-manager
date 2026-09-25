@@ -394,6 +394,18 @@ def test_nothing_says_moved_where_no_area_was_asked_for(tmp_path, monkeypatch) -
     assert "MOVED" not in steps
 
 
+def test_a_name_that_says_nothing_is_still_a_rename_in_the_message() -> None:
+    """The message asks the same question the rename does. Read for truth, a name
+    the validation ever let through as "" would have said "Device moved" about a
+    job that renamed the device."""
+    source = Path(routes_entities.__file__).read_text(encoding="utf-8")
+    at = source.index("        if new_name is not None and set_area:")
+    body = source[at : at + 300]
+
+    assert 'message = f"Device moved and renamed to: {new_name}"' in body
+    assert "elif new_name is not None:" in body
+
+
 def test_the_note_does_not_carry_the_type_part() -> None:
     """The type part is what the name is built from, not what a rule matches on.
 

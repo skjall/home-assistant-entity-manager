@@ -888,10 +888,13 @@ async def rename_device_handler(job, ctx):
         )
 
         # One of the two was asked for: the route refuses a payload that asks
-        # for neither.
-        if new_name and set_area:
+        # for neither. Asked as "is not None", as the rename itself is above: a
+        # name is a name whatever it says, and the two must answer the same
+        # question or the message could say "moved" about a job that went on to
+        # rename the device.
+        if new_name is not None and set_area:
             message = f"Device moved and renamed to: {new_name}"
-        elif new_name:
+        elif new_name is not None:
             message = f"Device renamed to: {new_name}"
         else:
             message = "Device moved"
