@@ -7,6 +7,7 @@ and every entity name below it are built out of the area.
 
 import asyncio
 import os
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -908,9 +909,26 @@ def test_a_device_in_no_area_can_take_back_a_pick():
     at = markup.index("matchingAreas() {")
     body = markup[at : markup.index("pickArea(area) {", at)]
 
-    # What the panel stands on, which is the staged pick while one is staged.
-    assert "if (this.panelAreaId() &&" in body
-    assert "this.selectedDeviceData?.area_id &&" not in body
+    # The device's own area, or whatever pick the panel holds - the pick of no
+    # area included, which has to stay in the list to be seen as chosen. Asked
+    # for the area it names, that pick took itself out of the list, the highlight
+    # had nowhere to stand and Enter took the first area there was.
+    assert "const somethingToLeave = !!this.selectedDeviceData?.area_id || this.devicePreviewAreaId !== null;" in body
+    assert "if (somethingToLeave &&" in body
+
+
+def test_the_area_the_device_is_in_is_not_a_pick():
+    """Clicking the area it is in says nothing to change, so nothing is held. Held
+    as a pick, a move made in Home Assistant while it stood here turned it into a
+    staged move back - green border, apply button and all - and applying it moved
+    the device back without the user ever asking for it."""
+    markup = _panel_source()
+    at = markup.index("pickPreviewArea(areaId) {")
+    body = markup[at : markup.index("getDeviceDisplayName(device) {", at)]
+
+    assert "const own = this.selectedDeviceData?.area_id || '';" in body
+    assert "const picked = (areaId || '') === own ? null : areaId;" in body
+    assert "this.devicePreviewAreaId = picked;" in body
 
 
 def test_the_area_list_is_keyed_on_when_the_registry_moved():
@@ -957,3 +975,14 @@ def test_the_word_the_rules_made_of_it_is_not_noted_as_the_input() -> None:
         web_ui.renamer_state.pop("restructurer", None)
 
     assert note["base_entity"] is None
+
+
+def test_what_went_in_is_read_once_for_the_whole_proposal() -> None:
+    """The proposal says the supplied word twice - as what was supplied and as what
+    the note would keep. Read twice, the two could answer differently, and a reader
+    comparing them to decide whether to rename would be told the entity supplied a
+    word that nothing supplied."""
+    source = Path(naming_service.__file__).read_text(encoding="utf-8")
+
+    assert '"supplied_name": _noted_type_part(resolution),' in source
+    assert '"supplied_name": resolution.get("input")' not in source

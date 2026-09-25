@@ -197,7 +197,11 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         "proposed_name": new_name,
         "name_comes_from": resolution.get("won_by"),
         "rule_id": resolution.get("rule_id"),
-        "supplied_name": resolution.get("input"),
+        # Out of the same reading as base_entity below: both are what went into
+        # the name, and asking twice let them answer differently - a reader
+        # comparing the two to decide whether to rename would then be told the
+        # entity supplied a word that nothing supplied.
+        "supplied_name": _noted_type_part(resolution),
         # The type part as it went in, kept with the name once it is written so
         # a later read gets it back without taking the rendered name apart.
         # What went in, not what came out: a rule the user edits afterwards has

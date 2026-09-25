@@ -5115,11 +5115,18 @@
                 // What the entities of the device being moved would be called.
                 // Their names are cached, and a move changes all of them.
                 pickPreviewArea(areaId) {
+                    // The area the device is already in is not a pick: held as
+                    // one, a move made in Home Assistant while it stood here
+                    // turned it into a staged move back, and the field said the
+                    // user had asked for something they never asked for - green
+                    // border, apply button and all.
+                    const own = this.selectedDeviceData?.area_id || '';
+                    const picked = (areaId || '') === own ? null : areaId;
                     // Offered while the device is in an area, so the same line
                     // can be clicked twice; computing the rows again for it
                     // asked the server for slugs that are already in hand.
-                    if (this.devicePreviewAreaId === areaId) return;
-                    this.devicePreviewAreaId = areaId;
+                    if (this.devicePreviewAreaId === picked) return;
+                    this.devicePreviewAreaId = picked;
                     // Through the panel's own preview where the panel holds a
                     // change, which includes this pick: the computed previews
                     // are worked out from the registry, so a name typed into
@@ -5671,16 +5678,19 @@
                 matchingAreas() {
                     const typed = (this.areaSearch || '').trim().toLowerCase();
                     const areas = this.hierarchy.areas.filter(a => !typed || a.name.toLowerCase().includes(typed));
-                    // Offered wherever there is an area to leave, written or
-                    // only staged - which is what the panel stands on. Read off
-                    // the device alone, a device in no area that was picked into
-                    // one had no way back: the entry that clears the pick never
-                    // appeared, and the staging could only be dropped by turning
-                    // to another device and back. The entry stays in the list
-                    // once it is chosen, too: taken out, it could not be seen as
-                    // chosen or chosen again.
+                    // Offered wherever there is an area to leave or a pick to
+                    // take back: the device's own area, or whatever pick the panel
+                    // holds. Read off the device alone, a device in no area that
+                    // was picked into one had no way back - the entry never
+                    // appeared, and the pick could only be dropped by turning to
+                    // another device and again to this one. Asked as "does the
+                    // panel hold a pick" rather than "is it an area", because the
+                    // pick of no area is one: taken out of the list once it was
+                    // chosen, the highlight had nowhere to stand and Enter took
+                    // the first area in the list instead.
                     const none = { id: '', name: this.t('area.no_area') };
-                    if (this.panelAreaId() && (!typed || none.name.toLowerCase().includes(typed))) {
+                    const somethingToLeave = !!this.selectedDeviceData?.area_id || this.devicePreviewAreaId !== null;
+                    if (somethingToLeave && (!typed || none.name.toLowerCase().includes(typed))) {
                         return [...areas, none];
                     }
                     return areas;
