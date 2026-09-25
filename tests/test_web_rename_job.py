@@ -246,6 +246,16 @@ def test_a_name_no_rule_decided_notes_no_rule() -> None:
     assert routes_entities._provenance_note(reading, "hash-1")["rule_id"] is None
 
 
+def test_a_name_nobody_recorded_a_type_part_for_notes_nothing() -> None:
+    """None, not "": an empty string means "this name has no type part", which
+    is an answer. Nothing recorded is not that answer, and reading it as one
+    would have the next rename strip a type part the entity does carry."""
+    reading = {"won_by": "rule:user", "rule_id": "rule-9"}
+
+    assert routes_entities._provenance_note(reading, "hash-1")["base_entity"] is None
+    assert routes_entities._provenance_note({"base_entity": ""}, "hash-1")["base_entity"] == ""
+
+
 def test_a_bracket_that_tells_two_entities_apart_reaches_the_new_id() -> None:
     """Three uplink sensors resolve to one name; the bracket says which peer.
 
