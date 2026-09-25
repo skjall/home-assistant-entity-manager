@@ -572,8 +572,9 @@ class EntityRestructurer:
         Decide what a name Home Assistant supplied is called in the user's language.
 
         Rules win over the supplied name: first a rule on the integration's
-        ``translation_key``, then one on the canonical form of the name, then
-        the built-in defaults. A name no rule covers is kept as it is.
+        ``translation_key``, then one on the canonical form of the name, then a
+        pattern the name fits, then the built-in defaults. A name no rule
+        covers is kept as it is.
         """
         candidates: List[Dict[str, Any]] = []
         integration = registry.get("platform") or None
@@ -603,6 +604,18 @@ class EntityRestructurer:
                     candidates.append(
                         {
                             "value": rule["targets"][language],
+                            "won_by": "rule:user",
+                            "rule_id": rule["id"],
+                            "matched_on": rules.why(rule, integration, model, domain),
+                        }
+                    )
+                # A name with a serial number in it is one of as many names as
+                # there are devices; a pattern answers for all of them.
+                rule = rules.find("pattern", name, integration, language, model, domain)
+                if rule:
+                    candidates.append(
+                        {
+                            "value": rules.render(rule, name, language),
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
                             "matched_on": rules.why(rule, integration, model, domain),
@@ -739,6 +752,7 @@ class EntityRestructurer:
         for kind, value in (
             ("translation_key", registry.get("translation_key") or ""),
             ("name", name),
+            ("pattern", name),
             ("device_class", device_class),
         ):
             rule = rules.find(kind, value, integration, self.language, model, entity_id.partition(".")[0] or None)
@@ -748,7 +762,11 @@ class EntityRestructurer:
                 name, entity_id, device_class, rule["targets"].get(self.language, "")
             ):
                 continue
-            return {"rule_id": rule["id"], "kind": kind, "value": value}
+            # A pattern rule is matched on its expression; the name is only
+            # what was held against it, and reading it back as the value said
+            # the rule was written for this one entity.
+            matched = rule["match"]["value"] if kind == "pattern" else value
+            return {"rule_id": rule["id"], "kind": kind, "value": matched}
         return None
 
     @staticmethod
