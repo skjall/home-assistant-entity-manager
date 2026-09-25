@@ -833,3 +833,42 @@ def test_a_field_this_call_adds_is_taken_off_again_where_the_write_fails(rules, 
         rules.update(rule["id"], filters=[{"integration": INTEGRATION}])
 
     assert "filters" not in rule
+
+
+def test_a_rule_missing_its_targets_is_answered_rather_than_crashing(rules):
+    """One out of a backup may have no targets at all. Merged into what is not
+    there, an edit came back as a KeyError."""
+    rule = _pattern_rule(rules)
+    rule.pop("targets")
+
+    updated = rules.update(rule["id"], targets={"de": "Heizkosten {1}"})
+
+    assert updated["targets"] == {"de": "Heizkosten {1}"}
+
+
+def test_an_expression_for_a_rule_missing_its_targets_is_written(rules):
+    """The same rule, and an expression instead of a target: it reaches the check
+    that reads the targets against the expression, which came back as a KeyError.
+    There is nothing to read, so there is nothing to refuse."""
+    rule = _pattern_rule(rules)
+    rule.pop("targets")
+
+    updated = rules.update(rule["id"], value=r"Heizung\ (?P<n1>\d+)x")
+
+    assert updated["match"]["value"] == r"Heizung\ (?P<n1>\d+)x"
+
+
+def test_the_rules_answer_for_the_expression_themselves(rules):
+    """Asked in the route first, the answer came out of a reading nothing held
+    still - the rule can be rewritten or deleted between that reading and the
+    write - and the same questions were asked again a moment later somewhere
+    else, where the two could drift apart."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(here, "routes_naming.py"), encoding="utf-8") as handle:
+        source = handle.read()
+    at = source.index('@naming.route("/api/naming/rules/<rule_id>"')
+    body = source[at : source.index("@naming.route", at + 10)]
+
+    assert "compile_pattern(" not in body
+    assert "rules.get(rule_id)" not in body
+    assert "except NotAPatternRuleError as error:" in body

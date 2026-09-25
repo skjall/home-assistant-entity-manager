@@ -92,6 +92,16 @@ class NamingRuleError(ValueError):
     """Raised for an invalid rule."""
 
 
+class NotAPatternRuleError(NamingRuleError):
+    """An expression was sent for a rule that is not matched on one.
+
+    Its own kind so a caller can tell it from the other refusals: the other
+    kinds are matched on a word the integration supplies, and that word is not
+    the writer's to change. Asked before the write rather than after, it was
+    asked of a reading nothing held still.
+    """
+
+
 class UnknownRuleError(NamingRuleError):
     """A rule was asked about by an id nothing is stored under.
 
@@ -925,7 +935,7 @@ class NamingRules:
         filters = rule.get("filters") or []
         if not filters or any(not one.get("integration") or one.get("registry_id") for one in filters):
             raise NamingRuleError("A pattern rule applies within an integration")
-        cls.check_targets(match, rule["targets"], compiled)
+        cls.check_targets(match, rule.get("targets") or {}, compiled)
 
     def _refuse_collision(self, rule: Mapping[str, Any]) -> None:
         self.check_pattern(rule)
@@ -1436,11 +1446,14 @@ class NamingRules:
             # it and says nothing about the others. Replacing meant every
             # writer had to send the whole set back, and a set read before
             # someone else's edit then wrote that edit away again.
-            wanted["targets"] = {**rule["targets"], **clean}
+            # Read with get, like every other field here: a rule out of a
+            # backup may have none, and merging into what is not there answered
+            # an edit with a KeyError.
+            wanted["targets"] = {**(rule.get("targets") or {}), **clean}
 
         if value is not None:
             if rule["match"]["kind"] != "pattern":
-                raise NamingRuleError("Only a pattern rule is matched on an expression")
+                raise NotAPatternRuleError("Only a pattern rule is matched on an expression")
             # Read as a pattern below, by the check that also asks whether
             # the targets still have what they need - one compilation, and it
             # says why it cannot be read, which is what the writer needs back.

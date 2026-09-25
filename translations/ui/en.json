@@ -553,6 +553,7 @@
     "pattern_toggle": "Offer pattern rules when renaming",
     "pick_pattern": "Pattern",
     "save_failed": "Not saved",
+    "list_not_read_again": "The list could not be read again - reload the page",
     "pattern_needs_an_expression": "A pattern rule needs an expression. Nothing was saved.",
     "pattern_expression": "Expression, e.g. Heating\\ (?P<n1>\\d+)",
     "caught_pattern": "pattern"

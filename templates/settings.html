@@ -2833,10 +2833,12 @@
                         return true;
                     } catch (error) {
                         console.error('Error loading rules:', error);
-                        // Said out loud: the list then stands as it was read
-                        // last, and somebody who had just saved a rule opened it
-                        // again, saw the old words and took the save for lost.
-                        this.namingMessage = this.t('settings.save_failed');
+                        // Said out loud, and said for what it is: the list
+                        // stands as it was read last, so somebody who had just
+                        // saved a rule would open it again and see the old words.
+                        // Not "not saved" - the save had gone through, and saying
+                        // otherwise had the same write sent a second time.
+                        this.namingMessage = this.t('settings.list_not_read_again');
                         this.namingError = true;
                         return false;
                     } finally {

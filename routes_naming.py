@@ -20,8 +20,8 @@ from naming_rules import (
     MAX_PATTERN_LENGTH,
     VERBATIM_KINDS,
     NamingRuleError,
+    NotAPatternRuleError,
     UnknownRuleError,
-    compile_pattern,
     pattern_of,
     readable_pattern,
     target_of,
@@ -875,26 +875,12 @@ def naming_rule_item(rule_id):
             return jsonify({"error": "A pattern needs an expression"}), 400
         if len(expression) > MAX_PATTERN_LENGTH:
             return jsonify({"error": f"A pattern's expression is at most {MAX_PATTERN_LENGTH} characters"}), 400
-        # Read as a pattern here, not only in the rules: the length is the
-        # smaller half of what makes an expression usable, and a caller that
-        # had been told a 499-character expression was within bounds then got
-        # "a pattern may not repeat what already repeats" out of the model as
-        # though the two answers came from different places.
-        try:
-            compile_pattern(expression)
-        except NamingRuleError as error:
-            return jsonify({"error": str(error)}), 400
-        # And a rule that is not matched on an expression cannot be given one.
-        # Passed on, the whole call was refused by the model - the targets sent
-        # with it among them - and nothing said which half was the problem.
-        standing = rules.get(rule_id)
-        if standing is None:
-            return jsonify({"error": "unknown rule"}), 404
-        # Said here as well as answered for below: a rule deleted between this
-        # reading and the write cannot be ruled out, and the write says so in
-        # its own words.
-        if standing["match"]["kind"] != "pattern":
-            return jsonify({"error": "Only a pattern rule is matched on an expression"}), 400
+        # What is wrong with the expression itself is answered by the rules,
+        # under their own lock: asked here first, the answer came out of a
+        # reading nothing held still - the rule could be rewritten or deleted
+        # between that reading and the write - and the same two questions were
+        # then asked again a moment later, in another place, where they could
+        # drift apart.
     targets = data.get("targets")
     if targets is not None and not isinstance(targets, dict):
         return jsonify({"error": "targets has to be a mapping of language to text"}), 400
@@ -921,6 +907,10 @@ def naming_rule_item(rule_id):
         # what 404 says. A targets-only call had it answered as though what was
         # sent was wrong, while the expression path said 404 for the same thing.
         return jsonify({"error": "unknown rule"}), 404
+    except NotAPatternRuleError as error:
+        # A rule of another kind cannot be given an expression. Its own answer, so
+        # what was sent with it is not reported as the problem.
+        return jsonify({"error": str(error)}), 400
     except NamingRuleError as error:
         return jsonify({"error": str(error)}), 400
     renamer_state["type_mappings"]._refresh_user_view()
