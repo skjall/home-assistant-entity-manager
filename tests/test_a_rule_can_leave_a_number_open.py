@@ -1211,3 +1211,45 @@ def test_the_search_for_a_placeholder_waits_for_the_answer(rules):
     body = source[at : source.index("    def _compiled_pattern(self", at)]
 
     assert body.index("already = self._filled_already(") < body.index("unfilled = ")
+
+
+def test_a_target_that_cannot_be_filled_is_no_name(client):
+    """An expression rewritten while a name is being worked out does not match it
+    any more, and the render comes back with nothing. Offered as a name, that stood
+    first among the candidates - nothing else in the walk takes it out, since it is
+    not the shown name either - and the entity was renamed to nothing at all."""
+    response = client.post(
+        "/api/naming/learn",
+        json={"entity_id": "sensor.reg-1", "value": "Heizkostenverteiler 12345678", "scope": "pattern"},
+    )
+    assert response.status_code == 200
+    assert _resolved("sensor.reg-2")["value"] == "Heizkostenverteiler 12345679"
+
+    # As a rewrite leaves it: the rule still applies and its render answers with
+    # nothing for this name.
+    rules = web_ui.renamer_state["naming_rules"]
+    rules.render = lambda rule, name, language: ""
+
+    resolution = _resolved("sensor.reg-2")
+
+    assert resolution["value"] != ""
+    assert "" not in [one["value"] for one in resolution["candidates"]]
+
+
+def test_a_possessive_quantifier_is_not_the_shape_this_refuses(rules):
+    """From Python 3.11 on "?+" is possessive: the group is matched once and never
+    gone back into, which is the opposite of what runs away."""
+    compiled = compile_pattern(r"(a+)?+")
+
+    assert compiled is not None
+    # A near miss answers rather than hanging, which is what possessive means.
+    assert compiled.fullmatch("a" * 40 + "x") is None
+
+
+def test_a_bounded_count_on_a_group_that_repeats_is_refused_however_short(rules):
+    """The same shape over fewer characters is the same shape: the answer is one
+    answer rather than a judgement per expression about which polynomial is small
+    enough."""
+    for expression in [r"(?P<n1>\d+){2,3}", r"([\w ]+){2,5}"]:
+        with pytest.raises(NamingRuleError, match="repeat what already repeats"):
+            compile_pattern(expression)

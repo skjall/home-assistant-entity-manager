@@ -707,14 +707,21 @@ class EntityRestructurer:
                         name, entity_id, device_class, rule["targets"].get(language, "")
                     ):
                         continue
+                    # Read straight out: a rule is only answered for where it
+                    # has a target in this language, which is what the lookup goes
+                    # by. A pattern rule is rendered, and that can come back with
+                    # nothing: an expression rewritten while this name was being
+                    # worked out does not match it any more, and a target that
+                    # cannot be filled is not a name. Offered as one, the empty
+                    # answer stood first among the candidates - nothing else in
+                    # the walk takes it out, since it is not the shown name
+                    # either - and the entity was renamed to nothing at all.
+                    offered = rules.render(rule, name, language) if kind == "pattern" else rule["targets"][language]
+                    if not offered:
+                        continue
                     candidates.append(
                         {
-                            # Read straight out: a rule is only answered for where
-                            # it has a target in this language, which is what the
-                            # lookup goes by.
-                            "value": (
-                                rules.render(rule, name, language) if kind == "pattern" else rule["targets"][language]
-                            ),
+                            "value": offered,
                             "won_by": "rule:user",
                             "rule_id": rule["id"],
                             "matched_on": rules.why(rule, integration, model, domain),
