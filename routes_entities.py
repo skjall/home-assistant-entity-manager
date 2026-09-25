@@ -639,8 +639,16 @@ def _provenance_note(reading: dict[str, Any], template_hash: str) -> dict[str, A
     # on every other way into the state file (naming_service.provenance_of):
     # "" would be an id, and a reader telling a name no rule decided from one
     # decided by a rule since deleted would be told the same thing for both.
+    #
+    # The type part keeps None where nothing was recorded: "" is an answer - the
+    # name is area and device and has no type part - and an entity that turned up
+    # only after the capture had nobody to give that answer. Written as "", the
+    # next run read it as one and left the entity named without the type part it
+    # carries, for good.
+    noted = reading.get("base_entity")
     return {
-        **{key: reading.get(key) or "" for key in ("base_entity", "won_by")},
+        "base_entity": noted if isinstance(noted, str) else None,
+        "won_by": reading.get("won_by") or "",
         "rule_id": reading.get("rule_id") or None,
         "template_hash": template_hash,
     }

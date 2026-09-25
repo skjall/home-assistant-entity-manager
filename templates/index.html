@@ -5150,7 +5150,10 @@
                 // The rows under one device, whether or not the panel stands
                 // on it.
                 entitiesOfDevice(deviceId) {
-                    return (this.hierarchy?.entities || []).filter(entity => entity.device_id === deviceId);
+                    // Out of the index, like every other lookup of a device's
+                    // rows: the scan it used to do was the one the index was
+                    // built to stop.
+                    return indexed(this).byDevice.get(deviceId) || none;
                 },
 
                 // What a set of entities would be called. Their own previews are
@@ -6839,8 +6842,6 @@
                     // below, and an answer still on its way would write those
                     // ids over the ones the server has just given.
                     this.dropStagedPreview();
-                    // The job is over, so the button opens again.
-                    this.renamingDevice = false;
                     // What the panel holds now may have been typed for another
                     // device while this job ran, and that is not this job's to
                     // throw away.
