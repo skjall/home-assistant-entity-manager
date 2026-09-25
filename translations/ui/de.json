@@ -132,7 +132,9 @@
     "supplied_stale": "Der Name steht so im Titel des Helfers: „{supplied}“ – „Übernehmen“ schreibt den Titel mit um.",
     "scope_domain_hint": "Nur für die {count} {domain}-Entitäten an Geräten vom Typ {model}.",
     "keep_current_hint": "„{name}“ übernehmen – so heißt sie heute",
-    "was_already_gone": "Die Entität war schon gelöscht — die Liste ist jetzt gleichauf."
+    "was_already_gone": "Die Entität war schon gelöscht — die Liste ist jetzt gleichauf.",
+    "scope_pattern_hint": "Für alle {count} Entitäten von {integration}, deren Name „{pattern}“ lautet – die Nummer darf jede sein.",
+    "explain_rule_pattern": "Alle „{pattern}“-Entitäten von {integration} heißen bei dir so – hier „{value}“"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",
@@ -204,7 +206,8 @@
     "rules_saved": "Regeln gespeichert",
     "nothing_to_apply": "Nichts zu übernehmen",
     "name_has_no_place": "Die Vorlage für den Gerätenamen hat keinen Platz für einen eigenen Namen, der eingegebene Name kann also nicht geschrieben werden",
-    "rename_running": "Umbenennung läuft - bitte abwarten"
+    "rename_running": "Umbenennung läuft - bitte abwarten",
+    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",
@@ -546,7 +549,12 @@
     "caught_name": "gelieferter Name",
     "caught_device_class": "Geräteklasse",
     "caught_none": "—",
-    "reach_open_device": "„{device}“ in Home Assistant öffnen"
+    "reach_open_device": "„{device}“ in Home Assistant öffnen",
+    "pattern_section": "Muster-Regeln",
+    "pattern_hint": "Manche Integrationen schreiben eine Seriennummer in jeden Namen, etwa „Heizung 12345678“. Eine Muster-Regel lässt die Nummer offen und gilt so für alle Geräte dieser Integration. Bestehende Muster-Regeln wirken auch, wenn der Schalter aus ist.",
+    "pattern_toggle": "Muster-Regeln beim Umbenennen anbieten",
+    "pick_pattern": "Muster",
+    "caught_pattern": "Muster"
   },
   "type_mappings": {
     "light": "Licht",

@@ -13,8 +13,8 @@ fill fields in the interface.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-# The three kinds a rule can match an entity by; used in several places.
-RULE_KINDS = ["translation_key", "device_class", "name"]
+# The kinds a rule can match an entity by; used in several places.
+RULE_KINDS = ["translation_key", "device_class", "name", "pattern"]
 
 
 class Operation:
@@ -145,10 +145,12 @@ OPERATIONS: List[Operation] = [
         "set_naming_settings",
         "Change the naming language or the spelling of types.",
         "Switching the language rebuilds every proposed name, because the rules are kept per "
-        "language. display_case is one of first_word, title or lower.",
+        "language. display_case is one of first_word, title or lower. pattern_rules shows the "
+        "pattern scope in the interface; stored pattern rules apply either way.",
         body={
             "language": text("Two-letter language code the rules are written in, e.g. de or en."),
             "display_case": text("How a type is spelled: first_word, title or lower."),
+            "pattern_rules": flag("Whether the interface offers pattern rules."),
         },
         tag="Naming",
     ),
@@ -170,9 +172,12 @@ OPERATIONS: List[Operation] = [
         "post",
         "create_rule",
         "Name every entity of one type.",
-        "match says what the rule matches: kind is translation_key, device_class or name, value is "
-        "the type as the integration supplies it, and integration and model narrow the rule to "
-        'those devices. targets carries the name per language, e.g. {"de": "Raumtemperatur"}. '
+        "match says what the rule matches: kind is translation_key, device_class, name or pattern, "
+        "value is the type as the integration supplies it, and integration and model narrow the "
+        "rule to those devices. A pattern is a regular expression the whole supplied name has to "
+        "match, and needs an integration; its target can carry what it captures, {1} for the "
+        "first group or {name} for a named one. "
+        'targets carries the name per language, e.g. {"de": "Raumtemperatur"}. '
         "Look at supplied_names first to get the value right, and at rules to see what a rule "
         "already reaches.",
         body={
@@ -304,13 +309,15 @@ OPERATIONS: List[Operation] = [
         "post",
         "learn_from_correction",
         "Turn a corrected name into a rule, letting the server pick the key.",
-        "scope is entity, integration, model or global, and decides how far the new rule reaches. "
+        "scope is entity, integration, model, pattern or global, and decides how far the new rule "
+        "reaches. pattern keeps the numbers in the supplied name open and applies within the "
+        "entity's integration, so one rule covers every name that differs only in its numbers. "
         "domain narrows whichever of those was chosen to this entity's own domain, which is what "
         "tells a measured value from a settable one where an integration supplies one name for both.",
         body={
             "entity_id": text("The entity whose type was corrected."),
             "value": text("The name it should have."),
-            "scope": text("How far the rule reaches: entity, integration, model or global."),
+            "scope": text("How far the rule reaches: entity, integration, model, pattern or global."),
             "domain": flag("Whether the rule is about this entity's domain alone."),
         },
         required=("entity_id", "value"),

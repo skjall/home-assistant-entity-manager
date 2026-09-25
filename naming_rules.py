@@ -25,6 +25,15 @@ Storage: ``/data/naming_rules.json``::
                 "source": "learned", "learned_from": "sensor.x", "created_at": "..."}],
      "migration": {...}}
 
+A pattern rule matches the supplied name against a regular expression instead
+of its exact wording. Integrations that put a serial number into every name -
+"Heating 12345678", "Heating 12345679" - supply as many names as they have
+devices, and an exact rule reaches only one of them. The pattern leaves the
+number open, and the target can carry it on: ``{1}`` stands for the first
+number, ``{name}`` for a named group of a hand-written expression. A pattern
+always applies within one integration: a name is only a pattern of what one
+integration writes, and "any name with a number in it" is no type at all.
+
 The legacy store ``user_type_mappings.json`` is migrated on first load; its
 backup and a report stay next to it so nothing is lost silently. Rules written
 before the filter list are migrated in place: their single scope becomes their
@@ -36,8 +45,9 @@ from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
+import re
 import shutil
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 import uuid
 
 from json_store import atomically, guarded, new_lock
@@ -47,9 +57,22 @@ from naming_display import CASE_MODES, DEFAULT_CASE, normalize_display
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 2
-KINDS = ("translation_key", "name", "device_class")
-# Lookup order: the most specific identity first.
-KIND_PRIORITY = {"translation_key": 0, "name": 1, "device_class": 2}
+KINDS = ("translation_key", "name", "pattern", "device_class")
+# Lookup order: the most specific identity first. A pattern is less specific
+# than the exact name it would also match, so a rule for that name wins.
+KIND_PRIORITY = {"translation_key": 0, "name": 1, "pattern": 2, "device_class": 3}
+
+# Kinds whose value is kept as written rather than in canonical form: a
+# translation key is an identifier, and a pattern is matched against the name
+# as supplied, spaces and all.
+VERBATIM_KINDS = ("translation_key", "pattern")
+
+# A run of digits is what a pattern learned from one name leaves open.
+_NUMBER = re.compile(r"\d+")
+_OPEN_NUMBER = re.compile(r"\(\?P<n(\d+)>\\d\+\)")
+_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+# Names are short; a longer expression is a mistake, not a pattern.
+MAX_PATTERN_LENGTH = 500
 
 # What a filter may say. A registry id names one entity and stands alone; the
 # others describe a kind of entity and may be combined.
@@ -66,6 +89,224 @@ EVERYWHERE_RANK = 8
 
 class NamingRuleError(ValueError):
     """Raised for an invalid rule."""
+
+
+def rule_key(kind: str, value: str) -> str:
+    """The form a rule of this kind stores and looks up its value in."""
+    return value if kind in VERBATIM_KINDS else canon(value)
+
+
+def pattern_of(example: str) -> Optional[Tuple[str, List[str]]]:
+    """The pattern a supplied name makes with its numbers left open, and the numbers.
+
+    None where the name carries no number: without one there is nothing to
+    leave open, and the exact rule already says everything.
+    """
+    numbers = _NUMBER.findall(example or "")
+    if not numbers:
+        return None
+    parts = _NUMBER.split(example)
+    regex = "".join(
+        re.escape(part) + (rf"(?P<n{index + 1}>\d+)" if index < len(numbers) else "")
+        for index, part in enumerate(parts)
+    )
+    return regex, numbers
+
+
+def readable_pattern(regex: str) -> str:
+    """A pattern as a person reads it: "Heating {1}" rather than its expression.
+
+    Only a pattern learned from a name reads that way; one written by hand is
+    shown as written, since anything else would claim more than it knows.
+    """
+    pieces, position = [], 0
+    for match in _OPEN_NUMBER.finditer(regex):
+        pieces.append(re.sub(r"\\(.)", r"\1", regex[position : match.start()]))
+        pieces.append("{" + match.group(1) + "}")
+        position = match.end()
+    pieces.append(re.sub(r"\\(.)", r"\1", regex[position:]))
+    text = "".join(pieces)
+    rebuilt = "".join(
+        re.escape(part) if index % 2 == 0 else rf"(?P<n{part}>\d+)"
+        for index, part in enumerate(re.split(r"\{(\d+)\}", text))
+    )
+    return text if rebuilt == regex else regex
+
+
+def target_of(typed: str, numbers: List[str]) -> str:
+    """The target a typed name makes: each number of the example becomes its placeholder.
+
+    Typing "Heat cost allocator 12345678" for "Heating 12345678" means the
+    number stays whatever it is on the next device. A number the typed name
+    does not repeat is simply not carried.
+    """
+    # One at a time, and each number only where it has not already been
+    # replaced: "Zone 10 Panel 10" holds the same number twice, and replacing
+    # every occurrence at once gave both of them the first placeholder.
+    target = typed
+    taken: List[Tuple[int, int]] = []
+    for index, number in sorted(enumerate(numbers, 1), key=lambda pair: -len(pair[1])):
+        for found in re.finditer(rf"(?<![\d{{]){re.escape(number)}(?![\d}}])", target):
+            if any(start < found.end() and found.start() < end for start, end in taken):
+                continue
+            placeholder = "{" + str(index) + "}"
+            target = target[: found.start()] + placeholder + target[found.end() :]
+            shift = len(placeholder) - (found.end() - found.start())
+            taken = [(start + shift, end + shift) if start > found.start() else (start, end) for start, end in taken]
+            taken.append((found.start(), found.start() + len(placeholder)))
+            break
+    return target
+
+
+# The syntax that opens a group: a plain "(", or one of the extensions whose
+# question mark says what kind of group it is rather than repeating anything.
+_GROUP_OPEN = re.compile(r"\(\?(?:P<\w+>|P=\w+|<[=!]|[:=!>#])")
+
+# A counted quantifier: "{4}", "{1,3}", or the open-ended "{2,}".
+_COUNT = re.compile(r"\{\d+(?P<open>,(?!\d))?(?:,\d+)?\}")
+
+
+def _refuse_runaway(regex: str) -> None:
+    """Refuse a quantifier that is applied to something that already repeats.
+
+    Or to something that can be read in more than one way: "(a|aa)+" matches
+    "aaaa" in several ways, and every one of them is tried on a name that nearly
+    matches. A group with a choice in it is refused a quantifier for the same
+    reason as one that repeats.
+
+    "(a+)+" and its kin take exponentially long on a name that nearly matches,
+    and every entity of the integration is matched against the pattern on every
+    resolution - one such expression would stop the add-on answering at all.
+    Nothing this add-on writes has that shape: a learned pattern quantifies the
+    digits it left open and nothing else.
+    """
+    quantifiers = {"*", "+", "?", "{"}
+    repeats = [False]  # whether the group at each depth already repeats
+    choices = [False]  # whether the group at each depth holds a choice
+    at = 0
+    in_class = False
+    while at < len(regex):
+        char = regex[at]
+        if char == "\\":
+            at += 2
+            continue
+        opening = _GROUP_OPEN.match(regex, at)
+        if opening and not in_class:
+            # "(?P<n1>" and its kin open a group; the question mark in them is
+            # not a quantifier and must not be read as one.
+            repeats.append(False)
+            choices.append(False)
+            at = opening.end()
+            continue
+        if in_class:
+            # Inside [...] a star is a star: "([a+])+" repeats a class of two
+            # characters, which finishes in time like any other.
+            in_class = char != "]"
+            at += 1
+            continue
+        if char == "[":
+            in_class = True
+        elif char == "(":
+            repeats.append(False)
+            choices.append(False)
+        elif char == "|":
+            choices[-1] = True
+        elif char == ")":
+            inside = repeats.pop() if len(repeats) > 1 else False
+            branched = choices.pop() if len(choices) > 1 else False
+            after = regex[at + 1 : at + 2]
+            # A bounded count after the group is no more a runaway than the
+            # group itself; an open-ended one is.
+            if after == "{":
+                counted = _COUNT.match(regex, at + 1)
+                if counted and not counted.group("open"):
+                    after = ""
+            if inside and after in quantifiers and after != "?":
+                raise NamingRuleError("A pattern may not repeat what already repeats: it would never finish")
+            # A choice inside a repeated group is the other shape that runs
+            # away: "(a|aa)+" can read one stretch of text in as many ways as
+            # there are ways to cut it up, and it tries all of them.
+            if branched and after in quantifiers and after != "?":
+                raise NamingRuleError("A pattern may not repeat a choice: it would never finish")
+            # "?" and "*" as well: "((ab)?)+" repeats a group that can match
+            # nothing, and the inner group alone said nothing about that.
+            if inside or after in {"*", "+", "{", "?"}:
+                repeats[-1] = True
+            # A group holding a choice is one to the group around it, so
+            # "((a|aa))+" is refused where "(a|aa)+" is.
+            if branched:
+                choices[-1] = True
+        elif char == "{":
+            counted = _COUNT.match(regex, at)
+            if counted:
+                # "{4}" and "{1,3}" bound what they repeat, so what they
+                # repeat finishes: "(\\d{4})+" is not the shape that runs
+                # away. An open end - "{2,}" - is, and reads as one below.
+                if counted.group("open"):
+                    repeats[-1] = True
+                at = counted.end()
+                continue
+            repeats[-1] = True
+        elif char in {"*", "+", "?"}:
+            # A question mark counts: "(Sensor ?)+" repeats a group that can
+            # match nothing, which backtracks just as badly as "(a+)+". A
+            # question mark on a group of its own is read at the ")" above and
+            # is fine - "(ab)?c" finishes in time.
+            repeats[-1] = True
+        at += 1
+
+
+def compile_pattern(regex: str) -> "re.Pattern[str]":
+    """A pattern's expression, compiled, or a NamingRuleError saying why not."""
+    if not regex or len(regex) > MAX_PATTERN_LENGTH:
+        raise NamingRuleError("A pattern needs an expression of at most 500 characters")
+    _refuse_runaway(regex)
+    try:
+        return re.compile(regex)
+    except re.error as error:
+        raise NamingRuleError(f"Not a valid pattern: {error}") from error
+
+
+def fill_placeholders(target: str, match: "re.Match[str]") -> Optional[str]:
+    """The target with every placeholder replaced by what the name had there.
+
+    None where a placeholder has nothing to put there: an expression like
+    "Zone (?P<n1>\\d*)" matches "Zone" with no number at all, and the target
+    then came out as the text around a hole. The rule does not apply to such a
+    name rather than renaming it to half of what it says.
+    """
+    missing = False
+
+    def value(found: "re.Match[str]") -> str:
+        nonlocal missing
+        got = _group(match, found.group(1))
+        if not got:
+            missing = True
+            return ""
+        return got
+
+    filled = _PLACEHOLDER.sub(value, target)
+    return None if missing else filled
+
+
+def _group(match: "re.Match[str]", key: str) -> Optional[str]:
+    """A placeholder's group: by name, as a learned number, or by position."""
+    groups = match.re.groupindex
+    if key in groups:
+        return match.group(key)
+    if f"n{key}" in groups:
+        return match.group(f"n{key}")
+    if key.isdigit() and 0 < int(key) <= match.re.groups:
+        return match.group(int(key))
+    return None
+
+
+def _known_placeholder(pattern: "re.Pattern[str]", key: str) -> bool:
+    return (
+        key in pattern.groupindex
+        or f"n{key}" in pattern.groupindex
+        or (key.isdigit() and 0 < int(key) <= pattern.groups)
+    )
 
 
 def _now() -> str:
@@ -168,6 +409,8 @@ class NamingRules:
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._rule_index = None
         self._by_entity = None
+        self._patterns: Optional[List[Tuple[Dict[str, Any], "re.Pattern[str]"]]] = None
+        self._patterns_keyed: Optional[Dict[str, "re.Pattern[str]"]] = None
         self.data = self._load()
 
     # ------------------------------------------------------------------ storage
@@ -177,6 +420,7 @@ class NamingRules:
             "version": SCHEMA_VERSION,
             "language": self.default_language,
             "display_case": DEFAULT_CASE,
+            "pattern_rules": False,
             "rules": [],
             "migration": None,
         }
@@ -192,6 +436,7 @@ class NamingRules:
                 data.setdefault("language", self.default_language)
                 data.setdefault("migration", None)
                 data.setdefault("display_case", DEFAULT_CASE)
+                data.setdefault("pattern_rules", False)
                 self._migrate_scopes_to_filters(data)
                 return data
             except (OSError, json.JSONDecodeError, NamingRuleError) as error:
@@ -233,6 +478,8 @@ class NamingRules:
     def _forget_index(self) -> None:
         self._rule_index = None
         self._by_entity = None
+        self._patterns = None
+        self._patterns_keyed = None
 
     @guarded
     def save(self) -> None:
@@ -402,6 +649,8 @@ class NamingRules:
             raise NamingRuleError(f"Unknown rule kind: {kind}")
         if not value:
             raise NamingRuleError("A rule needs a match value")
+        if kind == "pattern":
+            compile_pattern(value)
         clean_targets = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
         if not clean_targets:
             raise NamingRuleError("A rule needs at least one target")
@@ -435,6 +684,20 @@ class NamingRules:
     def display_case(self) -> str:
         return self.data.get("display_case") or DEFAULT_CASE
 
+    @property
+    def pattern_rules(self) -> bool:
+        """Whether pattern rules can be written from the UI.
+
+        Only the writing: a pattern rule already stored applies either way,
+        or switching the setting off would silently rename entities back.
+        """
+        return bool(self.data.get("pattern_rules"))
+
+    @guarded
+    def set_pattern_rules(self, enabled: bool) -> None:
+        self.data["pattern_rules"] = bool(enabled)
+        self.save()
+
     @guarded
     def set_display_case(self, mode: str) -> None:
         if mode not in CASE_MODES:
@@ -445,7 +708,7 @@ class NamingRules:
     def is_redundant(self, rule: Dict[str, Any], language: str, builtin: Optional[str] = None) -> bool:
         """A rule whose target is what the display spelling or the built-in default yields anyway."""
         target = rule["targets"].get(language)
-        if not target:
+        if not target or rule["match"]["kind"] == "pattern":
             return False
         if builtin is not None and target == builtin:
             return True
@@ -574,7 +837,28 @@ class NamingRules:
                 return other
         return None
 
+    @staticmethod
+    def check_pattern(rule: Mapping[str, Any]) -> None:
+        """Refuse a pattern rule that could not be applied as meant.
+
+        It has to name the integration it is about, and every placeholder in
+        its targets has to be something the expression captures - otherwise
+        the name would come out with a hole in it.
+        """
+        match = rule["match"]
+        if match["kind"] != "pattern":
+            return
+        pattern = compile_pattern(match["value"])
+        filters = rule.get("filters") or []
+        if not filters or any(not one.get("integration") or one.get("registry_id") for one in filters):
+            raise NamingRuleError("A pattern rule applies within an integration")
+        for target in rule["targets"].values():
+            for key in _PLACEHOLDER.findall(target):
+                if not _known_placeholder(pattern, key):
+                    raise NamingRuleError(f"The pattern captures nothing for {{{key}}}")
+
     def _refuse_collision(self, rule: Mapping[str, Any]) -> None:
+        self.check_pattern(rule)
         other = self.claimed_by(rule)
         if other is not None:
             raise NamingRuleError(f"Rule {other['id']} already covers one of those filters")
@@ -657,13 +941,17 @@ class NamingRules:
     ) -> Dict[str, Any]:
         """What a rule matched on, for a reader: its type and the filter that caught this entity."""
         one = cls.matching_filter(rule, integration, model, domain)
-        return {
-            **rule["match"],
+        match = rule["match"]
+        caught = {
+            **match,
             "integration": one.get("integration"),
             "model": one.get("model"),
             "domain": one.get("domain"),
             "filters": [dict(each) for each in rule.get("filters") or []],
         }
+        if match["kind"] == "pattern":
+            caught["label"] = readable_pattern(match["value"])
+        return caught
 
     def find(
         self,
@@ -677,7 +965,9 @@ class NamingRules:
         """Return the rule for ``kind``/``value``, the narrowest scope first."""
         if not value:
             return None
-        key = value if kind == "translation_key" else canon(value)
+        if kind == "pattern":
+            return self._find_pattern(value, integration, language, model, domain)
+        key = rule_key(kind, value)
         if not key:
             return None
         for scope_integration, scope_model, scope_domain in self._scopes(
@@ -687,6 +977,118 @@ class NamingRules:
             if rule and rule["targets"].get(language):
                 return rule
         return None
+
+    def _pattern_rules(self) -> List[Tuple[Dict[str, Any], "re.Pattern[str]"]]:
+        """Pattern rules with their compiled expressions; one that no longer compiles is left out."""
+        if self._patterns is None:
+            compiled = []
+            for rule in self.rules:
+                if rule["match"]["kind"] != "pattern":
+                    continue
+                try:
+                    compiled.append((rule, compile_pattern(rule["match"]["value"])))
+                except NamingRuleError as error:
+                    logger.warning("Pattern rule %s is skipped: %s", rule["id"], error)
+            self._patterns = compiled
+        return self._patterns
+
+    def _patterns_by_id(self) -> Dict[str, "re.Pattern[str]"]:
+        """The same compiled expressions, by rule id.
+
+        Built with them and thrown away with them - ``_forget_index`` drops both,
+        so a rewritten expression is compiled again rather than answered from
+        here.
+        """
+        if self._patterns_keyed is None:
+            self._patterns_keyed = {rule["id"]: pattern for rule, pattern in self._pattern_rules()}
+        return self._patterns_keyed
+
+    def _find_pattern(
+        self,
+        name: str,
+        integration: Optional[str],
+        language: str,
+        model: Optional[str],
+        domain: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        """The pattern rule for a supplied name, or None.
+
+        Patterns cannot be looked up, only tried. The narrowest filter decides
+        as it does for every rule; two patterns that match one name at the same
+        reach are a contradiction the user has to settle, so neither of those
+        applies - and the decision falls to the next rule that reaches less
+        far, which says something the user wrote and nothing contradicts.
+        """
+        found: List[Tuple[int, Dict[str, Any]]] = []
+        for rule, pattern in self._pattern_rules():
+            if not rule["targets"].get(language):
+                continue
+            one = self.matching_filter(rule, integration, model, domain)
+            if not one:
+                continue
+            match = pattern.fullmatch(name)
+            # Matching is not enough: a placeholder the name has nothing for
+            # leaves the target with a hole in it, and the rule then renamed
+            # the entity to its own template, "{1}" and all.
+            if not match or fill_placeholders(rule["targets"][language], match) is None:
+                continue
+            found.append((filter_rank(one), rule))
+        if not found:
+            return None
+        found.sort(key=lambda pair: pair[0])
+        at = 0
+        while at < len(found):
+            reach = found[at][0]
+            # All of them, not the first two: a third rule written to settle
+            # the tie between the other two joined it without a word. Counted
+            # from here on, since the list is sorted and what came before
+            # reaches further.
+            tied = [rule for rank, rule in found[at:] if rank == reach]
+            if len(tied) == 1:
+                return tied[0]
+            logger.warning(
+                "Pattern rules %s all match %r at the same reach; none of those applies",
+                ", ".join(rule["id"] for rule in tied),
+                name,
+            )
+            at += len(tied)
+        return None
+
+    def render(self, rule: Mapping[str, Any], name: str, language: str) -> str:
+        """What a rule makes of a supplied name: its target, placeholders filled."""
+        target = rule["targets"].get(language) or ""
+        if rule["match"]["kind"] != "pattern":
+            return target
+        # Out of what was compiled for the rules, so a home where every entity
+        # matches one pattern does not compile it once per entity.
+        # Nothing rather than the target: a target that still holds "{1}" is
+        # not a name, and it was written to Home Assistant as one wherever the
+        # expression could not be read or did not match.
+        unfilled = "" if _PLACEHOLDER.search(target) else target
+        pattern = self._compiled_pattern(rule)
+        if pattern is None:
+            return unfilled
+        match = pattern.fullmatch(name or "")
+        if not match:
+            return unfilled
+        filled = fill_placeholders(target, match)
+        # Nothing rather than the template: the target with its placeholders
+        # still in it is not a name, and it was written to Home Assistant as
+        # one.
+        return filled.strip() if filled is not None else ""
+
+    def _compiled_pattern(self, rule: Mapping[str, Any]) -> Optional["re.Pattern[str]"]:
+        """The compiled expression of a stored pattern rule, or of a passing one."""
+        # Looked up by id: render is asked once for every entity of the home, and
+        # walking the stored patterns for each of them was a scan per entity per
+        # rule where one lookup does.
+        kept = self._patterns_by_id().get(rule.get("id") or "")
+        if kept is not None:
+            return kept
+        try:
+            return compile_pattern(rule["match"]["value"])
+        except NamingRuleError:
+            return None
 
     @guarded
     def upsert(
@@ -702,7 +1104,7 @@ class NamingRules:
         domain: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create or update the rule for one match, setting its target for ``language``."""
-        key = value if kind == "translation_key" else canon(value)
+        key = rule_key(kind, value)
         rule = self._matching(kind, key, integration or None, model or None, domain or None)
         if rule is None:
             rule = self._make_rule(
@@ -713,7 +1115,12 @@ class NamingRules:
         else:
             if not target.strip():
                 raise NamingRuleError("A rule needs a target")
-            rule["targets"][language] = target.strip()
+            # Judged as what it would become, and written only if it passes:
+            # writing first left a refused target standing in the rule, and the
+            # next save of anything put it on disk.
+            wanted = {**rule["targets"], language: target.strip()}
+            self.check_pattern({**rule, "targets": wanted})
+            rule["targets"] = wanted
             rule["updated_at"] = _now()
             if learned_from:
                 rule["learned_from"] = learned_from
@@ -729,7 +1136,7 @@ class NamingRules:
         second place the same wording is wanted belongs in that list rather than
         in a second rule beside it.
         """
-        key = value if kind == "translation_key" else canon(value)
+        key = rule_key(kind, value)
         wanted = (target or "").strip()
         for rule in self.rules:
             if rule["match"]["kind"] != kind or rule["match"]["value"] != key:
@@ -778,7 +1185,7 @@ class NamingRules:
         if rule is None:
             rule = self._make_rule(
                 kind,
-                value if kind == "translation_key" else canon(value),
+                rule_key(kind, value),
                 None,
                 {language: target},
                 source=source,
@@ -834,6 +1241,10 @@ class NamingRules:
         held = self.claimed_by(wanting)
         if held is None or held["match"] != wanting["match"]:
             return None
+        # A pattern's new word is judged before it is written, as everywhere
+        # else: a target the expression captures nothing for would otherwise
+        # stand in the rule and be saved with the next change to any rule.
+        self.check_pattern({**held, "targets": {**held["targets"], language: target}})
         others = [each for each in (held.get("filters") or []) if each != one]
         if not others:
             held["targets"][language] = target
@@ -843,7 +1254,9 @@ class NamingRules:
         # one leaves and takes the new word with it.
         held["filters"] = others
         held["updated_at"] = _now()
-        self.rules.append(dict(wanting))
+        leaving = dict(wanting)
+        self.check_pattern(leaving)
+        self.rules.append(leaving)
         return self.rules[-1]
 
     @guarded
@@ -929,6 +1342,10 @@ class NamingRules:
             clean = {lang: text.strip() for lang, text in targets.items() if isinstance(text, str) and text.strip()}
             if not clean:
                 raise NamingRuleError("A rule needs at least one target")
+            # Judged as what it would become, and written only if it passes: a
+            # refused target that was written first stood in the rule, and the
+            # next save of anything else put it on disk.
+            self.check_pattern({**rule, "targets": clean})
             rule["targets"] = clean
 
         if filters is not ...:

@@ -132,7 +132,9 @@
     "supplied_stale": "El nombre es el título de la entrada del auxiliar: «{supplied}»: al aplicar también se reescribe el título.",
     "scope_domain_hint": "Solo las {count} entidades {domain} en dispositivos del tipo {model}.",
     "keep_current_hint": "Poner «{name}» en el campo: así se llama hoy",
-    "was_already_gone": "La entidad ya estaba eliminada: la lista se ha puesto al día."
+    "was_already_gone": "La entidad ya estaba eliminada: la lista se ha puesto al día.",
+    "scope_pattern_hint": "Para las {count} entidades de {integration} llamadas «{pattern}», sea cual sea el número.",
+    "explain_rule_pattern": "Todas las entidades «{pattern}» de {integration} se llaman así para ti – aquí «{value}»"
   },
   "virtual_devices": {
     "automations": "Automatizaciones",
@@ -204,7 +206,8 @@
     "rules_saved": "Reglas guardadas",
     "nothing_to_apply": "Nada que aplicar",
     "name_has_no_place": "La plantilla del nombre del dispositivo no tiene lugar para un nombre propio, así que el nombre escrito no se puede guardar",
-    "rename_running": "Hay un renombrado en curso: espera un momento"
+    "rename_running": "Hay un renombrado en curso: espera un momento",
+    "device_name_first": "Aplica primero el nombre del dispositivo: las entidades lo siguen"
   },
   "dependencies": {
     "title": "Dependencias de",
@@ -566,7 +569,12 @@
     "caught_name": "nombre entregado",
     "caught_device_class": "clase de dispositivo",
     "caught_none": "—",
-    "reach_open_device": "Abrir «{device}» en Home Assistant"
+    "reach_open_device": "Abrir «{device}» en Home Assistant",
+    "pattern_section": "Reglas con patrón",
+    "pattern_hint": "Algunas integraciones ponen un número de serie en cada nombre, como «Calefacción 12345678». Una regla con patrón deja el número abierto y así se aplica a todos los dispositivos de esa integración. Las reglas con patrón existentes siguen aplicándose aunque esto esté desactivado.",
+    "pattern_toggle": "Ofrecer reglas con patrón al renombrar",
+    "pick_pattern": "Patrón",
+    "caught_pattern": "patrón"
   },
   "jobs": {
     "rename_device": "Renombrando dispositivo",

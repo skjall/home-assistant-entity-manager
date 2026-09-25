@@ -132,7 +132,9 @@
     "supplied_stale": "The name is the helper’s entry title: “{supplied}” — applying rewrites the title too.",
     "scope_domain_hint": "Only the {count} {domain} entities on devices of type {model}.",
     "keep_current_hint": "Put “{name}” in the field – what it is called today",
-    "was_already_gone": "The entity was already deleted — the list has caught up."
+    "was_already_gone": "The entity was already deleted — the list has caught up.",
+    "scope_pattern_hint": "For all {count} entities from {integration} named “{pattern}”, whatever the number.",
+    "explain_rule_pattern": "All “{pattern}” entities from {integration} are named this way for you – here “{value}”"
   },
   "virtual_devices": {
     "automations": "Automations",
@@ -204,7 +206,8 @@
     "rules_saved": "Rules saved",
     "nothing_to_apply": "Nothing to apply",
     "name_has_no_place": "The device-name template has no place for a name of its own, so the typed name cannot be written",
-    "rename_running": "A rename is running - please wait"
+    "rename_running": "A rename is running - please wait",
+    "device_name_first": "Apply the device name first - the entities follow it"
   },
   "dependencies": {
     "title": "Dependencies for",
@@ -546,7 +549,12 @@
     "caught_name": "supplied name",
     "caught_device_class": "device class",
     "caught_none": "—",
-    "reach_open_device": "Open “{device}” in Home Assistant"
+    "reach_open_device": "Open “{device}” in Home Assistant",
+    "pattern_section": "Pattern rules",
+    "pattern_hint": "Some integrations put a serial number into every name, such as “Heating 12345678”. A pattern rule leaves the number open and so applies to every device of that integration. Existing pattern rules keep applying when this is switched off.",
+    "pattern_toggle": "Offer pattern rules when renaming",
+    "pick_pattern": "Pattern",
+    "caught_pattern": "pattern"
   },
   "type_mappings": {
     "light": "Light",
