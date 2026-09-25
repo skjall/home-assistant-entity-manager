@@ -1254,6 +1254,26 @@
             </div>
         </div>
 
+        <!-- Pattern rules are for the few integrations that put a serial number
+             into every name. Off by default so the scope choice stays as short
+             as it is for everyone else. -->
+        <div class="mapping-section" style="margin-bottom: 24px;" x-show="section === 'naming'">
+            <div class="section-header">
+                <h2>
+                    <i class="ri-hashtag"></i>
+                    <span x-text="t('settings.pattern_section')">Pattern rules</span>
+                </h2>
+            </div>
+            <div style="padding: 20px;">
+                <p style="color: var(--color-gray-500); font-size: 0.9rem; margin-bottom: 12px;"
+                   x-text="t('settings.pattern_hint')"></p>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" x-model="patternRules" @change="changePatternRules()">
+                    <span x-text="t('settings.pattern_toggle')">Offer pattern rules</span>
+                </label>
+            </div>
+        </div>
+
         <!-- Naming templates -->
         <div class="mapping-section" style="margin-bottom: 24px;" x-show="section === 'naming'">
             <div class="section-header">
@@ -1446,12 +1466,12 @@
                             <!-- What the rule says, as one line: the word that comes
                                  in, the word that goes out. -->
                             <div class="rule-says" x-show="editingKey !== row.id">
-                                <span class="rule-from" x-text="row.key"></span>
+                                <span class="rule-from" x-text="row.shown || row.key"></span>
                                 <i class="ri-arrow-right-line rule-arrow"></i>
                                 <span class="rule-to" x-text="row.isRule ? row.value : row.system_default"></span>
                             </div>
                             <div class="rule-says" x-show="editingKey === row.id">
-                                <span class="rule-from" x-text="row.key"></span>
+                                <span class="rule-from" x-text="row.shown || row.key"></span>
                                 <i class="ri-arrow-right-line rule-arrow"></i>
                                 <input type="text" class="edit-input" style="flex: 1 1 200px;" x-model="editValue"
                                        @keydown.enter="saveEdit(row)" @keydown.escape="cancelEdit()">
@@ -2143,6 +2163,7 @@
                 picked: { status: [], reach: [], kind: [], integration: [], model: [] },
                 highlightRuleId: null,
                 displayCase: 'first_word',
+                patternRules: false,
                 editingKey: null,
                 reachOpen: null,   // the rule whose entities are shown
                 reachRows: [],
@@ -2263,7 +2284,7 @@
                 focusHighlightedRule() {
                     const rule = this.rules.find(r => r.id === this.highlightRuleId);
                     if (!rule) return;
-                    this.searchQuery = rule.match?.value || '';
+                    this.searchQuery = rule.label || rule.match?.value || '';
                     this.filterRules();
                     this.$nextTick(() => {
                         const row = document.querySelector('.row-highlight');
@@ -2280,11 +2301,33 @@
                     await this.loadMappings();
                 },
 
+                async changePatternRules() {
+                    // The switch shows what the server holds. A write that did
+                    // not arrive left it showing the opposite until the page
+                    // was loaded again, when it silently went back.
+                    const wanted = this.patternRules;
+                    try {
+                        const response = await fetch('api/naming/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ pattern_rules: wanted })
+                        });
+                        if (!response.ok) throw new Error(await response.text());
+                        this.namingError = false;
+                        this.namingMessage = '';
+                    } catch (error) {
+                        this.patternRules = !wanted;
+                        this.namingError = true;
+                        this.namingMessage = error.message;
+                    }
+                },
+
                 // The language comes from Home Assistant; the page only shows it.
                 async syncRuleLanguage() {
                     try {
                         const settings = await (await fetch('api/naming/settings')).json();
                         this.displayCase = settings.display_case || 'first_word';
+                        this.patternRules = !!settings.pattern_rules;
                         this.language = settings.language || this.language;
                     } catch (e) {
                         console.error('Failed to read the naming settings', e);
@@ -2942,6 +2985,8 @@
                         id: rule.id,
                         isRule: true,
                         key: rule.match.value,
+                        // A pattern reads as the name it stands for, numbers open.
+                        shown: rule.label || rule.match.value,
                         kind: rule.match.kind,
                         filters: rule.filters || [],
                         entities: rule.entities || [],
@@ -2955,7 +3000,7 @@
                     const covered = new Set(rows.map(r => r.key));
                     for (const entry of this.systemRules) {
                         if (covered.has(entry.key)) continue;
-                        rows.push({ id: 'sys:' + entry.key, isRule: false, key: entry.key, kind: 'name',
+                        rows.push({ id: 'sys:' + entry.key, isRule: false, key: entry.key, shown: entry.key, kind: 'name',
                                     filters: [], entities: [], value: '', system_default: entry.value,
                                     affected: 0, updated: '' });
                     }
@@ -3036,6 +3081,7 @@
                         const q = this.searchQuery.toLowerCase();
                         result = result.filter(r =>
                             r.key.toLowerCase().includes(q) ||
+                            (r.shown || '').toLowerCase().includes(q) ||
                             (r.value && r.value.toLowerCase().includes(q)) ||
                             (r.system_default && r.system_default.toLowerCase().includes(q)) ||
                             r.entities.some(e => (e.entity_id || '').toLowerCase().includes(q))
@@ -3063,6 +3109,7 @@
                         name:            row => row.kind === 'name',
                         device_class:    row => row.kind === 'device_class',
                         translation_key: row => row.kind === 'translation_key',
+                        pattern:         row => row.kind === 'pattern',
                     },
                 },
 
@@ -3115,8 +3162,9 @@
                               { user: 'ri-user-line', no_effect: 'ri-eye-off-line', system: 'ri-shield-line' }),
                         fixed('reach', ['everywhere', 'narrowed', 'entity'],
                               { everywhere: 'ri-global-line', narrowed: 'ri-filter-line', entity: 'ri-focus-3-line' }),
-                        fixed('kind', ['name', 'device_class', 'translation_key'],
-                              { name: 'ri-text', device_class: 'ri-shapes-line', translation_key: 'ri-translate-2' }),
+                        fixed('kind', ['name', 'device_class', 'translation_key', 'pattern'],
+                              { name: 'ri-text', device_class: 'ri-shapes-line', translation_key: 'ri-translate-2',
+                                pattern: 'ri-hashtag' }),
                         { key: 'integration', label: this.t('settings.filter_integration'), options: seen('integration') },
                         { key: 'model', label: this.t('settings.filter_model'), options: seen('model') },
                     ];

@@ -31,6 +31,7 @@
     "assign_area": "Bereich zuweisen",
     "select_area": "Bereich wählen...",
     "area_assigned": "Gerät wurde Bereich zugewiesen",
+    "area_cleared": "Gerät aus seinem Bereich genommen",
     "open_in_ha": "Bereich in Home Assistant öffnen"
   },
   "summary": {
@@ -131,7 +132,9 @@
     "supplied_stale": "Der Name steht so im Titel des Helfers: „{supplied}“ – „Übernehmen“ schreibt den Titel mit um.",
     "scope_domain_hint": "Nur für die {count} {domain}-Entitäten an Geräten vom Typ {model}.",
     "keep_current_hint": "„{name}“ übernehmen – so heißt sie heute",
-    "was_already_gone": "Die Entität war schon gelöscht — die Liste ist jetzt gleichauf."
+    "was_already_gone": "Die Entität war schon gelöscht — die Liste ist jetzt gleichauf.",
+    "scope_pattern_hint": "Für alle {count} Entitäten von {integration}, deren Name „{pattern}“ lautet – die Nummer darf jede sein.",
+    "explain_rule_pattern": "Alle „{pattern}“-Entitäten von {integration} heißen bei dir so – hier „{value}“"
   },
   "virtual_devices": {
     "automations": "Automatisierungen",
@@ -201,7 +204,8 @@
     "entity_marked_for_acceptance": "Entität zum Akzeptieren markiert",
     "core_starting": "Home Assistant startet gerade. Sobald es antwortet, geht es weiter.",
     "rules_saved": "Regeln gespeichert",
-    "nothing_to_apply": "Nichts zu übernehmen"
+    "nothing_to_apply": "Nichts zu übernehmen",
+    "device_name_first": "Erst den Gerätenamen übernehmen - die Entities folgen ihm"
   },
   "dependencies": {
     "title": "Abhängigkeiten für",
@@ -229,6 +233,7 @@
     "new_name": "Neuer Name",
     "open_details": "Gerätedetails öffnen",
     "base_name_label": "Geräte-Basisname (ohne Bereichs-Präfix)",
+    "area_label": "Bereich",
     "name_conflict": "Ein Gerät mit diesem Namen existiert bereits",
     "z2m_drift_label": "Z2M-Name weicht ab",
     "open_in_ha": "Gerät in Home Assistant öffnen",
@@ -242,7 +247,10 @@
     "enabling": "Wird aktiviert…",
     "enabled": "Gerät aktiviert",
     "enable_it_first": "Das Gerät ist deaktiviert – erst das Gerät aktivieren.",
-    "id_conflict": "Dieser Name nähme eine Entitäts-ID, die schon vergeben ist: {id}"
+    "id_conflict": "Dieser Name nähme eine Entitäts-ID, die schon vergeben ist: {id}",
+    "name_already_correct": "Das Gerät heißt bereits so",
+    "gone": "Dieses Gerät gibt es in Home Assistant nicht mehr",
+    "moved_not_renamed": "Das Gerät wurde verschoben, aber nicht umbenannt: {error}"
   },
   "units": {
     "entities": "Entitäten",
@@ -539,7 +547,12 @@
     "caught_name": "gelieferter Name",
     "caught_device_class": "Geräteklasse",
     "caught_none": "—",
-    "reach_open_device": "„{device}“ in Home Assistant öffnen"
+    "reach_open_device": "„{device}“ in Home Assistant öffnen",
+    "pattern_section": "Muster-Regeln",
+    "pattern_hint": "Manche Integrationen schreiben eine Seriennummer in jeden Namen, etwa „Heizung 12345678“. Eine Muster-Regel lässt die Nummer offen und gilt so für alle Geräte dieser Integration. Bestehende Muster-Regeln wirken auch, wenn der Schalter aus ist.",
+    "pattern_toggle": "Muster-Regeln beim Umbenennen anbieten",
+    "pick_pattern": "Muster",
+    "caught_pattern": "Muster"
   },
   "type_mappings": {
     "light": "Licht",
