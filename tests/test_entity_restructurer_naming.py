@@ -390,3 +390,18 @@ def test_an_entity_with_an_area_of_its_own_stays_where_it_was_put(restructurer):
     context = restructurer.build_naming_context("sensor.existing_id", {}, pending_area_id="bedroom")
 
     assert context["area"] == "Bathroom"
+
+
+def test_a_move_takes_the_old_area_out_of_the_name(restructurer):
+    """The integration wrote the area into the name, and the move changes it.
+
+    Only the area being asked about was taken off, so the old one stayed in the
+    middle: "Bedroom Controller Living room Temperature".
+    """
+    restructurer.areas["bedroom"] = {"area_id": "bedroom", "name": "Bedroom", "floor_id": "ground"}
+    restructurer.entities["sensor.existing_id"]["original_name"] = "Living room Temperature"
+
+    context = restructurer.build_naming_context("sensor.existing_id", {}, pending_area_id="bedroom")
+
+    assert context["area"] == "Bedroom"
+    assert context["entity"] == "Temperature"

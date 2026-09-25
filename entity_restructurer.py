@@ -455,11 +455,10 @@ class EntityRestructurer:
         # that only the form has.
         # An area asked about that is the one the entity is in makes the answer
         # the real one, which the list may keep.
-        asking_only = (
-            ignore_exception
-            or pending_device_name is not None
-            or (pending_area_id is not None and follows_device and pending_area_id != stored_area)
-        )
+        # Asked of what came out, not of how it was chosen: the two were
+        # worked out from the same question in two places, and a change to one
+        # of them would have had hypothetical answers kept as real ones.
+        asking_only = ignore_exception or pending_device_name is not None or area_id != stored_area
         previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(
             entity_id,
@@ -470,6 +469,12 @@ class EntityRestructurer:
             (
                 raw_device_name,
                 partial_context["area"],
+                # The area the name carries is the one it was written under,
+                # which is not the one being asked about while a move is
+                # staged: taken from the answer alone, the old area stayed in
+                # the name and the row read "Bedroom Controller Kitchen
+                # Temperature".
+                self.areas.get(stored_area, {}).get("name", "") if stored_area else "",
                 # Which is the name the device is about to be given where
                 # one was typed, so it is in here once, not twice.
                 device_name,
@@ -578,9 +583,15 @@ class EntityRestructurer:
             context = self.build_naming_context(entity_id, {})
         device = self.devices.get(registry.get("device_id") or "", {})
         raw_device_name = device.get("name_by_user") or device.get("name") or device.get("model") or ""
+        # The area the name carries is the one it was written under, which is
+        # not the one being asked about while a move is staged: taken from the
+        # context alone, the old area stayed in the name and the row read
+        # "Bedroom Controller Kitchen Temperature".
+        under = registry.get("area_id") or device.get("area_id") or ""
         prefixes = (
             raw_device_name,
             context.get("area", ""),
+            self.areas.get(under, {}).get("name", "") if under else "",
             context.get("device", ""),
             device.get("name", ""),
             device.get("model", ""),

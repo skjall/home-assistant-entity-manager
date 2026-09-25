@@ -5070,10 +5070,17 @@
                 // case aside. Nothing to take off means the text as it is.
                 withoutLeading(text, prefix) {
                     if (!text || !prefix) return text || '';
-                    const lower = text.toLowerCase();
                     const head = prefix.toLowerCase();
-                    if (lower === head) return '';
-                    if (lower.startsWith(head + ' ')) return text.slice(prefix.length).trim();
+                    if (text.toLowerCase() === head) return '';
+                    // Compared over as many characters as are cut off, not over
+                    // the lower-cased text: "İ" lower-cases into two characters,
+                    // so a name starting with it was cut one short and kept a
+                    // stray combining dot in front.
+                    if (text.length > prefix.length
+                        && text.slice(0, prefix.length).toLowerCase() === head
+                        && text[prefix.length] === ' ') {
+                        return text.slice(prefix.length).trim();
+                    }
                     return text;
                 },
 
@@ -5156,7 +5163,11 @@
                                 || this.composeEntityId(entity, slugs[i]);
                             // The name carries the number too, or the row would
                             // read as one thing and be written as another.
-                            if (answer.names && answer.names[i]) entity._previewName = answer.names[i];
+                            // Empty is an answer - a name of area and device
+                            // with no type part - and only "nothing at all" is
+                            // not. Skipped as falsy, the row kept the old name
+                            // beside the new id.
+                            if (answer.names && answer.names[i] != null) entity._previewName = answer.names[i];
                         });
                         // Force Alpine to re-evaluate dependent expressions
                         this.previewVersion++;

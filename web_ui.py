@@ -588,9 +588,9 @@ def normalize_names():
             if resolved is not None and len(resolved) == len(proposals):
                 ids = [None] * len(names)
                 written = [None] * len(names)
-                for place, (_, new_id, name) in zip(places, resolved):
+                for place, (_, new_id, numbered) in zip(places, resolved):
                     ids[place] = new_id
-                    written[place] = name
+                    written[place] = numbered
                 answer["ids"] = ids
                 answer["names"] = written
     return jsonify(answer)
