@@ -368,20 +368,42 @@ class EntityRestructurer:
         return "sensor"  # Default
 
     def build_naming_context(
-        self, entity_id: str, state_info: Dict[str, Any], ignore_exception: bool = False
+        self,
+        entity_id: str,
+        state_info: Dict[str, Any],
+        ignore_exception: bool = False,
+        pending_device_name: Optional[str] = None,
+        pending_area_id: Optional[str] = None,
     ) -> Dict[str, str]:
         """Build the complete template context for an entity.
 
         ``ignore_exception`` answers what the entity would be called if it had
         no exception - the one question needed to tell an exception that still
         changes something from one a rule has meanwhile caught up with.
+
+        ``pending_device_name`` and ``pending_area_id`` answer the same question
+        for a device that is in the middle of being edited: they are what the
+        panel holds and the registry does not yet, whether because the write is
+        still to come or because it has not been read back. Until then the
+        registry answers with what the integration supplied - for a UniFi access
+        point its MAC address, and whatever area the device was in - and that
+        answer is what a confirmed rename would write.
+
+        ``pending_area_id`` distinguishes "nothing picked" from "picked, no
+        area": ``None`` leaves the stored area alone, ``""`` takes it away.
         """
         domain, _, object_id = entity_id.partition(".")
         entity_reg = self.entities.get(entity_id, {})
         device_id = entity_reg.get("device_id") or ""
         device = self.devices.get(device_id, {}) if device_id else {}
 
-        area_id = entity_reg.get("area_id") or device.get("area_id") or ""
+        stored_area = entity_reg.get("area_id") or device.get("area_id") or ""
+        # An entity with an area of its own is not moved by its device moving:
+        # Home Assistant writes the move onto the device, and the entity stays
+        # where it was put. Answering for it under the area the panel holds had
+        # the preview disagree with what the rename then wrote.
+        follows_device = not entity_reg.get("area_id")
+        area_id = pending_area_id if pending_area_id is not None and follows_device else stored_area
         area = self.areas.get(area_id, {}) if area_id else {}
         floor_id = area.get("floor_id") or ""
         floor = self.floors.get(floor_id, {}) if floor_id else {}
@@ -419,11 +441,25 @@ class EntityRestructurer:
             "model": device.get("model", ""),
             "integration": integration,
         }
-        device_name = self._base_device_name(raw_device_name, partial_context)
+        if pending_device_name is not None:
+            # What was typed is already a base name - it is the field the
+            # interface strips the area prefix out of - so it goes in as it is.
+            device_name = pending_device_name
+        else:
+            device_name = self._base_device_name(raw_device_name, partial_context)
         partial_context["device"] = device_name
         # A hypothetical answer must not replace the real one that the entity
-        # list reads back out of last_resolutions.
-        previous = self.last_resolutions.get(entity_id) if ignore_exception else None
+        # list reads back out of last_resolutions. A name asked about for a
+        # device name or an area that is not written yet is hypothetical in the
+        # same way: left behind, it had the list saying a rule decided a name
+        # that only the form has.
+        # An area asked about that is the one the entity is in makes the answer
+        # the real one, which the list may keep.
+        # Asked of what came out, not of how it was chosen: the two were
+        # worked out from the same question in two places, and a change to one
+        # of them would have had hypothetical answers kept as real ones.
+        asking_only = ignore_exception or pending_device_name is not None or area_id != stored_area
+        previous = self.last_resolutions.get(entity_id) if asking_only else None
         partial_context["entity"] = self._base_entity_name(
             entity_id,
             entity_reg,
@@ -433,6 +469,14 @@ class EntityRestructurer:
             (
                 raw_device_name,
                 partial_context["area"],
+                # The area the name carries is the one it was written under,
+                # which is not the one being asked about while a move is
+                # staged: taken from the answer alone, the old area stayed in
+                # the name and the row read "Bedroom Controller Kitchen
+                # Temperature".
+                self.areas.get(stored_area, {}).get("name", "") if stored_area else "",
+                # Which is the name the device is about to be given where
+                # one was typed, so it is in here once, not twice.
                 device_name,
                 # An integration may still write the name the device had when it
                 # was added, or its model, into every entity name.
@@ -441,7 +485,7 @@ class EntityRestructurer:
             ),
             partial_context,
         )
-        if ignore_exception:
+        if asking_only:
             if previous is None:
                 self.last_resolutions.pop(entity_id, None)
             else:
@@ -539,9 +583,15 @@ class EntityRestructurer:
             context = self.build_naming_context(entity_id, {})
         device = self.devices.get(registry.get("device_id") or "", {})
         raw_device_name = device.get("name_by_user") or device.get("name") or device.get("model") or ""
+        # The area the name carries is the one it was written under, which is
+        # not the one being asked about while a move is staged: taken from the
+        # context alone, the old area stayed in the name and the row read
+        # "Bedroom Controller Kitchen Temperature".
+        under = registry.get("area_id") or device.get("area_id") or ""
         prefixes = (
             raw_device_name,
             context.get("area", ""),
+            self.areas.get(under, {}).get("name", "") if under else "",
             context.get("device", ""),
             device.get("name", ""),
             device.get("model", ""),
@@ -1258,10 +1308,21 @@ class EntityRestructurer:
         entity_id: str,
         state_info: Dict[str, Any],
         entity_name: Optional[str] = None,
+        pending_device_name: Optional[str] = None,
+        pending_area_id: Optional[str] = None,
     ) -> Tuple[str, str]:
-        """Generate an entity ID and entity-registry name from active templates."""
+        """Generate an entity ID and entity-registry name from active templates.
+
+        ``pending_device_name`` and ``pending_area_id`` are what the panel holds
+        but has not applied; see ``build_naming_context``.
+        """
         domain = entity_id.split(".", 1)[0]
-        context = self.build_naming_context(entity_id, state_info)
+        context = self.build_naming_context(
+            entity_id,
+            state_info,
+            pending_device_name=pending_device_name,
+            pending_area_id=pending_area_id,
+        )
         if entity_name is not None:
             context["entity"] = entity_name
         object_id = self.naming_templates.render("entity_id", context, normalize=True)
