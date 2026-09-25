@@ -9,7 +9,7 @@ a web server.
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from app_state import renamer_state, ws_url
 from config_files import out_of_reach
@@ -208,8 +208,31 @@ async def proposed_naming(entity_id: str, entity_name: Optional[str] = None) -> 
         # has no type part at all, and writing it for "nothing to say about the
         # type part" had the next run strip the type part off a name that has
         # one. provenance_for below says the same thing.
-        "base_entity": resolution.get("input") or resolution.get("value") or None,
+        #
+        # Asked for as "is there a string", not "is there something truthy": a
+        # resolution that says the type part is empty says "" , and reading that
+        # as nothing put the question back that it had just answered.
+        "base_entity": _noted_type_part(resolution),
     }
+
+
+def _noted_type_part(resolution: Mapping[str, Any]) -> Optional[str]:
+    """What the resolution says the type part was, or None where it says nothing.
+
+    What went into the name, not what came out of it: a rule the user edits
+    afterwards only reaches this entity again if the note hands it back the word
+    the rule matches on.
+
+    "" is an answer - a name built out of area and device with no type part - and
+    it is kept as one. Asked for with ``or``, it read as no answer at all, and
+    the note then said "nothing recorded" about a name whose type part is
+    genuinely empty, which put the question back that it had just answered.
+    """
+    for key in ("input", "value"):
+        noted = resolution.get(key)
+        if isinstance(noted, str):
+            return noted
+    return None
 
 
 def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
@@ -232,7 +255,7 @@ def provenance_for(entity_id: str) -> Optional[Dict[str, Any]]:
         # note for a name that has no type part at all, so the entity renamed
         # one at a time was noted as having none and the next run proposed
         # stripping the type part off a name that has one.
-        "base_entity": resolution.get("input") or resolution.get("value") or None,
+        "base_entity": _noted_type_part(resolution),
         "won_by": resolution.get("won_by") or "",
         "rule_id": resolution.get("rule_id"),
         "template_hash": renamer_state["naming_templates"].fingerprint(),

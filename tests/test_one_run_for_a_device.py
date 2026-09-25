@@ -244,8 +244,8 @@ def test_only_one_place_asks_whether_the_area_is_still_there():
     assert "return this.areaMoveStaged(this.devicePreviewAreaId, this.selectedDeviceData);" in markup
     assert "const areaStaged = this.areaMoveStaged(this.devicePreviewAreaId, device);" in markup
     assert "const areaStaged = this.areaMoveStaged(picked, device);" in markup
-    # And the copy the run kept is gone.
-    assert "const stillThere" not in markup
+    # And the guard is in that one place: asked for once, by name.
+    assert markup.count("this.hierarchy.areas.some(a => a.id === picked)") == 1
 
 
 def test_a_pick_forgets_where_the_list_stood():
@@ -288,3 +288,66 @@ def test_a_single_rename_notes_nothing_where_the_resolution_says_nothing() -> No
         web_ui.renamer_state.pop("restructurer", None)
 
     assert note["base_entity"] is None
+
+
+def test_the_field_stands_on_a_pick_only_while_it_is_a_move():
+    """A pick of "no area" that Home Assistant has since carried out itself is
+    not a move any more: the field said "No area" with no border to say it was
+    staged, the apply button ignored it, and nothing could clear it."""
+    markup = _panel_source()
+    at = markup.index("panelAreaId() {")
+    body = markup[at : markup.index("panelAreaName() {", at)]
+
+    assert "this.devicePreviewAreaId === ''" not in body
+    assert "if (this.deviceChangeStagedArea()) {" in body
+
+
+def test_the_arrow_keys_start_where_the_highlight_is():
+    """An area deleted in Home Assistant shortens the list without a keystroke,
+    and stepping from a position past its end landed one item off what was lit."""
+    markup = _panel_source()
+    at = markup.index("comboStep(by, total, field) {")
+    body = markup[at : at + 900]
+
+    assert "const from = Math.min(this.areaComboAt, total - 1);" in body
+    assert "this.areaComboAt = (from + by + total) % total;" in body
+
+
+def test_the_clash_check_is_given_the_name_that_was_typed():
+    """It is asked 300ms later. Turning to another device in between cleared the
+    field, and the check then ran against the name the device already has - a
+    real clash for the typed name went unnoticed."""
+    markup = _panel_source()
+    at = markup.index("const typedFor = selectedDeviceData;")
+    body = markup[at : at + 300]
+
+    assert "const typedName = $event.target.value;" in body
+    assert "checkDeviceNameClash(typedFor, typedName)" in body
+
+
+def test_the_area_list_is_keyed_on_when_the_registry_moved():
+    """The list is read by the combo, by every item's class and by the empty
+    line, so writing the areas out walked them several times per repaint."""
+    markup = _panel_source()
+    at = markup.index("get areaOptions() {")
+    body = markup[at : markup.index("matchingAreas() {", at)]
+
+    assert "this.hierarchyVersion," in body
+    assert ".map(a => a.id" not in body
+
+
+def test_an_empty_type_part_is_noted_as_one() -> None:
+    """ "" is an answer - a name built out of area and device with no type part.
+    Asked for with `or`, it read as no answer at all, and the note then said
+    "nothing recorded" about a name whose type part is genuinely empty."""
+
+    class _Resolutions:
+        last_resolutions = {"sensor.x": {"won_by": "rule:user", "input": "", "value": "Licht"}}
+
+    web_ui.renamer_state["restructurer"] = _Resolutions()
+    try:
+        note = naming_service.provenance_for("sensor.x")
+    finally:
+        web_ui.renamer_state.pop("restructurer", None)
+
+    assert note["base_entity"] == ""

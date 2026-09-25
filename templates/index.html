@@ -2288,7 +2288,8 @@
                                         stageDeviceWideChange();
                                         clearTimeout(_deviceNameTimer);
                                         const typedFor = selectedDeviceData;
-                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(typedFor), 300)"
+                                        const typedName = $event.target.value;
+                                        _deviceNameTimer = setTimeout(() => checkDeviceNameClash(typedFor, typedName), 300)"
                                @keyup.enter="renameDeviceInHA($event.target.value)"
                                :placeholder="selectedDeviceData?.base_name"
                                :disabled="renamingDevice || applyingEntityId || executing">
@@ -5482,9 +5483,13 @@
                 },
 
                 panelAreaId() {
-                    // The device's own where the staged one has gone: it is no
-                    // longer an area to stand on.
-                    if (this.deviceChangeStagedArea() || this.devicePreviewAreaId === '') {
+                    // The device's own where the staged one is not a move: an
+                    // area deleted in Home Assistant is no longer one to stand
+                    // on, and neither is "no area" once Home Assistant has taken
+                    // the device out of its area itself - the field said "No
+                    // area" with no border to say it was staged, the apply
+                    // button ignored it, and there was no way to clear it.
+                    if (this.deviceChangeStagedArea()) {
                         return this.devicePreviewAreaId || '';
                     }
                     return this.selectedDeviceData?.area_id || '';
@@ -5495,7 +5500,7 @@
                     // Picked, and picked to be in no area at all: the field
                     // said nothing at all for it, which reads like a field
                     // nobody has touched.
-                    if (!id) return this.devicePreviewAreaId === '' ? this.t('area.no_area') : '';
+                    if (!id) return this.deviceChangeStagedArea() ? this.t('area.no_area') : '';
                     // Nothing is written from here: reading what the field
                     // says was setting the staged area as it went, and the
                     // effect that reads it ran again over its own writing.
@@ -5510,12 +5515,14 @@
                 get areaOptions() {
                     const key = [
                         this.areaSearch || '',
-                        // The areas themselves, not how many there are: one
-                        // renamed in Home Assistant leaves the count where it
-                        // was, and the field went on offering it under the name
-                        // it used to have - and, once the key had stopped
-                        // moving, stopped following the list at all.
-                        this.hierarchy.areas.map(a => a.id + '\u0001' + a.name).join('\u0002'),
+                        // When the registry last moved, not the areas written
+                        // out: the list is read by the combo's x-show, by every
+                        // item's class and by the empty line, so writing them
+                        // out walked the areas several times per repaint. The
+                        // count alone would not do - an area renamed in Home
+                        // Assistant leaves it where it was, and the field went
+                        // on offering the name it used to have.
+                        this.hierarchyVersion,
                         this.selectedDeviceData?.area_id || '',
                         // And the area picked and not yet written, which is the
                         // one the list marks as the current one.
@@ -5580,7 +5587,12 @@
                 // Enter would take in view.
                 comboStep(by, total, field) {
                     if (!total) return;
-                    this.areaComboAt = (this.areaComboAt + by + total) % total;
+                    // From where the highlight is, which is where the list shows
+                    // it: an area deleted in Home Assistant shortened the list
+                    // without a keystroke, and stepping from a position past its
+                    // end then landed one item off what was lit up.
+                    const from = Math.min(this.areaComboAt, total - 1);
+                    this.areaComboAt = (from + by + total) % total;
                     this.$nextTick(() => {
                         // The list belonging to this field, not the first one
                         // on the page: a second combo would scroll instead.

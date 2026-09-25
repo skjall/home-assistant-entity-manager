@@ -86,6 +86,14 @@ class NamingState:
         and a file written by that code is a version-2 file. So version 2 is
         read once more the same way, and only what this add-on writes from
         version 3 on means what it says.
+
+        This costs the entries that did mean "no type part": their names are taken
+        apart again, and a home with many of them sees many names worked out
+        afresh on the next run. That is the cheaper of the two, and the only one
+        that is honest - the alternative is reading "nothing to say" as an answer
+        and stripping the type part off names that have one, which is a wrong
+        name written to Home Assistant rather than a right one worked out twice.
+        Where the rules have not changed, what comes out is what is already there.
         """
         # Anything from version 3 on has been through this. Asked as "is it the
         # current version", the next version to be written would have the
