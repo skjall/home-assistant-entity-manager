@@ -1278,3 +1278,47 @@ def test_a_rule_that_stopped_matching_says_nothing_about_the_name(rules):
     assert rules.render(rule, "Heizung 12345678", "de") == "Heizkessel"
     # The same rule held against a name its expression says nothing about.
     assert rules.render(rule, "Waschmaschine", "de") == ""
+
+
+def test_a_lookaround_hands_nothing_up(rules):
+    """A lookaround matches no text at all, so what repeats inside one is walked once
+    for a position rather than again for every way of cutting the text up. Read as an
+    ordinary group, it was refused for a repetition that costs nothing."""
+    assert compile_pattern(r"((?=\d+)\w)+") is not None
+    assert compile_pattern(r"((?<=\w)\d)+") is not None
+    assert compile_pattern(r"(?=\d+)\w+") is not None
+
+    # And a group that does match text still hands its repetition up.
+    with pytest.raises(NamingRuleError, match="repeat what already repeats"):
+        compile_pattern(r"((?:a+))+")
+
+
+def test_a_supplied_name_is_read_once_for_the_counts_that_ask(rules):
+    """Two counts ask about the same name on one load - how far a pattern scope would
+    reach, and what it would be called - and each escaped and scanned it for
+    itself."""
+    naming_rules._pattern_and_numbers.cache_clear()
+    first = pattern_of("Heizung 12345678")
+    second = pattern_of("Heizung 12345678")
+
+    assert first == second
+    assert naming_rules._pattern_and_numbers.cache_info().hits == 1
+    # A list of its own for every caller: what is kept is shared, and a caller
+    # that wrote into it would have handed the next one its own numbers.
+    assert first[1] is not second[1]
+    first[1].append("nonsense")
+    assert pattern_of("Heizung 12345678")[1] == ["12345678"]
+
+
+def test_the_compiled_patterns_are_built_under_the_lock(rules):
+    """Read, built and written back without it, a build begun before a rule changed
+    could land after the build that followed it - and the expression of a rule that
+    had been rewritten stayed standing."""
+    with open(naming_rules.__file__, encoding="utf-8") as reading:
+        source = reading.read()
+    at = source.index("    def _pattern_rules(self)")
+    body = source[at : source.index("    def _filled(self", at)]
+
+    assert body.count("with self._lock:") == 2
+    assert "if self._patterns is None:" in body
+    assert body.index("with self._lock:") < body.index("if self._patterns is None:")

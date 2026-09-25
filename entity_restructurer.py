@@ -892,12 +892,16 @@ class EntityRestructurer:
             # the lookup ran for every entity that has a narrower rule in force
             # and its answer was thrown away two lines further down.
             #
-            # Nothing is returned rather than the narrower rule: where that one
-            # is a device-class rule the naming holds back, it does not name this
-            # entity either, and saying it did would put the entity in a list
-            # whose rule leaves it alone.
+            # Stepped over rather than returned from, as the naming steps over
+            # it: the domain is the last kind today, so the two come to the same
+            # thing - and a kind added after it would have been asked about here
+            # and not there, which is the drift this walk was written to stop.
+            # The narrower rule is not answered with either: where that one is a
+            # device-class rule the naming holds back, it does not name this
+            # entity, and saying it did would put the entity in a list whose rule
+            # leaves it alone.
             if kind == "domain" and narrower:
-                return None
+                continue
             # Not narrowed to a domain where the domain is what it matches on;
             # see build_naming_context.
             rule = rules.find(

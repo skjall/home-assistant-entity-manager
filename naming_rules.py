@@ -135,11 +135,13 @@ def rule_key(kind: str, value: str) -> str:
     return value if kind in VERBATIM_KINDS else canon(value)
 
 
-def pattern_of(example: str) -> Optional[Tuple[str, List[str]]]:
-    """The pattern a supplied name makes with its numbers left open, and the numbers.
+@lru_cache(maxsize=4096)
+def _pattern_and_numbers(example: str) -> Optional[Tuple[str, Tuple[str, ...]]]:
+    """The work of ``pattern_of``, kept for a name already read.
 
-    None where the name carries no number: without one there is nothing to
-    leave open, and the exact rule already says everything.
+    Two counts ask about the same name on one load - how far a pattern scope
+    would reach, and what it would be called - and each of them escaped and
+    scanned it for itself.
     """
     numbers = _NUMBER.findall(example or "")
     if not numbers:
@@ -149,7 +151,19 @@ def pattern_of(example: str) -> Optional[Tuple[str, List[str]]]:
         re.escape(part) + (rf"(?P<n{index + 1}>\d+)" if index < len(numbers) else "")
         for index, part in enumerate(parts)
     )
-    return regex, numbers
+    return regex, tuple(numbers)
+
+
+def pattern_of(example: str) -> Optional[Tuple[str, List[str]]]:
+    """The pattern a supplied name makes with its numbers left open, and the numbers.
+
+    None where the name carries no number: without one there is nothing to
+    leave open, and the exact rule already says everything.
+    """
+    # A list of its own for every caller: what is kept above is shared, and a
+    # caller that wrote into it would have handed the next one its own numbers.
+    read = _pattern_and_numbers(example or "")
+    return None if read is None else (read[0], list(read[1]))
 
 
 def readable_pattern(regex: str) -> str:
@@ -233,6 +247,11 @@ def _refuse_runaway(regex: str) -> None:
     digits it left open and nothing else.
     """
     quantifiers = {"*", "+", "?", "{"}
+    # Which group at each depth is a lookaround: "(?=", "(?!", "(?<=", "(?<!".
+    # Those match no text at all, so what repeats inside one cannot be walked
+    # again by a quantifier on the group around it - read as an ordinary group,
+    # "((?=\\d+)\\w)+" was refused for a repetition that costs nothing.
+    zero_width = [False]
     repeats = [False]  # whether the group at each depth already repeats
     choices = [False]  # whether the group at each depth holds a choice
     at = 0
@@ -264,6 +283,7 @@ def _refuse_runaway(regex: str) -> None:
             # not a quantifier and must not be read as one.
             repeats.append(False)
             choices.append(False)
+            zero_width.append(opening.group(0)[:3] in {"(?=", "(?!", "(?<"})
             at = opening.end()
             continue
         if in_class:
@@ -277,11 +297,13 @@ def _refuse_runaway(regex: str) -> None:
         elif char == "(":
             repeats.append(False)
             choices.append(False)
+            zero_width.append(False)
         elif char == "|":
             choices[-1] = True
         elif char == ")":
             inside = repeats.pop() if len(repeats) > 1 else False
             branched = choices.pop() if len(choices) > 1 else False
+            nothing_wide = zero_width.pop() if len(zero_width) > 1 else False
             after = regex[at + 1 : at + 2]
             # A bounded count after a group that holds nothing repeating is no
             # more a runaway than the group itself: "(\\d{4}){2,3}" reads eight
@@ -314,7 +336,10 @@ def _refuse_runaway(regex: str) -> None:
             #
             # "?" and "*" as well: "((ab)?)+" repeats a group that can match
             # nothing, and the inner group alone said nothing about that.
-            if inside or after in {"*", "+", "{", "?"}:
+            # A lookaround repeats no text, so it hands nothing up: what is
+            # inside it is walked once for a position rather than again for every
+            # way of cutting the text up.
+            if (inside and not nothing_wide) or after in {"*", "+", "{", "?"}:
                 repeats[-1] = True
             # A group holding a choice is one to the group around it, so
             # "((a|aa))+" is refused where "(a|aa)+" is.
@@ -1172,17 +1197,22 @@ class NamingRules:
 
     def _pattern_rules(self) -> List[Tuple[Dict[str, Any], "re.Pattern[str]"]]:
         """Pattern rules with their compiled expressions; one that no longer compiles is left out."""
-        if self._patterns is None:
-            compiled = []
-            for rule in self.rules:
-                if rule["match"]["kind"] != "pattern":
-                    continue
-                try:
-                    compiled.append((rule, compile_pattern(rule["match"]["value"])))
-                except NamingRuleError as error:
-                    logger.warning("Pattern rule %s is skipped: %s", rule["id"], error)
-            self._patterns = compiled
-        return self._patterns
+        # Under the lock that drops them: read, built and written back without
+        # it, a build begun before a rule changed could land after the build that
+        # followed it, leaving the expression of a rule that has been rewritten
+        # standing until something else forgets it.
+        with self._lock:
+            if self._patterns is None:
+                compiled = []
+                for rule in self.rules:
+                    if rule["match"]["kind"] != "pattern":
+                        continue
+                    try:
+                        compiled.append((rule, compile_pattern(rule["match"]["value"])))
+                    except NamingRuleError as error:
+                        logger.warning("Pattern rule %s is skipped: %s", rule["id"], error)
+                self._patterns = compiled
+            return self._patterns
 
     def _patterns_by_id(self) -> Dict[str, "re.Pattern[str]"]:
         """The same compiled expressions, by rule id.
@@ -1191,9 +1221,11 @@ class NamingRules:
         so a rewritten expression is compiled again rather than answered from
         here.
         """
-        if self._patterns_keyed is None:
-            self._patterns_keyed = {rule["id"]: pattern for rule, pattern in self._pattern_rules()}
-        return self._patterns_keyed
+        # Under the lock that drops it, for the reason ``_pattern_rules`` gives.
+        with self._lock:
+            if self._patterns_keyed is None:
+                self._patterns_keyed = {rule["id"]: pattern for rule, pattern in self._pattern_rules()}
+            return self._patterns_keyed
 
     def _filled(self, rule: Mapping[str, Any], name: str, language: str, match: "re.Match[str]") -> Optional[str]:
         """The target with this name's numbers in it, worked out once per name.
