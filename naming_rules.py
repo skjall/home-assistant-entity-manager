@@ -336,6 +336,13 @@ def _group(match: "re.Match[str]", key: str) -> Optional[str]:
 
 
 def _known_placeholder(pattern: "re.Pattern[str]", key: str) -> bool:
+    """Whether an expression has something for a placeholder to be filled from.
+
+    The three ways a target can name a group, in the order ``_group`` reads them:
+    by the name the group carries, by the name a learned pattern gives the
+    numbers it left open - "{1}" is the group "n1" - and by position, where "{1}"
+    is the first group of a hand-written expression.
+    """
     return (
         key in pattern.groupindex
         or f"n{key}" in pattern.groupindex
