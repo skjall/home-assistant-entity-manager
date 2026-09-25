@@ -4836,9 +4836,7 @@
                 // Their names are cached, and a move changes all of them.
                 pickPreviewArea(areaId) {
                     this.devicePreviewAreaId = areaId;
-                    const moved = (this.hierarchy.entities || [])
-                        .filter(e => e.device_id === this.selectedDevice);
-                    this.computePreviewsFor(moved);
+                    this.computePreviewsFor(this.entitiesOfDevice(this.selectedDevice));
                 },
 
                 // Get device display name (full name with area prefix)
@@ -4848,7 +4846,12 @@
                     // Through the template, not "area then name": a template
                     // that puts the area elsewhere had the list and the panel
                     // saying two different things about the same rename.
-                    return this.renderDeviceName(device) || device.base_name;
+                    //
+                    // And with the name being typed into the panel, where there
+                    // is one: without it the card said the new area beside the
+                    // old name while the rows below it said both new.
+                    const typed = device.id === this.selectedDevice ? (this.devicePreviewBaseName || '').trim() : '';
+                    return this.renderDeviceName(device, typed || device.base_name) || device.base_name;
                 },
 
                 // Get entity display name (short - just the entity suffix)
@@ -5705,6 +5708,14 @@
                 // change away.
                 async quickApplyEntity(entity) {
                     if (!entity || this.applyingEntityId) return;
+                    // The row is named out of the area the panel holds, so the
+                    // move goes in before the name that was built from it:
+                    // written without it, the name said an area the device is
+                    // not in, and the next read proposed the old name straight
+                    // back - for ever, since nothing had moved.
+                    if (entity.device_id && entity.device_id === this.selectedDevice) {
+                        if (!await this.commitStagedArea()) return;
+                    }
                     await this.previewsSettled();
 
                     // Trim suffix before saving
@@ -6768,7 +6779,10 @@
                         // The check never got to look. The field goes back to
                         // what it held, or it sits there showing a rename that
                         // was not made.
-                        this.devicePreviewBaseName = wasPreviewed;
+                        // Onto the panel only where it still stands on this
+                        // device: a click on another one during the check left
+                        // that device's field showing this device's name.
+                        if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
                         if (moved) {
                             // The move stands, and this is the one way out that
                             // said only "Error" about it.
@@ -6780,7 +6794,10 @@
                     }
                     if (clashes.length) {
                         const taken = clashes[0].id;
-                        this.devicePreviewBaseName = wasPreviewed;
+                        // Onto the panel only where it still stands on this
+                        // device: a click on another one during the check left
+                        // that device's field showing this device's name.
+                        if (this.selectedDevice === deviceId) this.devicePreviewBaseName = wasPreviewed;
                         this.showMessage(moved
                             ? this.t('device.moved_not_renamed', {error: this.t('device.id_conflict', {id: taken})})
                             : this.t('device.id_conflict', {id: taken}), 'error');
