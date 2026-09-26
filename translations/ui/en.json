@@ -614,6 +614,8 @@
     "count_failed": "{count} failed",
     "count_enabled": "{count} enabled",
     "step_unverified": "Unconfirmed",
-    "step_area": "Moved"
+    "step_area": "Moved",
+    "step_moved": "Move written",
+    "step_renamed_device": "Device renamed"
   }
 }

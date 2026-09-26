@@ -24,6 +24,8 @@ window.EntityManagerConfig = {
     //   colour - suffix of the .step-* and .row-* classes
     jobSteps: {
         AREA:        {label: "step_area",        icon: "ri-map-pin-line",         colour: "renamed"},
+        MOVED:       {label: "step_moved",       icon: "ri-drag-move-2-line",     colour: "renamed"},
+        RENAMED:     {label: "step_renamed_device", icon: "ri-router-line",       colour: "renamed"},
         RENAME:      {label: "step_renamed",     icon: "ri-price-tag-3-line",     colour: "renamed"},
         ENABLE:      {label: "step_enabled",     icon: "ri-toggle-line",          colour: "enabled"},
         CARRIED:     {label: "step_carried",     icon: "ri-links-line",           colour: "carried"},

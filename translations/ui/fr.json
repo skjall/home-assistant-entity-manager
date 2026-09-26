@@ -614,6 +614,8 @@
     "count_failed": "{count} en échec",
     "count_enabled": "{count} activées",
     "step_unverified": "Non confirmé",
-    "step_area": "Déplacé"
+    "step_area": "Déplacé",
+    "step_moved": "Déplacement écrit",
+    "step_renamed_device": "Appareil renommé"
   }
 }

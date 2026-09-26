@@ -614,6 +614,8 @@
     "count_failed": "{count} fehlgeschlagen",
     "count_enabled": "{count} aktiviert",
     "step_unverified": "Unbestätigt",
-    "step_area": "Verschoben"
+    "step_area": "Verschoben",
+    "step_moved": "Umzug geschrieben",
+    "step_renamed_device": "Gerät umbenannt"
   }
 }
