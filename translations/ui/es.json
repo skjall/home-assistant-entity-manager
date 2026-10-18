@@ -614,6 +614,8 @@
     "count_failed": "{count} fallidas",
     "count_enabled": "{count} activadas",
     "step_unverified": "Sin confirmar",
-    "step_area": "Movido"
+    "step_area": "Movido",
+    "step_moved": "Traslado escrito",
+    "step_renamed_device": "Dispositivo renombrado"
   }
 }
