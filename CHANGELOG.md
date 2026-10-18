@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/skjall/home-assistant-entity-manager/compare/v1.6.0...v1.6.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* the job log names the two steps a device rename writes ([#198](https://github.com/skjall/home-assistant-entity-manager/issues/198)) ([e5e7160](https://github.com/skjall/home-assistant-entity-manager/commit/e5e7160343fe7a5dc6c6d9e57147a714362d468b))
+
 ## [1.6.0](https://github.com/skjall/home-assistant-entity-manager/compare/v1.5.0...v1.6.0) (2026-09-25)
 
 
