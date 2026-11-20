@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/skjall/home-assistant-entity-manager/compare/v1.6.1...v1.6.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* build the add-on on an Alpine that carries the patched brotli ([#200](https://github.com/skjall/home-assistant-entity-manager/issues/200)) ([e0c084e](https://github.com/skjall/home-assistant-entity-manager/commit/e0c084e9b8f2bba29bffc1bccbdfc00c49198843))
+
 ## [1.6.1](https://github.com/skjall/home-assistant-entity-manager/compare/v1.6.0...v1.6.1) (2026-10-18)
 
 
