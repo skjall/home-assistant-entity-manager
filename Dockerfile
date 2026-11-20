@@ -1,4 +1,5 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.14-alpine3.20
+# The base image per architecture lives in build.json only.
+ARG BUILD_FROM
 
 # Build the frontend on the native build platform. Running npm/node under QEMU
 # emulation (e.g. for aarch64 on an amd64 runner) crashes with SIGILL (exit 132),
@@ -12,6 +13,11 @@ COPY templates/ ./templates/
 RUN mkdir -p static/js static/fonts && npm ci && npm run build
 
 FROM $BUILD_FROM
+
+# A base image is a snapshot of the day it was built; the armhf/armv7/i386
+# bases are no longer rebuilt at all. Upgrading here gives every architecture
+# the security fixes its Alpine release has published since.
+RUN apk upgrade --no-cache
 
 # Runtime build dependencies for Python packages
 RUN apk add --no-cache \

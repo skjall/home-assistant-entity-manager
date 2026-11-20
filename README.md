@@ -337,7 +337,7 @@ Check the Add-on logs in Supervisor → Entity Manager → Logs
 
 ```bash
 # Build for your architecture
-docker build --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base-python:3.14-alpine3.20" -t local/entity_manager .
+docker build --build-arg BUILD_FROM="$(jq -r '.build_from.amd64' build.json)" -t local/entity_manager .
 
 # Run locally for testing
 docker run --rm -it -p 5000:5000 \
