@@ -47,7 +47,7 @@ npm run build   # build CSS/JS + copy assets
 ### Build & run the add-on locally
 
 ```bash
-docker build --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base-python:3.14-alpine3.20" -t local/entity_manager .
+docker build --build-arg BUILD_FROM="$(jq -r '.build_from.amd64' build.json)" -t local/entity_manager .
 docker run --rm -it -p 5000:5000 \
   -e HA_URL="http://your-ha-instance:8123" \
   -e HA_TOKEN="your-long-lived-token" \
